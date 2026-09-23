@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { SessionPendingPrompt } from "@cline/core";
 import { sharedSessionDataDir } from "./paths";
 import type { ChatTurnAttachments, LiveSession } from "./types";
+import { consumeAttachmentUpload } from "./attachment-uploads";
 
 function queuedFilesMap(session: LiveSession): Map<string, string[]> {
 	if (!session.queuedAttachmentFiles) {
@@ -23,9 +24,10 @@ function consumedFilesMap(session: LiveSession): Map<string, string[]> {
 // ---------------------------------------------------------------------------
 // Materialized user-attachment lifecycle
 //
-// Non-image attachments arrive from the webview as inline content and are
-// written to `<session-data>/<sessionId>/user-attachments/` so the SDK can
-// load them by path at turn start. The sidecar owns these files and must
+// Non-image attachments are uploaded to the sidecar in bounded binary chunks,
+// then moved to `<session-data>/<sessionId>/user-attachments/` so the SDK can
+// load them by path at turn start. Legacy inline text remains accepted for
+// compatibility with an older webview. The sidecar owns these files and must
 // delete them once consumed (turn completed) or discarded (queued prompt
 // removed / session ended) — otherwise user data accumulates on disk.
 // ---------------------------------------------------------------------------
@@ -50,7 +52,11 @@ export function materializeUserFiles(
 				? requestedName
 				: "attachment.txt";
 		const path = join(attachmentDir, `${randomUUID()}-${safeName}`);
-		writeFileSync(path, file.content, "utf8");
+		if ("uploadId" in file) {
+			consumeAttachmentUpload(file.uploadId, path);
+		} else {
+			writeFileSync(path, file.content, "utf8");
+		}
 		return path;
 	});
 }

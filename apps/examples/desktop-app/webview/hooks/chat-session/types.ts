@@ -177,7 +177,7 @@ export type ChatSessionHookEvent = SessionHookEvent & {
 
 export type SerializedAttachmentFile = {
 	name: string;
-	content: string;
+	uploadId: string;
 };
 
 export type SerializedAttachments = {

@@ -1,4 +1,4 @@
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +12,11 @@ import {
 	sessionAttachmentsDir,
 	trackQueuedAttachments,
 } from "./attachments";
+import {
+	appendAttachmentUpload,
+	beginAttachmentUpload,
+	finishAttachmentUpload,
+} from "./attachment-uploads";
 import type { LiveSession } from "./types";
 
 const sessionId = "attachment-test-session";
@@ -48,6 +53,35 @@ afterEach(() => {
 });
 
 describe("materialized attachment lifecycle", () => {
+	it("preserves binary files uploaded in bounded chunks", () => {
+		const expected = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x50, 0x4b, 0x00]);
+		const { uploadId } = beginAttachmentUpload(expected.length);
+		appendAttachmentUpload(
+			uploadId,
+			0,
+			expected.subarray(0, 3).toString("base64"),
+		);
+		appendAttachmentUpload(
+			uploadId,
+			3,
+			expected.subarray(3).toString("base64"),
+		);
+		finishAttachmentUpload(uploadId);
+
+		const [staged] = materializeUserFiles(sessionId, [
+			{ name: "sample.apk", uploadId },
+		]) as string[];
+
+		expect(readFileSync(staged)).toEqual(expected);
+	});
+
+	it("rejects out-of-order attachment chunks", () => {
+		const { uploadId } = beginAttachmentUpload(4);
+		expect(() =>
+			appendAttachmentUpload(uploadId, 2, Buffer.from("test").toString("base64")),
+		).toThrow("offset mismatch");
+	});
+
 	it("only deletes files inside the session attachments dir", () => {
 		const [staged] = materializeUserFiles(sessionId, [
 			{ name: "notes.txt", content: "hello" },

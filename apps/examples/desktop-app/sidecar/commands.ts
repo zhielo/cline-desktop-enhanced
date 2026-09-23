@@ -90,6 +90,12 @@ import packageJson from "../package.json";
 import { CLINE_ACCOUNT_NOT_AUTHENTICATED_RESULT } from "../webview/lib/cline-account-state";
 import { MAX_RECORDED_AUDIO_BYTES } from "../webview/lib/voice-input-limits";
 import { resolveDesktopTelemetryUser } from "./client-context";
+import {
+	appendAttachmentUpload,
+	beginAttachmentUpload,
+	discardAttachmentUploads,
+	finishAttachmentUpload,
+} from "./attachment-uploads";
 import { resolveFreshClineAuthToken } from "./cline-auth";
 import {
 	getCloudSessionManager,
@@ -1840,6 +1846,35 @@ export async function handleCommand(
 	} else if (typeof args?.sessionId === "string" && args.sessionId.trim()) {
 		const binding = await findSessionRuntimeBinding(ctx, args.sessionId.trim());
 		if (binding) ctx = getEnvironmentContext(ctx, binding.environmentId);
+	}
+
+	// Upload binary attachments outside the chat command envelope. Keeping
+	// every chunk bounded prevents Bun from closing the WebSocket before the
+	// sidecar can return a useful validation error.
+	if (command === "begin_attachment_upload") {
+		const size = Number(args?.size);
+		return beginAttachmentUpload(size);
+	}
+	if (command === "append_attachment_upload") {
+		const uploadId = String(args?.uploadId ?? "").trim();
+		const offset = Number(args?.offset);
+		const contentBase64 = String(args?.contentBase64 ?? "");
+		if (!uploadId) throw new Error("Attachment upload id is required");
+		return appendAttachmentUpload(uploadId, offset, contentBase64);
+	}
+	if (command === "finish_attachment_upload") {
+		const uploadId = String(args?.uploadId ?? "").trim();
+		if (!uploadId) throw new Error("Attachment upload id is required");
+		return finishAttachmentUpload(uploadId);
+	}
+	if (command === "discard_attachment_uploads") {
+		const uploadIds = Array.isArray(args?.uploadIds)
+			? args.uploadIds
+					.map((value) => String(value).trim())
+					.filter((value) => value.length > 0)
+			: [];
+		discardAttachmentUploads(uploadIds);
+		return { ok: true };
 	}
 
 	// ── SSH remote environments ──────────────────────────────────────
