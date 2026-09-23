@@ -1,6 +1,6 @@
 # Windows installer build retry
 
-Triggered after local validation on 2026-09-23.
+Triggered after local validation on 2026-09-24, after enabling public-repository GitHub-hosted Actions.
 
 Validated locally before this retry:
 - SDK build
