@@ -17,7 +17,7 @@ describe("sidecar command authorization", () => {
 		const send = vi.fn();
 		const close = vi.fn();
 		const client = {
-			data: { canApproveTools: false },
+			data: { authenticated: false, canApproveTools: false },
 			send,
 			close,
 		} satisfies SidecarWebSocketClient;

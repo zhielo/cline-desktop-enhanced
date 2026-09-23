@@ -22,12 +22,14 @@ import {
 	type SidecarWebSocketClient,
 } from "./types";
 
+type SidecarConnectionData = {
+	authenticated?: boolean;
+	canApproveTools?: boolean;
+};
+
 type SidecarServer = {
 	port: number;
-	upgrade(
-		req: Request,
-		options?: { data?: { canApproveTools?: boolean } },
-	): boolean;
+	upgrade(req: Request, options?: { data?: SidecarConnectionData }): boolean;
 };
 
 const EXTRA_TRUSTED_ORIGINS = (process.env.CLINE_SIDECAR_TRUSTED_ORIGINS ?? "")
@@ -190,22 +192,22 @@ export function createFetchHandler(
 			);
 		}
 
-		if (
-			url.pathname === "/transport" &&
-			isTrustedRequestOrigin(req) &&
-			server.upgrade(req, {
-				data: {
-					// Only a browser-hosted desktop UI with the per-launch secret may
-					// invoke commands or resolve approvals. Originless local clients and
-					// trusted-origin requests without the secret remain connected only
-					// long enough to receive a deterministic authorization error.
-					canApproveTools:
-						Boolean(readOrigin(req)) &&
-						hasValidApprovalToken(url, approvalToken),
-				},
-			})
-		) {
-			return undefined;
+		if (url.pathname === "/transport" && isTrustedRequestOrigin(req)) {
+			const origin = readOrigin(req);
+			const authenticated = hasValidApprovalToken(url, approvalToken);
+			if (
+				server.upgrade(req, {
+					data: {
+						authenticated,
+						canApproveTools:
+							authenticated &&
+							Boolean(origin) &&
+							TRUSTED_BROWSER_ORIGINS.has(origin ?? ""),
+					},
+				})
+			) {
+				return undefined;
+			}
 		}
 
 		if (url.pathname === "/api/marketplace/catalog") {
@@ -327,7 +329,7 @@ export function createWebSocketHandler(ctx: SidecarContext) {
 			}
 		},
 		async message(ws: SidecarWebSocketClient, raw: string) {
-			if (!ws.data?.canApproveTools) {
+			if (!ws.data?.authenticated) {
 				ws.send(
 					jsonResponse(
 						"",
