@@ -806,37 +806,6 @@ export default function Home() {
 		[handleNewThread, handleOpenSessionById, handleViewChange],
 	);
 
-	const historyWorkspacePaths = useMemo(
-		() =>
-			workspacePathsFromSessions(
-				sessionHistory.sessions,
-				activeThread?.environmentId ?? activeEnvironmentId,
-			),
-		[activeEnvironmentId, activeThread?.environmentId, sessionHistory.sessions],
-	);
-	// A child agent session names its parent, but only the history list knows the
-	// parent's title — resolve it here so the chat header can point back to it.
-	const activeParentSession = useMemo(() => {
-		const parentSessionId =
-			activeThread?.historySession?.parentSessionId?.trim();
-		if (!parentSessionId) {
-			return undefined;
-		}
-		const title = sessionHistory.threads.find(
-			(thread) =>
-				thread.id ===
-				sessionKey({
-					sessionId: parentSessionId,
-					environmentId: activeThread.environmentId,
-				}),
-		)?.title;
-		return { sessionId: parentSessionId, title };
-	}, [
-		activeThread?.historySession?.parentSessionId,
-		activeThread?.environmentId,
-		sessionHistory.threads,
-	]);
-
 	return (
 		<AccountProvider>
 			<SidebarProvider>
@@ -880,78 +849,124 @@ export default function Home() {
 							<SidebarTrigger className="absolute left-20 top-0 z-40 md:hidden" />
 							<WindowTitleBar />
 							<div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-								{view === "sessions" ? (
-									<SessionsView
-										activeSessionId={activeHistorySessionId}
-										history={sessionHistory}
-									/>
-								) : activeThread ? (
+								{activeThread ? (
 									<div
-										aria-hidden={view === "settings" ? true : undefined}
+										aria-hidden={view !== "chat" ? true : undefined}
 										className="flex min-h-0 flex-1 flex-col"
-										inert={view === "settings" ? true : undefined}
+										inert={view !== "chat" ? true : undefined}
 									>
-										<ChatThreadPane
-											key={`${activeThread.id}:${activeThread.environmentId}`}
-											environmentId={activeThread.environmentId}
-											environmentProfiles={remoteEnvironmentProfiles}
-											environmentProfilesLoading={
-												remoteEnvironmentProfilesLoading
-											}
-											onAddSshHost={() => handleSettingsSectionChange("Remote")}
-											onPickRemoteWorkspaceDirectory={
-												pickRemoteWorkspaceDirectory
-											}
-											onSelectEnvironment={handleSelectEnvironment}
-											remoteEnvironment={
-												activeRemoteEnvironment?.id ===
-												activeThread.environmentId
-													? activeRemoteEnvironment
-													: null
-											}
-											historySession={activeThread.historySession}
-											liveHistoryStatus={
+										{/*
+										 * Keep every opened thread mounted while navigating. The sidecar
+										 * owns the actual run, but unmounting the pane discarded its live
+										 * subscriptions and in-progress presentation state. Returning to a
+										 * running session then looked collapsed or stopped until history
+										 * persistence caught up. Hidden panes stay subscribed and reconcile
+										 * continuously; only an explicit stop/delete tears a session down.
+										 */}
+										{threads.map((thread) => {
+											const isActive = thread.id === activeThread.id;
+											const parentSessionId =
+												thread.historySession?.parentSessionId?.trim();
+											const parentSession = parentSessionId
+												? {
+														sessionId: parentSessionId,
+														title: sessionHistory.threads.find(
+															(historyThread) =>
+																historyThread.id ===
+																sessionKey({
+																	sessionId: parentSessionId,
+																	environmentId: thread.environmentId,
+																}),
+														)?.title,
+													}
+												: undefined;
+											const knownWorkspacePaths = workspacePathsFromSessions(
+												sessionHistory.sessions,
+												thread.environmentId,
+											);
+											const liveHistoryStatus =
 												sessionHistory.sessions.find(
 													(session) =>
 														session.sessionId ===
-															activeThread.historySession?.sessionId &&
+															thread.historySession?.sessionId &&
 														(session.environmentId ??
 															LOCAL_WORKSPACE_ENVIRONMENT_ID) ===
-															activeThread.environmentId,
-												)?.status ?? activeThread.historySession?.status
-											}
-											initialPromptDraft={activeThread.initialPromptDraft}
-											knownWorkspacePaths={historyWorkspacePaths}
-											onInitialPromptDraftConsumed={
-												handleInitialPromptDraftConsumed
-											}
-											onUpdateSessionMetadata={(sessionId, metadata) =>
-												handleUpdateSessionMetadata(
-													sessionId,
-													metadata,
-													activeThread.environmentId,
-												)
-											}
-											threadId={activeThread.id}
-											onDeleteSession={(sessionId, threadId) =>
-												handleDeleteSession(
-													sessionId,
-													threadId,
-													activeThread.environmentId,
-												)
-											}
-											onNewThread={handleNewThread}
-											onOpenSession={handleOpenSession}
-											onOpenSessionById={handleOpenSessionById}
-											onOpenSetup={handleOpenSetup}
-											onOpenModelSettings={() =>
-												handleSettingsSectionChange("API Providers")
-											}
-											onOpenAccountSettings={() =>
-												handleSettingsSectionChange("Account")
-											}
-											parentSession={activeParentSession}
-											onThreadStarted={handleThreadStarted}
+															thread.environmentId,
+												)?.status ?? thread.historySession?.status;
+
+											return (
+												<div
+													aria-hidden={!isActive ? true : undefined}
+													className={
+														isActive ? "flex min-h-0 flex-1 flex-col" : "hidden"
+													}
+													inert={!isActive ? true : undefined}
+													key={`${thread.id}:${thread.environmentId}`}
+												>
+													<ChatThreadPane
+														environmentId={thread.environmentId}
+														environmentProfiles={remoteEnvironmentProfiles}
+														environmentProfilesLoading={
+															remoteEnvironmentProfilesLoading
+														}
+														onAddSshHost={() =>
+															handleSettingsSectionChange("Remote")
+														}
+														onPickRemoteWorkspaceDirectory={
+															pickRemoteWorkspaceDirectory
+														}
+														onSelectEnvironment={handleSelectEnvironment}
+														remoteEnvironment={
+															activeRemoteEnvironment?.id ===
+															thread.environmentId
+																? activeRemoteEnvironment
+																: null
+														}
+														historySession={thread.historySession}
+														liveHistoryStatus={liveHistoryStatus}
+														initialPromptDraft={thread.initialPromptDraft}
+														knownWorkspacePaths={knownWorkspacePaths}
+														onInitialPromptDraftConsumed={
+															handleInitialPromptDraftConsumed
+														}
+														onUpdateSessionMetadata={(sessionId, metadata) =>
+															handleUpdateSessionMetadata(
+																sessionId,
+																metadata,
+																thread.environmentId,
+															)
+														}
+														threadId={thread.id}
+														onDeleteSession={(sessionId, threadId) =>
+															handleDeleteSession(
+																sessionId,
+																threadId,
+																thread.environmentId,
+															)
+														}
+														onNewThread={handleNewThread}
+														onOpenSession={handleOpenSession}
+														onOpenSessionById={handleOpenSessionById}
+														onOpenSetup={handleOpenSetup}
+														onOpenModelSettings={() =>
+															handleSettingsSectionChange("API Providers")
+														}
+														onOpenAccountSettings={() =>
+															handleSettingsSectionChange("Account")
+														}
+														parentSession={parentSession}
+														onThreadStarted={handleThreadStarted}
+													/>
+												</div>
+											);
+										})}
+									</div>
+								) : null}
+								{view === "sessions" ? (
+									<div className="absolute inset-0 z-30 bg-background text-foreground">
+										<SessionsView
+											activeSessionId={activeHistorySessionId}
+											history={sessionHistory}
 										/>
 									</div>
 								) : null}
