@@ -114,6 +114,8 @@ export const ReverseEngineeringInputSchema = z.object({
 		"discover",
 		"inspect",
 		"compare_apks",
+		"verify_apk_signature",
+		"scan_strings",
 		"extract",
 		"analyze",
 		"decompile",
@@ -173,6 +175,12 @@ export const ReverseEngineeringInputSchema = z.object({
 	smali_regex: z.boolean().optional(),
 	context_lines: z.number().int().min(0).max(20).optional(),
 	max_results: z.number().int().min(1).max(5_000).optional(),
+	min_string_length: z.number().int().min(4).max(1_024).optional(),
+	string_pattern: z
+		.string()
+		.min(1)
+		.optional()
+		.describe("Optional case-insensitive regular expression for scan_strings"),
 	reuse_analysis: z
 		.boolean()
 		.optional()

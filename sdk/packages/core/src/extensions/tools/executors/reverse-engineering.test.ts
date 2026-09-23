@@ -49,6 +49,9 @@ describe("reverse-engineering discovery", () => {
 		expect(result.capabilities.platform).toBe(process.platform);
 		expect(result.capabilities).toHaveProperty("ghidra");
 		expect(result.capabilities).toHaveProperty("ida");
+		expect(result.capabilities).toHaveProperty("androidStudio.plugins");
+		expect(result.capabilities).toHaveProperty("supplementalTools");
+		expect(result.capabilities).toHaveProperty("toolSelectionGuide");
 	});
 });
 
@@ -198,6 +201,45 @@ describe("reverse-engineering archive inspection", () => {
 		expect(result.sectionCount).toBe(5);
 		expect(result.entryPoint).toBe("0x1234");
 		expect(result.imageBase).toBe("0x140000000");
+	});
+
+	it("extracts and classifies bounded security-relevant strings", async () => {
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-test-"),
+		);
+		temporaryDirectories.push(directory);
+		const target = path.join(directory, "classes.dex");
+		await fs.writeFile(
+			target,
+			Buffer.from(
+				"\u0000https://api.example.com/v1\u0000Lcom/example/Security;\u0000frida_detected\u0000",
+				"latin1",
+			),
+		);
+
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "scan_strings",
+					target,
+					min_string_length: 6,
+				},
+				{} as never,
+			),
+		);
+
+		expect(result.results.map((item: { value: string }) => item.value)).toEqual(
+			expect.arrayContaining([
+				"https://api.example.com/v1",
+				"Lcom/example/Security;",
+				"frida_detected",
+			]),
+		);
+		expect(result.categoryCounts).toMatchObject({
+			url: 1,
+			securityRelevant: 1,
+		});
 	});
 });
 

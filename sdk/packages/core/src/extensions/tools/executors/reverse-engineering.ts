@@ -26,7 +26,10 @@ type AndroidReUtilities = {
 	apksigner?: string;
 	zipalign?: string;
 	adb?: string;
+	aapt2?: string;
+	dexdump?: string;
 };
+type SupplementalToolInventory = Record<string, string | undefined>;
 
 const ANALYSIS_MANIFEST = "cline-analysis.json";
 const analysisLocks = new Map<string, Promise<void>>();
@@ -298,7 +301,7 @@ async function knownAndroidSdkRoots(): Promise<string[]> {
 }
 
 async function androidSdkToolCandidates(
-	tool: "apksigner" | "zipalign" | "adb",
+	tool: "apksigner" | "zipalign" | "adb" | "aapt2" | "dexdump",
 ): Promise<string[]> {
 	const win = process.platform === "win32";
 	const fileName =
@@ -311,8 +314,8 @@ async function androidSdkToolCandidates(
 					? "apksigner.bat"
 					: "apksigner"
 				: win
-					? "zipalign.exe"
-					: "zipalign";
+					? `${tool}.exe`
+					: tool;
 	const candidates: string[] = [];
 	for (const root of await knownAndroidSdkRoots()) {
 		if (tool === "adb") {
@@ -336,6 +339,7 @@ async function androidSdkToolCandidates(
 async function discoverAndroidStudio(): Promise<{
 	installations: string[];
 	pluginDirectories: string[];
+	plugins: Array<{ name: string; id?: string; path: string }>;
 	sdkRoots: string[];
 }> {
 	const installations: string[] = [];
@@ -354,7 +358,16 @@ async function discoverAndroidStudio(): Promise<{
 				? ["/Applications/Android Studio.app"]
 				: ["/opt/android-studio", path.join(os.homedir(), "android-studio")];
 	for (const candidate of candidates) {
-		if (candidate && (await exists(candidate))) installations.push(candidate);
+		if (candidate && (await exists(candidate))) {
+			installations.push(candidate);
+			for (const pluginCandidate of [
+				path.join(candidate, "plugins"),
+				path.join(candidate, "Contents", "plugins"),
+			]) {
+				if (await exists(pluginCandidate))
+					pluginDirectories.push(pluginCandidate);
+			}
+		}
 	}
 	const pluginParents = [
 		process.env.APPDATA ? path.join(process.env.APPDATA, "Google") : undefined,
@@ -380,9 +393,37 @@ async function discoverAndroidStudio(): Promise<{
 			// Optional discovery must not block the analysis tool.
 		}
 	}
+	const plugins: Array<{ name: string; id?: string; path: string }> = [];
+	for (const pluginDirectory of [...new Set(pluginDirectories)]) {
+		try {
+			for (const entry of await fs.readdir(pluginDirectory, {
+				withFileTypes: true,
+			})) {
+				if (!entry.isDirectory() || plugins.length >= 200) continue;
+				const pluginPath = path.join(pluginDirectory, entry.name);
+				const descriptorCandidates = [
+					path.join(pluginPath, "META-INF", "plugin.xml"),
+					path.join(pluginPath, "lib", "META-INF", "plugin.xml"),
+				];
+				let id: string | undefined;
+				let name = entry.name;
+				for (const descriptor of descriptorCandidates) {
+					if (!(await exists(descriptor))) continue;
+					const xml = await fs.readFile(descriptor, "utf8").catch(() => "");
+					id = /<id>([^<]+)<\/id>/i.exec(xml)?.[1]?.trim();
+					name = /<name>([^<]+)<\/name>/i.exec(xml)?.[1]?.trim() || name;
+					break;
+				}
+				plugins.push({ name, ...(id ? { id } : {}), path: pluginPath });
+			}
+		} catch {
+			// Android Studio may replace a plugin while discovery is running.
+		}
+	}
 	return {
 		installations: [...new Set(installations)],
 		pluginDirectories: [...new Set(pluginDirectories)],
+		plugins,
 		sdkRoots: await knownAndroidSdkRoots(),
 	};
 }
@@ -391,7 +432,7 @@ async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
 	const win = process.platform === "win32";
 	const suffix = win ? ".bat" : "";
 	const executableSuffix = win ? ".exe" : "";
-	const [apktool, baksmali, smali, apksigner, zipalign, adb] =
+	const [apktool, baksmali, smali, apksigner, zipalign, adb, aapt2, dexdump] =
 		await Promise.all([
 			discoverFirst([`apktool${suffix}`, `apktool${executableSuffix}`]),
 			discoverFirst([`baksmali${suffix}`, `baksmali${executableSuffix}`]),
@@ -409,8 +450,61 @@ async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
 				`adb${executableSuffix}`,
 				...(await androidSdkToolCandidates("adb")),
 			]),
+			discoverFirst([
+				`aapt2${executableSuffix}`,
+				...(await androidSdkToolCandidates("aapt2")),
+			]),
+			discoverFirst([
+				`dexdump${executableSuffix}`,
+				...(await androidSdkToolCandidates("dexdump")),
+			]),
 		]);
-	return { apktool, baksmali, smali, apksigner, zipalign, adb };
+	return {
+		apktool,
+		baksmali,
+		smali,
+		apksigner,
+		zipalign,
+		adb,
+		aapt2,
+		dexdump,
+	};
+}
+
+async function discoverSupplementalTools(): Promise<SupplementalToolInventory> {
+	const executableSuffix = process.platform === "win32" ? ".exe" : "";
+	const commands: Record<string, string[]> = {
+		apkid: [`apkid${executableSuffix}`, "apkid"],
+		androguard: [`androguard${executableSuffix}`, "androguard"],
+		frida: [`frida${executableSuffix}`, "frida"],
+		fridaPs: [`frida-ps${executableSuffix}`, "frida-ps"],
+		objection: [`objection${executableSuffix}`, "objection"],
+		radare2: [
+			`radare2${executableSuffix}`,
+			`r2${executableSuffix}`,
+			"radare2",
+			"r2",
+		],
+		rizin: [`rizin${executableSuffix}`, "rizin"],
+		cutter: [`cutter${executableSuffix}`, "cutter"],
+		llvmReadobj: [
+			`llvm-readobj${executableSuffix}`,
+			`llvm-readelf${executableSuffix}`,
+			"llvm-readobj",
+			"llvm-readelf",
+		],
+		objdump: [`objdump${executableSuffix}`, "objdump"],
+		strings: [`strings${executableSuffix}`, "strings"],
+		keytool: [`keytool${executableSuffix}`, "keytool"],
+		jarsigner: [`jarsigner${executableSuffix}`, "jarsigner"],
+	};
+	const results = await Promise.all(
+		Object.entries(commands).map(async ([name, candidates]) => [
+			name,
+			await discoverFirst(candidates),
+		]),
+	);
+	return Object.fromEntries(results);
 }
 
 async function sha256(filePath: string): Promise<string> {
@@ -931,6 +1025,111 @@ async function searchSmali(
 		matches,
 		truncated: false,
 		hint: "Use read_smali_method with a returned path and method signature to retrieve the complete method body.",
+	};
+}
+
+function classifyExtractedString(value: string): string {
+	if (/^https?:\/\//i.test(value)) return "url";
+	if (/^(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d+)?(?:\/|$)/.test(value))
+		return "domain";
+	if (/^(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?$/.test(value)) return "ip";
+	if (/^(?:L[^;]+;|[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*){2,})$/.test(value))
+		return "classOrPackage";
+	if (/[/\\](?:data|system|proc|sdcard|storage|lib|bin)[/\\]/i.test(value))
+		return "path";
+	if (
+		/(?:password|token|secret|certificate|keystore|root|frida|debug|emulator|hook)/i.test(
+			value,
+		)
+	)
+		return "securityRelevant";
+	return "other";
+}
+
+async function scanBinaryStrings(
+	target: string,
+	minLength: number,
+	maxResults: number,
+	pattern: string | undefined,
+	signal?: AbortSignal,
+) {
+	const filter = pattern ? new RegExp(pattern, "i") : undefined;
+	const stat = await fs.stat(target);
+	const maxScanBytes = Math.min(stat.size, 256 * 1024 * 1024);
+	const handle = await fs.open(target, "r");
+	const seen = new Set<string>();
+	const results: Array<{
+		value: string;
+		encoding: "ascii" | "utf16le";
+		category: string;
+	}> = [];
+	let offset = 0;
+	let carry = Buffer.alloc(0);
+	const add = (value: string, encoding: "ascii" | "utf16le") => {
+		const normalized = value.trim();
+		if (
+			normalized.length < minLength ||
+			seen.has(normalized) ||
+			(filter && !filter.test(normalized))
+		)
+			return;
+		seen.add(normalized);
+		results.push({
+			value: normalized.slice(0, 4_096),
+			encoding,
+			category: classifyExtractedString(normalized),
+		});
+	};
+	try {
+		while (offset < maxScanBytes && results.length < maxResults) {
+			signal?.throwIfAborted();
+			const length = Math.min(1024 * 1024, maxScanBytes - offset);
+			const chunk = Buffer.alloc(length);
+			const { bytesRead } = await handle.read(chunk, 0, length, offset);
+			if (bytesRead === 0) break;
+			offset += bytesRead;
+			const data = Buffer.concat([carry, chunk.subarray(0, bytesRead)]);
+			const ascii = data.toString("latin1");
+			const asciiPattern = new RegExp(`[\\x20-\\x7e]{${minLength},}`, "g");
+			for (const match of ascii.matchAll(asciiPattern)) {
+				add(match[0], "ascii");
+				if (results.length >= maxResults) break;
+			}
+			if (results.length < maxResults) {
+				let current = "";
+				for (let index = 0; index + 1 < data.length; index += 2) {
+					const low = data[index] ?? 0;
+					const high = data[index + 1] ?? 0;
+					if (high === 0 && low >= 0x20 && low <= 0x7e) {
+						current += String.fromCharCode(low);
+					} else {
+						if (current.length >= minLength) add(current, "utf16le");
+						current = "";
+					}
+					if (results.length >= maxResults) break;
+				}
+				if (current.length >= minLength) add(current, "utf16le");
+			}
+			carry = data.subarray(Math.max(0, data.length - 4_096));
+		}
+	} finally {
+		await handle.close();
+	}
+	const categoryCounts: Record<string, number> = {};
+	for (const result of results) {
+		categoryCounts[result.category] =
+			(categoryCounts[result.category] ?? 0) + 1;
+	}
+	return {
+		scannedBytes: offset,
+		fileBytes: stat.size,
+		scanLimited: stat.size > maxScanBytes,
+		minStringLength: minLength,
+		pattern: pattern ?? null,
+		resultCount: results.length,
+		resultsTruncated: results.length >= maxResults,
+		categoryCounts,
+		results,
 	};
 }
 
@@ -1598,6 +1797,21 @@ async function installationCapabilities(
 		},
 		androidBuildTools: androidUtilities,
 		androidStudio: await discoverAndroidStudio(),
+		supplementalTools: await discoverSupplementalTools(),
+		toolSelectionGuide: {
+			"two APKs":
+				"compare_apks first; then JADX for readable semantic changes and Smali for exact changed instructions",
+			"protected or obfuscated APK":
+				"Apktool/Baksmali + search_smali/read_smali_method; use JADX as a secondary view",
+			"native .so libraries":
+				"Ghidra or IDA for decompilation; LLVM/radare2/Rizin for supplemental headers and symbols",
+			"runtime behavior on an authorized device":
+				"android_device for bounded ADB collection; Frida/Objection are reported when installed but are not launched automatically",
+			"signing or tampering":
+				"verify_apk_signature plus compare_apks signature-entry changes",
+			"quick indicators":
+				"inspect and scan_strings before expensive decompilation",
+		},
 		cacheDirectory: analysisCacheRoot(),
 	};
 }
@@ -1744,6 +1958,55 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			? await sha256Directory(target)
 			: await sha256(target);
 		const zip = stat.isFile() ? await isZip(target) : false;
+		if (input.operation === "scan_strings") {
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					target,
+					sha256: hash,
+					...(await scanBinaryStrings(
+						target,
+						input.min_string_length ?? 6,
+						input.max_results ?? 1_000,
+						input.string_pattern,
+						context.signal,
+					)),
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
+		if (input.operation === "verify_apk_signature") {
+			if (!zip) {
+				throw new Error("verify_apk_signature requires an APK/ZIP container");
+			}
+			if (!androidUtilities.apksigner) {
+				throw new Error(
+					"apksigner was not found. Install Android SDK Build Tools or set ANDROID_SDK_ROOT.",
+				);
+			}
+			const result = await runSupervised(
+				androidUtilities.apksigner,
+				["verify", "--verbose", "--print-certs", target],
+				input.timeout_ms ?? 120_000,
+				context.signal,
+			);
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					target,
+					sha256: hash,
+					tool: androidUtilities.apksigner,
+					verified:
+						result.exitCode === 0 && !result.timedOut && !result.cancelled,
+					...result,
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
 		if (input.operation === "compare_apks") {
 			if (!input.compare_target) {
 				throw new Error("compare_target is required for compare_apks");
