@@ -7,6 +7,7 @@
  */
 
 import type { ToolExecutors } from "../types";
+import { createAndroidDeviceExecutor } from "./android-device";
 import {
 	type ApplyPatchExecutorOptions,
 	createApplyPatchExecutor,
@@ -31,6 +32,7 @@ export {
 	createApplyPatchExecutor,
 	type PatchFileChange,
 } from "./apply-patch";
+export { createAndroidDeviceExecutor } from "./android-device";
 export { PATCH_MARKERS, PatchActionType } from "./apply-patch-parser";
 export {
 	CommandExitError,
@@ -101,6 +103,7 @@ export function createDefaultExecutors(
 		readFile: createFileReadExecutor(options.fileRead),
 		search: createSearchExecutor(options.search),
 		reverseEngineering: createReverseEngineeringExecutor(),
+		androidDevice: createAndroidDeviceExecutor(),
 		bash: createDefaultShellExecutor(options.bash),
 		webFetch: createWebFetchExecutor(options.webFetch),
 		applyPatch: createApplyPatchExecutor(options.applyPatch),

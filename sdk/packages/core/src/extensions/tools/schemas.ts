@@ -171,6 +171,39 @@ export const ReverseEngineeringInputSchema = z.object({
 	jadx_mappings_path: z.string().min(1).optional(),
 });
 
+/** Supervised Android Debug Bridge operations without an unrestricted shell. */
+export const AndroidDeviceInputSchema = z.object({
+	operation: z.enum([
+		"discover",
+		"devices",
+		"package_info",
+		"install",
+		"uninstall",
+		"launch",
+		"force_stop",
+		"logcat",
+		"crash_logs",
+		"pull_apk",
+		"screenshot",
+		"bugreport",
+		"processes",
+	]),
+	device_serial: z.string().min(1).optional(),
+	package: z
+		.string()
+		.regex(/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/)
+		.optional(),
+	activity: z.string().min(1).optional(),
+	path: z.string().min(1).optional(),
+	output_path: z.string().min(1).optional(),
+	lines: z.number().int().min(1).max(5_000).optional(),
+	clear_logcat: z.boolean().optional(),
+	grant_permissions: z.boolean().optional(),
+	replace_existing: z.boolean().optional(),
+	keep_data: z.boolean().optional(),
+	timeout_ms: z.number().int().positive().max(600_000).optional(),
+});
+
 /**
  * Schema for search_codebase tool input
  */
@@ -374,6 +407,7 @@ export type ReadFilesInput = z.infer<typeof ReadFilesInputSchema>;
 export type ReverseEngineeringInput = z.infer<
 	typeof ReverseEngineeringInputSchema
 >;
+export type AndroidDeviceInput = z.infer<typeof AndroidDeviceInputSchema>;
 
 export type SearchCodebaseInput = z.infer<typeof SearchCodebaseInputSchema>;
 

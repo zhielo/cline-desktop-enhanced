@@ -37,6 +37,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		DefaultToolsConfig,
 		| "enableReadFiles"
 		| "enableReverseEngineering"
+		| "enableAndroidDevice"
 		| "enableSearch"
 		| "enableBash"
 		| "enableWebFetch"
@@ -49,6 +50,7 @@ const TOOL_NAME_TO_FLAG: Record<
 > = {
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
+	android_device: "enableAndroidDevice",
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
 	fetch_web_content: "enableWebFetch",

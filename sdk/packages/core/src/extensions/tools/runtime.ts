@@ -60,6 +60,12 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		headlessToolNames: ["reverse_engineer"],
 	},
 	{
+		id: "android_device",
+		description:
+			"Debug an attached authorized Android device with supervised ADB workflows.",
+		headlessToolNames: ["android_device"],
+	},
+	{
 		id: "search_codebase",
 		description:
 			"Perform regex pattern searches across the codebase for code patterns, definitions, imports, and other text matches.",
@@ -123,6 +129,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 			DefaultToolsConfig,
 			| "enableReadFiles"
 			| "enableReverseEngineering"
+			| "enableAndroidDevice"
 			| "enableSearch"
 			| "enableBash"
 			| "enableWebFetch"
@@ -136,6 +143,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 > = {
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
+	android_device: "enableAndroidDevice",
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
 	fetch_web_content: "enableWebFetch",
@@ -155,6 +163,7 @@ type ResolvedToolFlags = Pick<
 	DefaultToolsConfig,
 	| "enableReadFiles"
 	| "enableReverseEngineering"
+	| "enableAndroidDevice"
 	| "enableSearch"
 	| "enableBash"
 	| "enableWebFetch"

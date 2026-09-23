@@ -16,6 +16,7 @@ export { ALL_DEFAULT_TOOL_NAMES, DefaultToolNames } from "./constants";
 // AgentTool Definitions
 export {
 	createApplyPatchTool,
+	createAndroidDeviceTool,
 	createAskQuestionTool,
 	createDefaultTools,
 	createEditorTool,
@@ -33,6 +34,7 @@ export {
 	CommandExitError,
 	computePatchChanges,
 	createApplyPatchExecutor,
+	createAndroidDeviceExecutor,
 	createDefaultExecutors,
 	createDefaultShellExecutor,
 	createEditorExecutor,
@@ -86,6 +88,8 @@ export {
 } from "./runtime";
 // Schemas
 export {
+	type AndroidDeviceInput,
+	AndroidDeviceInputSchema,
 	type ApplyPatchInput,
 	ApplyPatchInputSchema,
 	type AskQuestionInput,
@@ -116,6 +120,7 @@ export {
 export { TEAM_TOOL_NAMES } from "./team/team-tools";
 // Types
 export type {
+	AndroidDeviceExecutor,
 	ApplyPatchExecutor,
 	AskQuestionExecutor,
 	CreateDefaultToolsOptions,

@@ -11,6 +11,7 @@ import type {
 	TextContent,
 } from "@cline/shared";
 import type {
+	AndroidDeviceInput,
 	ApplyPatchInput,
 	EditFileInput,
 	ReadFileRequest,
@@ -66,6 +67,11 @@ export type FileReadExecutor = (
  */
 export type ReverseEngineeringExecutor = (
 	input: ReverseEngineeringInput,
+	context: AgentToolContext,
+) => Promise<string>;
+
+export type AndroidDeviceExecutor = (
+	input: AndroidDeviceInput,
 	context: AgentToolContext,
 ) => Promise<string>;
 
@@ -209,6 +215,8 @@ export interface ToolExecutors {
 	search?: SearchExecutor;
 	/** Supervised reverse-engineering implementation */
 	reverseEngineering?: ReverseEngineeringExecutor;
+	/** Supervised Android Debug Bridge workflows */
+	androidDevice?: AndroidDeviceExecutor;
 	/** Shell command execution implementation */
 	bash?: ShellExecutor;
 	/** Web content fetching implementation */
@@ -236,6 +244,7 @@ export type DefaultToolName =
 	| "read_files"
 	| "search_codebase"
 	| "reverse_engineer"
+	| "android_device"
 	| "run_commands"
 	| "fetch_web_content"
 	| "apply_patch"
@@ -267,6 +276,9 @@ export interface DefaultToolsConfig {
 	 * @default true
 	 */
 	enableReverseEngineering?: boolean;
+
+	/** Enable the android_device tool. @default true */
+	enableAndroidDevice?: boolean;
 
 	/**
 	 * Enable the search_codebase tool

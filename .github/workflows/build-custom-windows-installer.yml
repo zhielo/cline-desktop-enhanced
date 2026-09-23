@@ -72,6 +72,7 @@ jobs:
         shell: bash
         run: |
           bunx vitest run \
+            sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
             sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             --config vitest.config.ts

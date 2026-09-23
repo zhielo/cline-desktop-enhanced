@@ -25,6 +25,7 @@ export const ToolPresets = {
 	act: {
 		enableReadFiles: true,
 		enableReverseEngineering: true,
+		enableAndroidDevice: true,
 		enableSearch: true,
 		enableBash: true,
 		enableWebFetch: true,
@@ -46,6 +47,7 @@ export const ToolPresets = {
 	plan: {
 		enableReadFiles: true,
 		enableReverseEngineering: true,
+		enableAndroidDevice: false,
 		enableSearch: true,
 		enableBash: true,
 		enableWebFetch: true,
@@ -65,6 +67,7 @@ export const ToolPresets = {
 	search: {
 		enableReadFiles: true,
 		enableReverseEngineering: true,
+		enableAndroidDevice: false,
 		enableSearch: true,
 		enableBash: false,
 		enableWebFetch: false,
@@ -83,6 +86,7 @@ export const ToolPresets = {
 	minimal: {
 		enableReadFiles: false,
 		enableReverseEngineering: true,
+		enableAndroidDevice: true,
 		enableSearch: false,
 		enableBash: true,
 		enableWebFetch: false,
@@ -102,6 +106,7 @@ export const ToolPresets = {
 	yolo: {
 		enableReadFiles: true,
 		enableReverseEngineering: true,
+		enableAndroidDevice: true,
 		enableSearch: true,
 		enableBash: true,
 		enableWebFetch: true,

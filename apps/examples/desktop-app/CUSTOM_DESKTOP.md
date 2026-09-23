@@ -97,3 +97,18 @@ idalib-mcp --stdio --max-workers 1
 The one-worker default avoids consuming multiple IDA license seats. The resulting MCP tools let the model open a database once and repeatedly query functions, strings, imports, pseudocode, and cross-references. The button configures an existing installation; it deliberately does not download third-party code.
 
 Ghidra 12 continues to work through the built-in supervised `analyzeHeadless` adapter. Discovery also prints the offline command for installing PyGhidra from the bundled Ghidra distribution when available.
+
+## Attached Android device debugging
+
+The built-in `android_device` tool uses Android Debug Bridge from `ADB_PATH`,
+`ANDROID_SDK_ROOT`, `ANDROID_HOME`, or `PATH` with an already-authorized USB or
+wireless-debugging device. It supports device discovery, package/process
+inspection, APK install/uninstall and launch/force-stop, PID-filtered `logcat`,
+the Android crash buffer, installed base-APK pulls, screenshots, and
+bugreports. Operations support device serial selection, timeout/cancellation,
+bounded text output, and Windows process-tree termination. APK pulls and
+screenshots update destinations atomically.
+
+The tool does not expose an unrestricted device shell, clear app data, root a
+device, bypass Android authorization, or bypass app signing. Full Access
+removes Cline approval prompts; Android must still authorize the device.

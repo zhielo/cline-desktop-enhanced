@@ -35,6 +35,8 @@ import {
 	withTimeout,
 } from "./helpers";
 import {
+	type AndroidDeviceInput,
+	AndroidDeviceInputSchema,
 	type ApplyPatchInput,
 	ApplyPatchInputSchema,
 	ApplyPatchInputUnionSchema,
@@ -61,6 +63,7 @@ import {
 	SubmitInputSchema,
 } from "./schemas";
 import type {
+	AndroidDeviceExecutor,
 	ApplyPatchExecutor,
 	AskQuestionExecutor,
 	CreateDefaultToolsOptions,
@@ -269,6 +272,20 @@ export function createReverseEngineeringTool(
 			"Discover and use installed Ghidra, IDA, or JADX for authorized static analysis. Call discover without a target when capabilities are unknown. Use inspect for structured PE/ELF/Mach-O/DEX/APK triage, extract for safe ZIP/APK/JAR extraction, disassemble_smali/assemble_smali/rebuild_apk for an editable APK or DEX Smali round trip, and analyze/decompile/script/open_gui for engine-backed work. Analysis workspaces are cached by artifact hash and reused by default; GUI handoff opens the generated Ghidra project or IDA database when available. JADX supports bounded threads, single-class work, deobfuscation, mappings, call graphs, JSON, fallback modes, and Gradle export. Automatically use this tool when a binary, APK, archive, decompilation, disassembly, or reverse-engineering task requires it. Uses per-workspace serialization, bounded output, timeouts, cancellation, private output directories, and archive resource ceilings. Does not execute target binaries or bypass licensing.",
 		inputSchema: zodToJsonSchema(ReverseEngineeringInputSchema),
 		timeoutMs: 3_600_000,
+		retryable: false,
+		execute: executor,
+	});
+}
+
+export function createAndroidDeviceTool(
+	executor: AndroidDeviceExecutor,
+): AgentTool<AndroidDeviceInput, string> {
+	return createTool<AndroidDeviceInput, string>({
+		name: "android_device",
+		description:
+			"Use Android Debug Bridge through bounded, supervised workflows for an attached and already-authorized device. Discover devices, inspect packages and processes, install/uninstall or launch a specifically named app, capture package-filtered logcat and crash logs, pull the installed base APK, take a screenshot, or collect a bugreport. Prefer this tool over raw shell commands for mobile debugging. It requires Android Platform Tools and device authorization, does not expose an unrestricted device shell, root devices, or bypass Android security or app signing.",
+		inputSchema: zodToJsonSchema(AndroidDeviceInputSchema),
+		timeoutMs: 600_000,
 		retryable: false,
 		execute: executor,
 	});
@@ -945,6 +962,7 @@ export function createDefaultTools(
 		enableReadFiles = true,
 		enableSearch = true,
 		enableReverseEngineering = true,
+		enableAndroidDevice = true,
 		enableBash = true,
 		enableWebFetch = true,
 		enableApplyPatch = false,
@@ -964,6 +982,9 @@ export function createDefaultTools(
 
 	if (enableReverseEngineering && executors.reverseEngineering) {
 		tools.push(createReverseEngineeringTool(executors.reverseEngineering));
+	}
+	if (enableAndroidDevice && executors.androidDevice) {
+		tools.push(createAndroidDeviceTool(executors.androidDevice));
 	}
 
 	// Add search_codebase tool if enabled and executor provided
