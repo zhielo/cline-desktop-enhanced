@@ -33,6 +33,7 @@ function createTelemetryHandler(capture = vi.fn()) {
 describe("sidecar WebSocket payload limit", () => {
 	it("accepts every recording allowed by the voice input size limit", () => {
 		const handler = createWebSocketHandler({} as SidecarContext);
+
 		expect(MAX_RECORDED_AUDIO_BYTES).toBe(25 * 1024 * 1024);
 		expect(handler.maxPayloadLength).toBeGreaterThan(
 			MAX_RECORDED_AUDIO_BASE64_BYTES,
@@ -53,6 +54,7 @@ describe("sidecar HTTP origin checks", () => {
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(403);
 		expect(response?.headers.get("access-control-allow-origin")).toBeNull();
 	});
@@ -63,10 +65,13 @@ describe("sidecar HTTP origin checks", () => {
 		const response = await createHandler(onShutdown)(
 			new Request("http://127.0.0.1:3126/shutdown", {
 				method: "POST",
-				headers: { origin: "https://attacker.example" },
+				headers: {
+					origin: "https://attacker.example",
+				},
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(403);
 		expect(onShutdown).not.toHaveBeenCalled();
 	});
@@ -75,10 +80,13 @@ describe("sidecar HTTP origin checks", () => {
 		const server = createTestServer();
 		const response = await createHandler()(
 			new Request("http://127.0.0.1:3126/transport", {
-				headers: { origin: "https://attacker.example" },
+				headers: {
+					origin: "https://attacker.example",
+				},
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(404);
 		expect(server.upgrade).not.toHaveBeenCalled();
 	});
@@ -87,10 +95,11 @@ describe("sidecar HTTP origin checks", () => {
 		const server = createTestServer();
 		await createHandler()(
 			new Request(
-				`http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}`,
+				`{{http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}}}`,
 			),
 			server,
 		);
+
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
 			data: { authenticated: true, canApproveTools: false },
 		});
@@ -100,11 +109,14 @@ describe("sidecar HTTP origin checks", () => {
 		const server = createTestServer();
 		await createHandler()(
 			new Request(
-				`http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}`,
-				{ headers: { origin: "tauri://localhost" } },
+				`{{http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}}}`,
+				{
+					headers: { origin: "tauri://localhost" },
+				},
 			),
 			server,
 		);
+
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
 			data: { authenticated: true, canApproveTools: true },
 		});
@@ -122,6 +134,7 @@ describe("sidecar HTTP origin checks", () => {
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(204);
 		expect(response?.headers.get("access-control-allow-origin")).toBe(
 			"tauri://localhost",
@@ -136,6 +149,7 @@ describe("sidecar HTTP origin checks", () => {
 			}),
 			server,
 		);
+
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
 			data: { authenticated: false, canApproveTools: false },
 		});
@@ -165,6 +179,7 @@ describe("desktop error telemetry", () => {
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(202);
 		expect(capture).toHaveBeenCalledWith({
 			event: "sdk.error",
@@ -204,6 +219,7 @@ describe("desktop error telemetry", () => {
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(202);
 		expect(capture).toHaveBeenCalledWith({
 			event: "sdk.error",
@@ -252,6 +268,7 @@ describe("desktop error telemetry", () => {
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(202);
 		const properties = capture.mock.calls[0]?.[0]?.properties as Record<
 			string,
@@ -274,6 +291,7 @@ describe("desktop error telemetry", () => {
 			}),
 			server,
 		);
+
 		expect(response?.status).toBe(403);
 		expect(capture).not.toHaveBeenCalled();
 	});
