@@ -22,16 +22,18 @@ import {
 	type SidecarWebSocketClient,
 } from "./types";
 
-type SidecarConnectionData = {
-	authenticated?: boolean;
-	canApproveTools?: boolean;
-};
-
 type SidecarServer = {
 	port: number;
-	upgrade(req: Request, options?: { data?: SidecarConnectionData }): boolean;
+	upgrade(
+		req: Request,
+		options?: {
+			data?: { authenticated?: boolean; canApproveTools?: boolean };
+		},
+	): boolean;
 };
 
+// Comma-separated extra origins (e.g. a dev server on a nonstandard port when
+// the sidecar runs inside a container). Origin validation itself stays on.
 const EXTRA_TRUSTED_ORIGINS = (process.env.CLINE_SIDECAR_TRUSTED_ORIGINS ?? "")
 	.split(",")
 	.map((origin) => origin.trim())
@@ -46,7 +48,10 @@ const TRUSTED_BROWSER_ORIGINS = new Set([
 	...EXTRA_TRUSTED_ORIGINS,
 ]);
 
-const JSON_HEADERS = { "content-type": "application/json" };
+const JSON_HEADERS = {
+	"content-type": "application/json",
+};
+
 const APPROVAL_TOKEN_QUERY_PARAM = "approval_token";
 
 function hasValidApprovalToken(url: URL, expectedToken: string): boolean {
@@ -76,14 +81,24 @@ function corsHeaders(req: Request): Record<string, string> {
 		"access-control-allow-headers": "accept, content-type",
 		"access-control-allow-methods": "GET, POST, OPTIONS",
 		...(origin && TRUSTED_BROWSER_ORIGINS.has(origin)
-			? { "access-control-allow-origin": origin, vary: "Origin" }
+			? {
+					"access-control-allow-origin": origin,
+					vary: "Origin",
+				}
 			: {}),
 	};
 }
 
 function jsonHeaders(req: Request): Record<string, string> {
-	return { ...JSON_HEADERS, ...corsHeaders(req) };
+	return {
+		...JSON_HEADERS,
+		...corsHeaders(req),
+	};
 }
+
+// ---------------------------------------------------------------------------
+// JSON response helper
+// ---------------------------------------------------------------------------
 
 function jsonResponse(
 	id: string,
@@ -107,7 +122,12 @@ function createJsonResponse(
 
 const EMPTY_MARKETPLACE_CATALOG = {
 	version: 1,
-	counts: { total: 0, plugins: 0, skills: 0, mcps: 0 },
+	counts: {
+		total: 0,
+		plugins: 0,
+		skills: 0,
+		mcps: 0,
+	},
 	tags: [],
 	entries: [],
 };
@@ -126,6 +146,8 @@ type DesktopClientErrorReport = {
 	stack?: unknown;
 };
 
+// Bound for free-form attribution strings (source URLs, stack traces);
+// matches ERROR_REPORT_FIELD_LIMIT in webview/lib/desktop-client.ts.
 const ERROR_REPORT_FIELD_LIMIT = 500;
 
 function captureDesktopError(
@@ -144,18 +166,27 @@ function captureDesktopError(
 	});
 }
 
+// ---------------------------------------------------------------------------
+// Bun HTTP + WebSocket server
+// ---------------------------------------------------------------------------
+
 export function startServer(
 	ctx: SidecarContext,
 	preferredPort: number = SIDECAR_PORT,
 	onShutdown?: (reason?: string) => Promise<void>,
-	approvalToken =
-		process.env.CLINE_SIDECAR_APPROVAL_TOKEN?.trim() || randomUUID(),
+	approvalToken = process.env.CLINE_SIDECAR_APPROVAL_TOKEN?.trim() ||
+		randomUUID(),
 ): { port: number; approvalToken: string } {
-	if (!BunRuntime) throw new Error("sidecar must be run with Bun");
+	if (!BunRuntime) {
+		throw new Error("sidecar must be run with Bun");
+	}
 
 	let server: SidecarServer | undefined;
 	let lastError: unknown;
-	for (const candidate of [preferredPort, 0]) {
+
+	// Try the preferred port first, then fall back to OS-assigned port (0).
+	const candidates = [preferredPort, 0];
+	for (const candidate of candidates) {
 		try {
 			server = BunRuntime.serve({
 				hostname: SIDECAR_HOST,
@@ -168,7 +199,11 @@ export function startServer(
 			lastError = error;
 		}
 	}
-	if (!server) throw lastError ?? new Error("Failed to start sidecar server");
+
+	if (!server) {
+		throw lastError ?? new Error("Failed to start sidecar server");
+	}
+
 	return { port: server.port, approvalToken };
 }
 
@@ -181,13 +216,19 @@ export function createFetchHandler(
 		const url = new URL(req.url);
 
 		if (req.method === "OPTIONS") {
-			if (!isTrustedRequestOrigin(req)) return new Response(null, { status: 403 });
+			if (!isTrustedRequestOrigin(req)) {
+				return new Response(null, { status: 403 });
+			}
 			return new Response(null, { status: 204, headers: corsHeaders(req) });
 		}
 
 		if (url.pathname === "/health") {
 			return new Response(
-				JSON.stringify({ ok: true, mode: SIDECAR_MODE, pid: process.pid }),
+				JSON.stringify({
+					ok: true,
+					mode: SIDECAR_MODE,
+					pid: process.pid,
+				}),
 				{ headers: jsonHeaders(req) },
 			);
 		}
@@ -199,6 +240,8 @@ export function createFetchHandler(
 				server.upgrade(req, {
 					data: {
 						authenticated,
+						// Originless integrations may invoke commands with the secret, but
+						// only the browser-hosted desktop UI may receive or resolve approvals.
 						canApproveTools:
 							authenticated &&
 							Boolean(origin) &&
@@ -262,7 +305,10 @@ export function createFetchHandler(
 					context.transportState = report.transportState.slice(0, 30);
 				}
 				if (typeof report.sourceUrl === "string" && report.sourceUrl.trim()) {
-					context.sourceUrl = report.sourceUrl.slice(0, ERROR_REPORT_FIELD_LIMIT);
+					context.sourceUrl = report.sourceUrl.slice(
+						0,
+						ERROR_REPORT_FIELD_LIMIT,
+					);
 				}
 				if (
 					typeof report.lineno === "number" &&
@@ -323,7 +369,12 @@ export function createWebSocketHandler(ctx: SidecarContext) {
 		open(ws: SidecarWebSocketClient) {
 			ctx.wsClients.add(ws);
 			void syncSidecarApprovalReadiness(ctx).catch(() => {});
-			sendEvent(ctx, "host_ready", { pid: process.pid, mode: SIDECAR_MODE });
+			sendEvent(ctx, "host_ready", {
+				pid: process.pid,
+				mode: SIDECAR_MODE,
+			});
+			// Replay a pending mismatch so webviews that connect (or reload)
+			// after detection still prompt the user to update and restart.
 			if (ctx.hubBuildMismatch) {
 				ws.send(encodeSidecarEvent("hub_build_mismatch", ctx.hubBuildMismatch));
 			}
@@ -373,8 +424,14 @@ export function createWebSocketHandler(ctx: SidecarContext) {
 			ctx.wsClients.delete(ws);
 			cancelSidecarToolApprovalsForOwner(ctx, ws);
 			void syncSidecarApprovalReadiness(ctx).catch(() => {});
+			// Browser OAuth flows are interactive: if the connection that started
+			// one goes away (webview reload, transport drop), cancel its callback
+			// wait so the sidecar cannot retain an abandoned authorization attempt.
 			cancelProviderOAuthLoginsForOwner(ws);
 			cancelMcpOAuthAuthorizationsForOwner(ws);
+			// Composio connects finish in the external browser; abandon (revoke
+			// + tombstone) any this connection started so a flow completed after
+			// the webview is gone cannot materialize connector tools.
 			abandonComposioConnectsForOwner(ws);
 		},
 	};
