@@ -223,6 +223,48 @@ describe("ai-sdk adapter malformed tool calls", () => {
 
 		expect(findParseError(events)).toContain("unavailable tool 'editor'");
 	});
+
+	it("repairs common command aliases only when the canonical tool is exposed", async () => {
+		const repaired = await repairMalformedToolCall({
+			toolCall: {
+				toolCallId: "call_1",
+				toolName: "execute_command",
+				input: '{"command":"git status"}',
+			},
+			error: new NoSuchToolError({ toolName: "execute_command" }),
+			tools: {
+				run_commands: {
+					description: "Run commands",
+					inputSchema: {} as never,
+				},
+			},
+		});
+		expect(repaired).toMatchObject({
+			toolName: "run_commands",
+			input: '{"command":"git status"}',
+		});
+	});
+
+	it("normalizes completion aliases to submit_and_exit", async () => {
+		const repaired = await repairMalformedToolCall({
+			toolCall: {
+				toolCallId: "call_1",
+				toolName: "attempt_completion",
+				input: '{"result":"All checks passed","verified":true}',
+			},
+			error: new NoSuchToolError({ toolName: "attempt_completion" }),
+			tools: {
+				submit_and_exit: {
+					description: "Finish",
+					inputSchema: {} as never,
+				},
+			},
+		});
+		expect(repaired).toMatchObject({
+			toolName: "submit_and_exit",
+			input: '{"summary":"All checks passed","verified":true}',
+		});
+	});
 });
 
 describe("repairMalformedToolCall", () => {

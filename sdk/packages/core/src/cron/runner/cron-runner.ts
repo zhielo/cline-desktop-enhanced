@@ -82,7 +82,6 @@ function cronExtensionEnabled(
 
 function buildToolPolicies(
 	spec: CronSpecRecord,
-	mode: "act" | "plan" | "yolo",
 ): NonNullable<ChatStartSessionRequest["toolPolicies"]> {
 	const policies: NonNullable<ChatStartSessionRequest["toolPolicies"]> =
 		spec.tools === undefined
@@ -97,12 +96,14 @@ function buildToolPolicies(
 		enabled: false,
 		autoApprove: true,
 	};
-	if (mode === "yolo") {
-		policies[DefaultToolNames.SUBMIT_AND_EXIT] = {
-			enabled: true,
-			autoApprove: true,
-		};
-	}
+	// Every scheduled run is unattended and needs an explicit, deterministic
+	// completion signal. This is independent of approval mode: act/plan retain
+	// their normal tool sets while gaining only the non-privileged completion
+	// tool.
+	policies[DefaultToolNames.SUBMIT_AND_EXIT] = {
+		enabled: true,
+		autoApprove: true,
+	};
 	return policies;
 }
 
@@ -735,7 +736,7 @@ export class CronRunner {
 			enableSpawn: runtimeOptions?.enableSpawn ?? true,
 			enableTeams: runtimeOptions?.enableTeams ?? true,
 			autoApproveTools: runtimeOptions?.autoApproveTools ?? true,
-			toolPolicies: buildToolPolicies(spec, mode),
+			toolPolicies: buildToolPolicies(spec),
 			configExtensions: DEFAULT_CRON_EXTENSIONS.filter((extension) =>
 				cronExtensionEnabled(spec, extension),
 			),

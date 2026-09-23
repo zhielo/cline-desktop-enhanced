@@ -855,6 +855,14 @@ export function createSidecarRuntimeCapabilities(
 		toolExecutors: {
 			askQuestion: (question, options, context) =>
 				requestSidecarAskQuestion(ctx, question, options, context),
+			// Completion is a lifecycle signal, not a privileged computer
+			// operation. Scheduled/headless runs need this executor so models can
+			// finish cleanly instead of failing on an unavailable
+			// `submit_and_exit` call.
+			submit: async (_summary, verified) =>
+				verified
+					? "Task completion accepted."
+					: "Task completion recorded without verification.",
 		},
 		requestToolApproval: (request) => requestSidecarToolApproval(ctx, request),
 	};

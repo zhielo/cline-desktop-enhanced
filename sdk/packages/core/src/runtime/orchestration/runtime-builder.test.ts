@@ -367,6 +367,28 @@ Use the review guidance.`,
 		}
 	}, 10_000);
 
+	it("enables completion in act mode when policy explicitly requests it", async () => {
+		const runtime = await new DefaultRuntimeBuilder().build({
+			config: makeBaseConfig({
+				mode: "act",
+				toolPolicies: {
+					submit_and_exit: { enabled: true, autoApprove: true },
+				},
+			}),
+			toolExecutors: {
+				submit: async () => "submitted",
+				askQuestion: async () => "question",
+			},
+		});
+
+		const names = runtime.tools.map((tool) => tool.name);
+		expect(names).toContain("submit_and_exit");
+		expect(names).not.toContain("ask_question");
+		expect(runtime.completionPolicy).toEqual({
+			requireCompletionTool: true,
+		});
+	});
+
 	it("does not infer yolo preset from auto-approval alone", async () => {
 		const runtime = await new DefaultRuntimeBuilder().build({
 			config: makeBaseConfig({

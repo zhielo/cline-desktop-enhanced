@@ -399,9 +399,10 @@ describe("CronRunner", () => {
 			enabled: false,
 			autoApprove: true,
 		});
-		expect(request.toolPolicies?.[DefaultToolNames.SUBMIT_AND_EXIT]).toEqual(
-			mode === "yolo" ? { enabled: true, autoApprove: true } : undefined,
-		);
+		expect(request.toolPolicies?.[DefaultToolNames.SUBMIT_AND_EXIT]).toEqual({
+			enabled: true,
+			autoApprove: true,
+		});
 	});
 
 	it("marks runs failed when the runtime throws", async () => {

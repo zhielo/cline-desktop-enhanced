@@ -134,6 +134,7 @@ describe("Code sidecar runtime capabilities", () => {
 				capabilities: expect.objectContaining({
 					toolExecutors: expect.objectContaining({
 						askQuestion: expect.any(Function),
+						submit: expect.any(Function),
 					}),
 					requestToolApproval: expect.any(Function),
 				}),

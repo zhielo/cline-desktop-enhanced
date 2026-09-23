@@ -97,6 +97,13 @@ function filterAvailableTools(
 	return filterDisabledTools(filterToolsByPolicies(tools, toolPolicies));
 }
 
+function explicitlyEnabledByPolicy(
+	toolName: string,
+	toolPolicies: CoreSessionConfig["toolPolicies"],
+): boolean {
+	return toolPolicies?.[toolName]?.enabled === true;
+}
+
 const CONFIGURED_AGENT_TOOL_NAME_ALIASES: Record<string, string> = {
 	apply_diff: "editor",
 	attempt_completion: "submit_and_exit",
@@ -156,6 +163,10 @@ function createBuiltinToolsList(
 		mode,
 		toolRoutingRules ?? DEFAULT_MODEL_TOOL_ROUTING_RULES,
 	);
+	const explicitCompletionTool = explicitlyEnabledByPolicy(
+		"submit_and_exit",
+		toolPolicies,
+	);
 
 	return filterAvailableTools(
 		createBuiltinTools({
@@ -167,6 +178,12 @@ function createBuiltinToolsList(
 			...preset,
 			enableSkills: !!skillsExecutor,
 			...toolRoutingConfig,
+			...(explicitCompletionTool
+				? {
+						enableAskQuestion: false,
+						enableSubmitAndExit: true,
+					}
+				: {}),
 			executors: {
 				...(skillsExecutor
 					? {

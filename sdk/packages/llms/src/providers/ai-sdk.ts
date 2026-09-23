@@ -889,21 +889,100 @@ interface RepairableToolCall {
 	input: string;
 }
 
+const TOOL_CALL_NAME_ALIASES: Record<string, string> = {
+	ask_followup_question: "ask_question",
+	attempt_completion: "submit_and_exit",
+	bash: "run_commands",
+	complete_task: "submit_and_exit",
+	execute_command: "run_commands",
+	fetch_url: "fetch_web_content",
+	final_answer: "submit_and_exit",
+	finish_task: "submit_and_exit",
+	grep: "search_codebase",
+	read_file: "read_files",
+	ripgrep: "search_codebase",
+	run_command: "run_commands",
+	search_files: "search_codebase",
+	shell: "run_commands",
+	spawn_subagent: "spawn_agent",
+	terminal: "run_commands",
+	use_skill: "skills",
+	web_fetch: "fetch_web_content",
+};
+
+function normalizeAliasedToolInput(
+	canonicalName: string,
+	input: string,
+): string {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(input);
+	} catch {
+		return input;
+	}
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		return input;
+	}
+	const record = parsed as Record<string, unknown>;
+	if (canonicalName === "submit_and_exit") {
+		const summary =
+			record.summary ??
+			record.result ??
+			record.answer ??
+			record.message ??
+			"Task completed by the agent.";
+		return JSON.stringify({
+			summary: String(summary),
+			verified: record.verified === true,
+		});
+	}
+	if (canonicalName === "search_codebase" && !("queries" in record)) {
+		const query = record.query ?? record.pattern ?? record.regex;
+		if (typeof query === "string") {
+			return JSON.stringify({ ...record, queries: [query] });
+		}
+	}
+	if (canonicalName === "spawn_agent") {
+		const task = record.task ?? record.prompt ?? record.instructions;
+		if (typeof task === "string") {
+			return JSON.stringify({
+				...record,
+				task,
+				systemPrompt:
+					typeof record.systemPrompt === "string"
+						? record.systemPrompt
+						: "You are a focused sub-agent. Complete the delegated task and report evidence concisely.",
+			});
+		}
+	}
+	return input;
+}
+
 /**
- * Last-chance repair for tool calls whose arguments are not valid JSON
- * (truncated payloads, single quotes, unescaped newlines — common with
- * weaker models). Runs the raw argument text through the shared jsonrepair
- * strategies; unknown tool names and already-valid JSON are not repairable
- * here, and returning null preserves the AI SDK's original error behavior.
+ * Last-chance repair for common cross-agent tool-name aliases and malformed
+ * JSON arguments. Aliases are accepted only when their canonical target is
+ * actually exposed in this request, so repair never bypasses a disabled tool
+ * or its approval policy.
  */
 export async function repairMalformedToolCall<T extends RepairableToolCall>({
 	toolCall,
 	error,
+	tools,
 }: {
 	toolCall: T;
 	error: unknown;
+	tools?: ToolSet;
 }): Promise<T | null> {
 	if (NoSuchToolError.isInstance(error)) {
+		const canonicalName =
+			TOOL_CALL_NAME_ALIASES[toolCall.toolName.trim().toLowerCase()];
+		if (canonicalName && hasAiSdkTool(tools, canonicalName)) {
+			return {
+				...toolCall,
+				toolName: canonicalName,
+				input: normalizeAliasedToolInput(canonicalName, toolCall.input),
+			};
+		}
 		return null;
 	}
 	if (typeof toolCall.input !== "string" || toolCall.input.trim() === "") {
