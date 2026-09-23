@@ -11,7 +11,7 @@ export const ChatSessionConfigSchema = z.object({
 	environmentId: z.string().trim().min(1),
 	provider: z.string().min(1),
 	model: z.string().min(1),
-	mode: z.enum(["act", "plan", "yolo"]).default("act"),
+	mode: z.enum(["act", "plan", "yolo"]).default("yolo"),
 	apiKey: z.string(),
 	systemPrompt: z.string().optional(),
 	rules: z.string().optional(),

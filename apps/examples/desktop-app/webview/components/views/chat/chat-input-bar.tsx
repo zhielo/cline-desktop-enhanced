@@ -13,6 +13,7 @@ import {
 	Cpu,
 	Paperclip,
 	Plus,
+	ShieldCheck,
 	X,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -310,7 +311,6 @@ type ChatInputBarProps = {
 	provider: string;
 	model: string;
 	modelContextWindow?: number;
-	mode: "act" | "plan" | "yolo";
 	thinking: ChatSessionConfig["thinking"];
 	reasoningEffort: ChatSessionConfig["reasoningEffort"];
 	/** Branch name, "no-git" for a non-repo folder, null while discovery is pending. */
@@ -323,7 +323,6 @@ type ChatInputBarProps = {
 	onPromptInputChange: (value: string) => void;
 	onProviderChange: (provider: string) => void;
 	onModelChange: (model: string) => void;
-	onModeChange: (mode: "act" | "plan" | "yolo") => void;
 	onReasoningChange: (
 		next: Pick<ChatSessionConfig, "thinking" | "reasoningEffort">,
 	) => void;
@@ -360,7 +359,6 @@ function ChatInputBarImpl({
 	provider,
 	model,
 	modelContextWindow,
-	mode,
 	thinking,
 	reasoningEffort,
 	gitBranch,
@@ -372,7 +370,6 @@ function ChatInputBarImpl({
 	onPromptInputChange,
 	onProviderChange,
 	onModelChange,
-	onModeChange,
 	onReasoningChange,
 	onListGitBranches,
 	onSwitchGitBranch,
@@ -1631,28 +1628,13 @@ function ChatInputBarImpl({
 						ref={fileInputRef}
 						type="file"
 					/>
-					<div className="shrink-0 items-center rounded-md bg-muted p-0.5 sm:flex">
-						{([
-							["plan", "Plan", "Read-only planning with guarded commands"],
-							["act", "Act", "Interactive development mode"],
-							["yolo", "Full Access", "Run tools without repetitive approval prompts"],
-						] as const).map(([value, label, title]) => (
-							<button
-								aria-pressed={mode === value}
-								className={cn(
-									"rounded px-2 py-1",
-									mode === value
-										? "bg-background text-foreground shadow-xs"
-										: "hover:text-foreground",
-								)}
-								key={value}
-								onClick={() => onModeChange(value)}
-								title={title}
-								type="button"
-							>
-								{label}
-							</button>
-						))}
+					<div
+						aria-label="Full Access enabled"
+						className="flex shrink-0 items-center gap-1.5 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-1 font-medium text-orange-600 dark:text-orange-400"
+						title="Full Access: local tools run without repetitive approval prompts"
+					>
+						<ShieldCheck className="size-3.5" />
+						<span>Full Access</span>
 					</div>
 					<div className="min-w-0 shrink-0">
 						<ModelSelector

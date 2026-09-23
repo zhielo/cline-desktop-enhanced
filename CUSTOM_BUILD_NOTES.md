@@ -4,8 +4,9 @@ This source tree extends the supplied Windows reverse-engineering fork.
 
 ## Included behavior
 
-- **Full Access** maps to the `yolo` session policy and auto-approves every
-  registered tool for that session.
+- **Full Access** is the only approval mode shown in the desktop composer and
+  is enabled by default. A legacy internal Cline mode value drives the
+  auto-approval policy but is never displayed to users.
 - Full Access keeps code search, batched commands, patch/editor, web fetch,
   configured skills, and reverse-engineering tools enabled.
 - `reverse_engineer` supports:

@@ -2131,11 +2131,6 @@ function ChatThreadPane({
 			),
 		[setConfig],
 	);
-	const handleModeChange = useCallback(
-		(mode: ChatSessionConfig["mode"]) =>
-			setConfig((prev) => (prev.mode === mode ? prev : { ...prev, mode })),
-		[setConfig],
-	);
 	const handleProviderChange = useCallback(
 		(nextProvider: string) =>
 			setConfig((prev) => {
@@ -2358,7 +2353,6 @@ function ChatThreadPane({
 			onRemoveAttachment={handleRemoveAttachment}
 			onSwitchGitBranch={switchGitBranch}
 			onModelChange={handleModelChange}
-			onModeChange={handleModeChange}
 			onPromptInputChange={handlePromptInputChange}
 			onOpenModelSettings={onOpenModelSettings}
 			onReasoningChange={handleReasoningChange}
@@ -2374,7 +2368,6 @@ function ChatThreadPane({
 			repoUrl={config.repoUrl}
 			model={config.model}
 			modelContextWindow={modelContextWindow}
-			mode={config.mode}
 			promptsInQueue={promptsInQueue}
 			promptDraft={promptDraft}
 			provider={config.provider}

@@ -26,7 +26,7 @@ export const DEFAULT_CHAT_CONFIG: ChatSessionConfig = {
 	provider: "cline",
 	model: CLINE_DEFAULT_MODEL_ID,
 	apiKey: process.env.CLINE_API_KEY || "",
-	mode: "act",
+	mode: "yolo",
 	systemPrompt: undefined,
 	maxIterations: undefined,
 	thinking: undefined,
