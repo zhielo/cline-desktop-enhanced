@@ -116,6 +116,9 @@ export const ReverseEngineeringInputSchema = z.object({
 		"extract",
 		"analyze",
 		"decompile",
+		"disassemble_smali",
+		"assemble_smali",
+		"rebuild_apk",
 		"script",
 		"open_gui",
 	]),
@@ -123,11 +126,49 @@ export const ReverseEngineeringInputSchema = z.object({
 		.string()
 		.min(1)
 		.optional()
-		.describe("Absolute path to the input artifact; omit for discover"),
+		.describe(
+			"Absolute path to the input artifact or decoded Smali/APK directory; omit for discover",
+		),
 	script_path: z.string().min(1).optional(),
 	script_args: z.array(z.string()).optional(),
 	timeout_ms: z.number().int().positive().max(3_600_000).optional(),
 	output_directory: z.string().min(1).optional(),
+	output_file: z
+		.string()
+		.min(1)
+		.optional()
+		.describe("Absolute output file for assemble_smali or rebuild_apk"),
+	smali_api_level: z.number().int().min(1).max(100).optional(),
+	reuse_analysis: z
+		.boolean()
+		.optional()
+		.describe(
+			"Reuse an artifact-hash keyed analysis workspace instead of starting from scratch",
+		),
+	max_cpu: z
+		.number()
+		.int()
+		.min(1)
+		.max(64)
+		.optional()
+		.describe("Maximum CPU cores for engines that support an explicit limit"),
+	jadx_mode: z
+		.enum(["auto", "restructure", "simple", "fallback"])
+		.optional()
+		.describe("JADX decompilation mode"),
+	jadx_threads: z.number().int().min(1).max(64).optional(),
+	jadx_single_class: z
+		.string()
+		.min(1)
+		.optional()
+		.describe("Decompile only this fully qualified JADX class"),
+	jadx_output_format: z.enum(["java", "json"]).optional(),
+	jadx_deobfuscate: z.boolean().optional(),
+	jadx_call_graph: z.enum(["dot", "json"]).optional(),
+	jadx_export_gradle: z.boolean().optional(),
+	jadx_no_resources: z.boolean().optional(),
+	jadx_no_sources: z.boolean().optional(),
+	jadx_mappings_path: z.string().min(1).optional(),
 });
 
 /**
@@ -330,7 +371,9 @@ export type ReadFilesInput = z.infer<typeof ReadFilesInputSchema>;
 /**
  * Input for the search_codebase tool
  */
-export type ReverseEngineeringInput = z.infer<typeof ReverseEngineeringInputSchema>;
+export type ReverseEngineeringInput = z.infer<
+	typeof ReverseEngineeringInputSchema
+>;
 
 export type SearchCodebaseInput = z.infer<typeof SearchCodebaseInputSchema>;
 

@@ -10,7 +10,7 @@ This fork adds an explicit **Full Access** profile, hardened binary handling, su
 
 ## Reverse engineering
 
-The built-in `reverse_engineer` tool supports discovery, safe ZIP inspection, headless analysis/decompilation, scripts, and GUI handoff.
+The built-in `reverse_engineer` tool supports discovery, structured binary triage, safe ZIP inspection/extraction, cached headless analysis/decompilation, scripts, and exact GUI handoff.
 
 Configure installed tools with `GHIDRA_HOME`/`GHIDRA_INSTALL_DIR`, `IDA_HOME`/`IDADIR`, or `JADX_HOME`, or put launchers on `PATH`. IDA requires a valid installation and license; this fork does not bypass licensing.
 
@@ -25,7 +25,11 @@ Example:
 }
 ```
 
-APK, AAB, DEX, and JAR inputs prefer JADX when installed. Ghidra uses `analyzeHeadless`; IDA uses autonomous mode; child output is bounded and timed out. ZIP inspection reads only the central directory and does not extract files.
+APK, AAB, DEX, and JAR inputs prefer JADX when installed. Ghidra uses `analyzeHeadless`; IDA uses autonomous mode; child output is bounded and timed out. Successful analysis is stored under an artifact SHA-256 and reused by default. Set `reuse_analysis` to `false` for an isolated temporary run. ZIP inspection reads only the central directory and does not extract files.
+
+JADX options include `jadx_mode`, `jadx_threads`, `jadx_single_class`, `jadx_output_format`, `jadx_deobfuscate`, `jadx_call_graph`, `jadx_export_gradle`, `jadx_no_resources`, `jadx_no_sources`, and `jadx_mappings_path`. Ghidra accepts `max_cpu`. IDA batch decompilation uses Hex-Rays' `ALL` target so every eligible non-library function is included.
+
+For protected or obfuscated Android applications, `disassemble_smali` uses `apktool` for APK-family containers or `baksmali` for raw DEX files. The resulting `.smali` files can be edited with normal file tools. `assemble_smali` builds an edited Smali directory into a DEX using `smali`; `rebuild_apk` builds an edited decoded directory into an unsigned APK using `apktool`. Build outputs are written atomically, symbolic links are rejected in build inputs, and the tool never executes the analyzed application. APK signing remains a separate, explicitly configured workflow.
 
 ## Binary and media safety
 
@@ -62,20 +66,25 @@ Ask Cline to **discover reverse-engineering tools** or call:
 }
 ```
 
-The result reports the detected headless and GUI launchers, Ghidra's bundled PyGhidra wheel directory, and IDA's idalib activation script. For IDA 9.0–9.3, activate idalib once using the exact command returned by discovery. This uses the installed licensed IDA instance and does not alter or bypass licensing.
+The result refreshes the sidecar's Windows `PATH` from the user and machine environment, then reports detected versions, headless and GUI launchers, Ghidra's bundled PyGhidra wheel directory, the analysis cache directory, and IDA's idalib activation script. Tools installed while Cline is open can therefore be detected without killing the sidecar. For IDA 9.0–9.3, activate idalib once using the exact command returned by discovery. This uses the installed licensed IDA instance and does not alter or bypass licensing.
 
 Use `inspect` before processing an unknown artifact. ZIP, APK, AAB, and JAR
 containers are parsed without extraction and report traversal, symlink,
 duplicate-name, compression-ratio, entry-count, and output-size findings. Use
 `extract` only after inspection; extraction is confined to a private output
 root, rejects unsafe archives, supports stored and deflated ZIP entries, and
-removes partial output after failure. APK inspection also reports DEX and native
-library counts without executing package content.
+removes partial output after failure. APK inspection also reports DEX files,
+native-library paths, and ABIs without executing package content. Non-archive
+inspection recognizes PE, ELF, Mach-O, DEX, and WebAssembly headers,
+architecture, bitness, entry point where available, and bounded sample entropy.
 
 `open_gui` is a handoff: it launches the detected GUI and returns immediately
-instead of holding an agent tool call open. Headless runs remain supervised,
-bounded, cancellable, and use per-artifact Ghidra project names so concurrent
-analyses do not write the same project.
+instead of holding an agent tool call open. When cached analysis exists, it
+opens the generated Ghidra project or IDA database rather than reimporting the
+original binary. Headless runs remain supervised, bounded, cancellable, and
+serialized per analysis workspace. Ghidra reprocesses its saved project, IDA
+reuses its `.i64` database, and generated artifacts plus a reproducibility
+manifest are returned to the agent.
 
 ### Persistent IDA tools
 
