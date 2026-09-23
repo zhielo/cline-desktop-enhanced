@@ -113,10 +113,13 @@ export const ReverseEngineeringInputSchema = z.object({
 	operation: z.enum([
 		"discover",
 		"inspect",
+		"compare_apks",
 		"extract",
 		"analyze",
 		"decompile",
 		"disassemble_smali",
+		"read_smali_method",
+		"search_smali",
 		"assemble_smali",
 		"rebuild_apk",
 		"script",
@@ -129,6 +132,13 @@ export const ReverseEngineeringInputSchema = z.object({
 		.describe(
 			"Absolute path to the input artifact or decoded Smali/APK directory; omit for discover",
 		),
+	compare_target: z
+		.string()
+		.min(1)
+		.optional()
+		.describe(
+			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
+		),
 	script_path: z.string().min(1).optional(),
 	script_args: z.array(z.string()).optional(),
 	timeout_ms: z.number().int().positive().max(3_600_000).optional(),
@@ -139,6 +149,30 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional()
 		.describe("Absolute output file for assemble_smali or rebuild_apk"),
 	smali_api_level: z.number().int().min(1).max(100).optional(),
+	smali_class: z
+		.string()
+		.min(1)
+		.optional()
+		.describe(
+			"Smali class name or relative path, for example com.example.MainActivity or com/example/MainActivity.smali",
+		),
+	smali_method: z
+		.string()
+		.min(1)
+		.optional()
+		.describe(
+			"Method name or signature to return in full, for example onCreate or onCreate(Landroid/os/Bundle;)V",
+		),
+	smali_query: z
+		.string()
+		.min(1)
+		.optional()
+		.describe(
+			"Literal text or regular expression to find across decoded Smali",
+		),
+	smali_regex: z.boolean().optional(),
+	context_lines: z.number().int().min(0).max(20).optional(),
+	max_results: z.number().int().min(1).max(5_000).optional(),
 	reuse_analysis: z
 		.boolean()
 		.optional()

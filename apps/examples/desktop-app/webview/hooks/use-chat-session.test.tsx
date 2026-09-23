@@ -3265,27 +3265,37 @@ describe("useChatSession", () => {
 
 	it("overlaps attachment serialization with cold session startup", async () => {
 		let resolveStart: ((value: { sessionId: string }) => void) | undefined;
-		let resolveFile: ((value: string) => void) | undefined;
+		let resolveUpload: ((value: ArrayBuffer) => void) | undefined;
 		const startResponse = new Promise<{ sessionId: string }>((resolve) => {
 			resolveStart = resolve;
 		});
-		const fileContent = new Promise<string>((resolve) => {
-			resolveFile = resolve;
+		const uploadChunk = new Promise<ArrayBuffer>((resolve) => {
+			resolveUpload = resolve;
 		});
-		const text = vi.fn(async () => await fileContent);
+		const arrayBuffer = vi.fn(async () => await uploadChunk);
 		const attachment = {
 			name: "notes.txt",
 			type: "text/plain",
 			size: 5,
 			lastModified: 1,
-			text,
+			slice: vi.fn(() => ({ arrayBuffer })),
 		} as unknown as File;
+		const appendUpload = vi.fn(async () => ({ receivedSize: 5 }));
 		let plannedSessionId = "";
 		let sentAttachments: unknown;
 		invokeMock.mockImplementation(
 			async (command: string, args?: Record<string, unknown>) => {
 				if (command === "get_process_context") {
 					return { cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+				}
+				if (command === "begin_attachment_upload") {
+					return { uploadId: "upload_notes", maxChunkBytes: 1024 };
+				}
+				if (command === "append_attachment_upload") {
+					return await appendUpload();
+				}
+				if (command === "finish_attachment_upload") {
+					return { uploadId: "upload_notes", size: 5 };
 				}
 				if (command === "chat_session_command") {
 					const request = args?.request as
@@ -3318,7 +3328,7 @@ describe("useChatSession", () => {
 			await Promise.resolve();
 		});
 
-		expect(text).toHaveBeenCalledTimes(1);
+		expect(arrayBuffer).toHaveBeenCalledTimes(1);
 		expect(plannedSessionId).toMatch(/^session_/);
 
 		await act(async () => {
@@ -3328,12 +3338,12 @@ describe("useChatSession", () => {
 		expect(sentAttachments).toBeUndefined();
 
 		await act(async () => {
-			resolveFile?.("hello");
+			resolveUpload?.(new TextEncoder().encode("hello").buffer);
 			await sendPromise;
 		});
 		expect(sentAttachments).toEqual({
 			userImages: [],
-			userFiles: [{ name: "notes.txt", content: "hello" }],
+			userFiles: [{ name: "notes.txt", uploadId: "upload_notes" }],
 		});
 	});
 
@@ -5964,16 +5974,16 @@ describe("useChatSession", () => {
 	});
 
 	it("preserves prompt order when the first prompt has a slow attachment", async () => {
-		let resolveFile: ((value: string) => void) | undefined;
-		const fileContent = new Promise<string>((resolve) => {
-			resolveFile = resolve;
+		let resolveUpload: ((value: ArrayBuffer) => void) | undefined;
+		const uploadChunk = new Promise<ArrayBuffer>((resolve) => {
+			resolveUpload = resolve;
 		});
 		const attachment = {
 			name: "slow.txt",
 			type: "text/plain",
 			size: 5,
 			lastModified: 1,
-			text: vi.fn(async () => await fileContent),
+			slice: vi.fn(() => ({ arrayBuffer: async () => await uploadChunk })),
 		} as unknown as File;
 		const sends: Array<{
 			prompt?: string;
@@ -5984,6 +5994,15 @@ describe("useChatSession", () => {
 			async (command: string, args?: Record<string, unknown>) => {
 				if (command === "get_process_context") {
 					return { cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+				}
+				if (command === "begin_attachment_upload") {
+					return { uploadId: "upload_slow", maxChunkBytes: 1024 };
+				}
+				if (command === "append_attachment_upload") {
+					return { receivedSize: 5 };
+				}
+				if (command === "finish_attachment_upload") {
+					return { uploadId: "upload_slow", size: 5 };
 				}
 				if (command === "chat_session_command") {
 					const request = args?.request as
@@ -6026,7 +6045,7 @@ describe("useChatSession", () => {
 		expect(sends).toHaveLength(0);
 
 		await act(async () => {
-			resolveFile?.("hello");
+			resolveUpload?.(new TextEncoder().encode("hello").buffer);
 			await Promise.all([firstSend, secondSend]);
 		});
 		expect(sends.map(({ prompt, delivery }) => ({ prompt, delivery }))).toEqual(

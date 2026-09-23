@@ -180,6 +180,18 @@ function compareSessionsByActivityDesc(
 	return b.sessionId.localeCompare(a.sessionId);
 }
 
+export function dedupeSessionsByIdentity(
+	sessions: SessionHistoryItem[],
+): SessionHistoryItem[] {
+	const seen = new Set<string>();
+	return sessions.filter((session) => {
+		const key = sessionKey(session);
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
 export function normalizeDiscoveredStatus(
 	status?: string,
 	prompt?: string,
@@ -801,28 +813,35 @@ export function useSessionHistory({
 				const hasMoreSessions = discovered.length >= limit;
 				mayHaveMoreSessionsRef.current = hasMoreSessions;
 				setMayHaveMoreSessions(hasMoreSessions);
-				const topLevelSessions = discovered
-					.map((session) => {
-						const normalized: SessionHistoryItem = {
-							...session,
-							sessionId: String(session.sessionId ?? "").trim(),
-							status: normalizeDiscoveredStatus(session.status, session.prompt),
-							provider: session.provider || "",
-							model: session.model || "",
-							cwd: session.cwd || "",
-							workspaceRoot: session.workspaceRoot || session.cwd || "",
-							startedAt: String(session.startedAt ?? ""),
-							metadata:
-								session.metadata && typeof session.metadata === "object"
-									? (session.metadata as SessionMetadata)
-									: undefined,
-						};
-						return normalized;
-					})
-					.filter((session) => Boolean(session.sessionId))
-					.filter(isValidHistorySession)
-					.filter((session) => !session.isSubagent && !session.parentSessionId)
-					.sort(compareSessionsByActivityDesc);
+				const topLevelSessions = dedupeSessionsByIdentity(
+					discovered
+						.map((session) => {
+							const normalized: SessionHistoryItem = {
+								...session,
+								sessionId: String(session.sessionId ?? "").trim(),
+								status: normalizeDiscoveredStatus(
+									session.status,
+									session.prompt,
+								),
+								provider: session.provider || "",
+								model: session.model || "",
+								cwd: session.cwd || "",
+								workspaceRoot: session.workspaceRoot || session.cwd || "",
+								startedAt: String(session.startedAt ?? ""),
+								metadata:
+									session.metadata && typeof session.metadata === "object"
+										? (session.metadata as SessionMetadata)
+										: undefined,
+							};
+							return normalized;
+						})
+						.filter((session) => Boolean(session.sessionId))
+						.filter(isValidHistorySession)
+						.filter(
+							(session) => !session.isSubagent && !session.parentSessionId,
+						)
+						.sort(compareSessionsByActivityDesc),
+				);
 				const mergedSessions = mergeDiscoveredSessions(
 					sessionsRef.current,
 					topLevelSessions,

@@ -29,6 +29,10 @@ export const DEFAULT_CHAT_CONFIG: ChatSessionConfig = {
 	mode: "yolo",
 	systemPrompt: undefined,
 	maxIterations: undefined,
+	// Complex APK comparisons and local/free gateway models can take longer
+	// than the SDK's three-minute per-request default. Ten minutes still gives
+	// a bounded failure while avoiding false session failures during analysis.
+	apiTimeoutMs: 10 * 60 * 1000,
 	thinking: undefined,
 	reasoningEffort: undefined,
 	enableTools: true,

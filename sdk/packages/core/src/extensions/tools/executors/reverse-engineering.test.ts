@@ -53,6 +53,44 @@ describe("reverse-engineering discovery", () => {
 });
 
 describe("reverse-engineering archive inspection", () => {
+	it("compares original and modified APK containers without extracting them", async () => {
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-test-"),
+		);
+		temporaryDirectories.push(directory);
+		const original = path.join(directory, "original.apk");
+		const modified = path.join(directory, "modified.apk");
+		const cleanZip =
+			"UEsDBBQAAAAAAGIZN11H3dx5AgAAAAIAAAANAAAAc2FmZS9maWxlLnR4dG9rUEsBAhQDFAAAAAAAYhk3XUfd3HkCAAAAAgAAAA0AAAAAAAAAAAAAAIABAAAAAHNhZmUvZmlsZS50eHRQSwUGAAAAAAEAAQA7AAAALQAAAAAA";
+		await fs.writeFile(original, Buffer.from(cleanZip, "base64"));
+		await fs.writeFile(modified, Buffer.from(ZIP_WITH_TRAVERSAL, "base64"));
+
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "compare_apks",
+					target: original,
+					compare_target: modified,
+				},
+				{} as never,
+			),
+		);
+
+		expect(result.identicalFile).toBe(false);
+		expect(result.summary).toMatchObject({
+			originalEntries: 1,
+			modifiedEntries: 2,
+			added: 1,
+			removed: 0,
+		});
+		expect(result.added).toEqual(["../escape.txt"]);
+		expect(await fs.readdir(directory)).toEqual([
+			"modified.apk",
+			"original.apk",
+		]);
+	});
+
 	it("reports traversal without extracting any entry", async () => {
 		const directory = await fs.mkdtemp(
 			path.join(os.tmpdir(), "cline-re-test-"),
@@ -160,6 +198,76 @@ describe("reverse-engineering archive inspection", () => {
 		expect(result.sectionCount).toBe(5);
 		expect(result.entryPoint).toBe("0x1234");
 		expect(result.imageBase).toBe("0x140000000");
+	});
+});
+
+describe("reverse-engineering Smali reading", () => {
+	it("returns a complete method body including labels and instructions", async () => {
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-smali-"),
+		);
+		temporaryDirectories.push(directory);
+		const smaliPath = path.join(
+			directory,
+			"smali",
+			"com",
+			"example",
+			"Main.smali",
+		);
+		await fs.mkdir(path.dirname(smaliPath), { recursive: true });
+		await fs.writeFile(
+			smaliPath,
+			[
+				".class public Lcom/example/Main;",
+				".super Ljava/lang/Object;",
+				"",
+				".method public check(I)Z",
+				"    .locals 1",
+				"    if-lez p1, :deny",
+				"    const/4 v0, 0x1",
+				"    return v0",
+				"    :deny",
+				"    const/4 v0, 0x0",
+				"    return v0",
+				".end method",
+			].join("\n"),
+		);
+
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "read_smali_method",
+					target: directory,
+					smali_class: "com.example.Main",
+					smali_method: "check(I)Z",
+				},
+				{} as never,
+			),
+		);
+
+		expect(result.signature).toContain("check(I)Z");
+		expect(result.body).toContain("if-lez p1, :deny");
+		expect(result.body).toContain(".end method");
+		expect(result.truncated).toBe(false);
+
+		const search = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "search_smali",
+					target: directory,
+					smali_query: "if-lez",
+					context_lines: 1,
+				},
+				{} as never,
+			),
+		);
+		expect(search.matches).toHaveLength(1);
+		expect(search.matches[0]).toMatchObject({
+			method: "public check(I)Z",
+			text: "    if-lez p1, :deny",
+		});
 	});
 });
 

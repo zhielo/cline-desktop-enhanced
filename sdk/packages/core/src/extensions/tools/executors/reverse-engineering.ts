@@ -4,8 +4,8 @@ import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { inflateRaw } from "node:zlib";
 import { promisify } from "node:util";
+import { inflateRaw } from "node:zlib";
 import type { ReverseEngineeringExecutor } from "../types";
 
 const MAX_OUTPUT_CHARS = 200_000;
@@ -25,6 +25,7 @@ type AndroidReUtilities = {
 	smali?: string;
 	apksigner?: string;
 	zipalign?: string;
+	adb?: string;
 };
 
 const ANALYSIS_MANIFEST = "cline-analysis.json";
@@ -275,18 +276,141 @@ async function discoverFirst(commands: string[]): Promise<string | undefined> {
 	return undefined;
 }
 
+async function knownAndroidSdkRoots(): Promise<string[]> {
+	const roots = [
+		process.env.ANDROID_SDK_ROOT,
+		process.env.ANDROID_HOME,
+		process.platform === "win32" && process.env.LOCALAPPDATA
+			? path.join(process.env.LOCALAPPDATA, "Android", "Sdk")
+			: undefined,
+		process.platform !== "win32"
+			? path.join(os.homedir(), "Android", "Sdk")
+			: undefined,
+		process.platform === "darwin"
+			? path.join(os.homedir(), "Library", "Android", "sdk")
+			: undefined,
+	].filter((value): value is string => Boolean(value));
+	const available: string[] = [];
+	for (const root of roots) {
+		if (await exists(root)) available.push(path.resolve(root));
+	}
+	return [...new Set(available)];
+}
+
+async function androidSdkToolCandidates(
+	tool: "apksigner" | "zipalign" | "adb",
+): Promise<string[]> {
+	const win = process.platform === "win32";
+	const fileName =
+		tool === "adb"
+			? win
+				? "adb.exe"
+				: "adb"
+			: tool === "apksigner"
+				? win
+					? "apksigner.bat"
+					: "apksigner"
+				: win
+					? "zipalign.exe"
+					: "zipalign";
+	const candidates: string[] = [];
+	for (const root of await knownAndroidSdkRoots()) {
+		if (tool === "adb") {
+			candidates.push(path.join(root, "platform-tools", fileName));
+			continue;
+		}
+		const buildToolsRoot = path.join(root, "build-tools");
+		if (!(await exists(buildToolsRoot))) continue;
+		const versions = await fs.readdir(buildToolsRoot, { withFileTypes: true });
+		for (const version of versions
+			.filter((entry) => entry.isDirectory())
+			.sort((a, b) =>
+				b.name.localeCompare(a.name, undefined, { numeric: true }),
+			)) {
+			candidates.push(path.join(buildToolsRoot, version.name, fileName));
+		}
+	}
+	return candidates;
+}
+
+async function discoverAndroidStudio(): Promise<{
+	installations: string[];
+	pluginDirectories: string[];
+	sdkRoots: string[];
+}> {
+	const installations: string[] = [];
+	const pluginDirectories: string[] = [];
+	const candidates =
+		process.platform === "win32"
+			? [
+					process.env.ProgramFiles
+						? path.join(process.env.ProgramFiles, "Android", "Android Studio")
+						: undefined,
+					process.env.LOCALAPPDATA
+						? path.join(process.env.LOCALAPPDATA, "Programs", "Android Studio")
+						: undefined,
+				]
+			: process.platform === "darwin"
+				? ["/Applications/Android Studio.app"]
+				: ["/opt/android-studio", path.join(os.homedir(), "android-studio")];
+	for (const candidate of candidates) {
+		if (candidate && (await exists(candidate))) installations.push(candidate);
+	}
+	const pluginParents = [
+		process.env.APPDATA ? path.join(process.env.APPDATA, "Google") : undefined,
+		process.env.LOCALAPPDATA
+			? path.join(process.env.LOCALAPPDATA, "Google")
+			: undefined,
+		path.join(os.homedir(), ".AndroidStudio"),
+	].filter((value): value is string => Boolean(value));
+	for (const parent of pluginParents) {
+		if (!(await exists(parent))) continue;
+		try {
+			for (const entry of await fs.readdir(parent, { withFileTypes: true })) {
+				if (!entry.isDirectory()) continue;
+				const base = path.join(parent, entry.name);
+				for (const candidate of [
+					path.join(base, "plugins"),
+					path.join(base, "config", "plugins"),
+				]) {
+					if (await exists(candidate)) pluginDirectories.push(candidate);
+				}
+			}
+		} catch {
+			// Optional discovery must not block the analysis tool.
+		}
+	}
+	return {
+		installations: [...new Set(installations)],
+		pluginDirectories: [...new Set(pluginDirectories)],
+		sdkRoots: await knownAndroidSdkRoots(),
+	};
+}
+
 async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
 	const win = process.platform === "win32";
 	const suffix = win ? ".bat" : "";
 	const executableSuffix = win ? ".exe" : "";
-	const [apktool, baksmali, smali, apksigner, zipalign] = await Promise.all([
-		discoverFirst([`apktool${suffix}`, `apktool${executableSuffix}`]),
-		discoverFirst([`baksmali${suffix}`, `baksmali${executableSuffix}`]),
-		discoverFirst([`smali${suffix}`, `smali${executableSuffix}`]),
-		discoverFirst([`apksigner${suffix}`, `apksigner${executableSuffix}`]),
-		discoverFirst([`zipalign${executableSuffix}`]),
-	]);
-	return { apktool, baksmali, smali, apksigner, zipalign };
+	const [apktool, baksmali, smali, apksigner, zipalign, adb] =
+		await Promise.all([
+			discoverFirst([`apktool${suffix}`, `apktool${executableSuffix}`]),
+			discoverFirst([`baksmali${suffix}`, `baksmali${executableSuffix}`]),
+			discoverFirst([`smali${suffix}`, `smali${executableSuffix}`]),
+			discoverFirst([
+				`apksigner${suffix}`,
+				`apksigner${executableSuffix}`,
+				...(await androidSdkToolCandidates("apksigner")),
+			]),
+			discoverFirst([
+				`zipalign${executableSuffix}`,
+				...(await androidSdkToolCandidates("zipalign")),
+			]),
+			discoverFirst([
+				`adb${executableSuffix}`,
+				...(await androidSdkToolCandidates("adb")),
+			]),
+		]);
+	return { apktool, baksmali, smali, apksigner, zipalign, adb };
 }
 
 async function sha256(filePath: string): Promise<string> {
@@ -482,6 +606,334 @@ interface ZipInspection {
 	parsed: ZipEntry[];
 }
 
+function apkEntryCategory(name: string): string {
+	if (name === "AndroidManifest.xml") return "manifest";
+	if (/^META-INF\//i.test(name)) return "signatures";
+	if (/^classes\d*\.dex$/i.test(name)) return "dex";
+	if (/^lib\/[^/]+\/[^/]+\.so$/i.test(name)) return "nativeLibraries";
+	if (/^res\//i.test(name) || name === "resources.arsc") return "resources";
+	if (/^assets\//i.test(name)) return "assets";
+	return "other";
+}
+
+function compareApkEntries(
+	original: ZipInspection,
+	modified: ZipInspection,
+	maxResults: number,
+) {
+	const originalByName = new Map(
+		original.parsed
+			.filter((entry) => !entry.isDirectory)
+			.map((entry) => [entry.normalized, entry]),
+	);
+	const modifiedByName = new Map(
+		modified.parsed
+			.filter((entry) => !entry.isDirectory)
+			.map((entry) => [entry.normalized, entry]),
+	);
+	const allNames = [
+		...new Set([...originalByName.keys(), ...modifiedByName.keys()]),
+	].sort((a, b) => a.localeCompare(b));
+	const added: string[] = [];
+	const removed: string[] = [];
+	const changed: Array<{
+		name: string;
+		category: string;
+		originalSize: number;
+		modifiedSize: number;
+		originalCrc32: string;
+		modifiedCrc32: string;
+	}> = [];
+	const categoryCounts: Record<
+		string,
+		{ added: number; removed: number; changed: number }
+	> = {};
+	const bump = (name: string, kind: "added" | "removed" | "changed"): void => {
+		const category = apkEntryCategory(name);
+		categoryCounts[category] ??= { added: 0, removed: 0, changed: 0 };
+		categoryCounts[category][kind] += 1;
+	};
+	for (const name of allNames) {
+		const before = originalByName.get(name);
+		const after = modifiedByName.get(name);
+		if (!before && after) {
+			added.push(name);
+			bump(name, "added");
+			continue;
+		}
+		if (before && !after) {
+			removed.push(name);
+			bump(name, "removed");
+			continue;
+		}
+		if (
+			before &&
+			after &&
+			(before.crc32 !== after.crc32 ||
+				before.uncompressedSize !== after.uncompressedSize)
+		) {
+			changed.push({
+				name,
+				category: apkEntryCategory(name),
+				originalSize: before.uncompressedSize,
+				modifiedSize: after.uncompressedSize,
+				originalCrc32: before.crc32.toString(16).padStart(8, "0"),
+				modifiedCrc32: after.crc32.toString(16).padStart(8, "0"),
+			});
+			bump(name, "changed");
+		}
+	}
+	return {
+		summary: {
+			originalEntries: originalByName.size,
+			modifiedEntries: modifiedByName.size,
+			added: added.length,
+			removed: removed.length,
+			changed: changed.length,
+			identical:
+				allNames.length - added.length - removed.length - changed.length,
+		},
+		categoryCounts,
+		added: added.slice(0, maxResults),
+		removed: removed.slice(0, maxResults),
+		changed: changed.slice(0, maxResults),
+		resultsTruncated:
+			added.length > maxResults ||
+			removed.length > maxResults ||
+			changed.length > maxResults,
+		recommendedNextSteps: [
+			...(categoryCounts.dex
+				? [
+						"Disassemble both APKs with disassemble_smali, then use read_smali_method for exact changed method bodies; use JADX decompile for higher-level semantics.",
+					]
+				: []),
+			...(categoryCounts.nativeLibraries
+				? [
+						"Extract changed native libraries and analyze them with Ghidra or IDA.",
+					]
+				: []),
+			...(categoryCounts.manifest
+				? [
+						"Decode both manifests with Apktool and compare components/permissions.",
+					]
+				: []),
+			...(categoryCounts.signatures
+				? ["Compare signing certificates with apksigner verify --print-certs."]
+				: []),
+		],
+	};
+}
+
+async function findSmaliFile(
+	target: string,
+	className: string | undefined,
+): Promise<string> {
+	const stat = await fs.stat(target);
+	if (stat.isFile()) {
+		if (path.extname(target).toLowerCase() !== ".smali") {
+			throw new Error("read_smali_method target file must end with .smali");
+		}
+		return target;
+	}
+	if (!stat.isDirectory()) {
+		throw new Error(
+			"read_smali_method target must be a Smali file or directory",
+		);
+	}
+	if (!className?.trim()) {
+		throw new Error(
+			"smali_class is required when read_smali_method targets a directory",
+		);
+	}
+	const suffix = `${className
+		.trim()
+		.replace(/^L/, "")
+		.replace(/;$/, "")
+		.replace(/\\/g, "/")
+		.replace(/\./g, "/")
+		.replace(/\.smali$/i, "")}.smali`;
+	const stack = [target];
+	let visited = 0;
+	while (stack.length > 0 && visited < 100_000) {
+		const current = stack.pop();
+		if (!current) break;
+		for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+			visited += 1;
+			const candidate = path.join(current, entry.name);
+			if (entry.isDirectory()) {
+				stack.push(candidate);
+			} else if (
+				entry.isFile() &&
+				candidate.replace(/\\/g, "/").endsWith(suffix)
+			) {
+				return candidate;
+			}
+		}
+	}
+	throw new Error(`Smali class was not found under ${target}: ${className}`);
+}
+
+async function readSmaliMethod(
+	target: string,
+	className: string | undefined,
+	methodQuery: string | undefined,
+) {
+	const smaliPath = await findSmaliFile(target, className);
+	const content = await fs.readFile(smaliPath, "utf8");
+	const lines = content.split(/\r?\n/);
+	const methods: Array<{
+		signature: string;
+		startLine: number;
+		endLine: number;
+	}> = [];
+	for (let index = 0; index < lines.length; index += 1) {
+		const line = lines[index]?.trim() ?? "";
+		if (!line.startsWith(".method ")) continue;
+		let end = index;
+		while (end < lines.length && lines[end]?.trim() !== ".end method") end += 1;
+		methods.push({
+			signature: line.slice(".method ".length),
+			startLine: index + 1,
+			endLine: Math.min(end + 1, lines.length),
+		});
+		index = end;
+	}
+	if (!methodQuery?.trim()) {
+		return {
+			smaliPath,
+			className:
+				lines.find((line) => line.trim().startsWith(".class "))?.trim() ?? null,
+			methodCount: methods.length,
+			methods,
+			hint: "Call read_smali_method again with smali_method set to a method name or signature to return the complete body.",
+		};
+	}
+	const query = methodQuery.trim();
+	const matches = methods.filter(
+		(method) =>
+			method.signature === query ||
+			method.signature.includes(query) ||
+			method.signature.split(/\s+/).at(-1)?.startsWith(`${query}(`),
+	);
+	if (matches.length === 0) {
+		throw new Error(
+			`No Smali method matching "${query}" was found. Available methods: ${methods
+				.slice(0, 100)
+				.map((method) => method.signature)
+				.join(", ")}`,
+		);
+	}
+	if (matches.length > 1) {
+		return {
+			smaliPath,
+			ambiguous: true,
+			query,
+			matches,
+			hint: "Retry with the full method signature to select one overload.",
+		};
+	}
+	const method = matches[0];
+	if (!method) throw new Error(`No Smali method matching "${query}" was found`);
+	const body = lines.slice(method.startLine - 1, method.endLine).join("\n");
+	return {
+		smaliPath,
+		signature: method.signature,
+		startLine: method.startLine,
+		endLine: method.endLine,
+		lineCount: method.endLine - method.startLine + 1,
+		body:
+			body.length <= MAX_OUTPUT_CHARS
+				? body
+				: `${body.slice(0, MAX_OUTPUT_CHARS)}\n... [method body truncated at ${MAX_OUTPUT_CHARS} characters]`,
+		truncated: body.length > MAX_OUTPUT_CHARS,
+	};
+}
+
+async function searchSmali(
+	target: string,
+	query: string,
+	regex: boolean,
+	contextLines: number,
+	maxResults: number,
+	signal?: AbortSignal,
+) {
+	const matcher = regex
+		? new RegExp(query, "i")
+		: {
+				test: (value: string) =>
+					value.toLowerCase().includes(query.toLowerCase()),
+			};
+	const stat = await fs.stat(target);
+	const stack = stat.isDirectory() ? [target] : [];
+	const files = stat.isFile() ? [target] : [];
+	let visited = 0;
+	while (stack.length > 0 && visited < 100_000) {
+		signal?.throwIfAborted();
+		const current = stack.pop();
+		if (!current) break;
+		for (const entry of await fs.readdir(current, { withFileTypes: true })) {
+			visited += 1;
+			const candidate = path.join(current, entry.name);
+			if (entry.isDirectory()) stack.push(candidate);
+			else if (entry.isFile() && entry.name.toLowerCase().endsWith(".smali"))
+				files.push(candidate);
+		}
+	}
+	const matches: Array<{
+		path: string;
+		line: number;
+		method: string | null;
+		text: string;
+		context: string;
+	}> = [];
+	for (const file of files) {
+		signal?.throwIfAborted();
+		const fileStat = await fs.stat(file);
+		if (fileStat.size > 20 * 1024 * 1024) continue;
+		const lines = (await fs.readFile(file, "utf8")).split(/\r?\n/);
+		let method: string | null = null;
+		for (let index = 0; index < lines.length; index += 1) {
+			const trimmed = lines[index]?.trim() ?? "";
+			if (trimmed.startsWith(".method ")) {
+				method = trimmed.slice(".method ".length);
+			} else if (trimmed === ".end method") {
+				method = null;
+			}
+			if (!matcher.test(lines[index] ?? "")) continue;
+			const from = Math.max(0, index - contextLines);
+			const to = Math.min(lines.length, index + contextLines + 1);
+			matches.push({
+				path: file,
+				line: index + 1,
+				method,
+				text: lines[index] ?? "",
+				context: lines
+					.slice(from, to)
+					.map((line, contextIndex) => `${from + contextIndex + 1}: ${line}`)
+					.join("\n"),
+			});
+			if (matches.length >= maxResults) {
+				return {
+					query,
+					regex,
+					scannedFiles: files.length,
+					matches,
+					truncated: true,
+					hint: "Use read_smali_method with the returned class path and method signature to retrieve the complete method body.",
+				};
+			}
+		}
+	}
+	return {
+		query,
+		regex,
+		scannedFiles: files.length,
+		matches,
+		truncated: false,
+		hint: "Use read_smali_method with a returned path and method signature to retrieve the complete method body.",
+	};
+}
+
 async function inspectZip(target: string): Promise<ZipInspection> {
 	const handle = await fs.open(target, "r");
 	try {
@@ -642,18 +1094,18 @@ async function isZip(target: string): Promise<boolean> {
 function machineName(machine: number): string {
 	return (
 		{
-			0x014c: "x86",
-			0x8664: "x86_64",
-			0x01c0: "arm",
-			0xaa64: "arm64",
-			0x01f0: "powerpc",
-			0x0003: "x86",
-			0x003e: "x86_64",
-			0x0028: "arm",
-			0x00b7: "arm64",
-			0x0008: "mips",
-			0x0014: "powerpc",
-			0x00f3: "riscv",
+			332: "x86",
+			34404: "x86_64",
+			448: "arm",
+			43620: "arm64",
+			496: "powerpc",
+			3: "x86",
+			62: "x86_64",
+			40: "arm",
+			183: "arm64",
+			8: "mips",
+			20: "powerpc",
+			243: "riscv",
 		}[machine] ?? `machine-0x${machine.toString(16)}`
 	);
 }
@@ -952,7 +1404,7 @@ async function createExtractionDirectory(requested?: string) {
 }
 
 function shellLikeQuote(value: string): string {
-	if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) return value;
+	if (/^[A-Za-z0-9_./:-]+$/.test(value)) return value;
 	return `"${value.replace(/(["\\])/g, "\\$1")}"`;
 }
 
@@ -1145,6 +1597,7 @@ async function installationCapabilities(
 			version: await toolVersion("jadx", available.jadx),
 		},
 		androidBuildTools: androidUtilities,
+		androidStudio: await discoverAndroidStudio(),
 		cacheDirectory: analysisCacheRoot(),
 	};
 }
@@ -1231,15 +1684,108 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		const stat = await fs.stat(target);
 		const directoryOperation =
 			input.operation === "assemble_smali" || input.operation === "rebuild_apk";
-		if (directoryOperation ? !stat.isDirectory() : !stat.isFile()) {
+		const smaliReadOperation =
+			input.operation === "read_smali_method" ||
+			input.operation === "search_smali";
+		if (
+			smaliReadOperation
+				? !stat.isDirectory() && !stat.isFile()
+				: directoryOperation
+					? !stat.isDirectory()
+					: !stat.isFile()
+		) {
 			throw new Error(
-				`Target must be ${directoryOperation ? "a directory" : "a file"}: ${target}`,
+				`Target must be ${
+					smaliReadOperation
+						? "a Smali file or decoded directory"
+						: directoryOperation
+							? "a directory"
+							: "a file"
+				}: ${target}`,
+			);
+		}
+		if (smaliReadOperation) {
+			if (input.operation === "search_smali") {
+				if (!input.smali_query) {
+					throw new Error("smali_query is required for search_smali");
+				}
+				return JSON.stringify(
+					{
+						operation: input.operation,
+						...(await searchSmali(
+							target,
+							input.smali_query,
+							input.smali_regex === true,
+							input.context_lines ?? 2,
+							input.max_results ?? 200,
+							context.signal,
+						)),
+						durationMs: Date.now() - started,
+					},
+					null,
+					2,
+				);
+			}
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					...(await readSmaliMethod(
+						target,
+						input.smali_class,
+						input.smali_method,
+					)),
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
 			);
 		}
 		const hash = stat.isDirectory()
 			? await sha256Directory(target)
 			: await sha256(target);
 		const zip = stat.isFile() ? await isZip(target) : false;
+		if (input.operation === "compare_apks") {
+			if (!input.compare_target) {
+				throw new Error("compare_target is required for compare_apks");
+			}
+			if (!path.isAbsolute(input.compare_target)) {
+				throw new Error("compare_target must be an absolute path");
+			}
+			const compareTarget = path.resolve(input.compare_target);
+			const compareStat = await fs.stat(compareTarget);
+			if (!stat.isFile() || !compareStat.isFile()) {
+				throw new Error("compare_apks requires two APK files");
+			}
+			if (!(await isZip(compareTarget)) || !zip) {
+				throw new Error("compare_apks requires two valid APK/ZIP containers");
+			}
+			const [originalArchive, modifiedArchive, modifiedHash] =
+				await Promise.all([
+					inspectZip(target),
+					inspectZip(compareTarget),
+					sha256(compareTarget),
+				]);
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					original: { target, sha256: hash, size: stat.size },
+					modified: {
+						target: compareTarget,
+						sha256: modifiedHash,
+						size: compareStat.size,
+					},
+					identicalFile: hash === modifiedHash,
+					...compareApkEntries(
+						originalArchive,
+						modifiedArchive,
+						input.max_results ?? 500,
+					),
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
 		if (input.operation === "inspect") {
 			if (!zip) {
 				return JSON.stringify(
@@ -1386,7 +1932,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				const result = await runSupervised(
 					command,
 					args,
-					input.timeout_ms ?? 300_000,
+					input.timeout_ms ?? 900_000,
 					context.signal,
 				);
 				const succeeded =
@@ -1476,7 +2022,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				const result = await runSupervised(
 					command,
 					args,
-					input.timeout_ms ?? 300_000,
+					input.timeout_ms ?? 900_000,
 					context.signal,
 				);
 				const succeeded =
@@ -1523,7 +2069,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			engine,
 		);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
-		const timeoutMs = input.timeout_ms ?? 300_000;
+		const timeoutMs = input.timeout_ms ?? 900_000;
 
 		return withAnalysisLock(outputDir, async () => {
 			const existingManifest = await readAnalysisManifest(outputDir);

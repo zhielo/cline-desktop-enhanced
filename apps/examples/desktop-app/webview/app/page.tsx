@@ -904,6 +904,7 @@ export default function Home() {
 													key={`${thread.id}:${thread.environmentId}`}
 												>
 													<ChatThreadPane
+														active={isActive}
 														environmentId={thread.environmentId}
 														environmentProfiles={remoteEnvironmentProfiles}
 														environmentProfilesLoading={
@@ -1025,6 +1026,7 @@ export default function Home() {
 let workspacesLoadedOnce = false;
 
 function ChatThreadPane({
+	active,
 	threadId,
 	environmentId,
 	environmentProfiles,
@@ -1049,6 +1051,7 @@ function ChatThreadPane({
 	remoteEnvironment,
 	onThreadStarted,
 }: {
+	active: boolean;
 	threadId: string;
 	environmentId: string;
 	environmentProfiles: RemoteEnvironmentProfile[];
@@ -2416,7 +2419,7 @@ function ChatThreadPane({
 				}
 				onAttachFiles={handleAttachFiles}
 			>
-				{!isWelcomeState ? (
+				{active && !isWelcomeState ? (
 					<WindowTitleBarContent>
 						<div className="cline-view-enter z-20 border-b border-border/70 bg-background/85 backdrop-blur-sm">
 							<AgentHeader

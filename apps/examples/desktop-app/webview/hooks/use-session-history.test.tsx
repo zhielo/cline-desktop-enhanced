@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sessionKey } from "../lib/session-identity";
 import {
+	dedupeSessionsByIdentity,
 	sessionActivityTimestamp,
 	useSessionHistory,
 } from "./use-session-history";
@@ -60,6 +61,15 @@ it("uses server activity when it is newer than local timestamps", () => {
 			lastActivityAt: "2026-07-20T12:00:00.000Z",
 		}),
 	).toBe(Date.parse("2026-07-20T12:00:00.000Z"));
+});
+
+it("deduplicates the same session identity but preserves different environments", () => {
+	const local = sessionRow("same-id");
+	const remote = { ...sessionRow("same-id"), environmentId: "remote" };
+	expect(dedupeSessionsByIdentity([local, local, remote])).toEqual([
+		local,
+		remote,
+	]);
 });
 
 let container: HTMLDivElement;

@@ -631,6 +631,8 @@ function buildCoreSessionConfig(
 		...(cwd ? { cwd } : {}),
 		systemPrompt: config.systemPrompt ?? config.system_prompt ?? "",
 		maxIterations: config.maxIterations ?? config.max_iterations,
+		apiTimeoutMs:
+			config.apiTimeoutMs ?? config.api_timeout_ms ?? 10 * 60 * 1000,
 		enableTools: config.enableTools ?? config.enable_tools ?? true,
 		...(thinking !== undefined ? { thinking } : {}),
 		...(reasoningEffort ? { reasoningEffort } : {}),
