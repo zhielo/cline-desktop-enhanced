@@ -133,7 +133,12 @@ export type PendingAskQuestion = {
 };
 
 export type SidecarWebSocketClient = {
-	data?: { canApproveTools?: boolean };
+	data?: {
+		/** Per-launch secret was supplied and matched. */
+		authenticated?: boolean;
+		/** This connection is the trusted browser UI allowed to resolve approvals. */
+		canApproveTools?: boolean;
+	};
 	send: (message: string) => void;
 	close?: () => void;
 };

@@ -91,25 +91,25 @@ describe("sidecar HTTP origin checks", () => {
 		expect(server.upgrade).not.toHaveBeenCalled();
 	});
 
-	it("does not grant approval authority to originless local clients", async () => {
+	it("authenticates originless local clients without approval authority", async () => {
 		const server = createTestServer();
 		await createHandler()(
 			new Request(
-				`http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}`,
+				`{{http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}}}`,
 			),
 			server,
 		);
 
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
-			data: { canApproveTools: false },
+			data: { authenticated: true, canApproveTools: false },
 		});
 	});
 
-	it("grants approval authority to the trusted desktop webview", async () => {
+	it("grants approval authority to the authenticated desktop webview", async () => {
 		const server = createTestServer();
 		await createHandler()(
 			new Request(
-				`http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}`,
+				`{{http://127.0.0.1:3126/transport?approval_token=${TEST_APPROVAL_TOKEN}}}`,
 				{
 					headers: { origin: "tauri://localhost" },
 				},
@@ -118,7 +118,7 @@ describe("sidecar HTTP origin checks", () => {
 		);
 
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
-			data: { canApproveTools: true },
+			data: { authenticated: true, canApproveTools: true },
 		});
 	});
 
@@ -141,7 +141,7 @@ describe("sidecar HTTP origin checks", () => {
 		);
 	});
 
-	it("does not grant approval authority to a spoofed trusted origin", async () => {
+	it("does not authenticate a spoofed trusted origin without the secret", async () => {
 		const server = createTestServer();
 		await createHandler()(
 			new Request("http://127.0.0.1:3126/transport", {
@@ -151,7 +151,7 @@ describe("sidecar HTTP origin checks", () => {
 		);
 
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
-			data: { canApproveTools: false },
+			data: { authenticated: false, canApproveTools: false },
 		});
 	});
 });

@@ -26,7 +26,9 @@ type SidecarServer = {
 	port: number;
 	upgrade(
 		req: Request,
-		options?: { data?: { canApproveTools?: boolean } },
+		options?: {
+			data?: { authenticated?: boolean; canApproveTools?: boolean };
+		},
 	): boolean;
 };
 
@@ -54,7 +56,7 @@ const APPROVAL_TOKEN_QUERY_PARAM = "approval_token";
 
 function hasValidApprovalToken(url: URL, expectedToken: string): boolean {
 	const candidate = url.searchParams.get(APPROVAL_TOKEN_QUERY_PARAM);
-	if (!candidate) return false;
+	if (!candidate || !expectedToken) return false;
 	const candidateBytes = Buffer.from(candidate);
 	const expectedBytes = Buffer.from(expectedToken);
 	return (
@@ -231,20 +233,24 @@ export function createFetchHandler(
 			);
 		}
 
-		if (
-			url.pathname === "/transport" &&
-			isTrustedRequestOrigin(req) &&
-			server.upgrade(req, {
-				data: {
-					// Originless clients remain supported for local integrations, but only
-					// the browser-hosted desktop UI may receive or resolve approvals.
-					canApproveTools:
-						Boolean(readOrigin(req)) &&
-						hasValidApprovalToken(url, approvalToken),
-				},
-			})
-		) {
-			return undefined;
+		if (url.pathname === "/transport" && isTrustedRequestOrigin(req)) {
+			const origin = readOrigin(req);
+			const authenticated = hasValidApprovalToken(url, approvalToken);
+			if (
+				server.upgrade(req, {
+					data: {
+						authenticated,
+						// Originless integrations may invoke commands with the secret, but
+						// only the browser-hosted desktop UI may receive or resolve approvals.
+						canApproveTools:
+							authenticated &&
+							Boolean(origin) &&
+							TRUSTED_BROWSER_ORIGINS.has(origin ?? ""),
+					},
+				})
+			) {
+				return undefined;
+			}
 		}
 
 		if (url.pathname === "/api/marketplace/catalog") {
@@ -331,7 +337,10 @@ export function createFetchHandler(
 		}
 
 		if (url.pathname === "/shutdown" && req.method === "POST") {
-			if (!isTrustedRequestOrigin(req)) {
+			if (
+				!isTrustedRequestOrigin(req) ||
+				!hasValidApprovalToken(url, approvalToken)
+			) {
 				return new Response(JSON.stringify({ ok: false }), {
 					status: 403,
 					headers: jsonHeaders(req),
@@ -371,6 +380,19 @@ export function createWebSocketHandler(ctx: SidecarContext) {
 			}
 		},
 		async message(ws: SidecarWebSocketClient, raw: string) {
+			if (!ws.data?.authenticated) {
+				ws.send(
+					jsonResponse(
+						"",
+						false,
+						undefined,
+						"desktop transport authorization required",
+					),
+				);
+				ws.close?.();
+				return;
+			}
+
 			let request: DesktopTransportRequest;
 			try {
 				request = JSON.parse(String(raw)) as DesktopTransportRequest;
