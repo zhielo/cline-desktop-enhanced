@@ -11,7 +11,7 @@ export const ChatSessionConfigSchema = z.object({
 	environmentId: z.string().trim().min(1),
 	provider: z.string().min(1),
 	model: z.string().min(1),
-	mode: z.enum(["act", "plan", "yolo"]).default("yolo"),
+	mode: z.enum(["act", "plan", "yolo"]).default("act"),
 	apiKey: z.string(),
 	systemPrompt: z.string().optional(),
 	rules: z.string().optional(),
@@ -20,7 +20,7 @@ export const ChatSessionConfigSchema = z.object({
 	thinking: z.boolean().optional(),
 	reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
 	enableTools: z.boolean(),
-	autoApproveTools: z.boolean().optional(),
+	autoApproveTools: z.boolean().default(false),
 	missionStepInterval: z.number().int().positive().optional(),
 	missionTimeIntervalMs: z.number().int().positive().optional(),
 });

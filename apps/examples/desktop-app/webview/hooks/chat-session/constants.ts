@@ -26,7 +26,7 @@ export const DEFAULT_CHAT_CONFIG: ChatSessionConfig = {
 	provider: "cline",
 	model: CLINE_DEFAULT_MODEL_ID,
 	apiKey: process.env.CLINE_API_KEY || "",
-	mode: "yolo",
+	mode: "act",
 	systemPrompt: undefined,
 	maxIterations: undefined,
 	// Complex APK comparisons and local/free gateway models can take longer
@@ -36,7 +36,7 @@ export const DEFAULT_CHAT_CONFIG: ChatSessionConfig = {
 	thinking: undefined,
 	reasoningEffort: undefined,
 	enableTools: true,
-	autoApproveTools: true,
+	autoApproveTools: false,
 	missionStepInterval: undefined,
 	missionTimeIntervalMs: undefined,
 };
