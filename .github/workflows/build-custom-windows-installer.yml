@@ -106,6 +106,53 @@ jobs:
           }
           Write-Host "NSIS silent installation completed successfully."
 
+          $uninstallRoots = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          )
+          $entry = Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'Cline Enhanced' } |
+            Select-Object -First 1
+          if (-not $entry) { throw 'Installed Cline Enhanced registry entry not found' }
+
+          $installLocation = $entry.InstallLocation
+          if (-not $installLocation -or -not (Test-Path $installLocation)) {
+            $uninstallExe = $entry.UninstallString -replace '^"|"$', ''
+            $installLocation = Split-Path $uninstallExe -Parent
+          }
+          $appExe = Get-ChildItem $installLocation -Filter 'cline-app.exe' -Recurse |
+            Select-Object -First 1
+          if (-not $appExe) { throw "cline-app.exe not found under $installLocation" }
+
+          $app = Start-Process -FilePath $appExe.FullName -PassThru
+          Start-Sleep -Seconds 15
+          $app.Refresh()
+          if ($app.HasExited) {
+            $events = Get-WinEvent -FilterHashtable @{
+              LogName = 'Application'
+              StartTime = (Get-Date).AddMinutes(-5)
+            } -ErrorAction SilentlyContinue |
+              Where-Object { $_.Message -match 'cline-app|Cline Enhanced' } |
+              Select-Object -First 5 |
+              Format-List -Property TimeCreated, Id, LevelDisplayName, Message |
+              Out-String
+            throw "Installed app exited during startup with code $($app.ExitCode). Events:`n$events"
+          }
+
+          $sidecar = Get-CimInstance Win32_Process |
+            Where-Object {
+              $_.Name -eq 'code-sidecar.exe' -and
+              $_.ExecutablePath -like "$installLocation*"
+            } |
+            Select-Object -First 1
+          if (-not $sidecar) {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            throw 'Installed app stayed open but its code-sidecar.exe did not start'
+          }
+          Write-Host "Installed app and sidecar launched successfully."
+          Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $sidecar.ProcessId -Force -ErrorAction SilentlyContinue
+
       - name: Upload setup.exe
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
