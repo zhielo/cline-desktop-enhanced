@@ -95,6 +95,17 @@ jobs:
             > dist/custom-installer/SHA256SUMS.txt
           ls -lh dist/custom-installer
 
+      - name: Smoke-test installer on Windows 10-compatible path
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        run: |
+          $setup = (Resolve-Path 'dist/custom-installer/Cline-Enhanced_0.0.34_x64-setup.exe').Path
+          $process = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "NSIS silent installation failed with exit code $($process.ExitCode)"
+          }
+          Write-Host "NSIS silent installation completed successfully."
+
       - name: Upload setup.exe
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

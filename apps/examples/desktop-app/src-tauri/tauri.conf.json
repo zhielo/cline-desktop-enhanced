@@ -42,6 +42,16 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
+		"windows": {
+			"nsis": {
+				"compression": "zlib",
+				"installMode": "currentUser"
+			},
+			"webviewInstallMode": {
+				"type": "downloadBootstrapper",
+				"silent": true
+			}
+		},
 		"macOS": {
 			"entitlements": "entitlements.plist",
 			"hardenedRuntime": true,
