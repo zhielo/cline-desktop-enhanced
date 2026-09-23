@@ -163,4 +163,4 @@ jobs:
           name: cline-enhanced-windows-x64
           path: apps/examples/desktop-app/dist/custom-installer/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
