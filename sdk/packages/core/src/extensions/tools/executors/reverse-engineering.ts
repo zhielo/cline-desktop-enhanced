@@ -6,7 +6,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { inflateRaw } from "node:zlib";
 import { promisify } from "node:util";
-import type { ReverseEngineeringInput } from "../schemas";
 import type { ReverseEngineeringExecutor } from "../types";
 
 const MAX_OUTPUT_CHARS = 200_000;
