@@ -11,7 +11,7 @@
 	},
 	"plugins": {
 		"updater": {
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENEMTJDNzk2RUExQUY3RDEKUldUUjl4cnFsc2NTelYxNzlFR1NkWnI0VTM1V0hvQXRyOW0xV2c0bFhkL3dhdkdpNGhNRW1MQXEK",
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaW5pIHB1YmxpYyBrZXk6IENEMTJDNzk2RUExQUY3RDEKUldUUjl4cnFsc2NTelYxNzlFR1NkWnI0VTM1V0hvQXRyOW0xV2c0bFhkL3dhdkdpNGhNRW1MQXEK",
 			"endpoints": []
 		}
 	},
@@ -29,7 +29,7 @@
 			}
 		],
 		"security": {
-			"csp": null
+			"csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:* http://127.0.0.1:* https:; img-src 'self' asset: http://asset.localhost data: blob: https:; font-src 'self' data:; media-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 		}
 	},
 	"bundle": {
@@ -63,18 +63,9 @@
 			"hardenedRuntime": true,
 			"dmg": {
 				"background": "dmg/background.gen.tiff",
-				"windowSize": {
-					"width": 640,
-					"height": 432
-				},
-				"appPosition": {
-					"x": 140,
-					"y": 200
-				},
-				"applicationFolderPosition": {
-					"x": 500,
-					"y": 200
-				}
+				"windowSize": { "width": 640, "height": 432 },
+				"appPosition": { "x": 140, "y": 200 },
+				"applicationFolderPosition": { "x": 500, "y": 200 }
 			}
 		}
 	}
