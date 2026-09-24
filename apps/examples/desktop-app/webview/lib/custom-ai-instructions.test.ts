@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it } from "vitest";
 import {
 	CUSTOM_AI_INSTRUCTIONS_STORAGE_KEY,
