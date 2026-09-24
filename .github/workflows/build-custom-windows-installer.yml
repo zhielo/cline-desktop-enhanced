@@ -3,6 +3,10 @@ name: Build signed custom Windows installer
 on:
   workflow_dispatch:
 
+concurrency:
+  group: signed-windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   id-token: write
@@ -118,6 +122,14 @@ jobs:
       - name: Test desktop sidecar
         working-directory: apps/examples/desktop-app
         run: bun run test:sidecar
+
+      - name: Test Windows installer logic
+        working-directory: apps/examples/desktop-app
+        run: bun run test:windows-installer
+
+      - name: Test desktop startup logic
+        working-directory: apps/examples/desktop-app
+        run: bun run test:sidecar-startup
 
       - name: Run focused customization tests
         shell: bash
@@ -285,4 +297,4 @@ jobs:
           name: cline-enhanced-windows-x64-signed-${{ steps.version.outputs.version }}
           path: apps/examples/desktop-app/dist/custom-installer/*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
