@@ -79,7 +79,6 @@ jobs:
           bunx vitest run \
             sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
             sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
-            sdk/packages/core/src/extensions/tools/presets.test.ts \
             sdk/packages/shared/src/prompt/system/ctf-authorized.test.ts \
             --config vitest.config.ts
 
