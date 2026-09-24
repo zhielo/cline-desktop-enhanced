@@ -1,18 +1,44 @@
-name: Build custom Windows installer
+name: Build signed custom Windows installer
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build-windows-installer:
-    name: Build unsigned Windows x64 setup.exe
+    name: Build signed Windows x64 setup.exe
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    environment: PublishDesktop
 
     steps:
+      - name: Verify signing configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP }}
+        run: |
+          missing=()
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
+                      AZURE_TRUSTED_SIGNING_ENDPOINT \
+                      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME \
+                      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing required Azure Trusted Signing secrets:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "This workflow never falls back to an unsigned build."
+            exit 1
+          fi
+
       - name: Checkout source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -20,6 +46,23 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: "1.3.13"
+
+      - name: Read and validate desktop version
+        id: version
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./apps/examples/desktop-app/package.json').version")"
+          TAURI_VERSION="$(node -p "require('./apps/examples/desktop-app/src-tauri/tauri.conf.json').version")"
+          if [ "$PACKAGE_VERSION" != "$TAURI_VERSION" ]; then
+            echo "Desktop package version $PACKAGE_VERSION does not match Tauri version $TAURI_VERSION"
+            exit 1
+          fi
+          if ! printf '%s\n' "$PACKAGE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "Invalid desktop version: $PACKAGE_VERSION"
+            exit 1
+          fi
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "filename=Cline-Enhanced_${PACKAGE_VERSION}_x64-setup.exe" >> "$GITHUB_OUTPUT"
 
       # The desktop packaging script embeds Linux remote helpers. Bun's
       # Windows extraction path cannot reliably unpack these target runtimes,
@@ -61,12 +104,20 @@ jobs:
           toolchain: stable
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build SDK packages
         run: bun run build:sdk
+
+      - name: Type-check desktop
+        working-directory: apps/examples/desktop-app
+        run: bun run typecheck
+
+      - name: Test desktop sidecar
+        working-directory: apps/examples/desktop-app
+        run: bun run test:sidecar
 
       - name: Run focused customization tests
         shell: bash
@@ -77,35 +128,100 @@ jobs:
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             --config vitest.config.ts
 
-      - name: Build NSIS installer
-        working-directory: apps/examples/desktop-app
-        run: bunx tauri build --bundles nsis
+      - name: Azure login with GitHub OIDC
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Collect installer
+      # Prime this token before the Rust build. The signing script retrieves it
+      # from the Azure CLI cache when Tauri signs each staged PE file.
+      - name: Prime Azure Trusted Signing token
+        run: az account get-access-token --resource https://codesigning.azure.net --query expiresOn --output tsv
+
+      - name: Write signing configuration
+        shell: bash
+        run: |
+          SCRIPT_PATH="${GITHUB_WORKSPACE//\\//}/apps/examples/desktop-app/scripts/tauri-sign-windows.ps1"
+          SIGN_CONF="${RUNNER_TEMP//\\//}/tauri-windows-sign.conf.json"
+          cat > "$SIGN_CONF" <<EOF
+          {
+            "\$schema": "https://schema.tauri.app/config/2",
+            "bundle": {
+              "windows": {
+                "signCommand": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ${SCRIPT_PATH} %1"
+              }
+            }
+          }
+          EOF
+          echo "SIGN_CONF=${SIGN_CONF}" >> "$GITHUB_ENV"
+
+      - name: Build and sign NSIS installer
         shell: bash
         working-directory: apps/examples/desktop-app
-        run: |
-          mkdir -p dist/custom-installer
-          SETUP="$(find src-tauri/target/release/bundle/nsis -name '*-setup.exe' -print -quit)"
-          if [ -z "$SETUP" ]; then
-            echo "No setup.exe was produced"
-            exit 1
-          fi
-          cp "$SETUP" dist/custom-installer/Cline-Enhanced_0.0.34_x64-setup.exe
-          sha256sum dist/custom-installer/Cline-Enhanced_0.0.34_x64-setup.exe \
-            > dist/custom-installer/SHA256SUMS.txt
-          ls -lh dist/custom-installer
+        env:
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP }}
+        run: bunx tauri build --bundles nsis --config "$SIGN_CONF"
 
-      - name: Smoke-test installer on Windows 10-compatible path
+      - name: Collect and verify signed installer
+        id: installer
         shell: pwsh
         working-directory: apps/examples/desktop-app
+        env:
+          OUTPUT_FILENAME: ${{ steps.version.outputs.filename }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $setup = (Resolve-Path 'dist/custom-installer/Cline-Enhanced_0.0.34_x64-setup.exe').Path
+          $bundleRoot = 'src-tauri/target/release/bundle/nsis'
+          $setup = Get-ChildItem $bundleRoot -Filter '*-setup.exe' -Recurse | Select-Object -First 1
+          if (-not $setup) { throw "No setup.exe was produced under $bundleRoot" }
+
+          $signature = Get-AuthenticodeSignature $setup.FullName
+          if ($signature.Status -ne 'Valid') {
+            throw "Installer signature is not valid: $($signature.Status) - $($signature.StatusMessage)"
+          }
+
+          $out = 'dist/custom-installer'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $destination = Join-Path $out $env:OUTPUT_FILENAME
+          Copy-Item $setup.FullName $destination -Force
+
+          $copiedSignature = Get-AuthenticodeSignature $destination
+          if ($copiedSignature.Status -ne 'Valid') {
+            throw "Copied installer signature is not valid: $($copiedSignature.Status)"
+          }
+
+          $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:OUTPUT_FILENAME" | Out-File (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          @(
+            "Version: $env:VERSION"
+            "Commit: $env:GITHUB_SHA"
+            "Runner: $env:RUNNER_OS $env:RUNNER_ARCH"
+            "Signed: yes"
+            "Signer: $($copiedSignature.SignerCertificate.Subject)"
+            "Timestamp certificate: $($copiedSignature.TimeStamperCertificate.Subject)"
+          ) | Out-File (Join-Path $out 'BUILD-INFO.txt') -Encoding utf8
+          "path=$destination" >> $env:GITHUB_OUTPUT
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - name: Smoke-test signed installer and installed binaries
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        env:
+          OUTPUT_FILENAME: ${{ steps.version.outputs.filename }}
+        run: |
+          $setup = (Resolve-Path "dist/custom-installer/$env:OUTPUT_FILENAME").Path
+          $setupSignature = Get-AuthenticodeSignature $setup
+          if ($setupSignature.Status -ne 'Valid') {
+            throw "Refusing to install an invalid or unsigned installer: $($setupSignature.Status)"
+          }
+
           $process = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
           if ($process.ExitCode -ne 0) {
             throw "NSIS silent installation failed with exit code $($process.ExitCode)"
           }
-          Write-Host "NSIS silent installation completed successfully."
 
           $uninstallRoots = @(
             'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -121,9 +237,17 @@ jobs:
             $uninstallExe = $entry.UninstallString -replace '^"|"$', ''
             $installLocation = Split-Path $uninstallExe -Parent
           }
-          $appExe = Get-ChildItem $installLocation -Filter 'cline-app.exe' -Recurse |
-            Select-Object -First 1
+          $appExe = Get-ChildItem $installLocation -Filter 'cline-app.exe' -Recurse | Select-Object -First 1
+          $sidecarExe = Get-ChildItem $installLocation -Filter 'code-sidecar.exe' -Recurse | Select-Object -First 1
           if (-not $appExe) { throw "cline-app.exe not found under $installLocation" }
+          if (-not $sidecarExe) { throw "code-sidecar.exe not found under $installLocation" }
+
+          foreach ($binary in @($appExe, $sidecarExe)) {
+            $signature = Get-AuthenticodeSignature $binary.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "$($binary.Name) is not validly signed: $($signature.Status)"
+            }
+          }
 
           $app = Start-Process -FilePath $appExe.FullName -PassThru
           Start-Sleep -Seconds 15
@@ -150,14 +274,15 @@ jobs:
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             throw 'Installed app stayed open but its code-sidecar.exe did not start'
           }
-          Write-Host "Installed app and sidecar launched successfully."
+
+          Write-Host 'Signed installer, installed app, and sidecar verified successfully.'
           Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Id $sidecar.ProcessId -Force -ErrorAction SilentlyContinue
 
-      - name: Upload setup.exe
+      - name: Upload signed setup.exe
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cline-enhanced-windows-x64
+          name: cline-enhanced-windows-x64-signed-${{ steps.version.outputs.version }}
           path: apps/examples/desktop-app/dist/custom-installer/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
