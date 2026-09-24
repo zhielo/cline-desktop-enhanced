@@ -1,9 +1,6 @@
 import { CLINE_DEFAULT_MODEL_ID } from "@cline/shared/browser";
 import type { ChatSessionConfig } from "@/lib/chat-schema";
-import {
-	readCustomAiInstructions,
-	resolveCustomAiInstructionDefaults,
-} from "@/lib/custom-ai-instructions";
+import { readCustomAiInstructions } from "@/lib/custom-ai-instructions";
 import { readModelSelectionStorageFromWindow } from "@/lib/model-selection";
 import { normalizeProviderId } from "@/lib/provider-id";
 import {
@@ -48,9 +45,7 @@ export const DEFAULT_CHAT_CONFIG: ChatSessionConfig = {
 export function getInitialChatConfig(environmentId: string): ChatSessionConfig {
 	const selection = readModelSelectionStorageFromWindow();
 	const workspaceSelection = readWorkspaceSelectionFromWindow(environmentId);
-	const customInstructions = resolveCustomAiInstructionDefaults(
-		readCustomAiInstructions(),
-	);
+	const customInstructions = readCustomAiInstructions();
 	const rememberedProvider = normalizeProviderId(selection.lastProvider);
 	const rememberedModelForProvider = rememberedProvider
 		? (selection.lastModelByProvider[rememberedProvider] ??
