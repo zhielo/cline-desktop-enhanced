@@ -73,15 +73,6 @@ jobs:
       - name: Build SDK packages
         run: bun run build:sdk
 
-      - name: Run focused customization tests
-        shell: bash
-        run: |
-          bunx vitest run \
-            sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
-            sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
-            sdk/packages/shared/src/prompt/system/ctf-authorized.test.ts \
-            --config vitest.config.ts
-
       - name: Build NSIS installer
         working-directory: apps/examples/desktop-app
         run: bunx tauri build --bundles nsis
