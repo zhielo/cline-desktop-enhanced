@@ -35,7 +35,10 @@ import {
 } from "@/components/ui/sidebar";
 import { ChatInputBar } from "@/components/views/chat/chat-input-bar";
 import { ChatMessages } from "@/components/views/chat/chat-messages";
-import { TaskReportPanel } from "@/components/views/chat/task-report-panel";
+import {
+	TaskReportPanel,
+	TaskReportTrigger,
+} from "@/components/views/chat/task-report-panel";
 import { EnvironmentSelector } from "@/components/views/chat/environment-selector";
 import { RemoteDirectoryPicker } from "@/components/views/chat/remote-directory-picker";
 import { WelcomeScreen } from "@/components/views/chat/welcome-chat";
@@ -1168,6 +1171,7 @@ function ChatThreadPane({
 	const [showDiffView, setShowDiffView] = useState(false);
 	const [deletingSession, setDeletingSession] = useState(false);
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+	const [taskReportOpen, setTaskReportOpen] = useState(false);
 	const [renamingSession, setRenamingSession] = useState(false);
 	const [manualTitle, setManualTitle] = useState("");
 	const [dismissedHistorySessionId, setDismissedHistorySessionId] = useState<
@@ -2392,6 +2396,15 @@ function ChatThreadPane({
 			onModelChange={handleModelChange}
 			onPromptInputChange={handlePromptInputChange}
 			onOpenModelSettings={onOpenModelSettings}
+			toolbarAction={
+				!isWelcomeState ? (
+					<TaskReportTrigger
+						onClick={() => setTaskReportOpen((current) => !current)}
+						open={taskReportOpen}
+						status={displayedStatus}
+					/>
+				) : undefined
+			}
 			onReasoningChange={handleReasoningChange}
 			onSteerPromptInQueue={steerPromptInQueue}
 			onEditPromptInQueue={updatePromptInQueue}
@@ -2564,6 +2577,8 @@ function ChatThreadPane({
 				/>
 				{!isWelcomeState ? (
 					<TaskReportPanel
+						onOpenChange={setTaskReportOpen}
+						open={taskReportOpen}
 						fileDiffs={fileDiffs}
 						messages={displayedMessages}
 						mode={config.mode}

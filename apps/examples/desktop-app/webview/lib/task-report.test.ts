@@ -69,4 +69,17 @@ describe("task report", () => {
 			"pending",
 		]);
 	});
+
+	it("removes transport markup from the displayed objective", () => {
+		const report = buildTaskExecutionReport({
+			status: "completed",
+			messages: [
+				message({
+					content: '<user_input mode="yolo">Inspect the project</user_input>',
+				}),
+			],
+			fileDiffs: [],
+		});
+		expect(report.objective).toBe("Inspect the project");
+	});
 });

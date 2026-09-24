@@ -17,6 +17,10 @@ on:
       - apps/examples/desktop-app/webview/components/views/settings/sections.ts
       - apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx
       - apps/examples/desktop-app/webview/components/views/settings/ai-instructions-view.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/task-report-panel.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/messages/tool-message-block.tsx
+      - apps/examples/desktop-app/webview/lib/task-report.ts
 
 permissions:
   contents: read

@@ -43,6 +43,8 @@ import {
 import { cn } from "@/lib/utils";
 
 export function TaskReportPanel({
+	open,
+	onOpenChange,
 	sessionId,
 	status,
 	messages,
@@ -59,6 +61,8 @@ export function TaskReportPanel({
 	onUpdateInstructions,
 	onStop,
 }: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
 	sessionId?: string | null;
 	status: ChatSessionStatus;
 	messages: ChatMessage[];
@@ -78,7 +82,6 @@ export function TaskReportPanel({
 	}) => void;
 	onStop: () => void | Promise<void>;
 }) {
-	const [open, setOpen] = useState(false);
 	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(
 		() => new Set(),
 	);
@@ -171,28 +174,12 @@ export function TaskReportPanel({
 	};
 
 	if (!open) {
-		return (
-			<Button
-				aria-label="Show task report"
-				className="absolute right-3 top-3 z-30 gap-2 shadow-sm"
-				onClick={() => setOpen(true)}
-				size="sm"
-				title="Task report"
-				type="button"
-				variant="outline"
-			>
-				<ListChecks className="size-4" />
-				<span className="hidden lg:inline">Task report</span>
-				{isBusy ? (
-					<span className="size-2 rounded-full bg-blue-500 animate-pulse" />
-				) : null}
-			</Button>
-		);
+		return null;
 	}
 
 	return (
-		<aside className="relative z-20 flex h-full w-[min(24rem,42vw)] min-w-80 shrink-0 flex-col border-l bg-card text-card-foreground max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:w-[min(24rem,calc(100vw-2rem))] max-md:shadow-2xl">
-			<header className="shrink-0 border-b p-4">
+		<aside className="relative z-30 flex h-full w-[min(28rem,46vw)] min-w-80 shrink-0 animate-in flex-col border-l bg-card/95 text-card-foreground shadow-2xl backdrop-blur-xl duration-200 slide-in-from-right-4 max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:w-[min(28rem,calc(100vw-1rem))]">
+			<header className="shrink-0 border-b bg-gradient-to-b from-primary/5 to-transparent p-4">
 				<div className="flex items-start justify-between gap-3">
 					<div className="min-w-0">
 						<div className="flex items-center gap-2">
@@ -210,7 +197,7 @@ export function TaskReportPanel({
 					<Button
 						aria-label="Close task report"
 						className="size-8 shrink-0"
-						onClick={() => setOpen(false)}
+						onClick={() => onOpenChange(false)}
 						size="icon"
 						type="button"
 						variant="ghost"
@@ -517,6 +504,40 @@ export function TaskReportPanel({
 				) : null}
 			</footer>
 		</aside>
+	);
+}
+
+export function TaskReportTrigger({
+	open,
+	status,
+	onClick,
+}: {
+	open: boolean;
+	status: ChatSessionStatus;
+	onClick: () => void;
+}) {
+	const isBusy =
+		status === "starting" || status === "running" || status === "stopping";
+	return (
+		<Button
+			aria-expanded={open}
+			aria-label={open ? "Task report open" : "Open task report"}
+			className={cn(
+				"h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs",
+				open && "border-primary/40 bg-primary/10 text-foreground",
+			)}
+			onClick={onClick}
+			size="sm"
+			title={open ? "Close task report" : "Open task report"}
+			type="button"
+			variant="outline"
+		>
+			<ListChecks className="size-3.5" />
+			<span className="max-[680px]:sr-only">Task report</span>
+			{isBusy ? (
+				<span className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
+			) : null}
+		</Button>
 	);
 }
 

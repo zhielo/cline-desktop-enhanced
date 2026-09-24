@@ -27,7 +27,14 @@ export type TaskReportSummary = {
 };
 
 function cleanText(value: string): string {
-	return value.replace(/\s+/g, " ").trim();
+	return value
+		.replace(
+			/<user_input\b[^>]*>([\s\S]*?)<\/user_input>/gi,
+			(_match, content: string) => content,
+		)
+		.replace(/<[^>]+>/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 function shortText(value: unknown, maximum = 140): string | undefined {
@@ -251,9 +258,11 @@ export function buildTaskExecutionReport(options: {
 }): TaskExecutionReport {
 	const { sessionId, status, messages, fileDiffs } = options;
 	const objective =
-		messages
-			.find((message) => message.role === "user" && message.content.trim())
-			?.content.trim() || "Start a conversation to define this task.";
+		cleanText(
+			messages.find(
+				(message) => message.role === "user" && message.content.trim(),
+			)?.content ?? "",
+		) || "Start a conversation to define this task.";
 	const evidence = evidenceFromMessages(messages);
 	const checklist = parseChecklist(messages);
 	const steps =
