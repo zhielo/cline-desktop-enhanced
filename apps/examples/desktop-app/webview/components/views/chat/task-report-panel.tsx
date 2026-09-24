@@ -6,7 +6,6 @@ import {
 	CheckCircle2,
 	ChevronDown,
 	Circle,
-	CircleDashed,
 	Clock3,
 	ListChecks,
 	Loader2,
@@ -40,10 +39,15 @@ function statusIcon(status: TaskReportStepStatus) {
 	}
 }
 
-function sessionLabel(status: ChatSessionStatus, activeCount: number): string {
+function sessionLabel(
+	status: ChatSessionStatus | undefined,
+	activeCount: number,
+	completedCount: number,
+	totalCount: number,
+): string {
 	if (status === "failed" || status === "error") return "Failed";
 	if (status === "cancelled") return "Cancelled";
-	if (status === "completed") return "Complete";
+	if (status === "completed" || completedCount === totalCount) return "Complete";
 	if (activeCount > 0) return "Executing";
 	return "Planned";
 }
@@ -53,7 +57,7 @@ export function TaskReportPanel({
 	status,
 }: {
 	report: SessionTaskReport;
-	status: ChatSessionStatus;
+	status?: ChatSessionStatus;
 }) {
 	const [expanded, setExpanded] = useState(true);
 	useEffect(() => {
@@ -84,7 +88,12 @@ export function TaskReportPanel({
 					<div className="flex items-center gap-2">
 						<span className="text-sm font-medium">Task report</span>
 						<span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-							{sessionLabel(status, activeCount)}
+							{sessionLabel(
+								status,
+								activeCount,
+								completedCount,
+								report.steps.length,
+							)}
 						</span>
 					</div>
 					<div className="mt-1 flex items-center gap-2">
@@ -131,7 +140,7 @@ export function TaskReportPanel({
 									{step.label}
 								</span>
 							</li>
-						))}
+							))}
 					</ol>
 				</div>
 			) : null}
