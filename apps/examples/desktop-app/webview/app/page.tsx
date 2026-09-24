@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/sidebar";
 import { ChatInputBar } from "@/components/views/chat/chat-input-bar";
 import { ChatMessages } from "@/components/views/chat/chat-messages";
+import { TaskReportPanel } from "@/components/views/chat/task-report-panel";
 import { EnvironmentSelector } from "@/components/views/chat/environment-selector";
 import { RemoteDirectoryPicker } from "@/components/views/chat/remote-directory-picker";
 import { WelcomeScreen } from "@/components/views/chat/welcome-chat";
@@ -159,6 +160,14 @@ const SessionsView = dynamic(
 	() =>
 		import("@/components/views/sessions/sessions-view").then(
 			(module) => module.SessionsView,
+		),
+	{ loading: viewLoading, ssr: false },
+);
+
+const AgendaView = dynamic(
+	() =>
+		import("@/components/views/agenda/agenda-view").then(
+			(module) => module.AgendaView,
 		),
 	{ loading: viewLoading, ssr: false },
 );
@@ -961,6 +970,11 @@ export default function Home() {
 												</div>
 											);
 										})}
+									</div>
+								) : null}
+								{view === "agenda" ? (
+									<div className="absolute inset-0 z-30 bg-background text-foreground">
+										<AgendaView onOpenSession={handleOpenSessionById} />
 									</div>
 								) : null}
 								{view === "sessions" ? (
@@ -2408,8 +2422,8 @@ function ChatThreadPane({
 			<AttachmentDropZone
 				className={
 					isWelcomeState
-						? "grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden"
-						: "grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden"
+						? "relative grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden"
+						: "relative grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden"
 				}
 				disabled={isCloudSessionExpired}
 				description={
@@ -2543,6 +2557,20 @@ function ChatThreadPane({
 					onWorkInChange={canWorkInWorktree ? setWorkIn : undefined}
 					workIn={workIn}
 				/>
+				{!isWelcomeState ? (
+					<TaskReportPanel
+						fileDiffs={fileDiffs}
+						messages={displayedMessages}
+						mode={config.mode}
+						model={config.model}
+						onStop={abort}
+						provider={config.provider}
+						queuedInstructions={promptsInQueue.map((prompt) => prompt.prompt)}
+						sessionId={displayedSessionId}
+						status={displayedStatus}
+						summary={summary}
+					/>
+				) : null}
 			</AttachmentDropZone>
 			<AlertDialog
 				open={deleteConfirmOpen}

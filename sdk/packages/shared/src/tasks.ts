@@ -186,3 +186,58 @@ export interface AgendaAutomationPolicy {
 	enabledAt?: string;
 	updatedAt: string;
 }
+
+/** Runtime-owned status for a milestone in an active task report. */
+export type TaskExecutionStepStatus =
+	| "pending"
+	| "running"
+	| "passed"
+	| "failed"
+	| "blocked"
+	| "skipped";
+
+/** Evidence captured from the execution harness rather than model self-reporting. */
+export interface TaskExecutionEvidence {
+	evidenceId: string;
+	type: "tool" | "command" | "test" | "file" | "diff" | "message" | "status";
+	label: string;
+	status?: "running" | "success" | "failure";
+	timestamp: string;
+	reference?: string;
+	summary?: string;
+}
+
+/** A reviewable milestone within one Agenda task run or interactive session. */
+export interface TaskExecutionStep {
+	stepId: string;
+	position: number;
+	title: string;
+	description?: string;
+	status: TaskExecutionStepStatus;
+	acceptanceCriteria: string[];
+	dependencies: string[];
+	startedAt?: string;
+	completedAt?: string;
+	attemptCount: number;
+	evidence: TaskExecutionEvidence[];
+	error?: string;
+}
+
+/** Evidence-backed projection displayed by the desktop Task Report panel. */
+export interface TaskExecutionReport {
+	sessionId?: string;
+	objective: string;
+	status: AgendaTaskRunStatus | "idle" | "stopping";
+	steps: TaskExecutionStep[];
+	evidence: TaskExecutionEvidence[];
+	changedFiles: Array<{
+		path: string;
+		additions: number;
+		deletions: number;
+	}>;
+	queuedInstructions: string[];
+	startedAt?: string;
+	updatedAt: string;
+	completedAt?: string;
+	summary?: string;
+}

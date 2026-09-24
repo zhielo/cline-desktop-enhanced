@@ -5,4 +5,4 @@
  * components, hooks, and sidecar plumbing stay in the codebase; flip this back
  * to true (together with the hub flag) to restore the feature.
  */
-export const AGENDA_UI_ENABLED = false;
+export const AGENDA_UI_ENABLED = true;

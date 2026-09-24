@@ -112,3 +112,21 @@ screenshots update destinations atomically.
 The tool does not expose an unrestricted device shell, clear app data, root a
 device, bypass Android authorization, or bypass app signing. Full Access
 removes Cline approval prompts; Android must still authorize the device.
+
+## Agenda and task execution reports
+
+The desktop sidebar exposes **Agenda** for reviewing queued agent work. Agenda
+items keep their approval revision, priority, execution mode, model, workspace,
+time and iteration limits, latest run, and failure state visible before a run is
+started. Failed tasks can be retried, completed runs can be reopened, and
+auto-start remains an explicit user-controlled policy.
+
+Every active chat also has a collapsible **Task report** panel. It treats the
+first user request as the objective, recognizes Markdown plan checklists, and
+builds an execution timeline from the desktop runtime's actual tool start/end
+messages. Command, test, and tool success is therefore derived from runtime
+evidence rather than the model's completion claim. The report also shows queued
+steering messages, changed files, token/tool counts, Full Access warnings, and
+the latest assistant outcome. The agent can propose or revise a plan, while the
+host remains authoritative for tool success, failure, cancellation, and file
+diffs.
