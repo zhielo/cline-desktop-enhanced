@@ -961,6 +961,9 @@ export default function Home() {
 														onOpenModelSettings={() =>
 															handleSettingsSectionChange("API Providers")
 														}
+														onOpenCustomize={() =>
+															handleSettingsSectionChange("Customize")
+														}
 														onOpenAccountSettings={() =>
 															handleSettingsSectionChange("Account")
 														}
@@ -1058,6 +1061,7 @@ function ChatThreadPane({
 	onOpenSessionById,
 	onOpenSetup,
 	onOpenModelSettings,
+	onOpenCustomize,
 	onOpenAccountSettings,
 	onPickRemoteWorkspaceDirectory,
 	onSelectEnvironment,
@@ -1096,6 +1100,7 @@ function ChatThreadPane({
 	onSelectEnvironment: (environmentId: string) => Promise<void>;
 	onOpenSetup?: () => void;
 	onOpenModelSettings?: () => void;
+	onOpenCustomize?: () => void;
 	onOpenAccountSettings?: () => void;
 	parentSession?: { sessionId: string; title?: string };
 	remoteEnvironment: RemoteWorkspaceEnvironment | null;
@@ -2563,12 +2568,23 @@ function ChatThreadPane({
 						messages={displayedMessages}
 						mode={config.mode}
 						model={config.model}
+						onManageInstructions={onOpenCustomize}
 						onStop={abort}
+						onUpdateInstructions={(value) =>
+							setConfig((current) => ({
+								...current,
+								systemPrompt: value.systemPrompt,
+								rules: value.rules,
+							}))
+						}
 						provider={config.provider}
 						queuedInstructions={promptsInQueue.map((prompt) => prompt.prompt)}
+						rules={config.rules}
 						sessionId={displayedSessionId}
 						status={displayedStatus}
 						summary={summary}
+						systemPrompt={config.systemPrompt}
+						workspaceRoot={config.cwd || config.workspaceRoot}
 					/>
 				) : null}
 			</AttachmentDropZone>

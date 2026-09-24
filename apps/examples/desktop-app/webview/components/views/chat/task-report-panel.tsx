@@ -4,6 +4,7 @@ import type { TaskExecutionStepStatus } from "@cline/shared";
 import {
 	Activity,
 	Ban,
+	BookOpen,
 	CheckCircle2,
 	ChevronDown,
 	ChevronRight,
@@ -13,17 +14,26 @@ import {
 	ListChecks,
 	Loader2,
 	Pause,
+	Plug,
 	ShieldAlert,
 	TestTube2,
+	Wrench,
 	X,
 	XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import type { ChatMessage, ChatSessionStatus } from "@/lib/chat-schema";
+import { desktopClient } from "@/lib/desktop-client";
+import {
+	buildEffectiveInstructionSources,
+	type EffectiveInstructionInventory,
+	type EffectiveInstructionSource,
+} from "@/lib/effective-instructions";
 import type { SessionFileDiff } from "@/lib/session-diff";
 import {
 	buildTaskExecutionReport,
@@ -42,6 +52,11 @@ export function TaskReportPanel({
 	model,
 	mode,
 	queuedInstructions,
+	systemPrompt,
+	rules,
+	workspaceRoot,
+	onManageInstructions,
+	onUpdateInstructions,
 	onStop,
 }: {
 	sessionId?: string | null;
@@ -53,12 +68,39 @@ export function TaskReportPanel({
 	model: string;
 	mode: "act" | "plan" | "yolo";
 	queuedInstructions: string[];
+	systemPrompt?: string;
+	rules?: string;
+	workspaceRoot?: string;
+	onManageInstructions?: () => void;
+	onUpdateInstructions: (value: {
+		systemPrompt?: string;
+		rules?: string;
+	}) => void;
 	onStop: () => void | Promise<void>;
 }) {
 	const [open, setOpen] = useState(false);
 	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(
 		() => new Set(),
 	);
+	const [expandedInstructionIds, setExpandedInstructionIds] = useState<
+		Set<string>
+	>(() => new Set());
+	const [instructionInventory, setInstructionInventory] =
+		useState<EffectiveInstructionInventory | null>(null);
+	const [instructionsLoading, setInstructionsLoading] = useState(false);
+	const [instructionsError, setInstructionsError] = useState<string | null>(
+		null,
+	);
+	const [editingInstructions, setEditingInstructions] = useState(false);
+	const [systemPromptDraft, setSystemPromptDraft] = useState(
+		systemPrompt ?? "",
+	);
+	const [rulesDraft, setRulesDraft] = useState(rules ?? "");
+	useEffect(() => {
+		if (editingInstructions) return;
+		setSystemPromptDraft(systemPrompt ?? "");
+		setRulesDraft(rules ?? "");
+	}, [editingInstructions, rules, systemPrompt]);
 	const report = useMemo(
 		() =>
 			buildTaskExecutionReport({
@@ -70,6 +112,52 @@ export function TaskReportPanel({
 			}),
 		[sessionId, status, messages, fileDiffs, queuedInstructions],
 	);
+	const instructionSources = useMemo(
+		() =>
+			buildEffectiveInstructionSources({
+				systemPrompt,
+				rules,
+				workspaceRoot,
+				inventory: instructionInventory,
+			}),
+		[systemPrompt, rules, workspaceRoot, instructionInventory],
+	);
+	useEffect(() => {
+		if (!open) return;
+		let cancelled = false;
+		const load = async () => {
+			setInstructionsLoading(true);
+			try {
+				const inventory =
+					await desktopClient.invoke<EffectiveInstructionInventory>(
+						"list_user_instruction_configs",
+						workspaceRoot ? { workspaceRoot } : undefined,
+					);
+				if (!cancelled) {
+					setInstructionInventory(inventory);
+					setInstructionsError(null);
+				}
+			} catch (error) {
+				if (!cancelled) {
+					setInstructionsError(
+						error instanceof Error
+							? error.message
+							: "Unable to load instruction sources.",
+					);
+				}
+			} finally {
+				if (!cancelled) setInstructionsLoading(false);
+			}
+		};
+		void load();
+		const unsubscribe = desktopClient.subscribe("settings.changed", () => {
+			void load();
+		});
+		return () => {
+			cancelled = true;
+			unsubscribe();
+		};
+	}, [open, workspaceRoot]);
 	const progress = reportProgress(report);
 	const isBusy =
 		status === "starting" || status === "running" || status === "stopping";
@@ -214,6 +302,115 @@ export function TaskReportPanel({
 						</div>
 					</section>
 
+					<section>
+						<div className="mb-2 flex items-center justify-between gap-2">
+							<h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+								<BookOpen className="size-3.5" />
+								Effective AI instructions
+							</h3>
+							<div className="flex items-center gap-1">
+								{onManageInstructions ? (
+									<Button
+										onClick={onManageInstructions}
+										size="sm"
+										type="button"
+										variant="ghost"
+									>
+										Manage sources
+									</Button>
+								) : null}
+								<Button
+									onClick={() => setEditingInstructions((current) => !current)}
+									size="sm"
+									type="button"
+									variant="outline"
+								>
+									{editingInstructions ? "Cancel" : "Edit"}
+								</Button>
+							</div>
+						</div>
+						<p className="mb-2 text-[11px] leading-4 text-muted-foreground">
+							Session instructions apply to the next turn. Internal platform
+							prompts and credentials remain hidden; common secret values are
+							redacted in this report.
+						</p>
+						{editingInstructions ? (
+							<div className="mb-3 space-y-3 rounded-md border bg-background/60 p-3">
+								<label className="block space-y-1.5">
+									<span className="text-xs font-medium">
+										Custom system prompt
+									</span>
+									<Textarea
+										aria-label="Custom system prompt"
+										className="min-h-28 font-mono text-xs"
+										onChange={(event) =>
+											setSystemPromptDraft(event.target.value)
+										}
+										placeholder="Optional instructions that customize this session's behavior"
+										value={systemPromptDraft}
+									/>
+								</label>
+								<label className="block space-y-1.5">
+									<span className="text-xs font-medium">Session rules</span>
+									<Textarea
+										aria-label="Session rules"
+										className="min-h-24 font-mono text-xs"
+										onChange={(event) => setRulesDraft(event.target.value)}
+										placeholder="Constraints, conventions, validation requirements, and done conditions"
+										value={rulesDraft}
+									/>
+								</label>
+								<div className="flex justify-end">
+									<Button
+										onClick={() => {
+											onUpdateInstructions({
+												systemPrompt: systemPromptDraft.trim() || undefined,
+												rules: rulesDraft.trim() || undefined,
+											});
+											setEditingInstructions(false);
+										}}
+										size="sm"
+										type="button"
+									>
+										Save for this session
+									</Button>
+								</div>
+							</div>
+						) : null}
+						{instructionsLoading && instructionSources.length === 0 ? (
+							<div className="flex items-center gap-2 text-xs text-muted-foreground">
+								<Loader2 className="size-3.5 animate-spin" />
+								Loading instruction sources…
+							</div>
+						) : instructionSources.length === 0 ? (
+							<p className="text-xs text-muted-foreground">
+								No user-configured instructions are active for this session.
+							</p>
+						) : (
+							<div className="space-y-1.5">
+								{instructionSources.map((source) => (
+									<InstructionSourceRow
+										expanded={expandedInstructionIds.has(source.id)}
+										key={source.id}
+										onToggle={() =>
+											setExpandedInstructionIds((current) => {
+												const next = new Set(current);
+												if (next.has(source.id)) next.delete(source.id);
+												else next.add(source.id);
+												return next;
+											})
+										}
+										source={source}
+									/>
+								))}
+							</div>
+						)}
+						{instructionsError ? (
+							<p className="mt-2 text-[11px] text-destructive" role="alert">
+								{instructionsError}
+							</p>
+						) : null}
+					</section>
 					{report.queuedInstructions.length > 0 ? (
 						<section>
 							<h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -354,6 +551,62 @@ function StepIcon({ status }: { status: TaskExecutionStepStatus }) {
 	if (status === "skipped")
 		return <Clock3 className={cn(classes, "text-muted-foreground")} />;
 	return <Circle className={cn(classes, "text-muted-foreground")} />;
+}
+
+function InstructionSourceRow({
+	source,
+	expanded,
+	onToggle,
+}: {
+	source: EffectiveInstructionSource;
+	expanded: boolean;
+	onToggle: () => void;
+}) {
+	const icon =
+		source.kind === "mcp" ? (
+			<Plug className="size-3.5" />
+		) : source.kind === "tool" ? (
+			<Wrench className="size-3.5" />
+		) : (
+			<BookOpen className="size-3.5" />
+		);
+	return (
+		<div className="rounded-md border bg-background/60">
+			<button
+				className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+				onClick={onToggle}
+				type="button"
+			>
+				{icon}
+				<div className="min-w-0 flex-1">
+					<div className="truncate text-xs font-medium">{source.label}</div>
+					{source.detail ? (
+						<div
+							className="truncate text-[10px] text-muted-foreground"
+							title={source.detail}
+						>
+							{source.detail}
+						</div>
+					) : null}
+				</div>
+				<Badge className="capitalize" variant="outline">
+					{source.kind}
+				</Badge>
+				{source.content ? (
+					expanded ? (
+						<ChevronDown className="size-3.5" />
+					) : (
+						<ChevronRight className="size-3.5" />
+					)
+				) : null}
+			</button>
+			{expanded && source.content ? (
+				<pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words border-t p-3 font-mono text-[11px] leading-4 text-muted-foreground">
+					{source.content}
+				</pre>
+			) : null}
+		</div>
+	);
 }
 
 function EvidenceRow({
