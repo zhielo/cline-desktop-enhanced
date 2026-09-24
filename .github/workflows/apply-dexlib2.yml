@@ -1,0 +1,25 @@
+name: apply-dexlib2
+on:
+  push:
+    paths:
+      - .github/dexlib2.patch.gz.b64
+      - .github/workflows/apply-dexlib2.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/windows-re-tooling-task-ui
+          fetch-depth: 0
+      - name: Apply validated Dexlib2 patch
+        run: |
+          base64 -d .github/dexlib2.patch.gz.b64 | gzip -d > /tmp/dexlib2.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git am /tmp/dexlib2.patch
+          git rm -f .github/dexlib2.patch.gz.b64 .github/workflows/apply-dexlib2.yml
+          git commit -m "Remove temporary Dexlib2 patch files"
+          git push origin HEAD:feature/windows-re-tooling-task-ui
