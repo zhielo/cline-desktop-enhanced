@@ -9,14 +9,21 @@ describe("authorized CTF behavior", () => {
 		"treats explicitly scoped application modification as authorized",
 		(prompt) => {
 			expect(prompt).toContain("AUTHORIZED CTF AND PRIVATE-LAB WORK");
-			expect(prompt).toContain("treat reverse engineering and application modification");
+			expect(prompt).toContain(
+				"treat reverse engineering and application modification",
+			);
 			expect(prompt).toContain("Do not refuse solely");
 			expect(prompt).toContain("integrity or signature verification");
 		},
 	);
 
-	it.each(PROMPTS)("keeps authorization bounded to the stated environment", (prompt) => {
-		expect(prompt).toContain("systems outside the user's stated environment");
-		expect(prompt).toContain("credential or data theft");
-	});
+	it.each(PROMPTS)(
+		"keeps authorization bounded to the stated environment",
+		(prompt) => {
+			expect(prompt).toContain(
+				"systems outside the user's stated environment",
+			);
+			expect(prompt).toContain("credential or data theft");
+		},
+	);
 });
