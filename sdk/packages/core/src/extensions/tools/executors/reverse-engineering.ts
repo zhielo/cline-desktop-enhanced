@@ -2471,6 +2471,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 			const succeeded =
 				result.exitCode === 0 && !result.timedOut && !result.cancelled;
+			const diagnostic =
+				engine !== "ida" || succeeded
+					? undefined
+					: result.timedOut
+						? "IDA did not finish in autonomous mode. Do not probe idat with -h or run it directly; open the installed IDA GUI once to complete any legitimate first-run setup, then retry this structured operation."
+						: !result.stdout.trim() && !result.stderr.trim()
+							? `IDA exited with code ${result.exitCode ?? "unknown"} without console output. Review ${path.join(outputDir, "ida.log")} for the startup or script error; do not retry with idat -h because it can open a dialog and hang.`
+							: undefined;
 			if (succeeded) {
 				await writeAnalysisManifest(outputDir, {
 					schemaVersion: 1,
@@ -2497,6 +2505,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					durationMs: Date.now() - started,
 					artifacts,
 					artifactsTruncated: artifacts.length >= 200,
+					...(diagnostic ? { diagnostic } : {}),
 					...result,
 				},
 				null,

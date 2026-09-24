@@ -353,6 +353,36 @@ describe("reverse-engineering engine execution", () => {
 		).toBe(result.sha256);
 	});
 
+	it("returns actionable diagnostics when IDA exits silently", async () => {
+		if (process.platform === "win32") return;
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-test-"),
+		);
+		temporaryDirectories.push(directory);
+		const bin = path.join(directory, "bin");
+		await executable(bin, "idat64", "exit 1");
+		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+		const target = path.join(directory, "sample.bin");
+		await fs.writeFile(target, "sample");
+		const outputDirectory = path.join(directory, "analysis");
+
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "ida",
+					operation: "analyze",
+					target,
+					output_directory: outputDirectory,
+				},
+				{} as never,
+			),
+		);
+
+		expect(result.exitCode).toBe(1);
+		expect(result.diagnostic).toContain("do not retry with idat -h");
+		expect(result.diagnostic).toContain("ida.log");
+	});
+
 	it("passes advanced bounded JADX options through structured arguments", async () => {
 		if (process.platform === "win32") return;
 		const directory = await fs.mkdtemp(
