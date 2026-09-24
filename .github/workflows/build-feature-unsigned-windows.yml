@@ -1,0 +1,182 @@
+name: Build personal unsigned Windows test installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/codex-task-report-ui
+    paths:
+      - .github/workflows/build-feature-unsigned-windows.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    name: Build unsigned Windows x64 test setup.exe
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Read and validate desktop version
+        id: version
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./apps/examples/desktop-app/package.json').version")"
+          TAURI_VERSION="$(node -p "require('./apps/examples/desktop-app/src-tauri/tauri.conf.json').version")"
+          if [ "$PACKAGE_VERSION" != "$TAURI_VERSION" ]; then
+            echo "Desktop package version $PACKAGE_VERSION does not match Tauri version $TAURI_VERSION"
+            exit 1
+          fi
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "filename=Cline-Enhanced_${PACKAGE_VERSION}_x64-setup-UNSIGNED.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Seed Bun cache for Linux remote helpers
+        shell: bash
+        run: |
+          BUN_VERSION="$(bun --version)"
+          CACHE_DIR="${RUNNER_TEMP//\\//}/bun-install-cache"
+          mkdir -p "$CACHE_DIR"
+          for target in linux-x64-baseline linux-aarch64; do
+            dest="$CACHE_DIR/bun-$target-v$BUN_VERSION"
+            work="$(mktemp -d)"
+            (
+              cd "$work"
+              npm pack "@oven/bun-$target@$BUN_VERSION" --silent >/dev/null
+              tar -xzf ./*.tgz package/bin/bun
+            )
+            mv "$work/package/bin/bun" "$dest"
+            test "$(head -c 4 "$dest" | od -An -c | tr -d ' ')" = "177ELF"
+          done
+          echo "BUN_INSTALL_CACHE_DIR=${CACHE_DIR}" >> "$GITHUB_ENV"
+
+      - name: Install Windows packaging tools
+        shell: pwsh
+        run: |
+          choco install upx --no-progress -y
+          $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
+          Invoke-WebRequest 'https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.11/nsis-3.11.zip' -OutFile $zip
+          $expected = 'EF7FF767E5CBD9EDD22ADD3A32C9B8F4500BB10D'
+          $actual = (Get-FileHash $zip -Algorithm SHA1).Hash
+          if ($actual -ne $expected) { throw "NSIS checksum mismatch: $actual" }
+          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+          "MAKENSIS_PATH=$env:RUNNER_TEMP/nsis-3.11/makensis.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable branch
+        with:
+          toolchain: stable
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SDK packages
+        run: bun run build:sdk
+
+      - name: Type-check desktop
+        working-directory: apps/examples/desktop-app
+        run: bun run typecheck
+
+      - name: Test desktop sidecar
+        working-directory: apps/examples/desktop-app
+        run: bun run test:sidecar
+
+      - name: Test task report projection
+        working-directory: apps/examples/desktop-app
+        run: bun x vitest run webview/lib/task-report.test.ts
+
+      - name: Build unsigned NSIS installer
+        working-directory: apps/examples/desktop-app
+        run: bunx tauri build --bundles nsis
+
+      - name: Collect unsigned installer
+        id: installer
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        env:
+          OUTPUT_FILENAME: ${{ steps.version.outputs.filename }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $bundleRoot = 'src-tauri/target/release/bundle/nsis'
+          $setup = Get-ChildItem $bundleRoot -Filter '*-setup.exe' -Recurse | Select-Object -First 1
+          if (-not $setup) { throw "No setup.exe was produced under $bundleRoot" }
+
+          $out = 'dist/custom-installer'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $destination = Join-Path $out $env:OUTPUT_FILENAME
+          Copy-Item $setup.FullName $destination -Force
+
+          $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:OUTPUT_FILENAME" | Out-File (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          @(
+            "Version: $env:VERSION"
+            "Commit: $env:GITHUB_SHA"
+            "Runner: $env:RUNNER_OS $env:RUNNER_ARCH"
+            "Signed: no"
+            "Purpose: personal testing only"
+          ) | Out-File (Join-Path $out 'BUILD-INFO.txt') -Encoding utf8
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - name: Smoke-test unsigned installer and app
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        env:
+          OUTPUT_FILENAME: ${{ steps.version.outputs.filename }}
+        run: |
+          $setup = (Resolve-Path "dist/custom-installer/$env:OUTPUT_FILENAME").Path
+          $process = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "NSIS silent installation failed with exit code $($process.ExitCode)"
+          }
+
+          $uninstallRoots = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          )
+          $entry = Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'Cline Enhanced' } |
+            Select-Object -First 1
+          if (-not $entry) { throw 'Installed Cline Enhanced registry entry not found' }
+
+          $installLocation = $entry.InstallLocation
+          if (-not $installLocation -or -not (Test-Path $installLocation)) {
+            $uninstallExe = $entry.UninstallString -replace '^"|"$', ''
+            $installLocation = Split-Path $uninstallExe -Parent
+          }
+          $appExe = Get-ChildItem $installLocation -Filter 'cline-app.exe' -Recurse | Select-Object -First 1
+          $sidecarExe = Get-ChildItem $installLocation -Filter 'code-sidecar.exe' -Recurse | Select-Object -First 1
+          if (-not $appExe) { throw "cline-app.exe not found under $installLocation" }
+          if (-not $sidecarExe) { throw "code-sidecar.exe not found under $installLocation" }
+
+          $app = Start-Process -FilePath $appExe.FullName -PassThru
+          Start-Sleep -Seconds 15
+          $app.Refresh()
+          if ($app.HasExited) { throw "Installed app exited during startup with code $($app.ExitCode)" }
+
+          $sidecar = Get-CimInstance Win32_Process |
+            Where-Object { $_.Name -eq 'code-sidecar.exe' -and $_.ExecutablePath -like "$installLocation*" } |
+            Select-Object -First 1
+          if (-not $sidecar) {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            throw 'Installed app stayed open but its code-sidecar.exe did not start'
+          }
+          Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Id $sidecar.ProcessId -Force -ErrorAction SilentlyContinue
+
+      - name: Upload personal test installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cline-enhanced-windows-x64-unsigned-${{ steps.version.outputs.version }}
+          path: apps/examples/desktop-app/dist/custom-installer/*
+          if-no-files-found: error
+          retention-days: 7
