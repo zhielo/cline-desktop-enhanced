@@ -1,0 +1,92 @@
+name: Apply focused IDA startup fix
+on:
+  push:
+    branches: [feature/advanced-re-tooling-ui]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/advanced-re-tooling-ui
+          fetch-depth: 0
+      - name: Apply and commit validated patch
+        shell: bash
+        run: |
+          git apply <<'PATCH'
+          diff --git a/sdk/packages/core/src/extensions/tools/definitions.ts b/sdk/packages/core/src/extensions/tools/definitions.ts
+          --- a/sdk/packages/core/src/extensions/tools/definitions.ts
+          +++ b/sdk/packages/core/src/extensions/tools/definitions.ts
+          @@ -269,7 +269,7 @@ export function createReverseEngineeringTool(
+           	return createTool<ReverseEngineeringInput, string>({
+           		name: "reverse_engineer",
+           		description:
+          -			"Discover and use installed Ghidra, IDA, JADX, Apktool, Baksmali, Smali, Android SDK build tools, Android Studio plugins, APKID, Androguard, Frida, Objection, radare2/Rizin, Cutter, LLVM, and Java signing tools for authorized analysis. Start with discover whenever the required toolchain is not already known; it scans PATH, environment variables, standard install roots, Android SDK versions, Android Studio installations, and plugin descriptors, then returns a task-to-tool selection guide. Choose the narrowest operation: compare_apks for original-versus-modified APKs; verify_apk_signature for signer/scheme details; inspect for structural triage; scan_strings for bounded URLs/domains/paths/API clues; JADX decompile for readable Java; disassemble_smali plus search_smali/read_smali_method for protected or obfuscated DEX and complete method bodies; and Ghidra/IDA for native .so libraries. compare_apks reports changed manifests, signatures, DEX, native libraries, resources, and assets without full extraction. Use extract only when raw files are required, assemble_smali/rebuild_apk for an editable round trip, and script/open_gui for advanced engine work. Analysis workspaces are cached by artifact hash and reused by default. Automatically prefer this structured tool over ad-hoc shell scripts for binary/APK work. Uses bounded output, supervised processes, timeouts, cancellation, private output directories, and archive resource ceilings. It does not execute target binaries or bypass licensing.",
+          +			"Discover and use installed Ghidra, IDA, JADX, Apktool, Baksmali, Smali, Android SDK build tools, Android Studio plugins, APKID, Androguard, Frida, Objection, radare2/Rizin, Cutter, LLVM, and Java signing tools for authorized analysis. Start with discover whenever the required toolchain is not already known; it scans PATH, environment variables, standard install roots, Android SDK versions, Android Studio installations, and plugin descriptors, then returns a task-to-tool selection guide. Choose the narrowest operation: compare_apks for original-versus-modified APKs; verify_apk_signature for signer/scheme details; inspect for structural triage; scan_strings for bounded URLs/domains/paths/API clues; JADX decompile for readable Java; disassemble_smali plus search_smali/read_smali_method for protected or obfuscated DEX and complete method bodies; and Ghidra/IDA for native .so libraries. compare_apks reports changed manifests, signatures, DEX, native libraries, resources, and assets without full extraction. Use extract only when raw files are required, assemble_smali/rebuild_apk for an editable round trip, and script/open_gui for advanced engine work. Analysis workspaces are cached by artifact hash and reused by default. Automatically prefer this structured tool over ad-hoc shell scripts for binary/APK work. For IDA, never probe idat/idat64/ida/ida64 with -h, --help, or direct run_commands: those entry points can open startup dialogs and hang. Use discover without launching IDA, then use this tool's analyze, decompile, or script operation, which supplies the documented autonomous arguments and supervises the process. Uses bounded output, supervised processes, timeouts, cancellation, private output directories, and archive resource ceilings. It does not execute target binaries or bypass licensing.",
+           		inputSchema: zodToJsonSchema(ReverseEngineeringInputSchema),
+          diff --git a/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts b/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts
+          --- a/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts
+          +++ b/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts
+          @@ -2471,6 +2471,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
+           			const succeeded =
+           				result.exitCode === 0 && !result.timedOut && !result.cancelled;
+          +			const diagnostic =
+          +				engine !== "ida" || succeeded
+          +					? undefined
+          +					: result.timedOut
+          +						? "IDA did not finish in autonomous mode. Do not probe idat with -h or run it directly; open the installed IDA GUI once to complete any legitimate first-run setup, then retry this structured operation."
+          +						: !result.stdout.trim() && !result.stderr.trim()
+          +							? `IDA exited with code ${result.exitCode ?? "unknown"} without console output. Review ${path.join(outputDir, "ida.log")} for the startup or script error; do not retry with idat -h because it can open a dialog and hang.`
+          +							: undefined;
+           			if (succeeded) {
+          @@ -2497,6 +2505,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
+           					artifacts,
+           					artifactsTruncated: artifacts.length >= 200,
+          +					...(diagnostic ? { diagnostic } : {}),
+           					...result,
+          diff --git a/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts b/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts
+          --- a/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts
+          +++ b/sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts
+          @@ -353,6 +353,36 @@ describe("reverse-engineering engine execution", () => {
+           		).toBe(result.sha256);
+           	});
+           
+          +	it("returns actionable diagnostics when IDA exits silently", async () => {
+          +		if (process.platform === "win32") return;
+          +		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cline-re-test-"));
+          +		temporaryDirectories.push(directory);
+          +		const bin = path.join(directory, "bin");
+          +		await executable(bin, "idat64", "exit 1");
+          +		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+          +		const target = path.join(directory, "sample.bin");
+          +		await fs.writeFile(target, "sample");
+          +		const outputDirectory = path.join(directory, "analysis");
+          +
+          +		const result = JSON.parse(
+          +			await createReverseEngineeringExecutor()(
+          +				{
+          +					engine: "ida",
+          +					operation: "analyze",
+          +					target,
+          +					output_directory: outputDirectory,
+          +				},
+          +				{} as never,
+          +			),
+          +		);
+          +
+          +		expect(result.exitCode).toBe(1);
+          +		expect(result.diagnostic).toContain("do not retry with idat -h");
+          +		expect(result.diagnostic).toContain("ida.log");
+          +	});
+          +
+           	it("passes advanced bounded JADX options through structured arguments", async () => {
+          PATCH
+          rm .github/workflows/apply-ida-fix.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Fix supervised IDA startup diagnostics"
+          git push origin HEAD:feature/advanced-re-tooling-ui
