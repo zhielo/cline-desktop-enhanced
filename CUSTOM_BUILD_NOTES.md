@@ -74,6 +74,8 @@ installed Bun dependencies, so a full monorepo build was not performed here.
 The manual GitHub Actions workflow at
 `.github/workflows/build-custom-windows-installer.yml` performs that native
 Windows build and uploads a single NSIS `setup.exe` artifact plus its SHA-256
-checksum. The workflow intentionally creates an unsigned private test build;
-Windows may show a SmartScreen warning until the installer is Authenticode
-signed with the publisher's certificate.
+checksum. The workflow requires Azure Trusted Signing and refuses to fall back to an
+unsigned build. It verifies the Authenticode signature on the installer, the
+installed application, and its sidecar before uploading the artifact. The
+artifact is retained in GitHub Actions for 90 days; no GitHub Release is
+created.
