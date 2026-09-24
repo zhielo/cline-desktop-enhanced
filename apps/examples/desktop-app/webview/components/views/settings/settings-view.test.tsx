@@ -153,3 +153,60 @@ describe("SettingsView cloud sessions rollout", () => {
 		);
 	});
 });
+
+describe("SettingsView AI agent instructions", () => {
+	it("loads and saves editable instructions", async () => {
+		invoke.mockImplementation(async (command: string, args?: unknown) => {
+			if (command === "get_feature_flags") {
+				return { cloudAgents: false, cloudAgentsAvailable: false };
+			}
+			if (command === "get_desktop_settings") {
+				return {
+					cloudSessionsEnabled: false,
+					agentInstructions: "Initial instructions",
+				};
+			}
+			if (command === "set_agent_instructions") {
+				return {
+					cloudSessionsEnabled: false,
+					agentInstructions: (args as { agent_instructions: string })
+						.agent_instructions,
+				};
+			}
+			return { telemetryOptOut: false, autoUpdateEnabled: true };
+		});
+
+		await act(async () => {
+			root.render(
+				<SettingsView onNavigateSection={vi.fn()} section="General" />,
+			);
+		});
+		const textarea = await vi.waitFor(() => {
+			const element = container.querySelector<HTMLTextAreaElement>(
+				'textarea[aria-label="AI agent instructions"]',
+			);
+			expect(element?.value).toBe("Initial instructions");
+			return element as HTMLTextAreaElement;
+		});
+
+		await act(async () => {
+			const setter = Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set;
+			setter?.call(textarea, "Updated instructions");
+			textarea.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		const saveButton = Array.from(
+			container.querySelectorAll<HTMLButtonElement>("button"),
+		).find((button) => button.textContent === "Save");
+		expect(saveButton?.disabled).toBe(false);
+
+		await act(async () => {
+			saveButton?.click();
+		});
+		expect(invoke).toHaveBeenCalledWith("set_agent_instructions", {
+			agent_instructions: "Updated instructions",
+		});
+	});
+});

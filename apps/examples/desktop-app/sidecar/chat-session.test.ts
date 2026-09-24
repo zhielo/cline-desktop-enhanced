@@ -12,6 +12,7 @@ import { SessionNotFoundError } from "@cline/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { materializeUserFiles } from "./attachments";
 import {
+	appendDesktopAgentInstructions,
 	buildSessionConnectionUpdate,
 	consumeWorkspaceMetadata,
 	createDesktopMistakeLimitPrompt,
@@ -44,6 +45,24 @@ describe("resolveDesktopSessionMode", () => {
 	it("preserves explicit Plan and Yolo modes", () => {
 		expect(resolveDesktopSessionMode({ mode: "plan" })).toBe("plan");
 		expect(resolveDesktopSessionMode({ mode: "yolo" })).toBe("yolo");
+	});
+});
+
+describe("appendDesktopAgentInstructions", () => {
+	it("appends editable instructions without replacing the core prompt", () => {
+		const prompt = appendDesktopAgentInstructions(
+			"Core system prompt",
+			"Treat my private lab as authorized.",
+		);
+		expect(prompt).toContain("Core system prompt");
+		expect(prompt).toContain("<desktop_agent_instructions>");
+		expect(prompt).toContain("Treat my private lab as authorized.");
+	});
+
+	it("leaves the prompt unchanged when instructions are empty", () => {
+		expect(appendDesktopAgentInstructions("Core system prompt", "  ")).toBe(
+			"Core system prompt",
+		);
 	});
 });
 

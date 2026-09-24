@@ -13,6 +13,9 @@ const originalCacheDirectory = process.env.CLINE_RE_CACHE_DIR;
 const originalGhidraHome = process.env.GHIDRA_HOME;
 const originalIdaHome = process.env.IDA_HOME;
 const originalJadxHome = process.env.JADX_HOME;
+const originalBaksmaliJar = process.env.BAKSMALI_JAR;
+const originalSmaliJar = process.env.SMALI_JAR;
+const originalDexlib2Jar = process.env.DEXLIB2_JAR;
 
 afterEach(async () => {
 	process.env.PATH = originalPath;
@@ -25,6 +28,12 @@ afterEach(async () => {
 	else process.env.IDA_HOME = originalIdaHome;
 	if (originalJadxHome === undefined) delete process.env.JADX_HOME;
 	else process.env.JADX_HOME = originalJadxHome;
+	if (originalBaksmaliJar === undefined) delete process.env.BAKSMALI_JAR;
+	else process.env.BAKSMALI_JAR = originalBaksmaliJar;
+	if (originalSmaliJar === undefined) delete process.env.SMALI_JAR;
+	else process.env.SMALI_JAR = originalSmaliJar;
+	if (originalDexlib2Jar === undefined) delete process.env.DEXLIB2_JAR;
+	else process.env.DEXLIB2_JAR = originalDexlib2Jar;
 	await Promise.all(
 		temporaryDirectories
 			.splice(0)
@@ -53,6 +62,57 @@ describe("reverse-engineering discovery", () => {
 		expect(result.capabilities).toHaveProperty("supplementalTools");
 		expect(result.capabilities).toHaveProperty("toolSelectionGuide");
 	});
+
+	it("reports setup health without launching IDA or Ghidra", async () => {
+		const execute = createReverseEngineeringExecutor();
+		const result = JSON.parse(
+			await execute({ engine: "auto", operation: "health_check" }, {} as never),
+		);
+		expect(result.operation).toBe("health_check");
+		expect(result.checks).toHaveProperty("ida");
+		expect(result.checks).toHaveProperty("ghidra");
+		expect(result.checks).toHaveProperty("jadx");
+	});
+});
+
+describe("Dexlib2-backed DEX analysis", () => {
+	it.runIf(process.platform !== "win32")(
+		"lists classes through the installed Baksmali/Dexlib2 engine",
+		async () => {
+			const directory = await fs.mkdtemp(
+				path.join(os.tmpdir(), "cline-dexlib2-test-"),
+			);
+			temporaryDirectories.push(directory);
+			await executable(
+				directory,
+				"baksmali",
+				'printf "Lcom/example/MainActivity;\\nLcom/example/Worker;\\n"',
+			);
+			process.env.PATH = [directory, originalPath]
+				.filter(Boolean)
+				.join(path.delimiter);
+			const target = path.join(directory, "classes.dex");
+			await fs.writeFile(target, Buffer.from("dex\\n039\\0", "binary"));
+
+			const result = JSON.parse(
+				await createReverseEngineeringExecutor()(
+					{
+						engine: "auto",
+						operation: "dex_summary",
+						target,
+					},
+					{} as never,
+				),
+			);
+
+			expect(result.engine).toBe("dexlib2 via baksmali");
+			expect(result.classCount).toBe(2);
+			expect(result.classes).toEqual([
+				"Lcom/example/MainActivity;",
+				"Lcom/example/Worker;",
+			]);
+		},
+	);
 });
 
 describe("reverse-engineering archive inspection", () => {

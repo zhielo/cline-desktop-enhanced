@@ -1,5 +1,102 @@
 This is the **Cline** monorepo. Toolchain is **Bun 1.3.13** (package manager + task runner) with **Node >=22** as the runtime. Do not use npm/yarn/pnpm.
 
+## Customized Cline Enhanced handoff — read before changing this fork
+
+This branch is an active customized **Windows Cline Desktop** project. Before making changes, inspect the latest branch, pull requests, workflow runs, and current diff instead of recreating completed work.
+
+### Product goal and required deliverable
+
+- Build **Cline Enhanced** for **Windows x64**.
+- The final deliverable must be a working NSIS `setup.exe`, expected to be named `Cline-Enhanced_0.0.34_x64-setup.exe` or an equivalent Windows x64 setup executable.
+- Do not substitute an AppImage, DMG, Linux build, macOS build, or source ZIP for the requested installer.
+- Preserve the custom application identifier and disabled upstream auto-update behavior documented in `CUSTOM_BUILD_NOTES.md`.
+
+### Active development
+
+- Primary development branch: `feature/windows-re-tooling-task-ui`
+- Draft PR #10: <https://github.com/zhielo/cline-desktop-enhanced/pull/10>
+- Focused IDA startup-fix branch: `feature/advanced-re-tooling-ui`
+- Draft PR #9: <https://github.com/zhielo/cline-desktop-enhanced/pull/9>
+- PR #10 is intentionally stacked on the IDA-fix branch. Do not merge either PR until Windows validation and relevant CI results are understood.
+
+### Completed custom work that must be preserved
+
+1. Fixed the incorrect IDA `idat -h`/`--help` probing behavior. Never restore help-flag probing of IDA entry points.
+2. Added supervised IDA, Ghidra, and JADX analysis with bounded output, cancellation, timeouts, and Windows process-tree cleanup.
+3. Added `health_check` and `binary_triage` operations.
+4. Added discovery for tools including capa, FLOSS, YARA, binwalk, Detect It Easy CLI, radare2, readelf, nm, ExifTool, UPX, GDB, LLDB, dumpbin, and Sigcheck.
+5. Added Codex-style task status presentation with Running/Done/Failed state pills and disclosure controls.
+6. Added modern Dexlib2/Smali support:
+   - `dex_summary` provides a fast Dexlib2-backed DEX class inventory through Baksmali.
+   - Prefer official Smali/Dexlib2 **3.0.10** artifacts while retaining compatibility with **3.0.9**.
+   - Discover `BAKSMALI_JAR`, `SMALI_JAR`, and `DEXLIB2_JAR` overrides, common Cline tool directories, Maven cache paths, Java, and command launchers.
+   - Raw DEX disassembly falls back to `java -jar <baksmali-fat-release.jar>` when a Baksmali launcher is unavailable.
+   - Smali assembly falls back to `java -jar <smali-fat-release.jar>` when a Smali launcher is unavailable.
+   - JAR paths and all external arguments must remain structured argv entries; do not introduce shell interpolation for Windows paths.
+
+Recommended end-user JAR locations on Windows:
+
+```text
+%USERPROFILE%\.cline\tools\baksmali-3.0.10-fat-release.jar
+%USERPROFILE%\.cline\tools\smali-3.0.10-fat-release.jar
+```
+
+The standalone `smali-dexlib2` library JAR is not required for normal disassembly/assembly because the official fat-release JARs carry their runtime dependencies. Do not assume the standalone Dexlib2 library JAR has an executable main class.
+
+### Important implementation files
+
+- `sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts`
+- `sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts`
+- `sdk/packages/core/src/extensions/tools/definitions.ts`
+- `sdk/packages/core/src/extensions/tools/schemas.ts`
+- `apps/examples/desktop-app/CUSTOM_DESKTOP.md`
+- `apps/examples/desktop-app/webview/components/views/chat/messages/tool-message-block.tsx`
+- `sdk/packages/ui/components/agent-chat/index.tsx`
+- `sdk/packages/ui/components/agent-chat/agent-chat.css`
+- `CUSTOM_BUILD_NOTES.md`
+
+### Focused validation
+
+Run these after relevant changes. Build SDK packages before their tests because package exports resolve through `dist/`.
+
+```bash
+bun run build:sdk
+cd sdk/packages/core
+bun vitest run src/extensions/tools/executors/reverse-engineering.test.ts --config vitest.config.ts
+cd ../../ui
+bun run typecheck
+bun vitest run tests/agent-chat.test.tsx --config vitest.config.ts
+cd ../../../apps/examples/desktop-app
+bun run typecheck
+cd ../../..
+git diff --check
+```
+
+The last verified focused reverse-engineering suite contained **15 passing tests**, including Dexlib2/Baksmali class inventory. Re-run tests rather than relying on this historical count after modifying code.
+
+### Remaining release work
+
+1. Inspect PR #10, its latest diff, reviews, and CI before changing code.
+2. Build the latest development head on a Windows x64 GitHub Actions runner.
+3. Confirm the NSIS `setup.exe` exists and is the full desktop installer, not only a sidecar binary.
+4. Test silent installation and confirm `cline-app.exe` and `code-sidecar.exe` start.
+5. Generate and retain a SHA-256 checksum for the installer.
+6. Make the Windows installer artifact available to the user.
+7. Remove one-time build trigger files after the required artifact is captured, if they still exist:
+   - `.github/workflows/build-windows-once.yml`
+   - `.github/WINDOWS_BUILD_TRIGGER`
+8. Ensure no temporary Base64 patch-transfer files or self-applying transfer workflows remain in the PR.
+9. Distinguish baseline/infrastructure CI failures from regressions caused by the focused changes; do not claim all CI passed unless verified.
+
+### Reverse-engineering safety and licensing constraints
+
+- Never bypass, patch, suppress, or circumvent IDA licensing or activation.
+- Never patch IDA binaries.
+- Do not execute `idat.exe -h`, `idat64.exe -h`, `ida.exe --help`, or `ida64.exe --help`.
+- Use IDA only through legitimately installed/licensed capabilities; first-run GUI setup may be required.
+- Use Ghidra through its official interfaces.
+- Keep reverse-engineering operations supervised, scoped to authorized artifacts, bounded, cancellable, timeout-controlled, and non-shell-interpolated where structured argv is available.
+
 ## Cloud Agent Instructions
 
 ### Cline CLI

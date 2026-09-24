@@ -12,6 +12,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 import { isBetaVersion, productNameForVersion } from "@/lib/app-channel";
 import {
 	DEFAULT_APP_FONT_SIZE,
@@ -92,6 +93,13 @@ type GlobalSettingsResponse = {
 	autoUpdateEnabled: boolean;
 	tools?: Partial<Record<"web_search", { enabled: boolean }>>;
 };
+
+type DesktopSettingsResponse = {
+	cloudSessionsEnabled: boolean;
+	agentInstructions: string;
+};
+
+const MAX_AGENT_INSTRUCTIONS_LENGTH = 20_000;
 
 const PROVIDER_CATALOG_CACHE_TTL_MS = 60_000;
 
@@ -708,6 +716,14 @@ function GeneralSettingsContent({
 	const [cloudSessionsError, setCloudSessionsError] = useState<string | null>(
 		null,
 	);
+	const [agentInstructions, setAgentInstructions] = useState("");
+	const [savedAgentInstructions, setSavedAgentInstructions] = useState("");
+	const [agentInstructionsLoading, setAgentInstructionsLoading] =
+		useState(true);
+	const [agentInstructionsSaving, setAgentInstructionsSaving] = useState(false);
+	const [agentInstructionsError, setAgentInstructionsError] = useState<
+		string | null
+	>(null);
 	// The environment override can differ from the stored opt-in.
 	const [cloudSessionsEffective, setCloudSessionsEffective] = useState<
 		boolean | null
@@ -806,6 +822,8 @@ function GeneralSettingsContent({
 		setWebSearchError(null);
 		setCloudSessionsLoading(true);
 		setCloudSessionsError(null);
+		setAgentInstructionsLoading(true);
+		setAgentInstructionsError(null);
 		await Promise.all([
 			(async () => {
 				try {
@@ -829,18 +847,27 @@ function GeneralSettingsContent({
 			})(),
 			(async () => {
 				try {
-					const desktopSettings = await desktopClient.invoke<{
-						cloudSessionsEnabled: boolean;
-					}>("get_desktop_settings");
+					const desktopSettings =
+						await desktopClient.invoke<DesktopSettingsResponse>(
+							"get_desktop_settings",
+						);
 					setCloudSessionsEnabled(
 						Boolean(desktopSettings.cloudSessionsEnabled),
 					);
+					const instructions =
+						typeof desktopSettings.agentInstructions === "string"
+							? desktopSettings.agentInstructions
+							: "";
+					setAgentInstructions(instructions);
+					setSavedAgentInstructions(instructions);
 				} catch (error) {
-					setCloudSessionsError(
-						error instanceof Error ? error.message : String(error),
-					);
+					const message =
+						error instanceof Error ? error.message : String(error);
+					setCloudSessionsError(message);
+					setAgentInstructionsError(message);
 				} finally {
 					setCloudSessionsLoading(false);
+					setAgentInstructionsLoading(false);
 				}
 			})(),
 			refreshCloudSessionsEffective(),
@@ -934,6 +961,43 @@ function GeneralSettingsContent({
 		}
 	};
 
+	const saveAgentInstructions = async () => {
+		setAgentInstructionsSaving(true);
+		setAgentInstructionsError(null);
+		try {
+			const settings = await desktopClient.invoke<DesktopSettingsResponse>(
+				"set_agent_instructions",
+				{ agent_instructions: agentInstructions },
+			);
+			setAgentInstructions(settings.agentInstructions);
+			setSavedAgentInstructions(settings.agentInstructions);
+		} catch (error) {
+			setAgentInstructionsError(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setAgentInstructionsSaving(false);
+		}
+	};
+
+	const resetAgentInstructions = async () => {
+		setAgentInstructionsSaving(true);
+		setAgentInstructionsError(null);
+		try {
+			const settings = await desktopClient.invoke<DesktopSettingsResponse>(
+				"reset_agent_instructions",
+			);
+			setAgentInstructions(settings.agentInstructions);
+			setSavedAgentInstructions(settings.agentInstructions);
+		} catch (error) {
+			setAgentInstructionsError(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setAgentInstructionsSaving(false);
+		}
+	};
+
 	const updateTheme = (darkModeEnabled: boolean) => {
 		const nextTheme = darkModeEnabled ? "dark" : "light";
 		setTheme(setStoredHubTheme(nextTheme));
@@ -985,6 +1049,64 @@ function GeneralSettingsContent({
 			/>
 			<section className="max-w-344">
 				<NotificationSettings />
+				<div className="flex flex-col gap-3 border-b py-4">
+					<div className="flex flex-col gap-1">
+						<p className="text-base font-semibold text-foreground">
+							AI agent instructions
+						</p>
+						<p className="text-sm text-muted-foreground">
+							Add instructions that are appended to the built-in system prompt
+							for new local sessions. Reset restores the CTF/private-lab
+							default.
+						</p>
+					</div>
+					<Textarea
+						aria-label="AI agent instructions"
+						className="min-h-44 resize-y font-mono text-xs"
+						disabled={agentInstructionsLoading || agentInstructionsSaving}
+						maxLength={MAX_AGENT_INSTRUCTIONS_LENGTH}
+						onChange={(event) => setAgentInstructions(event.target.value)}
+						placeholder="Enter instructions for new agent sessions..."
+						value={agentInstructions}
+					/>
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<p className="text-xs text-muted-foreground">
+								{agentInstructions.length.toLocaleString()} /{" "}
+								{MAX_AGENT_INSTRUCTIONS_LENGTH.toLocaleString()} characters
+							</p>
+							{agentInstructionsError ? (
+								<p className="mt-1 text-xs text-destructive" role="alert">
+									Failed to update AI agent instructions:{" "}
+									{agentInstructionsError}
+								</p>
+							) : null}
+						</div>
+						<div className="flex items-center gap-2">
+							<Button
+								disabled={agentInstructionsLoading || agentInstructionsSaving}
+								onClick={() => void resetAgentInstructions()}
+								size="sm"
+								type="button"
+								variant="outline"
+							>
+								Reset
+							</Button>
+							<Button
+								disabled={
+									agentInstructionsLoading ||
+									agentInstructionsSaving ||
+									agentInstructions === savedAgentInstructions
+								}
+								onClick={() => void saveAgentInstructions()}
+								size="sm"
+								type="button"
+							>
+								{agentInstructionsSaving ? "Saving…" : "Save"}
+							</Button>
+						</div>
+					</div>
+				</div>
 				<div className="flex py-4 items-center justify-between gap-5 border-b max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:py-4">
 					<div className="flex flex-col gap-1">
 						<p className="text-base font-semibold text-foreground">Dark mode</p>

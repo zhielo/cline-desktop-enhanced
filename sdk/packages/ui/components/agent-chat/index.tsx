@@ -710,6 +710,7 @@ export type ToolActivityTriggerProps = Omit<
 	icon?: ReactNode;
 	label: ReactNode;
 	status?: ToolActivityStatus;
+	statusLabel?: ReactNode;
 	additions?: number;
 	deletions?: number;
 	disabled?: boolean;
@@ -728,6 +729,7 @@ export const ToolActivityTrigger = ({
 	onClick,
 	showDisclosureIcon = true,
 	status = "success",
+	statusLabel,
 	...props
 }: ToolActivityTriggerProps) => {
 	const { expandable, isOpen, panelId, setIsOpen } = useToolActivity();
@@ -742,6 +744,9 @@ export const ToolActivityTrigger = ({
 				<span className="cline-chat-tool-icon">{icon}</span>
 			) : null}
 			<span className="cline-chat-tool-label">{label}</span>
+			{statusLabel ? (
+				<span className="cline-chat-tool-status">{statusLabel}</span>
+			) : null}
 			{additions !== undefined || deletions !== undefined ? (
 				<span className="cline-chat-tool-diff">
 					{additions !== undefined ? (

@@ -54,6 +54,7 @@ import {
 	requestSidecarAskQuestion,
 	sendEvent,
 } from "./context";
+import { readDesktopSettings } from "./desktop-settings";
 import { isCloudAgentsEnabled } from "./feature-flags";
 import { readSessionManifest, sharedSessionDataDir } from "./paths";
 import { persistSessionMessages } from "./session-data/messages";
@@ -777,12 +778,28 @@ export function hasProviderChanged(
 	return nextProviderId !== undefined && currentProviderId !== nextProviderId;
 }
 
+export function appendDesktopAgentInstructions(
+	systemPrompt: string,
+	instructions = readDesktopSettings().agentInstructions,
+): string {
+	const normalizedInstructions = instructions.trim();
+	if (!normalizedInstructions) return systemPrompt;
+	return [
+		systemPrompt.trim(),
+		`<desktop_agent_instructions>\n${normalizedInstructions}\n</desktop_agent_instructions>`,
+	]
+		.filter(Boolean)
+		.join("\n\n");
+}
+
 async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 	const cwd = String(
 		config.cwd ?? config.workspaceRoot ?? config.workspace_root ?? "",
 	).trim();
 	if (!cwd) {
-		return String(config.systemPrompt ?? config.system_prompt ?? "").trim();
+		return appendDesktopAgentInstructions(
+			String(config.systemPrompt ?? config.system_prompt ?? "").trim(),
+		);
 	}
 	const providerId = String(config.provider ?? config.providerId ?? "").trim();
 	const mode = resolveDesktopSessionMode(config);
@@ -791,7 +808,7 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 		typeof config.rules === "string" && config.rules.trim().length > 0
 			? config.rules
 			: undefined;
-	return buildClineSystemPrompt({
+	const systemPrompt = await buildClineSystemPrompt({
 		ide: "Terminal Shell",
 		workspaceRoot: cwd,
 		workspaceName: basename(cwd),
@@ -809,6 +826,7 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 					: undefined,
 		platform: process.platform || "unknown",
 	});
+	return appendDesktopAgentInstructions(systemPrompt);
 }
 
 function resolveToolPolicies(

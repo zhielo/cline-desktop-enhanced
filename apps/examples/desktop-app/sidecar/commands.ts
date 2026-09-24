@@ -89,13 +89,13 @@ import { resolveClineDir } from "@cline/shared/storage";
 import packageJson from "../package.json";
 import { CLINE_ACCOUNT_NOT_AUTHENTICATED_RESULT } from "../webview/lib/cline-account-state";
 import { MAX_RECORDED_AUDIO_BYTES } from "../webview/lib/voice-input-limits";
-import { resolveDesktopTelemetryUser } from "./client-context";
 import {
 	appendAttachmentUpload,
 	beginAttachmentUpload,
 	discardAttachmentUploads,
 	finishAttachmentUpload,
 } from "./attachment-uploads";
+import { resolveDesktopTelemetryUser } from "./client-context";
 import { resolveFreshClineAuthToken } from "./cline-auth";
 import {
 	getCloudSessionManager,
@@ -133,6 +133,8 @@ import {
 } from "./context";
 import {
 	readDesktopSettings,
+	resetAgentInstructions,
+	setAgentInstructions,
 	setCloudSessionsEnabled,
 } from "./desktop-settings";
 import {
@@ -3210,6 +3212,15 @@ export async function handleCommand(
 			cloudAgentsAvailable: isCloudAgentsAvailable(),
 		});
 		return settings;
+	}
+	if (command === "set_agent_instructions") {
+		if (typeof args?.agent_instructions !== "string") {
+			throw new Error("agent_instructions must be a string");
+		}
+		return setAgentInstructions(args.agent_instructions);
+	}
+	if (command === "reset_agent_instructions") {
+		return resetAgentInstructions();
 	}
 	if (command === "set_web_search_enabled") {
 		if (typeof args?.web_search_enabled !== "boolean") {
