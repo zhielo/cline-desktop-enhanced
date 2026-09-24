@@ -241,6 +241,38 @@ describe("reverse-engineering archive inspection", () => {
 			securityRelevant: 1,
 		});
 	});
+
+	it("triages wrapped Dex and high-entropy payload indicators", async () => {
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-test-"),
+		);
+		temporaryDirectories.push(directory);
+		const target = path.join(directory, "classes.dex");
+		const payload = Buffer.alloc(128 * 1024);
+		for (let index = 0; index < payload.length; index += 1) {
+			payload[index] = (index * 131 + (index >> 3) * 17) & 0xff;
+		}
+		await fs.writeFile(target, payload);
+
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{ engine: "auto", operation: "triage_obfuscation", target },
+				{} as never,
+			),
+		);
+
+		expect(result.assessment).toBe(
+			"strong-obfuscation-or-protection-indicators",
+		);
+		expect(result.findings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ kind: "wrapped-dex", severity: "high" }),
+			]),
+		);
+		expect(result.recommendedNextSteps.join(" ")).toContain(
+			"disassemble_smali",
+		);
+	});
 });
 
 describe("reverse-engineering Smali reading", () => {

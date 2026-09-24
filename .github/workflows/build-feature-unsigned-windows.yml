@@ -9,6 +9,11 @@ on:
       - apps/examples/desktop-app/webview/components/views/settings/customize-view.tsx
       - apps/examples/desktop-app/webview/components/views/task-report-view.tsx
       - apps/examples/desktop-app/webview/lib/task-report.ts
+      - sdk/packages/core/src/extensions/tools/schemas.ts
+      - sdk/packages/core/src/extensions/tools/runtime.ts
+      - sdk/packages/core/src/extensions/tools/definitions.ts
+      - sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts
+      - sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts
       - apps/examples/desktop-app/webview/lib/task-report.test.ts
       - apps/examples/desktop-app/webview/lib/custom-ai-instructions.ts
       - apps/examples/desktop-app/webview/lib/custom-ai-instructions.test.ts
@@ -86,6 +91,8 @@ jobs:
       - name: Test task report
         working-directory: apps/examples/desktop-app
         run: bun x vitest run webview/lib/task-report.test.ts webview/lib/custom-ai-instructions.test.ts
+      - name: Test advanced ELF and Dex triage
+        run: bun x vitest run sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts
       - name: Build unsigned NSIS installer
         working-directory: apps/examples/desktop-app
         run: bunx tauri build --bundles nsis

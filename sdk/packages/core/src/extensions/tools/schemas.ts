@@ -116,6 +116,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		"compare_apks",
 		"verify_apk_signature",
 		"scan_strings",
+		"triage_obfuscation",
 		"extract",
 		"analyze",
 		"decompile",
