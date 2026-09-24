@@ -35,6 +35,10 @@ import {
 } from "@/components/ui/sidebar";
 import { ChatInputBar } from "@/components/views/chat/chat-input-bar";
 import { ChatMessages } from "@/components/views/chat/chat-messages";
+import {
+	TaskReportPanel,
+	TaskReportTrigger,
+} from "@/components/views/chat/task-report-panel";
 import { EnvironmentSelector } from "@/components/views/chat/environment-selector";
 import { RemoteDirectoryPicker } from "@/components/views/chat/remote-directory-picker";
 import { WelcomeScreen } from "@/components/views/chat/welcome-chat";
@@ -159,6 +163,14 @@ const SessionsView = dynamic(
 	() =>
 		import("@/components/views/sessions/sessions-view").then(
 			(module) => module.SessionsView,
+		),
+	{ loading: viewLoading, ssr: false },
+);
+
+const AgendaView = dynamic(
+	() =>
+		import("@/components/views/agenda/agenda-view").then(
+			(module) => module.AgendaView,
 		),
 	{ loading: viewLoading, ssr: false },
 );
@@ -952,6 +964,9 @@ export default function Home() {
 														onOpenModelSettings={() =>
 															handleSettingsSectionChange("API Providers")
 														}
+														onOpenCustomize={() =>
+															handleSettingsSectionChange("Customize")
+														}
 														onOpenAccountSettings={() =>
 															handleSettingsSectionChange("Account")
 														}
@@ -961,6 +976,11 @@ export default function Home() {
 												</div>
 											);
 										})}
+									</div>
+								) : null}
+								{view === "agenda" ? (
+									<div className="absolute inset-0 z-30 bg-background text-foreground">
+										<AgendaView onOpenSession={handleOpenSessionById} />
 									</div>
 								) : null}
 								{view === "sessions" ? (
@@ -1044,6 +1064,7 @@ function ChatThreadPane({
 	onOpenSessionById,
 	onOpenSetup,
 	onOpenModelSettings,
+	onOpenCustomize,
 	onOpenAccountSettings,
 	onPickRemoteWorkspaceDirectory,
 	onSelectEnvironment,
@@ -1082,6 +1103,7 @@ function ChatThreadPane({
 	onSelectEnvironment: (environmentId: string) => Promise<void>;
 	onOpenSetup?: () => void;
 	onOpenModelSettings?: () => void;
+	onOpenCustomize?: () => void;
 	onOpenAccountSettings?: () => void;
 	parentSession?: { sessionId: string; title?: string };
 	remoteEnvironment: RemoteWorkspaceEnvironment | null;
@@ -1149,6 +1171,7 @@ function ChatThreadPane({
 	const [showDiffView, setShowDiffView] = useState(false);
 	const [deletingSession, setDeletingSession] = useState(false);
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+	const [taskReportOpen, setTaskReportOpen] = useState(false);
 	const [renamingSession, setRenamingSession] = useState(false);
 	const [manualTitle, setManualTitle] = useState("");
 	const [dismissedHistorySessionId, setDismissedHistorySessionId] = useState<
@@ -2373,6 +2396,15 @@ function ChatThreadPane({
 			onModelChange={handleModelChange}
 			onPromptInputChange={handlePromptInputChange}
 			onOpenModelSettings={onOpenModelSettings}
+			toolbarAction={
+				!isWelcomeState ? (
+					<TaskReportTrigger
+						onClick={() => setTaskReportOpen((current) => !current)}
+						open={taskReportOpen}
+						status={displayedStatus}
+					/>
+				) : undefined
+			}
 			onReasoningChange={handleReasoningChange}
 			onSteerPromptInQueue={steerPromptInQueue}
 			onEditPromptInQueue={updatePromptInQueue}
@@ -2408,8 +2440,8 @@ function ChatThreadPane({
 			<AttachmentDropZone
 				className={
 					isWelcomeState
-						? "grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden"
-						: "grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden"
+						? "relative grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden"
+						: "relative grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden"
 				}
 				disabled={isCloudSessionExpired}
 				description={
@@ -2543,6 +2575,33 @@ function ChatThreadPane({
 					onWorkInChange={canWorkInWorktree ? setWorkIn : undefined}
 					workIn={workIn}
 				/>
+				{!isWelcomeState ? (
+					<TaskReportPanel
+						onOpenChange={setTaskReportOpen}
+						open={taskReportOpen}
+						fileDiffs={fileDiffs}
+						messages={displayedMessages}
+						mode={config.mode}
+						model={config.model}
+						onManageInstructions={onOpenCustomize}
+						onStop={abort}
+						onUpdateInstructions={(value) =>
+							setConfig((current) => ({
+								...current,
+								systemPrompt: value.systemPrompt,
+								rules: value.rules,
+							}))
+						}
+						provider={config.provider}
+						queuedInstructions={promptsInQueue.map((prompt) => prompt.prompt)}
+						rules={config.rules}
+						sessionId={displayedSessionId}
+						status={displayedStatus}
+						summary={summary}
+						systemPrompt={config.systemPrompt}
+						workspaceRoot={config.cwd || config.workspaceRoot}
+					/>
+				) : null}
 			</AttachmentDropZone>
 			<AlertDialog
 				open={deleteConfirmOpen}

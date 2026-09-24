@@ -4,6 +4,7 @@ import {
 	ArrowLeft,
 	ArrowRight,
 	Blocks,
+	Bot,
 	ChevronDown,
 	CircleUserRound,
 	Clock3,
@@ -13,6 +14,7 @@ import {
 	GitFork,
 	Import,
 	Loader2,
+	ListChecks,
 	Mic,
 	Network,
 	PanelLeftOpen,
@@ -113,7 +115,7 @@ import { TASK_WORKTREE_DELETE_WARNING } from "@/lib/work-in-selection";
 import { isTaskWorktreePath } from "@/lib/workspace-paths";
 
 type Thread = SessionThread;
-type AppView = "chat" | "sessions" | "settings";
+type AppView = "chat" | "agenda" | "sessions" | "settings";
 
 const filterOptions = ["All", "Running"] as const;
 type FilterOption = (typeof filterOptions)[number];
@@ -146,6 +148,7 @@ function hubPort(url: string | null): string | null {
 
 const SETTINGS_SECTION_ICONS = {
 	General: SlidersHorizontal,
+	"AI Instructions": Bot,
 	"API Providers": Plug,
 	Voice: Mic,
 	Channels: Radio,
@@ -413,6 +416,10 @@ export function AgentSidebar({
 	}, [closeMobileSidebar, onHome]);
 	const openSessions = useCallback(() => {
 		setView("sessions");
+		closeMobileSidebar();
+	}, [closeMobileSidebar, setView]);
+	const openAgenda = useCallback(() => {
+		setView("agenda");
 		closeMobileSidebar();
 	}, [closeMobileSidebar, setView]);
 	// The gear is a shortcut to the General settings page rather than a
@@ -927,6 +934,20 @@ export function AgentSidebar({
 						>
 							<Plus className="size-4 shrink-0" />
 							<span className="truncate">Session</span>
+						</Button>
+						<Button
+							aria-current={view === "agenda" ? "page" : undefined}
+							aria-label="Agenda"
+							className={cn(
+								view === "agenda" && "bg-surface-hover text-sidebar-foreground",
+							)}
+							onClick={openAgenda}
+							title="Agenda"
+							type="button"
+							variant="sidebarItem"
+						>
+							<ListChecks className="size-4 shrink-0" />
+							<span className="truncate">Agenda</span>
 						</Button>
 						<Button
 							aria-label="Schedule"

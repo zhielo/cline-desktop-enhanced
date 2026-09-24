@@ -56,7 +56,7 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 	{
 		id: "reverse_engineer",
 		description:
-			"Inspect archives and run installed Ghidra, IDA, or JADX for authorized static analysis.",
+			"Inspect archives, triage obfuscated or encrypted ELF/Dex artifacts, and run installed Ghidra, IDA, or JADX for authorized static analysis.",
 		headlessToolNames: ["reverse_engineer"],
 	},
 	{

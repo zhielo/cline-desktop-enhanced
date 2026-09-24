@@ -1322,6 +1322,204 @@ function sampleEntropy(buffer: Buffer): number {
 	return Number(entropy.toFixed(3));
 }
 
+function printableRatio(buffer: Buffer): number {
+	if (buffer.length === 0) return 0;
+	let printable = 0;
+	for (const byte of buffer) {
+		if (
+			byte === 0x09 ||
+			byte === 0x0a ||
+			byte === 0x0d ||
+			(byte >= 0x20 && byte <= 0x7e)
+		) {
+			printable += 1;
+		}
+	}
+	return Number((printable / buffer.length).toFixed(4));
+}
+
+async function readObfuscationSamples(target: string) {
+	const handle = await fs.open(target, "r");
+	try {
+		const stat = await handle.stat();
+		const windowSize = Math.min(1024 * 1024, stat.size);
+		const offsets = [
+			0,
+			Math.max(0, Math.floor((stat.size - windowSize) / 2)),
+			Math.max(0, stat.size - windowSize),
+		].filter((offset, index, values) => values.indexOf(offset) === index);
+		const windows = [];
+		for (const offset of offsets) {
+			const payload = Buffer.alloc(windowSize);
+			const { bytesRead } = await handle.read(
+				payload,
+				0,
+				windowSize,
+				offset,
+			);
+			const sample = payload.subarray(0, bytesRead);
+			windows.push({
+				offset,
+				size: sample.length,
+				entropy: sampleEntropy(sample),
+				printableRatio: printableRatio(sample),
+				sample,
+			});
+		}
+		return { size: stat.size, windows };
+	} finally {
+		await handle.close();
+	}
+}
+
+function dexHeader(sample: Buffer) {
+	if (
+		sample.length < 0x70 ||
+		sample.subarray(0, 4).toString("ascii") !== "dex\n"
+	) {
+		return null;
+	}
+	return {
+		version: sample.subarray(4, 7).toString("ascii"),
+		fileSize: sample.readUInt32LE(0x20),
+		headerSize: sample.readUInt32LE(0x24),
+		endianTag: `0x${sample.readUInt32LE(0x28).toString(16)}`,
+		mapOffset: sample.readUInt32LE(0x34),
+		stringIds: sample.readUInt32LE(0x38),
+		typeIds: sample.readUInt32LE(0x40),
+		protoIds: sample.readUInt32LE(0x48),
+		fieldIds: sample.readUInt32LE(0x50),
+		methodIds: sample.readUInt32LE(0x58),
+		classDefs: sample.readUInt32LE(0x60),
+		dataSize: sample.readUInt32LE(0x68),
+		dataOffset: sample.readUInt32LE(0x6c),
+	};
+}
+
+async function triageObfuscation(target: string) {
+	const metadata = await inspectBinary(target);
+	const { size, windows } = await readObfuscationSamples(target);
+	const combined = Buffer.concat(windows.map((window) => window.sample));
+	const markerText = combined.toString("latin1").toLowerCase();
+	const knownMarkers = [
+		"upx!",
+		"dexguard",
+		"dexprotector",
+		"apkprotect",
+		"bangcle",
+		"ijiami",
+		"libjiagu",
+		"secneo",
+		"frida_detect",
+		"registerNatives".toLowerCase(),
+		"jni_onload",
+		"ptrace",
+		"mprotect",
+		"dlopen",
+		"dlsym",
+	].filter((marker) => markerText.includes(marker));
+	const averageEntropy =
+		windows.reduce((sum, window) => sum + window.entropy, 0) /
+		Math.max(windows.length, 1);
+	const minimumPrintableRatio = Math.min(
+		...windows.map((window) => window.printableRatio),
+	);
+	const extension = path.extname(target).toLowerCase();
+	const findings: Array<{
+		severity: "info" | "medium" | "high";
+		kind: string;
+		detail: string;
+	}> = [];
+	if (averageEntropy >= 7.45) {
+		findings.push({
+			severity: "high",
+			kind: "high-entropy",
+			detail:
+				"Sampled regions have near-random byte distribution, consistent with compression, packing, or encrypted payload data.",
+		});
+	}
+	if (minimumPrintableRatio < 0.04) {
+		findings.push({
+			severity: "medium",
+			kind: "low-string-density",
+			detail:
+				"At least one sampled region contains very little printable data, which can indicate packed code or encrypted assets.",
+		});
+	}
+	if (knownMarkers.length > 0) {
+		findings.push({
+			severity: "medium",
+			kind: "protection-markers",
+			detail: `Matched bounded protection/runtime indicators: ${knownMarkers.join(", ")}`,
+		});
+	}
+	if (extension === ".so" && metadata.format !== "elf") {
+		findings.push({
+			severity: "high",
+			kind: "wrapped-elf",
+			detail:
+				"The file has a .so extension but no ELF header, suggesting wrapping, corruption, or an encrypted container.",
+		});
+	}
+	const header = dexHeader(windows[0]?.sample ?? Buffer.alloc(0));
+	if (extension === ".dex" && metadata.format !== "dex") {
+		findings.push({
+			severity: "high",
+			kind: "wrapped-dex",
+			detail:
+				"The file has a .dex extension but no Dex magic, suggesting a protected, encrypted, or reconstructed-at-runtime payload.",
+		});
+	}
+	if (header) {
+		if (header.headerSize !== 0x70) {
+			findings.push({
+				severity: "high",
+				kind: "dex-header-anomaly",
+				detail: `Unexpected Dex header size: 0x${header.headerSize.toString(16)} (expected 0x70).`,
+			});
+		}
+		if (header.fileSize !== size) {
+			findings.push({
+				severity: "medium",
+				kind: "dex-size-mismatch",
+				detail: `Dex header reports ${header.fileSize} bytes but the file contains ${size} bytes.`,
+			});
+		}
+	}
+	return {
+		target,
+		size,
+		metadata,
+		sampling: {
+			windowCount: windows.length,
+			averageEntropy: Number(averageEntropy.toFixed(3)),
+			minimumPrintableRatio,
+			windows: windows.map(({ sample: _sample, ...window }) => window),
+		},
+		dexHeader: header,
+		knownMarkers,
+		findings,
+		assessment:
+			findings.some((finding) => finding.severity === "high")
+				? "strong-obfuscation-or-protection-indicators"
+				: findings.length > 0
+					? "possible-obfuscation-or-protection"
+					: "no-strong-indicators-in-bounded-static-triage",
+		recommendedNextSteps:
+			metadata.format === "dex" || extension === ".dex"
+				? [
+						"Run disassemble_smali; Smali often remains usable when high-level decompilation fails.",
+						"Use search_smali for reflection, dynamic loading, native bridges, decryptor loops, and suspicious API calls.",
+						"Run JADX with simple or fallback mode and compare failures with the Smali output.",
+					]
+				: [
+						"Run scan_strings with a focused pattern such as JNI_OnLoad|RegisterNatives|dlopen|dlsym|mprotect|ptrace.",
+						"Analyze the library with Ghidra or IDA and inspect the entry point, JNI registration, constructors, and high-entropy regions.",
+						"Correlate the .so with Java/Smali native method declarations and runtime loading code.",
+					],
+	};
+}
+
 async function inspectBinary(target: string) {
 	const handle = await fs.open(target, "r");
 	try {
@@ -1958,6 +2156,18 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			? await sha256Directory(target)
 			: await sha256(target);
 		const zip = stat.isFile() ? await isZip(target) : false;
+		if (input.operation === "triage_obfuscation") {
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					sha256: hash,
+					...(await triageObfuscation(target)),
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
 		if (input.operation === "scan_strings") {
 			return JSON.stringify(
 				{

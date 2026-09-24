@@ -16,7 +16,15 @@ import {
 	ShieldCheck,
 	X,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	memo,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	SpeechInput,
 	type SpeechTranscriptionSource,
@@ -341,6 +349,7 @@ type ChatInputBarProps = {
 	) => Promise<void> | void;
 	onRemovePromptInQueue: (promptId: string) => Promise<void> | void;
 	onOpenModelSettings?: () => void;
+	toolbarAction?: ReactNode;
 	summary: {
 		toolCalls: number;
 		tokensIn: number;
@@ -383,6 +392,7 @@ function ChatInputBarImpl({
 	onEditPromptInQueue,
 	onRemovePromptInQueue,
 	onOpenModelSettings,
+	toolbarAction,
 	summary,
 }: ChatInputBarProps) {
 	const {
@@ -1691,6 +1701,7 @@ function ChatInputBarImpl({
 				</div>
 
 				<div className="ml-auto flex min-w-0 items-center gap-2 max-[560px]:shrink-0">
+					{toolbarAction}
 					{variant === "conversation" ? (
 						<div className="flex min-w-0 items-center gap-0">
 							<div className="min-w-0 overflow-visible">

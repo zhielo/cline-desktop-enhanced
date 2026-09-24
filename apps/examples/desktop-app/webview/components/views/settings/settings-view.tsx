@@ -65,6 +65,7 @@ import { MarketplaceExplorerView } from "../marketplace-explorer-view";
 import { PageFrame, PageHeader } from "../page-layout";
 import { AccountView } from "./account-view";
 import { AddProviderContent, type AddProviderPayload } from "./add-provider";
+import { AiInstructionsView } from "./ai-instructions-view";
 import { ChannelsContent } from "./channels-view";
 import { CustomizeView } from "./customize-view";
 import { ImportContent } from "./import-view";
@@ -619,6 +620,8 @@ export function SettingsView({
 			<VoiceInputContent
 				onOpenModelProviders={() => onNavigateSection("API Providers")}
 			/>
+		) : activeNav === "AI Instructions" ? (
+			<AiInstructionsView />
 		) : activeNav === "Customize" ? (
 			<CustomizeView
 				onOpenMarketplace={() => onNavigateSection("Marketplace")}

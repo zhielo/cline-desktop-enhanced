@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 
-// Covers the shipped state of the Agenda feature: the sidebar has no Agenda
-// UI at all, and with AGENDA_UI_ENABLED false (the real flag value) the
-// welcome quick actions stay hidden and no agenda commands are issued. The
-// feature-flag mock in welcome-chat.test.tsx forces the flag on to keep
-// exercising the dormant welcome-screen UI.
+// Covers the shipped Agenda entry point. The sidebar exposes Agenda and the
+// welcome screen loads actionable tasks when the feature flag is enabled.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -67,8 +64,8 @@ function makeSessionHistory(): UseSessionHistoryResult {
 	} as unknown as UseSessionHistoryResult;
 }
 
-describe("Agenda UI hidden by default", () => {
-	it("renders the sidebar without any Agenda UI and issues no agenda commands", async () => {
+describe("Agenda UI enabled", () => {
+	it("renders the Agenda sidebar action without fetching until opened", async () => {
 		await act(async () => {
 			root.render(
 				<SidebarProvider>
@@ -86,7 +83,7 @@ describe("Agenda UI hidden by default", () => {
 		});
 
 		expect(container.querySelector('[aria-label="Show Agenda"]')).toBeNull();
-		expect(container.querySelector('[aria-label="Agenda"]')).toBeNull();
+		expect(container.querySelector('[aria-label="Agenda"]')).not.toBeNull();
 		expect(
 			container.querySelector('[aria-label="Search sessions"]'),
 		).not.toBeNull();
@@ -94,7 +91,7 @@ describe("Agenda UI hidden by default", () => {
 		expect(desktopMocks.getAgendaAutomationPolicy).not.toHaveBeenCalled();
 	});
 
-	it("renders the welcome screen without agenda quick actions or agenda fetches", async () => {
+	it("loads Agenda quick actions on the welcome screen", async () => {
 		await act(async () => {
 			root.render(
 				<WorkspaceProvider
@@ -125,6 +122,6 @@ describe("Agenda UI hidden by default", () => {
 		});
 
 		expect(container.querySelector("[data-welcome-hero]")).not.toBeNull();
-		expect(desktopMocks.listAgendaTasks).not.toHaveBeenCalled();
+		expect(desktopMocks.listAgendaTasks).toHaveBeenCalled();
 	});
 });

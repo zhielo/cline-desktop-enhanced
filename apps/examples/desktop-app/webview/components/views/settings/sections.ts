@@ -7,6 +7,7 @@
 
 const ALL_SETTINGS_SECTIONS = [
 	"General",
+	"AI Instructions",
 	"API Providers",
 	"Voice",
 	"Channels",
