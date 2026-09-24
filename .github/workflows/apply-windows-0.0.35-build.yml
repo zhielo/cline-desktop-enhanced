@@ -14,12 +14,15 @@ jobs:
         with:
           ref: feature/windows-re-tooling-task-ui
           fetch-depth: 0
-      - name: Apply validated Windows build patch
+      - name: Apply validated artifact-only Windows build patch
         run: |
-          base64 -d .github/windows-0.0.35.patch.gz.b64 | gzip -d > /tmp/windows-0.0.35.patch
+          set -euxo pipefail
+          base64 --decode .github/windows-0.0.35.patch.gz.b64 | gzip --decompress > /tmp/windows-0.0.35.patch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git am /tmp/windows-0.0.35.patch
+          git apply --check /tmp/windows-0.0.35.patch
+          git apply /tmp/windows-0.0.35.patch
+          git add --all
           git rm -f .github/windows-0.0.35.patch.gz.b64 .github/workflows/apply-windows-0.0.35-build.yml
-          git commit -m "Remove temporary Windows build patch files"
+          git commit -m "Prepare Cline Enhanced 0.0.35 Windows build"
           git push origin HEAD:feature/windows-re-tooling-task-ui
