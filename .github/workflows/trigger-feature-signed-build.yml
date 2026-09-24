@@ -1,0 +1,21 @@
+name: Trigger signed feature installer build
+
+on:
+  push:
+    branches:
+      - feature/codex-task-report-ui
+    paths:
+      - .github/workflows/trigger-feature-signed-build.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-signed-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch signed Windows installer workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-custom-windows-installer.yml --ref feature/codex-task-report-ui
