@@ -20,9 +20,8 @@ import { McpServersContent } from "./mcp-view";
 
 /**
  * Unified Customize hub: the installed inventory of everything that extends
- * Cline — skills, MCP servers, plugins, rules, hooks, and tools — as sub-tabs
- * with live counts. Browsing happens on the dedicated Marketplace page,
- * reached from the sidebar or the header button here.
+ * Cline. AI Instructions is backed by the existing Rules inventory so saved
+ * instructions keep their current storage and behavior.
  */
 
 type CustomizeTab =
@@ -35,10 +34,10 @@ type CustomizeTab =
 	| "tools";
 
 const CUSTOMIZE_TABS: { id: CustomizeTab; label: string }[] = [
+	{ id: "rules", label: "AI Instructions" },
 	{ id: "tools", label: "Tools" },
 	{ id: "plugins", label: "Plugins" },
 	{ id: "skills", label: "Skills" },
-	{ id: "rules", label: "Rules" },
 	{ id: "mcp", label: "MCP" },
 	{ id: "hooks", label: "Hooks" },
 	{ id: "integrations", label: "Connectors" },
@@ -65,10 +64,8 @@ export function CustomizeView({
 }: {
 	onOpenMarketplace?: () => void;
 }) {
-	const [tab, setTab] = useState<CustomizeTab>("tools");
+	const [tab, setTab] = useState<CustomizeTab>("rules");
 	const [counts, setCounts] = useState<TabCounts>({});
-	// Connectors are an org-provisioned feature: the tab only exists when the
-	// account has Composio beta access.
 	const connectorsAvailable =
 		useSyncExternalStore(
 			subscribeComposioAvailability,
@@ -144,7 +141,7 @@ export function CustomizeView({
 						</Button>
 					) : undefined
 				}
-				description="Extend what Cline can do and how it works. Explore the marketplace for more options."
+				description="Manage your AI instructions and everything that extends Cline."
 				title="Customize"
 			/>
 
