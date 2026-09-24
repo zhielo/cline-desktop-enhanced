@@ -10,6 +10,13 @@ on:
       - apps/examples/desktop-app/webview/components/views/task-report-view.tsx
       - apps/examples/desktop-app/webview/lib/task-report.ts
       - apps/examples/desktop-app/webview/lib/task-report.test.ts
+      - apps/examples/desktop-app/webview/lib/custom-ai-instructions.ts
+      - apps/examples/desktop-app/webview/lib/custom-ai-instructions.test.ts
+      - apps/examples/desktop-app/webview/hooks/chat-session/constants.ts
+      - apps/examples/desktop-app/webview/components/agent-sidebar.tsx
+      - apps/examples/desktop-app/webview/components/views/settings/sections.ts
+      - apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx
+      - apps/examples/desktop-app/webview/components/views/settings/ai-instructions-view.tsx
 
 permissions:
   contents: read
@@ -74,7 +81,7 @@ jobs:
         run: bun run typecheck
       - name: Test task report
         working-directory: apps/examples/desktop-app
-        run: bun x vitest run webview/lib/task-report.test.ts
+        run: bun x vitest run webview/lib/task-report.test.ts webview/lib/custom-ai-instructions.test.ts
       - name: Build unsigned NSIS installer
         working-directory: apps/examples/desktop-app
         run: bunx tauri build --bundles nsis

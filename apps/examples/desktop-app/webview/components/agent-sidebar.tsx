@@ -4,6 +4,7 @@ import {
 	ArrowLeft,
 	ArrowRight,
 	Blocks,
+	Bot,
 	ChevronDown,
 	CircleUserRound,
 	Clock3,
@@ -147,6 +148,7 @@ function hubPort(url: string | null): string | null {
 
 const SETTINGS_SECTION_ICONS = {
 	General: SlidersHorizontal,
+	"AI Instructions": Bot,
 	"API Providers": Plug,
 	Voice: Mic,
 	Channels: Radio,
