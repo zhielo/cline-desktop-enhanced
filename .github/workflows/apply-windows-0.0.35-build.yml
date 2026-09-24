@@ -1,0 +1,25 @@
+name: apply-windows-0-0-35-build
+on:
+  push:
+    paths:
+      - .github/windows-0.0.35.patch.gz.b64
+      - .github/workflows/apply-windows-0.0.35-build.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/windows-re-tooling-task-ui
+          fetch-depth: 0
+      - name: Apply validated Windows build patch
+        run: |
+          base64 -d .github/windows-0.0.35.patch.gz.b64 | gzip -d > /tmp/windows-0.0.35.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git am /tmp/windows-0.0.35.patch
+          git rm -f .github/windows-0.0.35.patch.gz.b64 .github/workflows/apply-windows-0.0.35-build.yml
+          git commit -m "Remove temporary Windows build patch files"
+          git push origin HEAD:feature/windows-re-tooling-task-ui
