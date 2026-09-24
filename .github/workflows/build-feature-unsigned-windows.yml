@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [feature/codex-task-report-ui]
-    paths: [.github/workflows/build-feature-unsigned-windows.yml]
+    paths:
+      - .github/workflows/build-feature-unsigned-windows.yml
+      - apps/examples/desktop-app/webview/components/views/settings/customize-view.tsx
 
 permissions:
   contents: read
