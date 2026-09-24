@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getCloudSessionManager } from "./cloud-sessions";
 import { handleCommand } from "./commands";
 import { createSidecarContext } from "./context";
-import { setCloudSessionsEnabled } from "./desktop-settings";
+import {
+	DEFAULT_AGENT_INSTRUCTIONS,
+	setCloudSessionsEnabled,
+} from "./desktop-settings";
 import {
 	getDesktopFeatureFlagsService,
 	resetDesktopFeatureFlagsForTesting,
@@ -156,6 +159,35 @@ describe("desktop settings commands", () => {
 		expect(events).toEqual([]);
 	});
 
+	it("persists and resets editable agent instructions", async () => {
+		const { ctx } = createContext();
+
+		await expect(
+			handleCommand(ctx, "set_agent_instructions", {
+				agent_instructions: "Use short status updates.",
+			}),
+		).resolves.toMatchObject({
+			agentInstructions: "Use short status updates.",
+		});
+		await expect(
+			handleCommand(ctx, "get_desktop_settings", {}),
+		).resolves.toMatchObject({
+			agentInstructions: "Use short status updates.",
+		});
+		await expect(
+			handleCommand(ctx, "reset_agent_instructions", {}),
+		).resolves.toMatchObject({ agentInstructions: DEFAULT_AGENT_INSTRUCTIONS });
+	});
+
+	it("rejects a non-string agent instructions value", async () => {
+		const { ctx } = createContext();
+		await expect(
+			handleCommand(ctx, "set_agent_instructions", {
+				agent_instructions: true,
+			}),
+		).rejects.toThrow("agent_instructions must be a string");
+	});
+
 	it.each([
 		true,
 		false,
@@ -166,7 +198,10 @@ describe("desktop settings commands", () => {
 			handleCommand(ctx, "set_cloud_sessions_enabled", {
 				cloud_sessions_enabled: enabled,
 			}),
-		).resolves.toEqual({ cloudSessionsEnabled: enabled });
+		).resolves.toEqual({
+			cloudSessionsEnabled: enabled,
+			agentInstructions: DEFAULT_AGENT_INSTRUCTIONS,
+		});
 		expect(events).toEqual([
 			{ name: "cloud_sessions_changed", payload: { environmentId: "local" } },
 			{
@@ -183,6 +218,9 @@ describe("desktop settings commands", () => {
 		).resolves.toMatchObject({ cloudAgents: false });
 		await expect(
 			handleCommand(ctx, "get_desktop_settings", {}),
-		).resolves.toEqual({ cloudSessionsEnabled: enabled });
+		).resolves.toEqual({
+			cloudSessionsEnabled: enabled,
+			agentInstructions: DEFAULT_AGENT_INSTRUCTIONS,
+		});
 	});
 });
