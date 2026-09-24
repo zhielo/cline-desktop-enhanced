@@ -154,6 +154,21 @@ describe("@cline/ui agent chat primitives", () => {
 		expect(container.querySelector("[data-testid='tool-icon']")).not.toBeNull();
 	});
 
+	it("renders a concise task status label", async () => {
+		await render(
+			<ToolActivity expandable={false}>
+				<ToolActivityTrigger
+					label="Analyzing binary"
+					status="running"
+					statusLabel="Running"
+				/>
+			</ToolActivity>,
+		);
+
+		const status = container.querySelector(".cline-chat-tool-status");
+		expect(status?.textContent).toBe("Running");
+	});
+
 	it("toggles expandable tool details", async () => {
 		await render(
 			<ToolActivity>

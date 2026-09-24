@@ -222,8 +222,9 @@ const ToolCallRow = memo(function ToolCallRow({
 					)
 				}
 				label={<ToolLabel isRunning={isRunning} parts={labelParts} />}
-				showDisclosureIcon={false}
+				showDisclosureIcon={hasExpandedSections}
 				status={hasError ? "error" : isRunning ? "running" : "success"}
+				statusLabel={hasError ? "Failed" : isRunning ? "Running" : "Done"}
 			/>
 			<ToolActivityContent presentation="rail">
 				{details.length > 0 ? (

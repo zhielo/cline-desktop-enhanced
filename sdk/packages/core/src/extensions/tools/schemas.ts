@@ -112,6 +112,8 @@ export const ReverseEngineeringInputSchema = z.object({
 	engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
 	operation: z.enum([
 		"discover",
+		"health_check",
+		"binary_triage",
 		"inspect",
 		"compare_apks",
 		"verify_apk_signature",

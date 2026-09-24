@@ -53,6 +53,17 @@ describe("reverse-engineering discovery", () => {
 		expect(result.capabilities).toHaveProperty("supplementalTools");
 		expect(result.capabilities).toHaveProperty("toolSelectionGuide");
 	});
+
+	it("reports setup health without launching IDA or Ghidra", async () => {
+		const execute = createReverseEngineeringExecutor();
+		const result = JSON.parse(
+			await execute({ engine: "auto", operation: "health_check" }, {} as never),
+		);
+		expect(result.operation).toBe("health_check");
+		expect(result.checks).toHaveProperty("ida");
+		expect(result.checks).toHaveProperty("ghidra");
+		expect(result.checks).toHaveProperty("jadx");
+	});
 });
 
 describe("reverse-engineering archive inspection", () => {

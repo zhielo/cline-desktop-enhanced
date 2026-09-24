@@ -495,6 +495,21 @@ async function discoverSupplementalTools(): Promise<SupplementalToolInventory> {
 		],
 		objdump: [`objdump${executableSuffix}`, "objdump"],
 		strings: [`strings${executableSuffix}`, "strings"],
+		readelf: [`readelf${executableSuffix}`, "readelf"],
+		nm: [`nm${executableSuffix}`, "nm"],
+		rabin2: [`rabin2${executableSuffix}`, "rabin2"],
+		capa: [`capa${executableSuffix}`, "capa"],
+		floss: [`floss${executableSuffix}`, "floss"],
+		yara: [`yara${executableSuffix}`, "yara"],
+		binwalk: [`binwalk${executableSuffix}`, "binwalk"],
+		diec: [`diec${executableSuffix}`, "diec"],
+		file: [`file${executableSuffix}`, "file"],
+		exiftool: [`exiftool${executableSuffix}`, "exiftool"],
+		upx: [`upx${executableSuffix}`, "upx"],
+		gdb: [`gdb${executableSuffix}`, "gdb"],
+		lldb: [`lldb${executableSuffix}`, "lldb"],
+		dumpbin: [`dumpbin${executableSuffix}`, "dumpbin"],
+		sigcheck: [`sigcheck${executableSuffix}`, "sigcheck"],
 		keytool: [`keytool${executableSuffix}`, "keytool"],
 		jarsigner: [`jarsigner${executableSuffix}`, "jarsigner"],
 	};
@@ -505,6 +520,62 @@ async function discoverSupplementalTools(): Promise<SupplementalToolInventory> {
 		]),
 	);
 	return Object.fromEntries(results);
+}
+
+async function runStaticTriage(
+	target: string,
+	timeoutMs: number,
+	signal?: AbortSignal,
+) {
+	const tools = await discoverSupplementalTools();
+	const plan: Array<{ name: string; command: string; args: string[] }> = [];
+	const add = (name: string, args: string[]) => {
+		const command = tools[name];
+		if (command) plan.push({ name, command, args });
+	};
+	add("file", ["--brief", target]);
+	add("capa", ["--json", target]);
+	add("floss", ["--json", target]);
+	add("diec", ["-j", target]);
+	add("rabin2", ["-Ij", target]);
+	if (plan.length < 5)
+		add("llvmReadobj", ["--file-headers", "--sections", "--symbols", target]);
+	if (plan.length < 5) add("readelf", ["-h", "-S", "-s", target]);
+	if (plan.length < 5) add("objdump", ["-f", "-h", "-t", target]);
+	const results = [];
+	for (const tool of plan.slice(0, 5)) {
+		signal?.throwIfAborted();
+		try {
+			results.push({
+				tool: tool.name,
+				command: tool.command,
+				...(await runSupervised(
+					tool.command,
+					tool.args,
+					Math.min(timeoutMs, 180_000),
+					signal,
+				)),
+			});
+		} catch (error) {
+			results.push({
+				tool: tool.name,
+				command: tool.command,
+				exitCode: null,
+				stdout: "",
+				stderr: error instanceof Error ? error.message : String(error),
+				timedOut: false,
+				cancelled: false,
+			});
+		}
+	}
+	return {
+		availableTools: tools,
+		executedTools: results.map((item) => item.tool),
+		results,
+		recommendation: plan.length
+			? "Correlate findings across tools; signatures and capability matches are leads, not proof."
+			: "Install capa, FLOSS, Detect It Easy CLI, radare2/Rizin, LLVM, or GNU binutils for richer static triage.",
+	};
 }
 
 async function sha256(filePath: string): Promise<string> {
@@ -1867,15 +1938,28 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			jadx: await discover("jadx"),
 		};
 		const androidUtilities = await discoverAndroidUtilities();
-		if (input.operation === "discover") {
+		if (input.operation === "discover" || input.operation === "health_check") {
 			const capabilities = await installationCapabilities(
 				available,
 				androidUtilities,
 			);
 			return JSON.stringify(
 				{
+					operation: input.operation,
 					capabilities,
 					pathRefreshed,
+					checks:
+						input.operation === "health_check"
+							? {
+									ida: capabilities.ida.headless
+										? "ready; executable found and intentionally not launched during health check"
+										: "not found",
+									ghidra: capabilities.ghidra.headless
+										? "ready; analyzeHeadless found and intentionally not launched during health check"
+										: "not found",
+									jadx: capabilities.jadx.cli ? "ready" : "not found",
+								}
+							: undefined,
 					recommendations: {
 						ida: capabilities.ida.idalibActivationScript
 							? `Activate idalib once with: uv run "${capabilities.ida.idalibActivationScript}"`
@@ -1958,6 +2042,25 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			? await sha256Directory(target)
 			: await sha256(target);
 		const zip = stat.isFile() ? await isZip(target) : false;
+		if (input.operation === "binary_triage") {
+			if (!stat.isFile())
+				throw new Error("binary_triage requires a file target");
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					target,
+					sha256: hash,
+					...(await runStaticTriage(
+						target,
+						input.timeout_ms ?? 180_000,
+						context.signal,
+					)),
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
 		if (input.operation === "scan_strings") {
 			return JSON.stringify(
 				{
