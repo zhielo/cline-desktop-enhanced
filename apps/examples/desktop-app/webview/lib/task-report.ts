@@ -14,11 +14,27 @@ export type TaskReportStep = {
 	id: string;
 	label: string;
 	status: TaskReportStepStatus;
+	isRepair: boolean;
+};
+
+export type TaskRepairState =
+	| "repair_required"
+	| "repairing"
+	| "verifying"
+	| "blocked";
+
+export type TaskRepairReport = {
+	state: TaskRepairState;
+	failedStepId: string;
+	failedStepLabel: string;
+	attempt: number;
+	maxAttempts: number;
 };
 
 export type SessionTaskReport = {
 	explanation?: string;
 	steps: TaskReportStep[];
+	repair?: TaskRepairReport;
 	sourceMessageId: string;
 	sourceTool: string;
 	updatedAt: number;
@@ -31,6 +47,8 @@ const PLAN_TOOL_NAMES = new Set([
 	"todo_write",
 	"write_todos",
 ]);
+const REPAIR_STEP_PATTERN =
+	/\b(repair|fix|diagnos|debug|recover|retry|rerun|re-run|verify|verification)\b/i;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return value && typeof value === "object" && !Array.isArray(value)
@@ -90,17 +108,19 @@ function stepLabel(step: Record<string, unknown>): string | null {
 	return null;
 }
 
+function isRepairLabel(label: string): boolean {
+	return REPAIR_STEP_PATTERN.test(label);
+}
+
 function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 	if (!Array.isArray(value)) return [];
 	let hasActiveStep = false;
-	return value.flatMap((rawStep, index) => {
+	const steps = value.flatMap((rawStep, index) => {
 		const step = asRecord(rawStep);
 		if (!step) return [];
 		const label = stepLabel(step);
 		const rawStatus = normalizeStatus(step.status);
 		if (!label || !rawStatus) return [];
-		// Codex plans permit one active step. Project malformed provider output
-		// safely instead of presenting several simultaneous current steps.
 		const status =
 			rawStatus === "in_progress" && hasActiveStep ? "pending" : rawStatus;
 		if (status === "in_progress") hasActiveStep = true;
@@ -113,15 +133,72 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 						: `${messageId}:${index}`,
 				label,
 				status,
+				isRepair: isRepairLabel(label),
 			},
 		];
 	});
+
+	const failureIndex = steps.findIndex(
+		(step) => step.status === "failed" || step.status === "blocked",
+	);
+	if (failureIndex < 0) return steps;
+	const completedRepair = steps
+		.slice(failureIndex + 1)
+		.some((step) => step.isRepair && step.status === "completed");
+	return steps.map((step, index) => {
+		if (
+			index > failureIndex &&
+			step.status === "in_progress" &&
+			!step.isRepair &&
+			!completedRepair
+		) {
+			return { ...step, status: "pending" };
+		}
+		return step;
+	});
+}
+
+function positiveInteger(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isInteger(value) && value > 0
+		? value
+		: fallback;
+}
+
+function buildRepairReport(
+	steps: TaskReportStep[],
+	input: Record<string, unknown>,
+): TaskRepairReport | undefined {
+	const failure = steps.find(
+		(step) => step.status === "failed" || step.status === "blocked",
+	);
+	if (!failure) return undefined;
+	const repairSteps = steps.slice(steps.indexOf(failure) + 1).filter((step) => step.isRepair);
+	const activeRepair = repairSteps.some((step) => step.status === "in_progress");
+	const completedRepair = repairSteps.some((step) => step.status === "completed");
+	const activeVerification =
+		completedRepair &&
+		steps.some((step) => step.status === "in_progress" && !step.isRepair);
+	const state: TaskRepairState =
+		failure.status === "blocked"
+			? "blocked"
+			: activeVerification || completedRepair
+				? "verifying"
+				: activeRepair
+					? "repairing"
+					: "repair_required";
+	return {
+		state,
+		failedStepId: failure.id,
+		failedStepLabel: failure.label,
+		attempt: positiveInteger(input.repair_attempt, activeRepair ? 1 : 0),
+		maxAttempts: positiveInteger(input.max_repair_attempts, 3),
+	};
 }
 
 /**
  * Projects the newest structured planner call into stable session UI state.
- * The transcript remains the durable event log, so hydration and reconnects
- * rebuild the same report without a second persistence surface.
+ * Failed work cannot visually advance until a repair step completes; the
+ * transcript remains the durable event log for reconnect and hydration.
  */
 export function buildSessionTaskReport(
 	messages: ChatMessage[],
@@ -147,6 +224,7 @@ export function buildSessionTaskReport(
 		return {
 			explanation,
 			steps,
+			repair: buildRepairReport(steps, input),
 			sourceMessageId: message.id,
 			sourceTool: toolName,
 			updatedAt: message.createdAt,
