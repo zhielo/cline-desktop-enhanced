@@ -28,6 +28,10 @@ type AndroidReUtilities = {
 	adb?: string;
 	aapt2?: string;
 	dexdump?: string;
+	java?: string;
+	baksmaliJar?: string;
+	smaliJar?: string;
+	dexlib2Jar?: string;
 };
 type SupplementalToolInventory = Record<string, string | undefined>;
 
@@ -428,37 +432,115 @@ async function discoverAndroidStudio(): Promise<{
 	};
 }
 
+async function discoverSmaliJar(
+	environmentVariable: string,
+	fileNames: string[],
+	mavenArtifact?: string,
+): Promise<string | undefined> {
+	const explicit = process.env[environmentVariable];
+	if (explicit && path.isAbsolute(explicit) && (await exists(explicit)))
+		return explicit;
+	const roots = [
+		process.env.CLINE_RE_TOOLS_DIR,
+		path.join(os.homedir(), ".cline", "tools"),
+		path.join(process.cwd(), "tools"),
+	].filter((value): value is string => Boolean(value));
+	const versions = ["3.0.10", "3.0.9"];
+	const candidates = roots.flatMap((root) =>
+		fileNames.map((name) => path.join(root, name)),
+	);
+	if (mavenArtifact) {
+		for (const version of versions) {
+			candidates.push(
+				path.join(
+					os.homedir(),
+					".m2",
+					"repository",
+					"com",
+					"android",
+					"tools",
+					"smali",
+					mavenArtifact,
+					version,
+					`${mavenArtifact}-${version}.jar`,
+				),
+			);
+		}
+	}
+	for (const candidate of candidates) {
+		if (await exists(candidate)) return candidate;
+	}
+	return undefined;
+}
+
+function jarInvocation(
+	executable: string | undefined,
+	java: string | undefined,
+	jar: string | undefined,
+	args: string[],
+) {
+	if (executable) return { command: executable, args };
+	if (java && jar) return { command: java, args: ["-jar", jar, ...args] };
+	return undefined;
+}
+
 async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
 	const win = process.platform === "win32";
 	const suffix = win ? ".bat" : "";
 	const executableSuffix = win ? ".exe" : "";
-	const [apktool, baksmali, smali, apksigner, zipalign, adb, aapt2, dexdump] =
-		await Promise.all([
-			discoverFirst([`apktool${suffix}`, `apktool${executableSuffix}`]),
-			discoverFirst([`baksmali${suffix}`, `baksmali${executableSuffix}`]),
-			discoverFirst([`smali${suffix}`, `smali${executableSuffix}`]),
-			discoverFirst([
-				`apksigner${suffix}`,
-				`apksigner${executableSuffix}`,
-				...(await androidSdkToolCandidates("apksigner")),
-			]),
-			discoverFirst([
-				`zipalign${executableSuffix}`,
-				...(await androidSdkToolCandidates("zipalign")),
-			]),
-			discoverFirst([
-				`adb${executableSuffix}`,
-				...(await androidSdkToolCandidates("adb")),
-			]),
-			discoverFirst([
-				`aapt2${executableSuffix}`,
-				...(await androidSdkToolCandidates("aapt2")),
-			]),
-			discoverFirst([
-				`dexdump${executableSuffix}`,
-				...(await androidSdkToolCandidates("dexdump")),
-			]),
-		]);
+	const [
+		apktool,
+		baksmali,
+		smali,
+		apksigner,
+		zipalign,
+		adb,
+		aapt2,
+		dexdump,
+		java,
+		baksmaliJar,
+		smaliJar,
+		dexlib2Jar,
+	] = await Promise.all([
+		discoverFirst([`apktool${suffix}`, `apktool${executableSuffix}`]),
+		discoverFirst([`baksmali${suffix}`, `baksmali${executableSuffix}`]),
+		discoverFirst([`smali${suffix}`, `smali${executableSuffix}`]),
+		discoverFirst([
+			`apksigner${suffix}`,
+			`apksigner${executableSuffix}`,
+			...(await androidSdkToolCandidates("apksigner")),
+		]),
+		discoverFirst([
+			`zipalign${executableSuffix}`,
+			...(await androidSdkToolCandidates("zipalign")),
+		]),
+		discoverFirst([
+			`adb${executableSuffix}`,
+			...(await androidSdkToolCandidates("adb")),
+		]),
+		discoverFirst([
+			`aapt2${executableSuffix}`,
+			...(await androidSdkToolCandidates("aapt2")),
+		]),
+		discoverFirst([
+			`dexdump${executableSuffix}`,
+			...(await androidSdkToolCandidates("dexdump")),
+		]),
+		discoverFirst([`java${executableSuffix}`, "java"]),
+		discoverSmaliJar("BAKSMALI_JAR", [
+			"baksmali-3.0.10-fat-release.jar",
+			"baksmali-3.0.9-fat-release.jar",
+		]),
+		discoverSmaliJar("SMALI_JAR", [
+			"smali-3.0.10-fat-release.jar",
+			"smali-3.0.9-fat-release.jar",
+		]),
+		discoverSmaliJar(
+			"DEXLIB2_JAR",
+			["smali-dexlib2-3.0.10.jar", "smali-dexlib2-3.0.9.jar"],
+			"smali-dexlib2",
+		),
+	]);
 	return {
 		apktool,
 		baksmali,
@@ -468,6 +550,10 @@ async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
 		adb,
 		aapt2,
 		dexdump,
+		java,
+		baksmaliJar,
+		smaliJar,
+		dexlib2Jar,
 	};
 }
 
@@ -2230,6 +2316,49 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				throw new Error(`script_path is not a file: ${input.script_path}`);
 			}
 		}
+		if (input.operation === "dex_summary") {
+			if (![".dex", ".odex"].includes(path.extname(target).toLowerCase())) {
+				throw new Error("dex_summary requires a raw DEX or ODEX file");
+			}
+			const invocation = jarInvocation(
+				androidUtilities.baksmali,
+				androidUtilities.java,
+				androidUtilities.baksmaliJar,
+				["list", "classes", target],
+			);
+			if (!invocation) {
+				throw new Error(
+					"Dexlib2-backed analysis requires baksmali or BAKSMALI_JAR plus Java. Use the official 3.0.10 fat-release jar.",
+				);
+			}
+			const result = await runSupervised(
+				invocation.command,
+				invocation.args,
+				input.timeout_ms ?? 180_000,
+				context.signal,
+			);
+			const classes = result.stdout
+				.split(/\r?\n/)
+				.map((value) => value.trim())
+				.filter((value) => /^L.+;$/.test(value));
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					target,
+					sha256: hash,
+					engine: "dexlib2 via baksmali",
+					baksmaliJar: androidUtilities.baksmaliJar,
+					dexlib2Jar: androidUtilities.dexlib2Jar,
+					classCount: classes.length,
+					classes: classes.slice(0, input.max_results ?? 500),
+					classesTruncated: classes.length > (input.max_results ?? 500),
+					durationMs: Date.now() - started,
+					...result,
+				},
+				null,
+				2,
+			);
+		}
 		if (input.operation === "disassemble_smali") {
 			const extension = path.extname(target).toLowerCase();
 			const apkContainer = [".apk", ".aab", ".apkm", ".xapk"].includes(
@@ -2237,7 +2366,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 			const command = apkContainer
 				? androidUtilities.apktool
-				: androidUtilities.baksmali;
+				: (androidUtilities.baksmali ??
+					(androidUtilities.java && androidUtilities.baksmaliJar
+						? androidUtilities.java
+						: undefined));
 			if (!command) {
 				throw new Error(
 					apkContainer
@@ -2287,6 +2419,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				const args = apkContainer
 					? ["d", "-f", "-o", outputDir, target]
 					: [
+							...(androidUtilities.baksmali
+								? []
+								: ["-jar", androidUtilities.baksmaliJar!]),
 							"disassemble",
 							target,
 							"-o",
@@ -2358,7 +2493,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			}
 			const command =
 				input.operation === "assemble_smali"
-					? androidUtilities.smali
+					? (androidUtilities.smali ??
+						(androidUtilities.java && androidUtilities.smaliJar
+							? androidUtilities.java
+							: undefined))
 					: androidUtilities.apktool;
 			if (!command) {
 				throw new Error(
@@ -2375,6 +2513,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			const args =
 				input.operation === "assemble_smali"
 					? [
+							...(androidUtilities.smali
+								? []
+								: ["-jar", androidUtilities.smaliJar!]),
 							"assemble",
 							target,
 							"-o",

@@ -121,6 +121,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		"extract",
 		"analyze",
 		"decompile",
+		"dex_summary",
 		"disassemble_smali",
 		"read_smali_method",
 		"search_smali",
