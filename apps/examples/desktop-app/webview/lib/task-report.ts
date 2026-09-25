@@ -71,7 +71,7 @@ const PLAN_TOOL_NAMES = new Set([
 const REPAIR_STEP_PATTERN =
 	/\b(repair|fix|diagnos|debug|recover|retry|rerun|re-run)\b/i;
 const VERIFICATION_STEP_PATTERN =
-	/\b(test|verify|verification|validate|check|lint|typecheck)\b/i;
+	/\b(tests?|verify|verification|validate|checks?|lint|typecheck)\b/i;
 
 const TOOL_LABELS: Record<string, string> = {
 	apply_patch: "Applying code changes",
