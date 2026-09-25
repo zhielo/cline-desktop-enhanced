@@ -29,6 +29,7 @@ import type {
 } from "@/lib/chat-schema";
 import { formatRunError } from "@/lib/run-error";
 import type { SessionImportTool } from "@/lib/session-import";
+import { buildSessionTaskReport } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
 import { ImportedSessionNotice } from "./imported-session-notice";
 import { STREAMING_TITLE_CLASS } from "./messages/constants";
@@ -55,10 +56,7 @@ type ChatMessagesProps = {
 	sessionId: string | null;
 	status: ChatSessionStatus;
 	chatTransportState?:
-		| "connecting"
-		| "reconnecting"
-		| "connected"
-		| "unavailable";
+		"connecting" | "reconnecting" | "connected" | "unavailable";
 	isSessionSwitching?: boolean;
 	messages: ChatMessage[];
 	error: string | null;
@@ -228,6 +226,10 @@ function ChatMessagesImpl({
 				collapseTrailingRun,
 			}),
 		[messages, collapseTrailingRun],
+	);
+	const taskReport = useMemo(
+		() => buildSessionTaskReport(messages, status),
+		[messages, status],
 	);
 	const isRunActive =
 		status === "starting" || status === "running" || status === "stopping";
@@ -554,6 +556,8 @@ function ChatMessagesImpl({
 					)}
 				>
 					<SessionContent
+						status={status}
+						taskReport={taskReport}
 						className={cn(
 							"relative min-h-full",
 							// Bottom padding clears a pinned action pill (~40px with its
