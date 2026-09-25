@@ -153,3 +153,60 @@ describe("SettingsView cloud sessions rollout", () => {
 		);
 	});
 });
+
+describe("SettingsView custom AI instructions", () => {
+	it("shows saved instructions and persists edits permanently", async () => {
+		invoke.mockImplementation(async (command: string, args?: unknown) => {
+			if (command === "get_desktop_settings") {
+				return {
+					cloudSessionsEnabled: false,
+					customAiInstructions: "Always show the plan.",
+				};
+			}
+			if (command === "set_custom_ai_instructions") {
+				return {
+					cloudSessionsEnabled: false,
+					customAiInstructions: (args as { custom_ai_instructions: string })
+						.custom_ai_instructions,
+				};
+			}
+			if (command === "get_feature_flags") {
+				return { cloudAgents: false, cloudAgentsAvailable: false };
+			}
+			return { telemetryOptOut: false, autoUpdateEnabled: true };
+		});
+
+		await act(async () => {
+			root.render(
+				<SettingsView onNavigateSection={vi.fn()} section="General" />,
+			);
+		});
+		const textarea = container.querySelector<HTMLTextAreaElement>(
+			'textarea[aria-label="Custom AI instructions"]',
+		);
+		await vi.waitFor(() =>
+			expect(textarea?.value).toBe("Always show the plan."),
+		);
+
+		await act(async () => {
+			const setter = Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set;
+			setter?.call(textarea, "Always show the plan and run focused tests.");
+			textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		const saveButton = Array.from(
+			container.querySelectorAll<HTMLButtonElement>("button"),
+		).find((button) => button.textContent?.includes("Save instructions"));
+		expect(saveButton?.disabled).toBe(false);
+		await act(async () => saveButton?.click());
+
+		expect(invoke).toHaveBeenCalledWith("set_custom_ai_instructions", {
+			custom_ai_instructions: "Always show the plan and run focused tests.",
+		});
+		await vi.waitFor(() =>
+			expect(container.textContent).toContain("Saved permanently"),
+		);
+	});
+});

@@ -12,6 +12,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 import { isBetaVersion, productNameForVersion } from "@/lib/app-channel";
 import {
 	DEFAULT_APP_FONT_SIZE,
@@ -694,6 +695,18 @@ function GeneralSettingsContent({
 	>("desktop");
 	const [appIconError, setAppIconError] = useState<string | null>(null);
 	const appIconRequestRef = useRef(0);
+	const [customAiInstructions, setCustomAiInstructions] = useState("");
+	const [savedCustomAiInstructions, setSavedCustomAiInstructions] =
+		useState("");
+	const [customAiInstructionsLoading, setCustomAiInstructionsLoading] =
+		useState(true);
+	const [customAiInstructionsSaving, setCustomAiInstructionsSaving] =
+		useState(false);
+	const [customAiInstructionsError, setCustomAiInstructionsError] = useState<
+		string | null
+	>(null);
+	const [customAiInstructionsSaved, setCustomAiInstructionsSaved] =
+		useState(false);
 	const [telemetryOptOut, setTelemetryOptOut] = useState(false);
 	const [telemetryLoading, setTelemetryLoading] = useState(true);
 	const [telemetrySaving, setTelemetrySaving] = useState(false);
@@ -806,6 +819,8 @@ function GeneralSettingsContent({
 		setWebSearchError(null);
 		setCloudSessionsLoading(true);
 		setCloudSessionsError(null);
+		setCustomAiInstructionsLoading(true);
+		setCustomAiInstructionsError(null);
 		await Promise.all([
 			(async () => {
 				try {
@@ -831,16 +846,22 @@ function GeneralSettingsContent({
 				try {
 					const desktopSettings = await desktopClient.invoke<{
 						cloudSessionsEnabled: boolean;
+						customAiInstructions?: string;
 					}>("get_desktop_settings");
 					setCloudSessionsEnabled(
 						Boolean(desktopSettings.cloudSessionsEnabled),
 					);
+					const instructions = desktopSettings.customAiInstructions ?? "";
+					setCustomAiInstructions(instructions);
+					setSavedCustomAiInstructions(instructions);
 				} catch (error) {
-					setCloudSessionsError(
-						error instanceof Error ? error.message : String(error),
-					);
+					const message =
+						error instanceof Error ? error.message : String(error);
+					setCloudSessionsError(message);
+					setCustomAiInstructionsError(message);
 				} finally {
 					setCloudSessionsLoading(false);
+					setCustomAiInstructionsLoading(false);
 				}
 			})(),
 			refreshCloudSessionsEffective(),
@@ -853,6 +874,28 @@ function GeneralSettingsContent({
 		}, 0);
 		return () => window.clearTimeout(timeoutId);
 	}, [loadGlobalSettings]);
+
+	const saveCustomAiInstructions = async () => {
+		setCustomAiInstructionsSaving(true);
+		setCustomAiInstructionsError(null);
+		setCustomAiInstructionsSaved(false);
+		try {
+			const settings = await desktopClient.invoke<{
+				customAiInstructions: string;
+			}>("set_custom_ai_instructions", {
+				custom_ai_instructions: customAiInstructions,
+			});
+			setCustomAiInstructions(settings.customAiInstructions);
+			setSavedCustomAiInstructions(settings.customAiInstructions);
+			setCustomAiInstructionsSaved(true);
+		} catch (error) {
+			setCustomAiInstructionsError(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setCustomAiInstructionsSaving(false);
+		}
+	};
 
 	const updateTelemetryOptOut = async (nextValue: boolean) => {
 		const previousValue = telemetryOptOut;
@@ -985,6 +1028,62 @@ function GeneralSettingsContent({
 			/>
 			<section className="max-w-344">
 				<NotificationSettings />
+				<div className="border-b py-4">
+					<div className="flex flex-col gap-1">
+						<p className="text-base font-semibold text-foreground">
+							Custom AI instructions
+						</p>
+						<p className="text-sm text-muted-foreground">
+							Permanent guidance added to every new local AI session on this
+							device. Project rules and session instructions are applied after
+							it.
+						</p>
+					</div>
+					<Textarea
+						aria-label="Custom AI instructions"
+						className="mt-3 min-h-32 resize-y font-mono text-sm"
+						disabled={customAiInstructionsLoading}
+						maxLength={50_000}
+						onChange={(event) => {
+							setCustomAiInstructions(event.target.value);
+							setCustomAiInstructionsSaved(false);
+						}}
+						placeholder="Example: Always show the plan, explain important tradeoffs, and run focused tests before completion."
+						value={customAiInstructions}
+					/>
+					<div className="mt-2 flex min-h-8 items-center justify-between gap-3">
+						<div className="text-xs">
+							{customAiInstructionsError ? (
+								<p className="text-destructive" role="alert">
+									Failed to save instructions: {customAiInstructionsError}
+								</p>
+							) : customAiInstructionsSaved ? (
+								<output className="text-emerald-600 dark:text-emerald-400">
+									Saved permanently. New local sessions will use these
+									instructions.
+								</output>
+							) : (
+								<p className="text-muted-foreground">
+									{customAiInstructions.length.toLocaleString()} / 50,000
+									characters
+								</p>
+							)}
+						</div>
+						<Button
+							className="shrink-0"
+							disabled={
+								customAiInstructionsLoading ||
+								customAiInstructionsSaving ||
+								customAiInstructions === savedCustomAiInstructions
+							}
+							onClick={() => void saveCustomAiInstructions()}
+							size="sm"
+							type="button"
+						>
+							{customAiInstructionsSaving ? "Saving…" : "Save instructions"}
+						</Button>
+					</div>
+				</div>
 				<div className="flex py-4 items-center justify-between gap-5 border-b max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:py-4">
 					<div className="flex flex-col gap-1">
 						<p className="text-base font-semibold text-foreground">Dark mode</p>

@@ -133,8 +133,10 @@ import {
 	sendEventToClient,
 } from "./context";
 import {
+	MAX_CUSTOM_AI_INSTRUCTIONS_LENGTH,
 	readDesktopSettings,
 	setCloudSessionsEnabled,
+	setCustomAiInstructions,
 } from "./desktop-settings";
 import {
 	identifyDesktopFeatureFlagsAccount,
@@ -3215,6 +3217,21 @@ export async function handleCommand(
 	}
 	if (command === "get_desktop_settings") {
 		return readDesktopSettings();
+	}
+	if (command === "set_custom_ai_instructions") {
+		if (typeof args?.custom_ai_instructions !== "string") {
+			throw new Error("custom_ai_instructions must be a string");
+		}
+		if (
+			args.custom_ai_instructions.length > MAX_CUSTOM_AI_INSTRUCTIONS_LENGTH
+		) {
+			throw new Error(
+				`custom_ai_instructions must be ${MAX_CUSTOM_AI_INSTRUCTIONS_LENGTH} characters or fewer`,
+			);
+		}
+		const settings = setCustomAiInstructions(args.custom_ai_instructions);
+		broadcastEvent(ctx, "desktop_settings_changed", settings);
+		return settings;
 	}
 	if (command === "set_cloud_sessions_enabled") {
 		if (typeof args?.cloud_sessions_enabled !== "boolean") {

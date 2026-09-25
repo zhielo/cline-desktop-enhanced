@@ -40,6 +40,7 @@ import {
 	trackQueuedAttachments,
 } from "./attachments";
 import { createDesktopExtensionContext } from "./client-context";
+import { mergeDesktopAiInstructions } from "./desktop-settings";
 import {
 	getCloudSessionManager,
 	isCloudOuterSessionId,
@@ -789,10 +790,9 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 	const providerId = String(config.provider ?? config.providerId ?? "").trim();
 	const mode = resolveDesktopSessionMode(config);
 	const metadata = await consumeWorkspaceMetadata(cwd);
-	const inlineRules =
-		typeof config.rules === "string" && config.rules.trim().length > 0
-			? config.rules
-			: undefined;
+	const inlineRules = mergeDesktopAiInstructions(
+		typeof config.rules === "string" ? config.rules : undefined,
+	);
 	return buildClineSystemPrompt({
 		ide: "Terminal Shell",
 		workspaceRoot: cwd,

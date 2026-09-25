@@ -166,7 +166,7 @@ describe("desktop settings commands", () => {
 			handleCommand(ctx, "set_cloud_sessions_enabled", {
 				cloud_sessions_enabled: enabled,
 			}),
-		).resolves.toEqual({ cloudSessionsEnabled: enabled });
+		).resolves.toMatchObject({ cloudSessionsEnabled: enabled });
 		expect(events).toEqual([
 			{ name: "cloud_sessions_changed", payload: { environmentId: "local" } },
 			{
@@ -183,6 +183,27 @@ describe("desktop settings commands", () => {
 		).resolves.toMatchObject({ cloudAgents: false });
 		await expect(
 			handleCommand(ctx, "get_desktop_settings", {}),
-		).resolves.toEqual({ cloudSessionsEnabled: enabled });
+		).resolves.toMatchObject({ cloudSessionsEnabled: enabled });
+	});
+	it("persists custom AI instructions and exposes them in desktop settings", async () => {
+		const { ctx, events } = createContext();
+		await expect(
+			handleCommand(ctx, "set_custom_ai_instructions", {
+				custom_ai_instructions: "Always explain validation failures.",
+			}),
+		).resolves.toMatchObject({
+			customAiInstructions: "Always explain validation failures.",
+		});
+		await expect(
+			handleCommand(ctx, "get_desktop_settings", {}),
+		).resolves.toMatchObject({
+			customAiInstructions: "Always explain validation failures.",
+		});
+		expect(events).toContainEqual({
+			name: "desktop_settings_changed",
+			payload: expect.objectContaining({
+				customAiInstructions: "Always explain validation failures.",
+			}),
+		});
 	});
 });
