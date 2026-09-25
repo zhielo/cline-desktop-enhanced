@@ -27,6 +27,18 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "vitest.config.mts",
+		markers: [
+			"vitest/config",
+			"defineConfig",
+			"sdk/packages/core/vitest.config.ts",
+		],
+	},
+	{
+		path: "apps/examples/vscode/vitest.config.mts",
+		markers: ["vitest/config", "defineConfig", "src/**/*.test.ts"],
+	},
+	{
 		path: "apps/examples/desktop-app/vitest.config.mts",
 		markers: ["vitest/config", "import.meta.url", "defineConfig"],
 	},
@@ -90,9 +102,23 @@ const requiredMarkers: Array<{
 		path: "sdk/packages/core/src/extensions/tools/executors/bash.ts",
 		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
 	},
+	{
+		path: "docs/CODEX_LIKE_COMMAND_EXECUTION.md",
+		markers: [
+			"Structured direct execution",
+			"Immediate first output",
+			"cline.run_commands.time_to_first_output_ms",
+			"Prewarmed PowerShell worker",
+			"Do not publish a GitHub Release",
+		],
+	},
 ];
 
-const forbiddenPaths = ["apps/examples/desktop-app/vitest.config.ts"];
+const forbiddenPaths = [
+	"vitest.config.ts",
+	"apps/examples/vscode/vitest.config.ts",
+	"apps/examples/desktop-app/vitest.config.ts",
+];
 const failures: string[] = [];
 
 for (const forbiddenPath of forbiddenPaths) {

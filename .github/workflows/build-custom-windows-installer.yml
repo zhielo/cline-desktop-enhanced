@@ -119,7 +119,7 @@ jobs:
             sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
             sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
             sdk/packages/core/src/extensions/tools/presets.test.ts \
-            --config vitest.config.ts
+            --config vitest.config.mts
 
       - name: Build unsigned NSIS installer
         working-directory: apps/examples/desktop-app
