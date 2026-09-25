@@ -788,10 +788,9 @@ describe("default run_commands tool", () => {
 				_cwd: string,
 				context: AgentToolContext,
 			) => {
-				context.emitUpdate?.({
-					stream: "stdout",
-					chunk: typeof command === "string" ? command : command.command,
-				});
+				const chunk = typeof command === "string" ? command : command.command;
+				context.emitUpdate?.({ stream: "stdout", chunk });
+				context.emitUpdate?.({ stream: "stdout", chunk: `${chunk}:second` });
 				return "done";
 			},
 		);
@@ -816,9 +815,19 @@ describe("default run_commands tool", () => {
 			},
 			{
 				stream: "stdout",
+				chunk: "pwd:second",
+				commandIndex: 0,
+			},
+			{
+				stream: "stdout",
 				chunk: "node",
 				commandIndex: 1,
 				query: "node --version",
+			},
+			{
+				stream: "stdout",
+				chunk: "node:second",
+				commandIndex: 1,
 			},
 		]);
 	});
@@ -1272,13 +1281,20 @@ describe("default run_commands tool", () => {
 		expect(result[0].query).toContain("command truncated");
 	});
 
-	it("records command duration telemetry without command text", async () => {
+	it("records command timing and output-volume telemetry without command text", async () => {
 		const telemetry = createTelemetryStub();
 		const execute = vi.fn(
-			async (command: string | { command: string; args?: string[] }) => {
+			async (
+				command: string | { command: string; args?: string[] },
+				_cwd: string,
+				context: AgentToolContext,
+			) => {
 				if (typeof command === "string") {
+					context.emitUpdate?.({ stream: "stderr", chunk: "failure" });
 					throw new Error("shell execution failed");
 				}
+				context.emitUpdate?.({ stream: "stdout", chunk: "first" });
+				context.emitUpdate?.({ stream: "stdout", chunk: "second" });
 				return "ok";
 			},
 		);
@@ -1298,12 +1314,16 @@ describe("default run_commands tool", () => {
 				agentId: "agent-1",
 				conversationId: "conv-1",
 				iteration: 1,
+				emitUpdate: () => {},
 			},
 		);
 
-		const calls = (
+		const histogramCalls = (
 			telemetry.recordHistogram as ReturnType<typeof vi.fn>
-		).mock.calls.filter((call) => call[0] === "cline.run_commands.duration_ms");
+		).mock.calls;
+		const calls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.duration_ms",
+		);
 		expect(calls).toHaveLength(2);
 		expect(calls[0]?.[2]).toEqual({
 			execution_mode: "direct",
@@ -1319,7 +1339,26 @@ describe("default run_commands tool", () => {
 		expect(calls[0]?.[3]).toBe(
 			"End-to-end run_commands executor duration in milliseconds.",
 		);
-		const payload = JSON.stringify(calls);
+
+		const firstOutputCalls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.time_to_first_output_ms",
+		);
+		expect(firstOutputCalls).toHaveLength(2);
+		expect(firstOutputCalls.map((call) => call[2]?.execution_mode)).toEqual([
+			"direct",
+			"shell",
+		]);
+
+		const chunkCalls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.output_chunk_count",
+		);
+		expect(chunkCalls.map((call) => call[1])).toEqual([2, 1]);
+		const charCalls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.output_chars",
+		);
+		expect(charCalls.map((call) => call[1])).toEqual([11, 7]);
+
+		const payload = JSON.stringify(histogramCalls);
 		expect(payload).not.toContain("secret-direct");
 		expect(payload).not.toContain("private-argument");
 		expect(payload).not.toContain("secret-shell");

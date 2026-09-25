@@ -63,7 +63,7 @@ Primary files:
 
 ### Command execution performance
 
-- Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, and records bounded command-duration telemetry without command text.
+- Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event.
 
 Primary files:
 

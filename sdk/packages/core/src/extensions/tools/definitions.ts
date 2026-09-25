@@ -119,24 +119,63 @@ function captureRunCommandsTimeoutFromContext(
 	});
 }
 
-function recordRunCommandsDuration(
+type RunCommandsExecutionMode = "direct" | "shell";
+type RunCommandsTimeoutSource = "default_setting" | "configured_setting";
+
+function recordRunCommandsFirstOutput(
 	telemetry: ITelemetryService | undefined,
 	durationMs: number,
 	attributes: {
-		executionMode: "direct" | "shell";
-		success: boolean;
-		timeoutSource: "default_setting" | "configured_setting";
+		executionMode: RunCommandsExecutionMode;
+		timeoutSource: RunCommandsTimeoutSource;
 	},
 ): void {
 	telemetry?.recordHistogram(
-		"cline.run_commands.duration_ms",
+		"cline.run_commands.time_to_first_output_ms",
 		durationMs,
 		{
 			execution_mode: attributes.executionMode,
-			success: attributes.success,
 			timeout_source: attributes.timeoutSource,
 		},
+		"Time from run_commands executor start to its first non-empty streamed output in milliseconds.",
+	);
+}
+
+function recordRunCommandsCompletionMetrics(
+	telemetry: ITelemetryService | undefined,
+	measurements: {
+		durationMs: number;
+		outputChunkCount: number;
+		outputChars: number;
+	},
+	attributes: {
+		executionMode: RunCommandsExecutionMode;
+		success: boolean;
+		timeoutSource: RunCommandsTimeoutSource;
+	},
+): void {
+	const metricAttributes = {
+		execution_mode: attributes.executionMode,
+		success: attributes.success,
+		timeout_source: attributes.timeoutSource,
+	};
+	telemetry?.recordHistogram(
+		"cline.run_commands.duration_ms",
+		measurements.durationMs,
+		metricAttributes,
 		"End-to-end run_commands executor duration in milliseconds.",
+	);
+	telemetry?.recordHistogram(
+		"cline.run_commands.output_chunk_count",
+		measurements.outputChunkCount,
+		metricAttributes,
+		"Number of non-empty output chunks emitted by a run_commands executor.",
+	);
+	telemetry?.recordHistogram(
+		"cline.run_commands.output_chars",
+		measurements.outputChars,
+		metricAttributes,
+		"Number of output characters emitted by a run_commands executor.",
 	);
 }
 
@@ -225,6 +264,10 @@ async function executeShellCommands(
 				const executionMode =
 					typeof command !== "string" && "args" in command ? "direct" : "shell";
 				const query = formatRunCommandQueryPreview(command);
+				let emittedCommandMetadata = false;
+				let recordedFirstOutput = false;
+				let outputChunkCount = 0;
+				let outputChars = 0;
 				const commandContext: AgentToolContext = context.emitUpdate
 					? {
 							...context,
@@ -233,11 +276,25 @@ async function executeShellCommands(
 									update && typeof update === "object" && !Array.isArray(update)
 										? (update as Record<string, unknown>)
 										: { update };
+								const chunk = payload.chunk;
+								if (typeof chunk === "string" && chunk.length > 0) {
+									outputChunkCount += 1;
+									outputChars += chunk.length;
+									if (!recordedFirstOutput) {
+										recordedFirstOutput = true;
+										recordRunCommandsFirstOutput(
+											telemetry,
+											Date.now() - startedAt,
+											{ executionMode, timeoutSource },
+										);
+									}
+								}
 								context.emitUpdate?.({
 									...payload,
 									commandIndex,
-									query,
+									...(!emittedCommandMetadata ? { query } : {}),
 								});
+								emittedCommandMetadata = true;
 							},
 						}
 					: context;
@@ -247,22 +304,30 @@ async function executeShellCommands(
 						timeoutMs,
 						`Command timed out after ${timeoutMs}ms`,
 					);
-					recordRunCommandsDuration(telemetry, Date.now() - startedAt, {
-						executionMode,
-						success: true,
-						timeoutSource,
-					});
+					recordRunCommandsCompletionMetrics(
+						telemetry,
+						{
+							durationMs: Date.now() - startedAt,
+							outputChunkCount,
+							outputChars,
+						},
+						{ executionMode, success: true, timeoutSource },
+					);
 					return {
 						query,
 						result: output,
 						success: true,
 					};
 				} catch (error) {
-					recordRunCommandsDuration(telemetry, Date.now() - startedAt, {
-						executionMode,
-						success: false,
-						timeoutSource,
-					});
+					recordRunCommandsCompletionMetrics(
+						telemetry,
+						{
+							durationMs: Date.now() - startedAt,
+							outputChunkCount,
+							outputChars,
+						},
+						{ executionMode, success: false, timeoutSource },
+					);
 					if (error instanceof TimeoutError) {
 						captureRunCommandsTimeoutFromContext(telemetry, context, {
 							effectiveTimeoutMs: error.timeoutMs,

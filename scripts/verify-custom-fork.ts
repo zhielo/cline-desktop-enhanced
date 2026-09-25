@@ -80,6 +80,9 @@ const requiredMarkers: Array<{
 		path: "sdk/packages/core/src/extensions/tools/definitions.ts",
 		markers: [
 			"cline.run_commands.duration_ms",
+			"cline.run_commands.time_to_first_output_ms",
+			"cline.run_commands.output_chunk_count",
+			"emittedCommandMetadata",
 			"Prefer { command, args } with explicit argv",
 		],
 	},
