@@ -48,7 +48,7 @@ Primary files:
 - Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
 - Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
 - Sidecar stores are closed during tests and logging fixtures work across platforms.
-- Desktop Vitest configuration is native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` config must not be restored.
+- Desktop, example VS Code, and repository-root Vitest configurations are native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` configs must not be restored.
 - React image-attachment tests explicitly enable the React `act(...)` environment.
 - The custom installer validates type safety, sidecar behavior, task reports, focused customization tests, installer configuration, installation, startup, and unsigned binaries.
 
@@ -56,10 +56,25 @@ Primary files:
 
 - `apps/examples/desktop-app/sidecar/commands.ts`
 - `apps/examples/desktop-app/sidecar/commands-git-worktree.test.ts`
+- `vitest.config.mts`
+- `sdk/tsconfig.json`
 - `apps/examples/desktop-app/vitest.config.mts`
 - `apps/examples/desktop-app/package.json`
+- `apps/examples/vscode/vitest.config.mts`
+- `apps/examples/vscode/package.json`
 - `apps/examples/desktop-app/webview/lib/image-attachments.test.ts`
 - `.github/workflows/build-custom-windows-installer.yml`
+
+### Command execution performance
+
+- Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event. The full implementation contract and phased roadmap are recorded in `docs/CODEX_LIKE_COMMAND_EXECUTION.md`.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/schemas.ts`
+- `sdk/packages/core/src/extensions/tools/definitions.ts`
+- `sdk/packages/core/src/extensions/tools/executors/bash.ts`
+- `docs/CODEX_LIKE_COMMAND_EXECUTION.md`
 
 ### Specialized tools
 

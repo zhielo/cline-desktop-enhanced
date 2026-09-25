@@ -10,6 +10,7 @@ const requiredMarkers: Array<{
 			"AI task execution UI",
 			"Permanent Custom AI Instructions",
 			"Windows reliability",
+			"Command execution performance",
 			"Required validation",
 			"vitest.config.mts",
 		],
@@ -24,6 +25,18 @@ const requiredMarkers: Array<{
 			"CUSTOMIZATIONS.md",
 			"BUILD-INFO.txt",
 		],
+	},
+	{
+		path: "vitest.config.mts",
+		markers: [
+			"vitest/config",
+			"defineConfig",
+			"sdk/packages/core/vitest.config.ts",
+		],
+	},
+	{
+		path: "apps/examples/vscode/vitest.config.mts",
+		markers: ["vitest/config", "defineConfig", "src/**/*.test.ts"],
 	},
 	{
 		path: "apps/examples/desktop-app/vitest.config.mts",
@@ -71,9 +84,41 @@ const requiredMarkers: Array<{
 		path: "apps/examples/desktop-app/webview/lib/image-attachments.test.ts",
 		markers: ["IS_REACT_ACT_ENVIRONMENT"],
 	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
+		markers: ["StructuredCommandInputSchema", "invoke an executable directly"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/definitions.ts",
+		markers: [
+			"cline.run_commands.duration_ms",
+			"cline.run_commands.time_to_first_output_ms",
+			"cline.run_commands.output_chunk_count",
+			"emittedCommandMetadata",
+			"Prefer { command, args } with explicit argv",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/bash.ts",
+		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
+	},
+	{
+		path: "docs/CODEX_LIKE_COMMAND_EXECUTION.md",
+		markers: [
+			"Structured direct execution",
+			"Immediate first output",
+			"cline.run_commands.time_to_first_output_ms",
+			"Prewarmed PowerShell worker",
+			"Do not publish a GitHub Release",
+		],
+	},
 ];
 
-const forbiddenPaths = ["apps/examples/desktop-app/vitest.config.ts"];
+const forbiddenPaths = [
+	"vitest.config.ts",
+	"apps/examples/vscode/vitest.config.ts",
+	"apps/examples/desktop-app/vitest.config.ts",
+];
 const failures: string[] = [];
 
 for (const forbiddenPath of forbiddenPaths) {

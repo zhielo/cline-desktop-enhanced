@@ -119,6 +119,66 @@ function captureRunCommandsTimeoutFromContext(
 	});
 }
 
+type RunCommandsExecutionMode = "direct" | "shell";
+type RunCommandsTimeoutSource = "default_setting" | "configured_setting";
+
+function recordRunCommandsFirstOutput(
+	telemetry: ITelemetryService | undefined,
+	durationMs: number,
+	attributes: {
+		executionMode: RunCommandsExecutionMode;
+		timeoutSource: RunCommandsTimeoutSource;
+	},
+): void {
+	telemetry?.recordHistogram(
+		"cline.run_commands.time_to_first_output_ms",
+		durationMs,
+		{
+			execution_mode: attributes.executionMode,
+			timeout_source: attributes.timeoutSource,
+		},
+		"Time from run_commands executor start to its first non-empty streamed output in milliseconds.",
+	);
+}
+
+function recordRunCommandsCompletionMetrics(
+	telemetry: ITelemetryService | undefined,
+	measurements: {
+		durationMs: number;
+		outputChunkCount: number;
+		outputChars: number;
+	},
+	attributes: {
+		executionMode: RunCommandsExecutionMode;
+		success: boolean;
+		timeoutSource: RunCommandsTimeoutSource;
+	},
+): void {
+	const metricAttributes = {
+		execution_mode: attributes.executionMode,
+		success: attributes.success,
+		timeout_source: attributes.timeoutSource,
+	};
+	telemetry?.recordHistogram(
+		"cline.run_commands.duration_ms",
+		measurements.durationMs,
+		metricAttributes,
+		"End-to-end run_commands executor duration in milliseconds.",
+	);
+	telemetry?.recordHistogram(
+		"cline.run_commands.output_chunk_count",
+		measurements.outputChunkCount,
+		metricAttributes,
+		"Number of non-empty output chunks emitted by a run_commands executor.",
+	);
+	telemetry?.recordHistogram(
+		"cline.run_commands.output_chars",
+		measurements.outputChars,
+		metricAttributes,
+		"Number of output characters emitted by a run_commands executor.",
+	);
+}
+
 function getHeredocDelimiter(command: string): string | undefined {
 	const match = command.match(
 		/(?<![<])<<-?\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_./-]+))/,
@@ -201,7 +261,13 @@ async function executeShellCommands(
 		commands.map(
 			async (command, commandIndex): Promise<ToolOperationResult> => {
 				const startedAt = Date.now();
+				const executionMode =
+					typeof command !== "string" && "args" in command ? "direct" : "shell";
 				const query = formatRunCommandQueryPreview(command);
+				let emittedCommandMetadata = false;
+				let recordedFirstOutput = false;
+				let outputChunkCount = 0;
+				let outputChars = 0;
 				const commandContext: AgentToolContext = context.emitUpdate
 					? {
 							...context,
@@ -210,11 +276,25 @@ async function executeShellCommands(
 									update && typeof update === "object" && !Array.isArray(update)
 										? (update as Record<string, unknown>)
 										: { update };
+								const chunk = payload.chunk;
+								if (typeof chunk === "string" && chunk.length > 0) {
+									outputChunkCount += 1;
+									outputChars += chunk.length;
+									if (!recordedFirstOutput) {
+										recordedFirstOutput = true;
+										recordRunCommandsFirstOutput(
+											telemetry,
+											Date.now() - startedAt,
+											{ executionMode, timeoutSource },
+										);
+									}
+								}
 								context.emitUpdate?.({
 									...payload,
 									commandIndex,
-									query,
+									...(!emittedCommandMetadata ? { query } : {}),
 								});
+								emittedCommandMetadata = true;
 							},
 						}
 					: context;
@@ -224,12 +304,30 @@ async function executeShellCommands(
 						timeoutMs,
 						`Command timed out after ${timeoutMs}ms`,
 					);
+					recordRunCommandsCompletionMetrics(
+						telemetry,
+						{
+							durationMs: Date.now() - startedAt,
+							outputChunkCount,
+							outputChars,
+						},
+						{ executionMode, success: true, timeoutSource },
+					);
 					return {
 						query,
 						result: output,
 						success: true,
 					};
 				} catch (error) {
+					recordRunCommandsCompletionMetrics(
+						telemetry,
+						{
+							durationMs: Date.now() - startedAt,
+							outputChunkCount,
+							outputChars,
+						},
+						{ executionMode, success: false, timeoutSource },
+					);
 					if (error instanceof TimeoutError) {
 						captureRunCommandsTimeoutFromContext(telemetry, context, {
 							effectiveTimeoutMs: error.timeoutMs,
@@ -462,6 +560,7 @@ export function createSearchTool(
 
 const RUN_COMMANDS_SHARED_INSTRUCTIONS =
 	"Use for listing files, checking git status, running builds, executing tests, etc. " +
+	"Prefer { command, args } with explicit argv to bypass shell startup and parsing when shell syntax is not needed. " +
 	"Commands must be non-interactive. Commands that require follow-up input like pagers should be skipped or used with supported flags/env (e.g. git --no-pager, --non-interactive) to bypass the interaction steps. ";
 
 /**

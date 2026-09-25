@@ -788,10 +788,9 @@ describe("default run_commands tool", () => {
 				_cwd: string,
 				context: AgentToolContext,
 			) => {
-				context.emitUpdate?.({
-					stream: "stdout",
-					chunk: typeof command === "string" ? command : command.command,
-				});
+				const chunk = typeof command === "string" ? command : command.command;
+				context.emitUpdate?.({ stream: "stdout", chunk });
+				context.emitUpdate?.({ stream: "stdout", chunk: `${chunk}:second` });
 				return "done";
 			},
 		);
@@ -816,9 +815,19 @@ describe("default run_commands tool", () => {
 			},
 			{
 				stream: "stdout",
+				chunk: "pwd:second",
+				commandIndex: 0,
+			},
+			{
+				stream: "stdout",
 				chunk: "node",
 				commandIndex: 1,
 				query: "node --version",
+			},
+			{
+				stream: "stdout",
+				chunk: "node:second",
+				commandIndex: 1,
 			},
 		]);
 	});
@@ -1270,6 +1279,89 @@ describe("default run_commands tool", () => {
 			RUN_COMMAND_QUERY_PREVIEW_LIMIT + 100,
 		);
 		expect(result[0].query).toContain("command truncated");
+	});
+
+	it("records command timing and output-volume telemetry without command text", async () => {
+		const telemetry = createTelemetryStub();
+		const execute = vi.fn(
+			async (
+				command: string | { command: string; args?: string[] },
+				_cwd: string,
+				context: AgentToolContext,
+			) => {
+				if (typeof command === "string") {
+					context.emitUpdate?.({ stream: "stderr", chunk: "failure" });
+					throw new Error("shell execution failed");
+				}
+				context.emitUpdate?.({ stream: "stdout", chunk: "first" });
+				context.emitUpdate?.({ stream: "stdout", chunk: "second" });
+				return "ok";
+			},
+		);
+		const tool = createShellTool(execute, {
+			bashTimeoutMs: 50,
+			telemetry,
+		});
+
+		await tool.execute(
+			{
+				commands: [
+					{ command: "secret-direct", args: ["private-argument"] },
+					"echo secret-shell",
+				],
+			} as never,
+			{
+				agentId: "agent-1",
+				conversationId: "conv-1",
+				iteration: 1,
+				emitUpdate: () => {},
+			},
+		);
+
+		const histogramCalls = (
+			telemetry.recordHistogram as ReturnType<typeof vi.fn>
+		).mock.calls;
+		const calls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.duration_ms",
+		);
+		expect(calls).toHaveLength(2);
+		expect(calls[0]?.[2]).toEqual({
+			execution_mode: "direct",
+			success: true,
+			timeout_source: "configured_setting",
+		});
+		expect(calls[1]?.[2]).toEqual({
+			execution_mode: "shell",
+			success: false,
+			timeout_source: "configured_setting",
+		});
+		expect(calls.every((call) => typeof call[1] === "number")).toBe(true);
+		expect(calls[0]?.[3]).toBe(
+			"End-to-end run_commands executor duration in milliseconds.",
+		);
+
+		const firstOutputCalls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.time_to_first_output_ms",
+		);
+		expect(firstOutputCalls).toHaveLength(2);
+		expect(firstOutputCalls.map((call) => call[2]?.execution_mode)).toEqual([
+			"direct",
+			"shell",
+		]);
+
+		const chunkCalls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.output_chunk_count",
+		);
+		expect(chunkCalls.map((call) => call[1])).toEqual([2, 1]);
+		const charCalls = histogramCalls.filter(
+			(call) => call[0] === "cline.run_commands.output_chars",
+		);
+		expect(charCalls.map((call) => call[1])).toEqual([11, 7]);
+
+		const payload = JSON.stringify(histogramCalls);
+		expect(payload).not.toContain("secret-direct");
+		expect(payload).not.toContain("private-argument");
+		expect(payload).not.toContain("secret-shell");
 	});
 
 	it("emits timeout telemetry without leaking raw command data", async () => {
@@ -1801,20 +1893,23 @@ describe("default read_files tool", () => {
 });
 
 describe("zod schema conversion", () => {
-	it("advertises run_commands as string-only command arrays", () => {
+	it("advertises run_commands as structured command objects", () => {
 		const tool = createShellTool(async () => "ok");
 		const inputSchema = tool.inputSchema as Record<string, unknown>;
 		const serialized = JSON.stringify(inputSchema);
 
 		expect(serialized).not.toContain('"anyOf"');
-		expect(serialized).not.toContain("Prefer structured");
-		expect(hasSchemaKey(inputSchema, "command")).toBe(false);
+		expect(serialized).toContain("Prefer");
+		expect(hasSchemaKey(inputSchema, "command")).toBe(true);
+		expect(hasSchemaKey(inputSchema, "args")).toBe(true);
 
 		const properties = inputSchema.properties as Record<string, unknown>;
 		const commands = properties.commands as {
-			items?: { type?: string };
+			items?: { type?: string; properties?: Record<string, unknown> };
 		};
-		expect(commands.items?.type).toBe("string");
+		expect(commands.items?.type).toBe("object");
+		expect(commands.items?.properties).toHaveProperty("command");
+		expect(commands.items?.properties).toHaveProperty("args");
 	});
 
 	it("preserves read_files required properties in generated JSON schema", () => {
