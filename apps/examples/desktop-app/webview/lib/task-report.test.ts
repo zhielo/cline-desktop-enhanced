@@ -4,7 +4,10 @@ import {
 	ChatMessageSchema,
 	TaskProtocolEventSchema,
 } from "@/lib/chat-schema";
-import { buildSessionTaskReport } from "@/lib/task-report";
+import {
+	buildSessionTaskReport,
+	formatTaskReportText,
+} from "@/lib/task-report";
 
 function userMessage(id: string, content = "Do the work"): ChatMessage {
 	return {
@@ -338,5 +341,31 @@ describe("buildSessionTaskReport", () => {
 			},
 		]);
 		expect(report).toBeNull();
+	});
+	it("formats a copyable report with steps and exact evidence", () => {
+		const report = buildSessionTaskReport([
+			userMessage("user-1"),
+			toolMessage("tool-2", "update_plan", {
+				plan: [
+					{ id: "build", step: "Build panel", status: "completed" },
+					{ id: "test", step: "Run tests", status: "in_progress" },
+				],
+			}),
+			toolMessage(
+				"tool-3",
+				"bash",
+				{ command: "bun test" },
+				{
+					taskStepId: "test",
+					toolCallId: "call-1",
+				},
+			),
+		]);
+		expect(report).not.toBeNull();
+		const text = formatTaskReportText(report!);
+		expect(text).toContain("Progress: 1/2");
+		expect(text).toContain("[x] Build panel");
+		expect(text).toContain("[~] Run tests");
+		expect(text).toContain("bun test");
 	});
 });

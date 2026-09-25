@@ -61,6 +61,50 @@ export type SessionTaskReport = {
 	updatedAt: number;
 };
 
+const TASK_STEP_MARKERS: Record<TaskReportStepStatus, string> = {
+	pending: "[ ]",
+	in_progress: "[~]",
+	blocked: "[!]",
+	waiting_for_user: "[?]",
+	completed: "[x]",
+	failed: "[!]",
+	skipped: "[-]",
+	cancelled: "[-]",
+};
+
+/** Formats the visible plan and its execution evidence for issue reports. */
+export function formatTaskReportText(report: SessionTaskReport): string {
+	const lines = ["AI task report"];
+	if (report.explanation) lines.push(report.explanation);
+	if (report.steps.length > 0) {
+		lines.push("", `Progress: ${report.completedCount}/${report.steps.length}`);
+		for (const step of report.steps) {
+			lines.push(`${TASK_STEP_MARKERS[step.status]} ${step.label}`);
+			for (const evidence of report.evidence.filter(
+				(item) => item.stepId === step.id,
+			)) {
+				const duration =
+					typeof evidence.durationMs === "number"
+						? ` (${(evidence.durationMs / 1000).toFixed(1)}s)`
+						: "";
+				const detail = evidence.detail ? ` — ${evidence.detail}` : "";
+				lines.push(
+					`  - ${evidence.status}: ${evidence.label}${detail}${duration}`,
+				);
+			}
+		}
+	}
+	const unassigned = report.evidence.filter((item) => !item.stepId);
+	if (unassigned.length > 0) {
+		lines.push("", "Execution evidence");
+		for (const evidence of unassigned) {
+			const detail = evidence.detail ? ` — ${evidence.detail}` : "";
+			lines.push(`- ${evidence.status}: ${evidence.label}${detail}`);
+		}
+	}
+	return lines.join("\n");
+}
+
 const PLAN_TOOL_NAMES = new Set([
 	"update_plan",
 	"update_task_plan",

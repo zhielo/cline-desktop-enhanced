@@ -8,6 +8,7 @@ import {
 	ChevronDown,
 	Circle,
 	Clock3,
+	Copy,
 	FileCheck2,
 	ListChecks,
 	Loader2,
@@ -18,6 +19,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { ChatSessionStatus } from "@/lib/chat-schema";
 import type {
+	formatTaskReportText,
 	SessionTaskReport,
 	TaskEvidenceStatus,
 	TaskReportStep,
@@ -134,6 +136,9 @@ export function TaskReportPanel({
 		report.steps.length > 0 &&
 		report.completedCount === report.steps.length;
 	const [expanded, setExpanded] = useState(!complete);
+	const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+		"idle",
+	);
 	useEffect(() => {
 		setExpanded(!complete);
 	}, [complete]);
@@ -166,6 +171,19 @@ export function TaskReportPanel({
 		activeStep?.label ??
 		latestActivity?.label ??
 		(complete ? "All planned steps completed" : report.explanation);
+	const copyReport = async () => {
+		if (!navigator.clipboard?.writeText) {
+			setCopyState("failed");
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(formatTaskReportText(report));
+			setCopyState("copied");
+			window.setTimeout(() => setCopyState("idle"), 1800);
+		} catch {
+			setCopyState("failed");
+		}
+	};
 	const repairLabel = report.repair
 		? {
 				repair_required: "Repair required before continuing",
@@ -274,6 +292,27 @@ export function TaskReportPanel({
 			{expanded ? (
 				<div className="border-border/60 border-t">
 					<div className="max-h-[min(56vh,32rem)] overflow-y-auto px-3.5 py-3.5">
+						<div className="mb-2 flex justify-end">
+							<button
+								className={cn(
+									"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+									copyState === "failed" && "text-destructive",
+								)}
+								onClick={() => void copyReport()}
+								type="button"
+							>
+								{copyState === "copied" ? (
+									<Check className="size-3.5" />
+								) : (
+									<Copy className="size-3.5" />
+								)}
+								{copyState === "copied"
+									? "Copied"
+									: copyState === "failed"
+										? "Copy failed"
+										: "Copy report"}
+							</button>
+						</div>
 						{activeStep ? (
 							<div className="mb-3 rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent px-3 py-2.5">
 								<div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-400">
