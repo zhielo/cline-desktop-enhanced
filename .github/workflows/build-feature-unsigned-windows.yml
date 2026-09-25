@@ -7,6 +7,11 @@ on:
     paths:
       - .github/workflows/build-feature-unsigned-windows.yml
       - apps/examples/desktop-app/webview/components/views/settings/customize-view.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/session-content.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/task-report-panel.tsx
+      - apps/examples/desktop-app/webview/lib/task-report.ts
+      - apps/examples/desktop-app/webview/lib/task-report.test.ts
 
 permissions:
   contents: read
