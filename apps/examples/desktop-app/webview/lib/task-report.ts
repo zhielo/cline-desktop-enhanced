@@ -39,6 +39,8 @@ export type TaskEvidence = {
 	detail?: string;
 	status: TaskEvidenceStatus;
 	toolName: string;
+	stepId?: string;
+	durationMs?: number;
 	createdAt: number;
 };
 
@@ -301,7 +303,9 @@ function buildRepairReport(
 			activeRepair ? 1 : 0,
 		),
 		maxAttempts: positiveInteger(
-			explicitRepair?.max_attempts ?? input.max_repair_attempts,
+			explicitRepair?.max_attempts ??
+				explicitRepair?.maxAttempts ??
+				input.max_repair_attempts,
 			3,
 		),
 	};
@@ -347,16 +351,27 @@ function evidenceFromMessages(
 		if (!name || PLAN_TOOL_NAMES.has(name)) continue;
 		const input = asRecord(payload?.input);
 		const key = message.meta?.toolCallId ?? message.id;
-		const isError = payload?.isError === true;
+		const taskEvent = message.meta?.taskEvent;
+		const isError =
+			payload?.isError === true || taskEvent?.type === "tool.failed";
 		const running =
+			taskEvent?.type === "tool.started" ||
 			message.meta?.hookEventName === "tool_call_start" ||
 			(payload !== null && payload.result == null && !isError);
+		const stepId =
+			message.meta?.taskStepId ??
+			(taskEvent && "stepId" in taskEvent ? taskEvent.stepId : undefined);
 		evidence.set(key, {
 			id: key,
 			label: TOOL_LABELS[name] ?? titleCaseTool(name),
 			detail: evidenceDetail(input),
 			status: isError ? "failed" : running ? "running" : "completed",
 			toolName: name,
+			stepId,
+			durationMs:
+				taskEvent && "durationMs" in taskEvent
+					? taskEvent.durationMs
+					: undefined,
 			createdAt: message.createdAt,
 		});
 	}
@@ -414,32 +429,55 @@ export function buildSessionTaskReport(
 		if (message.role !== "tool") continue;
 		const payload = parsePayload(message.content);
 		const name = toolName(message, payload);
-		if (!PLAN_TOOL_NAMES.has(name) || payload?.isError === true) continue;
-		const input = asRecord(payload?.input) ?? payload;
+		const planEvent =
+			message.meta?.taskEvent?.type === "plan.updated"
+				? message.meta.taskEvent
+				: undefined;
+		if (
+			!planEvent &&
+			(!PLAN_TOOL_NAMES.has(name) || payload?.isError === true)
+		) {
+			continue;
+		}
+		const input = asRecord(payload?.input) ?? payload ?? {};
 		const steps = normalizeSteps(
-			input?.plan ?? input?.steps ?? input?.todos ?? input?.items,
+			planEvent?.steps ??
+				input.plan ??
+				input.steps ??
+				input.todos ??
+				input.items,
 			message.id,
 		);
 		if (steps.length === 0) continue;
 		const explanation =
-			typeof input?.explanation === "string" && input.explanation.trim()
+			planEvent?.explanation ??
+			(typeof input.explanation === "string" && input.explanation.trim()
 				? input.explanation.trim()
-				: undefined;
+				: undefined);
 		const completedCount = steps.filter(
 			(step) => step.status === "completed",
 		).length;
 		const activeStep = steps.find((step) => step.status === "in_progress");
+		const repairInput = planEvent?.repair
+			? {
+					repair: {
+						state: planEvent.repair.state,
+						attempt: planEvent.repair.attempt,
+						maxAttempts: planEvent.repair.maxAttempts,
+					},
+				}
+			: input;
 		return {
 			mode: "plan",
 			explanation,
 			steps,
 			evidence: evidenceFromMessages(messages, runStartIndex),
-			repair: buildRepairReport(steps, input),
-			activeStepId: activeStep?.id,
+			repair: buildRepairReport(steps, repairInput),
+			activeStepId: planEvent?.activeStepId ?? activeStep?.id,
 			completedCount,
 			progressPercent: Math.round((completedCount / steps.length) * 100),
 			sourceMessageId: message.id,
-			sourceTool: name,
+			sourceTool: name || "task_protocol",
 			updatedAt: message.createdAt,
 		};
 	}

@@ -1,3 +1,4 @@
+import type { TaskProtocolEvent } from "@/lib/chat-schema";
 import type { SessionHookEvent } from "@/lib/session-diff";
 
 export type ProcessContext = {
@@ -54,6 +55,8 @@ export type ToolCallStartEvent = {
 	toolCallId?: string;
 	toolName?: string;
 	input?: unknown;
+	taskStepId?: string;
+	taskEvent?: TaskProtocolEvent;
 };
 
 export type ToolCallEndEvent = {
@@ -63,6 +66,8 @@ export type ToolCallEndEvent = {
 	output?: unknown;
 	error?: string;
 	durationMs?: number;
+	taskStepId?: string;
+	taskEvent?: TaskProtocolEvent;
 };
 
 export type ToolCallUpdateEvent = {
@@ -110,11 +115,7 @@ export type ChatApiResult = {
 	};
 	iterations?: number;
 	finishReason?:
-		| "completed"
-		| "max_iterations"
-		| "aborted"
-		| "mistake_limit"
-		| "error";
+		"completed" | "max_iterations" | "aborted" | "mistake_limit" | "error";
 	toolCalls?: Array<{
 		name: string;
 		input?: unknown;
@@ -159,10 +160,7 @@ export type ChatWsChunkEvent = {
 };
 
 export type ChatTransportState =
-	| "connecting"
-	| "reconnecting"
-	| "connected"
-	| "unavailable";
+	"connecting" | "reconnecting" | "connected" | "unavailable";
 
 export type CoreLogChunk = {
 	level?: string;

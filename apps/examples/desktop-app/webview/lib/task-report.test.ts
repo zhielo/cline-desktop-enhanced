@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ChatMessage } from "@/lib/chat-schema";
+import {
+	type ChatMessage,
+	ChatMessageSchema,
+	TaskProtocolEventSchema,
+} from "@/lib/chat-schema";
 import { buildSessionTaskReport } from "@/lib/task-report";
 
 function userMessage(id: string, content = "Do the work"): ChatMessage {
@@ -21,6 +25,8 @@ function toolMessage(
 		result?: unknown;
 		toolCallId?: string;
 		hookEventName?: string;
+		taskStepId?: string;
+		taskEvent?: NonNullable<ChatMessage["meta"]>["taskEvent"];
 	},
 ): ChatMessage {
 	return {
@@ -43,11 +49,34 @@ function toolMessage(
 			toolName,
 			toolCallId: options?.toolCallId,
 			hookEventName: options?.hookEventName,
+			taskStepId: options?.taskStepId,
+			taskEvent: options?.taskEvent,
 		},
 	};
 }
 
 describe("buildSessionTaskReport", () => {
+	it("validates the native task protocol in persisted chat metadata", () => {
+		const event = TaskProtocolEventSchema.parse({
+			type: "plan.updated",
+			planId: "plan-1",
+			activeStepId: "step-1",
+			steps: [
+				{
+					id: "step-1",
+					label: "Implement the protocol",
+					status: "in_progress",
+					kind: "work",
+				},
+			],
+		});
+		const message = ChatMessageSchema.parse({
+			...toolMessage("tool-1", "update_plan", {}),
+			meta: { toolName: "update_plan", taskEvent: event },
+		});
+		expect(message.meta?.taskEvent?.type).toBe("plan.updated");
+	});
+
 	it("projects the newest Codex plan with stable progress metadata", () => {
 		const report = buildSessionTaskReport(
 			[
@@ -209,6 +238,53 @@ describe("buildSessionTaskReport", () => {
 			id: "call-1",
 			label: "Running a command",
 			detail: "bun test",
+			status: "completed",
+		});
+	});
+
+	it("prefers typed plan events and maps tool evidence to the active step", () => {
+		const planEvent = {
+			type: "plan.updated" as const,
+			planId: "plan-1",
+			explanation: "Use the native task protocol.",
+			activeStepId: "implement",
+			steps: [
+				{
+					id: "implement",
+					label: "Implement typed task events",
+					status: "in_progress" as const,
+					kind: "work" as const,
+				},
+			],
+		};
+		const report = buildSessionTaskReport([
+			userMessage("user-1"),
+			toolMessage("tool-2", "update_plan", {}, { taskEvent: planEvent }),
+			toolMessage(
+				"tool-3",
+				"run_command",
+				{ command: "bun test" },
+				{
+					toolCallId: "call-1",
+					taskStepId: "implement",
+					taskEvent: {
+						type: "tool.completed",
+						toolCallId: "call-1",
+						toolName: "run_command",
+						stepId: "implement",
+						durationMs: 1250,
+					},
+				},
+			),
+		]);
+		expect(report).toMatchObject({
+			mode: "plan",
+			activeStepId: "implement",
+			explanation: "Use the native task protocol.",
+		});
+		expect(report?.evidence[0]).toMatchObject({
+			stepId: "implement",
+			durationMs: 1250,
 			status: "completed",
 		});
 	});

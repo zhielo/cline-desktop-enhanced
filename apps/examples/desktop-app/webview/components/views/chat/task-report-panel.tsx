@@ -148,6 +148,20 @@ export function TaskReportPanel({
 	const latestActivity =
 		report.evidence.find((item) => item.status === "running") ??
 		report.evidence[0];
+	const evidenceByStep = useMemo(() => {
+		const grouped = new Map<string, typeof report.evidence>();
+		for (const item of report.evidence) {
+			if (!item.stepId) continue;
+			const items = grouped.get(item.stepId) ?? [];
+			items.push(item);
+			grouped.set(item.stepId, items);
+		}
+		return grouped;
+	}, [report.evidence]);
+	const unassignedEvidence = useMemo(
+		() => report.evidence.filter((item) => !item.stepId),
+		[report.evidence],
+	);
 	const headline =
 		activeStep?.label ??
 		latestActivity?.label ??
@@ -353,13 +367,33 @@ export function TaskReportPanel({
 													{step.kind}
 												</span>
 											) : null}
+											{(evidenceByStep.get(step.id) ?? []).length > 0 ? (
+												<ul className="mt-1.5 space-y-1">
+													{(evidenceByStep.get(step.id) ?? [])
+														.slice(0, 2)
+														.map((item) => (
+															<li
+																className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground"
+																key={item.id}
+															>
+																{evidenceIcon(item.status)}
+																<span className="truncate">{item.label}</span>
+																{typeof item.durationMs === "number" ? (
+																	<span className="shrink-0 tabular-nums">
+																		{(item.durationMs / 1000).toFixed(1)}s
+																	</span>
+																) : null}
+															</li>
+														))}
+												</ul>
+											) : null}
 										</div>
 									</li>
 								))}
 							</ol>
 						) : null}
 
-						{report.evidence.length > 0 ? (
+						{unassignedEvidence.length > 0 ? (
 							<div
 								className={cn(
 									"mt-3",
@@ -371,7 +405,7 @@ export function TaskReportPanel({
 									Execution evidence
 								</div>
 								<ul className="space-y-1.5">
-									{report.evidence.map((item) => (
+									{unassignedEvidence.map((item) => (
 										<li
 											className="flex min-w-0 items-start gap-2 rounded-lg bg-muted/35 px-2.5 py-2"
 											key={item.id}

@@ -337,6 +337,230 @@ export function sendPromptsInQueueSnapshot(
 // Agent event mapping: AgentEvent → frontend transport chunks
 // ---------------------------------------------------------------------------
 
+const TASK_PLAN_TOOL_NAMES = new Set([
+	"update_plan",
+	"update_task_plan",
+	"update_todo_list",
+	"todo_write",
+	"write_todos",
+]);
+
+function taskRecord(value: unknown): Record<string, unknown> | null {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: null;
+}
+
+function normalizeTaskStepStatus(
+	value: unknown,
+):
+	| "pending"
+	| "in_progress"
+	| "blocked"
+	| "waiting_for_user"
+	| "completed"
+	| "failed"
+	| "skipped"
+	| "cancelled"
+	| null {
+	if (typeof value !== "string") return null;
+	switch (value.trim().replaceAll("-", "_").toLowerCase()) {
+		case "pending":
+		case "todo":
+		case "not_started":
+			return "pending";
+		case "inprogress":
+		case "in_progress":
+		case "active":
+		case "running":
+			return "in_progress";
+		case "blocked":
+			return "blocked";
+		case "waiting":
+		case "waiting_for_user":
+		case "needs_input":
+			return "waiting_for_user";
+		case "completed":
+		case "complete":
+		case "done":
+			return "completed";
+		case "failed":
+		case "error":
+			return "failed";
+		case "skipped":
+			return "skipped";
+		case "cancelled":
+		case "canceled":
+			return "cancelled";
+		default:
+			return null;
+	}
+}
+
+function normalizeTaskStepKind(
+	value: unknown,
+	label: string,
+): "work" | "repair" | "verification" {
+	if (typeof value === "string") {
+		switch (value.trim().replaceAll("-", "_").toLowerCase()) {
+			case "repair":
+			case "recovery":
+			case "fix":
+				return "repair";
+			case "verification":
+			case "verify":
+			case "validation":
+			case "test":
+				return "verification";
+		}
+	}
+	if (
+		/\b(repair|fix|diagnos|debug|recover|retry|rerun|re-run)\b/i.test(label)
+	) {
+		return "repair";
+	}
+	if (
+		/\b(test|verify|verification|validate|check|lint|typecheck)\b/i.test(label)
+	) {
+		return "verification";
+	}
+	return "work";
+}
+
+function buildPlanTaskEvent(
+	toolCallId: string,
+	input: unknown,
+): {
+	event: Record<string, unknown>;
+	activeStepId?: string;
+} | null {
+	const record = taskRecord(input);
+	if (!record) return null;
+	const rawSteps = record.plan ?? record.steps ?? record.todos ?? record.items;
+	if (!Array.isArray(rawSteps)) return null;
+	const steps = rawSteps.flatMap((rawStep, index) => {
+		const step = taskRecord(rawStep);
+		if (!step) return [];
+		const label = ["step", "label", "title", "content", "text"]
+			.map((key) => step[key])
+			.find((value) => typeof value === "string" && value.trim());
+		const status = normalizeTaskStepStatus(step.status);
+		if (typeof label !== "string" || !status) return [];
+		const rawId = step.id;
+		const rawParentId = step.parent_step_id ?? step.parentStepId;
+		return [
+			{
+				id:
+					typeof rawId === "string" && rawId.trim()
+						? rawId.trim()
+						: `${toolCallId}:${index}`,
+				label: label.trim(),
+				status,
+				kind: normalizeTaskStepKind(
+					step.kind ?? step.category ?? step.phase,
+					label.trim(),
+				),
+				...(typeof rawParentId === "string" && rawParentId.trim()
+					? { parentStepId: rawParentId.trim() }
+					: {}),
+			},
+		];
+	});
+	if (steps.length === 0) return null;
+	const activeStepId = steps.find((step) => step.status === "in_progress")?.id;
+	const explicitRepair = taskRecord(record.repair);
+	const rawRepairState = explicitRepair?.state;
+	const repairState =
+		rawRepairState === "repair_required" ||
+		rawRepairState === "repairing" ||
+		rawRepairState === "verifying" ||
+		rawRepairState === "blocked"
+			? rawRepairState
+			: undefined;
+	const repair = explicitRepair
+		? {
+				...(repairState ? { state: repairState } : {}),
+				...(typeof explicitRepair.attempt === "number"
+					? { attempt: explicitRepair.attempt }
+					: {}),
+				...(typeof explicitRepair.max_attempts === "number"
+					? { maxAttempts: explicitRepair.max_attempts }
+					: typeof explicitRepair.maxAttempts === "number"
+						? { maxAttempts: explicitRepair.maxAttempts }
+						: {}),
+			}
+		: undefined;
+	return {
+		event: {
+			type: "plan.updated",
+			planId: toolCallId,
+			...(typeof record.explanation === "string" && record.explanation.trim()
+				? { explanation: record.explanation.trim() }
+				: {}),
+			steps,
+			...(activeStepId ? { activeStepId } : {}),
+			...(repair ? { repair } : {}),
+		},
+		activeStepId,
+	};
+}
+
+function captureTaskToolStart(
+	session: LiveSession | undefined,
+	toolCallId: string,
+	toolName: string,
+	input: unknown,
+): { taskStepId?: string; taskEvent?: Record<string, unknown> } {
+	if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) {
+		const plan = buildPlanTaskEvent(toolCallId, input);
+		if (!plan) return {};
+		if (session) session.activeTaskStepId = plan.activeStepId;
+		return { taskEvent: plan.event };
+	}
+	const taskStepId = session?.activeTaskStepId;
+	if (session && taskStepId) {
+		(session.taskToolStepIds ??= new Map()).set(toolCallId, taskStepId);
+	}
+	return {
+		...(taskStepId ? { taskStepId } : {}),
+		taskEvent: {
+			type: "tool.started",
+			toolCallId,
+			toolName,
+			...(taskStepId ? { stepId: taskStepId } : {}),
+		},
+	};
+}
+
+function captureTaskToolEnd(
+	session: LiveSession | undefined,
+	toolCallId: string,
+	toolName: string,
+	error: unknown,
+	durationMs?: number,
+): { taskStepId?: string; taskEvent?: Record<string, unknown> } {
+	if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) return {};
+	const taskStepId = session?.taskToolStepIds?.get(toolCallId);
+	session?.taskToolStepIds?.delete(toolCallId);
+	const errorMessage =
+		typeof error === "string"
+			? error
+			: error instanceof Error
+				? error.message
+				: undefined;
+	return {
+		...(taskStepId ? { taskStepId } : {}),
+		taskEvent: {
+			type: errorMessage ? "tool.failed" : "tool.completed",
+			toolCallId,
+			toolName,
+			...(taskStepId ? { stepId: taskStepId } : {}),
+			...(typeof durationMs === "number" ? { durationMs } : {}),
+			...(errorMessage ? { error: errorMessage } : {}),
+		},
+	};
+}
+
 function handleAgentEvent(
 	ctx: SidecarContext,
 	sessionId: string,
@@ -357,14 +581,23 @@ function handleAgentEvent(
 					}),
 				);
 			} else if (event.contentType === "tool") {
+				const toolName = event.toolName || "tool";
+				const toolCallId = event.toolCallId || `${toolName}-${nowMs()}`;
+				const task = captureTaskToolStart(
+					ctx.liveSessions.get(sessionId),
+					toolCallId,
+					toolName,
+					event.input,
+				);
 				emitChunk(
 					ctx,
 					sessionId,
 					"chat_tool_call_start",
 					JSON.stringify({
-						toolCallId: event.toolCallId,
-						toolName: event.toolName,
+						toolCallId,
+						toolName,
 						input: event.input,
+						...task,
 					}),
 				);
 			}
@@ -398,16 +631,28 @@ function handleAgentEvent(
 				break;
 			}
 			if (event.contentType === "tool") {
+				const toolCallId = event.toolCallId;
+				const toolName = event.toolName || "tool";
+				const task = toolCallId
+					? captureTaskToolEnd(
+							ctx.liveSessions.get(sessionId),
+							toolCallId,
+							toolName,
+							event.error,
+							event.durationMs,
+						)
+					: {};
 				emitChunk(
 					ctx,
 					sessionId,
 					"chat_tool_call_end",
 					JSON.stringify({
-						toolCallId: event.toolCallId,
-						toolName: event.toolName,
+						toolCallId,
+						toolName,
 						output: event.output,
 						error: event.error,
 						durationMs: event.durationMs,
+						...task,
 					}),
 				);
 			}
@@ -452,6 +697,8 @@ function handleAgentEvent(
 			if (session) {
 				session.busy = false;
 				session.status = event.reason === "completed" ? "idle" : event.reason;
+				session.activeTaskStepId = undefined;
+				session.taskToolStepIds?.clear();
 			}
 			emitChunk(
 				ctx,
@@ -1097,20 +1344,29 @@ export function handleHubLiveEvent(
 			return;
 		}
 		case "tool.started": {
+			const toolCallId =
+				typeof event.payload?.toolCallId === "string"
+					? event.payload.toolCallId
+					: `hub-tool-${event.sequence ?? nowMs()}`;
+			const toolName =
+				typeof event.payload?.toolName === "string"
+					? event.payload.toolName
+					: "tool";
+			const task = captureTaskToolStart(
+				session,
+				toolCallId,
+				toolName,
+				event.payload?.input,
+			);
 			emitChunk(
 				ctx,
 				sessionId,
 				"chat_tool_call_start",
 				JSON.stringify({
-					toolCallId:
-						typeof event.payload?.toolCallId === "string"
-							? event.payload.toolCallId
-							: undefined,
-					toolName:
-						typeof event.payload?.toolName === "string"
-							? event.payload.toolName
-							: "tool",
+					toolCallId,
+					toolName,
 					input: event.payload?.input,
+					...task,
 				}),
 			);
 			return;
@@ -1135,24 +1391,31 @@ export function handleHubLiveEvent(
 			return;
 		}
 		case "tool.finished": {
+			const toolCallId =
+				typeof event.payload?.toolCallId === "string"
+					? event.payload.toolCallId
+					: undefined;
+			const toolName =
+				typeof event.payload?.toolName === "string"
+					? event.payload.toolName
+					: "tool";
+			const error =
+				typeof event.payload?.error === "string"
+					? event.payload.error
+					: undefined;
+			const task = toolCallId
+				? captureTaskToolEnd(session, toolCallId, toolName, error)
+				: {};
 			emitChunk(
 				ctx,
 				sessionId,
 				"chat_tool_call_end",
 				JSON.stringify({
-					toolCallId:
-						typeof event.payload?.toolCallId === "string"
-							? event.payload.toolCallId
-							: undefined,
-					toolName:
-						typeof event.payload?.toolName === "string"
-							? event.payload.toolName
-							: "tool",
+					toolCallId,
+					toolName,
 					output: event.payload?.output,
-					error:
-						typeof event.payload?.error === "string"
-							? event.payload.error
-							: undefined,
+					error,
+					...task,
 				}),
 			);
 			return;
@@ -1220,6 +1483,8 @@ export function handleHubLiveEvent(
 			session.status = reason;
 			session.busy = false;
 			session.endedAt = nowMs();
+			session.activeTaskStepId = undefined;
+			session.taskToolStepIds?.clear();
 			sendEvent(ctx, "chat_session_ended", { sessionId, reason });
 			return;
 		}

@@ -19,8 +19,7 @@ export type JsonRecord = Record<string, unknown>;
 export type ChatTurnAttachments = {
 	userImages?: string[];
 	userFiles?: Array<
-		| { name: string; uploadId: string }
-		| { name: string; content: string }
+		{ name: string; uploadId: string } | { name: string; content: string }
 	>;
 };
 
@@ -80,6 +79,10 @@ export type LiveSession = {
 	queuedAttachmentFiles?: Map<string, string[]>;
 	/** Last prompt id announced via chat_queued_prompt_start, to dedupe emits. */
 	lastQueuedPromptStartId?: string;
+	/** Active structured-plan step used to associate live tool evidence. */
+	activeTaskStepId?: string;
+	/** Step association captured when each tool starts, cleared when it finishes. */
+	taskToolStepIds?: Map<string, string>;
 	/** Materialized attachment files whose prompt was submitted; deleted when the turn ends. */
 	consumedAttachmentFiles?: Map<string, string[]>;
 };

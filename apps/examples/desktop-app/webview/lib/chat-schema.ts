@@ -53,6 +53,67 @@ export const ChatMessageImageSchema = z.object({
 
 export const ChatMessageMediaSchema = GeneratedMediaSchema;
 
+export const TaskStepStatusSchema = z.enum([
+	"pending",
+	"in_progress",
+	"blocked",
+	"waiting_for_user",
+	"completed",
+	"failed",
+	"skipped",
+	"cancelled",
+]);
+
+export const TaskStepKindSchema = z.enum(["work", "repair", "verification"]);
+
+export const TaskPlanStepSchema = z.object({
+	id: z.string().min(1),
+	label: z.string().min(1),
+	status: TaskStepStatusSchema,
+	kind: TaskStepKindSchema.default("work"),
+	parentStepId: z.string().min(1).optional(),
+});
+
+export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
+	z.object({
+		type: z.literal("plan.updated"),
+		planId: z.string().min(1),
+		explanation: z.string().optional(),
+		steps: z.array(TaskPlanStepSchema),
+		activeStepId: z.string().min(1).optional(),
+		repair: z
+			.object({
+				state: z
+					.enum(["repair_required", "repairing", "verifying", "blocked"])
+					.optional(),
+				attempt: z.number().int().nonnegative().optional(),
+				maxAttempts: z.number().int().positive().optional(),
+			})
+			.optional(),
+	}),
+	z.object({
+		type: z.literal("tool.started"),
+		toolCallId: z.string().min(1),
+		toolName: z.string().min(1),
+		stepId: z.string().min(1).optional(),
+	}),
+	z.object({
+		type: z.literal("tool.completed"),
+		toolCallId: z.string().min(1),
+		toolName: z.string().min(1),
+		stepId: z.string().min(1).optional(),
+		durationMs: z.number().nonnegative().optional(),
+	}),
+	z.object({
+		type: z.literal("tool.failed"),
+		toolCallId: z.string().min(1),
+		toolName: z.string().min(1),
+		stepId: z.string().min(1).optional(),
+		durationMs: z.number().nonnegative().optional(),
+		error: z.string().optional(),
+	}),
+]);
+
 export const ChatMessageSchema = z.object({
 	id: z.string().min(1),
 	sessionId: z.string().nullable(),
@@ -68,6 +129,8 @@ export const ChatMessageSchema = z.object({
 			stream: z.enum(["stdout", "stderr"]).optional(),
 			toolName: z.string().optional(),
 			toolCallId: z.string().optional(),
+			taskStepId: z.string().optional(),
+			taskEvent: TaskProtocolEventSchema.optional(),
 			toolOutput: z.string().optional(),
 			toolOutputTruncated: z.boolean().optional(),
 			toolDetachable: z.boolean().optional(),
@@ -116,6 +179,12 @@ export const ChatViewStateSchema = z.object({
 
 export type ChatSessionConfig = z.infer<typeof ChatSessionConfigSchema>;
 export type ChatSessionStatus = z.infer<typeof ChatSessionStatusSchema>;
+export type TaskPlanStep = z.infer<typeof TaskPlanStepSchema>;
+export type TaskProtocolEvent = z.infer<typeof TaskProtocolEventSchema>;
+export type TaskPlanUpdatedEvent = Extract<
+	TaskProtocolEvent,
+	{ type: "plan.updated" }
+>;
 export type ChatMessageImage = z.infer<typeof ChatMessageImageSchema>;
 export type ChatMessageMedia = z.infer<typeof ChatMessageMediaSchema>;
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
