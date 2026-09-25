@@ -1,0 +1,107 @@
+name: Build personal unsigned Windows test installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/codex-task-report-ui]
+    paths:
+      - .github/workflows/build-feature-unsigned-windows.yml
+      - apps/examples/desktop-app/webview/components/views/settings/customize-view.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/session-content.tsx
+      - apps/examples/desktop-app/webview/components/views/chat/task-report-panel.tsx
+      - apps/examples/desktop-app/webview/lib/task-report.ts
+      - apps/examples/desktop-app/webview/lib/task-report.test.ts
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    name: Build unsigned Windows x64 test setup.exe
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.3.13"
+
+      - name: Read desktop version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./apps/examples/desktop-app/package.json').version")"
+          TAURI_VERSION="$(node -p "require('./apps/examples/desktop-app/src-tauri/tauri.conf.json').version")"
+          test "$VERSION" = "$TAURI_VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "filename=Cline-Enhanced_${VERSION}_x64-setup-UNSIGNED.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Seed Bun cache for Linux remote helpers
+        shell: bash
+        run: |
+          BUN_VERSION="$(bun --version)"
+          CACHE_DIR="${RUNNER_TEMP//\\//}/bun-install-cache"
+          mkdir -p "$CACHE_DIR"
+          for target in linux-x64-baseline linux-aarch64; do
+            dest="$CACHE_DIR/bun-$target-v$BUN_VERSION"
+            work="$(mktemp -d)"
+            (cd "$work" && npm pack "@oven/bun-$target@$BUN_VERSION" --silent >/dev/null && tar -xzf ./*.tgz package/bin/bun)
+            mv "$work/package/bin/bun" "$dest"
+          done
+          echo "BUN_INSTALL_CACHE_DIR=${CACHE_DIR}" >> "$GITHUB_ENV"
+
+      - name: Install Windows packaging tools
+        shell: pwsh
+        run: |
+          choco install upx --no-progress -y
+          $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
+          Invoke-WebRequest 'https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.11/nsis-3.11.zip' -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA1).Hash -ne 'EF7FF767E5CBD9EDD22ADD3A32C9B8F4500BB10D') { throw 'NSIS checksum mismatch' }
+          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+          "MAKENSIS_PATH=$env:RUNNER_TEMP/nsis-3.11/makensis.exe" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: stable
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build SDK
+        run: bun run build:sdk
+      - name: Type-check desktop
+        working-directory: apps/examples/desktop-app
+        run: bun run typecheck
+      - name: Test task report
+        working-directory: apps/examples/desktop-app
+        run: bun x vitest run webview/lib/task-report.test.ts
+      - name: Build unsigned NSIS installer
+        working-directory: apps/examples/desktop-app
+        run: bunx tauri build --bundles nsis
+
+      - name: Collect installer and checksum
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        env:
+          OUTPUT_FILENAME: ${{ steps.version.outputs.filename }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $setup = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' -Recurse | Select-Object -First 1
+          if (-not $setup) { throw 'No setup.exe was produced' }
+          $out = 'dist/custom-installer'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $destination = Join-Path $out $env:OUTPUT_FILENAME
+          Copy-Item $setup.FullName $destination
+          $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:OUTPUT_FILENAME" | Out-File (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          @("Version: $env:VERSION", "Commit: $env:GITHUB_SHA", 'Signed: no', 'Purpose: personal testing only') | Out-File (Join-Path $out 'BUILD-INFO.txt')
+
+      - name: Upload personal test installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cline-enhanced-windows-x64-unsigned-${{ steps.version.outputs.version }}
+          path: apps/examples/desktop-app/dist/custom-installer/*
+          if-no-files-found: error
+          retention-days: 7
