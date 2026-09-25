@@ -104,6 +104,10 @@ jobs:
         working-directory: apps/examples/desktop-app
         run: bun run test:windows-installer
 
+      - name: Test AI task report
+        working-directory: apps/examples/desktop-app
+        run: bun x vitest run webview/lib/task-report.test.ts
+
       - name: Run focused customization tests
         shell: bash
         run: |
