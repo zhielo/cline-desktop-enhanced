@@ -111,6 +111,56 @@ describe("createShellExecutor", () => {
 		await execution;
 	});
 
+	it("emits the first output chunk immediately before later output is coalesced", async () => {
+		const updates: Array<Record<string, unknown>> = [];
+		let completed = false;
+		let resolveFirst: (() => void) | undefined;
+		const firstOutput = new Promise<void>((resolve) => {
+			resolveFirst = resolve;
+		});
+		const shell = createShellExecutor({ timeoutMs: 2_000 });
+		const execution = shell(
+			{
+				command: process.execPath,
+				args: [
+					"-e",
+					"process.stdout.write('first'); setTimeout(() => process.stdout.write('second'), 20); setTimeout(() => {}, 120)",
+				],
+			},
+			process.cwd(),
+			{
+				...ctx,
+				emitUpdate: (update) => {
+					updates.push(update as Record<string, unknown>);
+					if (
+						update &&
+						typeof update === "object" &&
+						"chunk" in update &&
+						typeof update.chunk === "string" &&
+						update.chunk.length > 0
+					) {
+						resolveFirst?.();
+					}
+				},
+			},
+		).finally(() => {
+			completed = true;
+		});
+
+		await firstOutput;
+		expect(completed).toBe(false);
+		const firstChunk = updates.find(
+			(update) => typeof update.chunk === "string" && update.chunk.length > 0,
+		);
+		expect(firstChunk).toEqual(
+			expect.objectContaining({ stream: "stdout", chunk: "first" }),
+		);
+		await execution;
+		expect(
+			updates.some((update) => String(update.chunk ?? "").includes("second")),
+		).toBe(true);
+	});
+
 	it("coalesces and bounds progress queued by noisy commands", async () => {
 		const updates: Array<Record<string, unknown>> = [];
 		const shell = createShellExecutor({

@@ -10,6 +10,7 @@ const requiredMarkers: Array<{
 			"AI task execution UI",
 			"Permanent Custom AI Instructions",
 			"Windows reliability",
+			"Command execution performance",
 			"Required validation",
 			"vitest.config.mts",
 		],
@@ -70,6 +71,21 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/examples/desktop-app/webview/lib/image-attachments.test.ts",
 		markers: ["IS_REACT_ACT_ENVIRONMENT"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
+		markers: ["StructuredCommandInputSchema", "invoke an executable directly"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/definitions.ts",
+		markers: [
+			"cline.run_commands.duration_ms",
+			"Prefer { command, args } with explicit argv",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/bash.ts",
+		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
 	},
 ];
 

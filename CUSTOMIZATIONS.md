@@ -61,6 +61,16 @@ Primary files:
 - `apps/examples/desktop-app/webview/lib/image-attachments.test.ts`
 - `.github/workflows/build-custom-windows-installer.yml`
 
+### Command execution performance
+
+- Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, and records bounded command-duration telemetry without command text.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/schemas.ts`
+- `sdk/packages/core/src/extensions/tools/definitions.ts`
+- `sdk/packages/core/src/extensions/tools/executors/bash.ts`
+
 ### Specialized tools
 
 - Supervised Android device debugging.

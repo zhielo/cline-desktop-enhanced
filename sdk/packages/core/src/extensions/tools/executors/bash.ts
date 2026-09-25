@@ -476,6 +476,7 @@ function createCommandProgressEmitter(
 	> = {};
 	let streamOrder: CommandProgressStream[] = [];
 	let flushTimer: NodeJS.Timeout | undefined;
+	let emittedOutput = false;
 	let stopped = false;
 
 	const clearFlushTimer = () => {
@@ -544,6 +545,11 @@ function createCommandProgressEmitter(
 					entry.chunk = entry.chunk.slice(overflow);
 				}
 				entry.chunk += text;
+			}
+			if (!emittedOutput) {
+				emittedOutput = true;
+				flush();
+				return;
 			}
 			scheduleFlush();
 		},

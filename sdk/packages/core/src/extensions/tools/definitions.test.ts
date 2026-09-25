@@ -1272,6 +1272,59 @@ describe("default run_commands tool", () => {
 		expect(result[0].query).toContain("command truncated");
 	});
 
+	it("records command duration telemetry without command text", async () => {
+		const telemetry = createTelemetryStub();
+		const execute = vi.fn(
+			async (command: string | { command: string; args?: string[] }) => {
+				if (typeof command === "string") {
+					throw new Error("shell execution failed");
+				}
+				return "ok";
+			},
+		);
+		const tool = createShellTool(execute, {
+			bashTimeoutMs: 50,
+			telemetry,
+		});
+
+		await tool.execute(
+			{
+				commands: [
+					{ command: "secret-direct", args: ["private-argument"] },
+					"echo secret-shell",
+				],
+			} as never,
+			{
+				agentId: "agent-1",
+				conversationId: "conv-1",
+				iteration: 1,
+			},
+		);
+
+		const calls = (
+			telemetry.recordHistogram as ReturnType<typeof vi.fn>
+		).mock.calls.filter((call) => call[0] === "cline.run_commands.duration_ms");
+		expect(calls).toHaveLength(2);
+		expect(calls[0]?.[2]).toEqual({
+			execution_mode: "direct",
+			success: true,
+			timeout_source: "configured_setting",
+		});
+		expect(calls[1]?.[2]).toEqual({
+			execution_mode: "shell",
+			success: false,
+			timeout_source: "configured_setting",
+		});
+		expect(calls.every((call) => typeof call[1] === "number")).toBe(true);
+		expect(calls[0]?.[3]).toBe(
+			"End-to-end run_commands executor duration in milliseconds.",
+		);
+		const payload = JSON.stringify(calls);
+		expect(payload).not.toContain("secret-direct");
+		expect(payload).not.toContain("private-argument");
+		expect(payload).not.toContain("secret-shell");
+	});
+
 	it("emits timeout telemetry without leaking raw command data", async () => {
 		// Never resolves, so the configured timeout deterministically wins the
 		// race regardless of host load (a tight real-timer margin flaked under
@@ -1801,20 +1854,23 @@ describe("default read_files tool", () => {
 });
 
 describe("zod schema conversion", () => {
-	it("advertises run_commands as string-only command arrays", () => {
+	it("advertises run_commands as structured command objects", () => {
 		const tool = createShellTool(async () => "ok");
 		const inputSchema = tool.inputSchema as Record<string, unknown>;
 		const serialized = JSON.stringify(inputSchema);
 
 		expect(serialized).not.toContain('"anyOf"');
-		expect(serialized).not.toContain("Prefer structured");
-		expect(hasSchemaKey(inputSchema, "command")).toBe(false);
+		expect(serialized).toContain("Prefer");
+		expect(hasSchemaKey(inputSchema, "command")).toBe(true);
+		expect(hasSchemaKey(inputSchema, "args")).toBe(true);
 
 		const properties = inputSchema.properties as Record<string, unknown>;
 		const commands = properties.commands as {
-			items?: { type?: string };
+			items?: { type?: string; properties?: Record<string, unknown> };
 		};
-		expect(commands.items?.type).toBe("string");
+		expect(commands.items?.type).toBe("object");
+		expect(commands.items?.properties).toHaveProperty("command");
+		expect(commands.items?.properties).toHaveProperty("args");
 	});
 
 	it("preserves read_files required properties in generated JSON schema", () => {

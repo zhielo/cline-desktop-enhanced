@@ -289,8 +289,10 @@ export const StructuredCommandEntrySchema = z.union([
 
 export const RunCommandsInputSchema = z.object({
 	commands: z
-		.array(CommandInputSchema)
-		.describe("Array of complete shell command strings to execute."),
+		.array(StructuredCommandInputSchema)
+		.describe(
+			'Array of commands. Prefer { command: "git", args: ["status", "--short"] } to invoke an executable directly without shell parsing. Use args: [] for a no-argument executable. Omit args only when command intentionally uses shell syntax such as pipes, redirects, variables, or chaining.',
+		),
 });
 
 const StructuredCommandsInputSchema = z.object({

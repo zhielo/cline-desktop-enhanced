@@ -119,6 +119,27 @@ function captureRunCommandsTimeoutFromContext(
 	});
 }
 
+function recordRunCommandsDuration(
+	telemetry: ITelemetryService | undefined,
+	durationMs: number,
+	attributes: {
+		executionMode: "direct" | "shell";
+		success: boolean;
+		timeoutSource: "default_setting" | "configured_setting";
+	},
+): void {
+	telemetry?.recordHistogram(
+		"cline.run_commands.duration_ms",
+		durationMs,
+		{
+			execution_mode: attributes.executionMode,
+			success: attributes.success,
+			timeout_source: attributes.timeoutSource,
+		},
+		"End-to-end run_commands executor duration in milliseconds.",
+	);
+}
+
 function getHeredocDelimiter(command: string): string | undefined {
 	const match = command.match(
 		/(?<![<])<<-?\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9_./-]+))/,
@@ -201,6 +222,8 @@ async function executeShellCommands(
 		commands.map(
 			async (command, commandIndex): Promise<ToolOperationResult> => {
 				const startedAt = Date.now();
+				const executionMode =
+					typeof command !== "string" && "args" in command ? "direct" : "shell";
 				const query = formatRunCommandQueryPreview(command);
 				const commandContext: AgentToolContext = context.emitUpdate
 					? {
@@ -224,12 +247,22 @@ async function executeShellCommands(
 						timeoutMs,
 						`Command timed out after ${timeoutMs}ms`,
 					);
+					recordRunCommandsDuration(telemetry, Date.now() - startedAt, {
+						executionMode,
+						success: true,
+						timeoutSource,
+					});
 					return {
 						query,
 						result: output,
 						success: true,
 					};
 				} catch (error) {
+					recordRunCommandsDuration(telemetry, Date.now() - startedAt, {
+						executionMode,
+						success: false,
+						timeoutSource,
+					});
 					if (error instanceof TimeoutError) {
 						captureRunCommandsTimeoutFromContext(telemetry, context, {
 							effectiveTimeoutMs: error.timeoutMs,
@@ -462,6 +495,7 @@ export function createSearchTool(
 
 const RUN_COMMANDS_SHARED_INSTRUCTIONS =
 	"Use for listing files, checking git status, running builds, executing tests, etc. " +
+	"Prefer { command, args } with explicit argv to bypass shell startup and parsing when shell syntax is not needed. " +
 	"Commands must be non-interactive. Commands that require follow-up input like pagers should be skipped or used with supported flags/env (e.g. git --no-pager, --non-interactive) to bypass the interaction steps. ";
 
 /**
