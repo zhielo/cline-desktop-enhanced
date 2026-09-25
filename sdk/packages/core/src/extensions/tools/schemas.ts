@@ -213,11 +213,13 @@ export const ReverseEngineeringInputSchema = z.object({
 	jadx_mappings_path: z.string().min(1).optional(),
 });
 
-/** Supervised Android Debug Bridge operations without an unrestricted shell. */
+/** Structured Android automation with explicitly acknowledged unrestricted shell access. */
 export const AndroidDeviceInputSchema = z.object({
 	operation: z.enum([
 		"discover",
 		"devices",
+		"screen_info",
+		"ui_hierarchy",
 		"package_info",
 		"install",
 		"uninstall",
@@ -227,6 +229,12 @@ export const AndroidDeviceInputSchema = z.object({
 		"crash_logs",
 		"pull_apk",
 		"screenshot",
+		"tap",
+		"long_press",
+		"swipe",
+		"key_event",
+		"text_input",
+		"shell",
 		"bugreport",
 		"processes",
 	]),
@@ -235,9 +243,44 @@ export const AndroidDeviceInputSchema = z.object({
 		.string()
 		.regex(/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/)
 		.optional(),
+	require_foreground_package: z
+		.string()
+		.regex(/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/)
+		.optional(),
 	activity: z.string().min(1).optional(),
 	path: z.string().min(1).optional(),
 	output_path: z.string().min(1).optional(),
+	before_screenshot_path: z.string().min(1).optional(),
+	after_screenshot_path: z.string().min(1).optional(),
+	x: z.number().int().min(0).max(100_000).optional(),
+	y: z.number().int().min(0).max(100_000).optional(),
+	start_x: z.number().int().min(0).max(100_000).optional(),
+	start_y: z.number().int().min(0).max(100_000).optional(),
+	end_x: z.number().int().min(0).max(100_000).optional(),
+	end_y: z.number().int().min(0).max(100_000).optional(),
+	duration_ms: z.number().int().min(1).max(60_000).optional(),
+	key_code: z
+		.enum([
+			"BACK",
+			"HOME",
+			"ENTER",
+			"APP_SWITCH",
+			"DPAD_UP",
+			"DPAD_DOWN",
+			"DPAD_LEFT",
+			"DPAD_RIGHT",
+			"DPAD_CENTER",
+			"VOLUME_UP",
+			"VOLUME_DOWN",
+			"VOLUME_MUTE",
+			"POWER",
+			"WAKEUP",
+			"SLEEP",
+		])
+		.optional(),
+	text: z.string().max(10_000).optional(),
+	shell_args: z.array(z.string().max(32_768)).min(1).max(256).optional(),
+	acknowledge_risk: z.boolean().optional(),
 	lines: z.number().int().min(1).max(5_000).optional(),
 	clear_logcat: z.boolean().optional(),
 	grant_permissions: z.boolean().optional(),
