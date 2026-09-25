@@ -340,6 +340,7 @@ export function TaskReportPanel({
 										) : null}
 										<span
 											aria-label={stepStatusLabel(step.status)}
+											role="img"
 											className={cn(
 												"relative z-10 mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border",
 												stepTone(step),

@@ -21,7 +21,10 @@ export type TaskReportStep = {
 };
 
 export type TaskRepairState =
-	"repair_required" | "repairing" | "verifying" | "blocked";
+	| "repair_required"
+	| "repairing"
+	| "verifying"
+	| "blocked";
 
 export type TaskRepairReport = {
 	state: TaskRepairState;

@@ -334,7 +334,8 @@ function readPersistedChatMessages(
 	if (!existsSync(path)) return null;
 	try {
 		const parsed = JSON.parse(readFileSync(path, "utf8").trim()) as
-			{ messages?: MessageWithMetadata[] } | MessageWithMetadata[];
+			| { messages?: MessageWithMetadata[] }
+			| MessageWithMetadata[];
 		if (Array.isArray(parsed)) return parsed;
 		return Array.isArray(parsed.messages) ? parsed.messages : null;
 	} catch {
@@ -805,7 +806,7 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 			config.systemPrompt.trim().length > 0
 				? config.systemPrompt
 				: typeof config.system_prompt === "string" &&
-					  config.system_prompt.trim().length > 0
+						config.system_prompt.trim().length > 0
 					? config.system_prompt
 					: undefined,
 		platform: process.platform || "unknown",
@@ -1348,8 +1349,8 @@ async function handleSend(
 		: session?.config;
 	const providerChanged = Boolean(
 		session &&
-		request.config &&
-		hasProviderChanged(session.config, request.config),
+			request.config &&
+			hasProviderChanged(session.config, request.config),
 	);
 	if (providerChanged && session?.busy) {
 		throw new Error("Cannot switch providers while a turn is running");

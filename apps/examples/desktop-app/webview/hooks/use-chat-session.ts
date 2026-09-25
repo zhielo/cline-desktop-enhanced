@@ -147,7 +147,8 @@ function validateConfig(
 	config: ChatSessionConfig,
 	options?: { hasActiveSession?: boolean },
 ):
-	{ parsed: ChatSessionConfig; error: null } | { parsed: null; error: string } {
+	| { parsed: ChatSessionConfig; error: null }
+	| { parsed: null; error: string } {
 	const runtimeConfig = normalizeRuntimeConfig(config);
 	const result = ChatSessionConfigSchema.safeParse(runtimeConfig);
 	if (!result.success) {
@@ -1307,8 +1308,8 @@ export function useChatSession(environmentId: string) {
 					);
 					const toolOutputTruncated = Boolean(
 						message.meta?.toolOutputTruncated ||
-						pending.truncated ||
-						merged.truncated,
+							pending.truncated ||
+							merged.truncated,
 					);
 					const toolDetachable =
 						pending.detachable ?? message.meta?.toolDetachable;
@@ -1412,8 +1413,8 @@ export function useChatSession(environmentId: string) {
 				const currentWorkspace = (prev.workspaceRoot || prev.cwd || "").trim();
 				const selectionChangedWhileLoading = Boolean(
 					currentWorkspace &&
-					normalizeWorkspacePath(currentWorkspace) !==
-						normalizeWorkspacePath(rememberedWorkspace),
+						normalizeWorkspacePath(currentWorkspace) !==
+							normalizeWorkspacePath(rememberedWorkspace),
 				);
 				const workspace = selectionChangedWhileLoading
 					? currentWorkspace

@@ -115,7 +115,11 @@ export type ChatApiResult = {
 	};
 	iterations?: number;
 	finishReason?:
-		"completed" | "max_iterations" | "aborted" | "mistake_limit" | "error";
+		| "completed"
+		| "max_iterations"
+		| "aborted"
+		| "mistake_limit"
+		| "error";
 	toolCalls?: Array<{
 		name: string;
 		input?: unknown;
@@ -160,7 +164,10 @@ export type ChatWsChunkEvent = {
 };
 
 export type ChatTransportState =
-	"connecting" | "reconnecting" | "connected" | "unavailable";
+	| "connecting"
+	| "reconnecting"
+	| "connected"
+	| "unavailable";
 
 export type CoreLogChunk = {
 	level?: string;

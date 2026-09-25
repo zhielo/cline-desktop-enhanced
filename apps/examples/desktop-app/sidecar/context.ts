@@ -519,7 +519,8 @@ function captureTaskToolStart(
 	}
 	const taskStepId = session?.activeTaskStepId;
 	if (session && taskStepId) {
-		(session.taskToolStepIds ??= new Map()).set(toolCallId, taskStepId);
+		session.taskToolStepIds ??= new Map();
+		session.taskToolStepIds.set(toolCallId, taskStepId);
 	}
 	return {
 		...(taskStepId ? { taskStepId } : {}),
