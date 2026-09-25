@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/chat-schema";
+import type { ChatMessage, ChatSessionStatus } from "@/lib/chat-schema";
 
 export type TaskReportStepStatus =
 	| "pending"
@@ -10,18 +10,18 @@ export type TaskReportStepStatus =
 	| "skipped"
 	| "cancelled";
 
+export type TaskReportStepKind = "work" | "repair" | "verification";
+
 export type TaskReportStep = {
 	id: string;
 	label: string;
 	status: TaskReportStepStatus;
-	isRepair: boolean;
+	kind: TaskReportStepKind;
+	parentStepId?: string;
 };
 
 export type TaskRepairState =
-	| "repair_required"
-	| "repairing"
-	| "verifying"
-	| "blocked";
+	"repair_required" | "repairing" | "verifying" | "blocked";
 
 export type TaskRepairReport = {
 	state: TaskRepairState;
@@ -31,10 +31,26 @@ export type TaskRepairReport = {
 	maxAttempts: number;
 };
 
+export type TaskEvidenceStatus = "running" | "completed" | "failed";
+
+export type TaskEvidence = {
+	id: string;
+	label: string;
+	detail?: string;
+	status: TaskEvidenceStatus;
+	toolName: string;
+	createdAt: number;
+};
+
 export type SessionTaskReport = {
+	mode: "plan" | "activity";
 	explanation?: string;
 	steps: TaskReportStep[];
+	evidence: TaskEvidence[];
 	repair?: TaskRepairReport;
+	activeStepId?: string;
+	completedCount: number;
+	progressPercent: number | null;
 	sourceMessageId: string;
 	sourceTool: string;
 	updatedAt: number;
@@ -48,7 +64,23 @@ const PLAN_TOOL_NAMES = new Set([
 	"write_todos",
 ]);
 const REPAIR_STEP_PATTERN =
-	/\b(repair|fix|diagnos|debug|recover|retry|rerun|re-run|verify|verification)\b/i;
+	/\b(repair|fix|diagnos|debug|recover|retry|rerun|re-run)\b/i;
+const VERIFICATION_STEP_PATTERN =
+	/\b(test|verify|verification|validate|check|lint|typecheck)\b/i;
+
+const TOOL_LABELS: Record<string, string> = {
+	apply_patch: "Applying code changes",
+	bash: "Running a command",
+	create_file: "Creating a file",
+	edit: "Editing a file",
+	get_file_contents: "Reading repository files",
+	read_file: "Reading a file",
+	replace_in_file: "Editing a file",
+	run_command: "Running a command",
+	search_code: "Searching the codebase",
+	str_replace: "Editing a file",
+	write_file: "Writing a file",
+};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return value && typeof value === "object" && !Array.isArray(value)
@@ -62,6 +94,15 @@ function parsePayload(content: string): Record<string, unknown> | null {
 	} catch {
 		return null;
 	}
+}
+
+function toolName(
+	message: ChatMessage,
+	payload?: Record<string, unknown> | null,
+) {
+	return String(
+		message.meta?.toolName ?? payload?.toolName ?? "",
+	).toLowerCase();
 }
 
 function normalizeStatus(value: unknown): TaskReportStepStatus | null {
@@ -108,8 +149,38 @@ function stepLabel(step: Record<string, unknown>): string | null {
 	return null;
 }
 
-function isRepairLabel(label: string): boolean {
-	return REPAIR_STEP_PATTERN.test(label);
+function explicitStepKind(value: unknown): TaskReportStepKind | null {
+	if (typeof value !== "string") return null;
+	switch (value.trim().replaceAll("-", "_").toLowerCase()) {
+		case "repair":
+		case "recovery":
+		case "fix":
+			return "repair";
+		case "verification":
+		case "verify":
+		case "validation":
+		case "test":
+			return "verification";
+		case "work":
+		case "implementation":
+			return "work";
+		default:
+			return null;
+	}
+}
+
+function stepKind(
+	step: Record<string, unknown>,
+	label: string,
+): TaskReportStepKind {
+	const explicit =
+		explicitStepKind(step.kind) ??
+		explicitStepKind(step.category) ??
+		explicitStepKind(step.phase);
+	if (explicit) return explicit;
+	if (REPAIR_STEP_PATTERN.test(label)) return "repair";
+	if (VERIFICATION_STEP_PATTERN.test(label)) return "verification";
+	return "work";
 }
 
 function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
@@ -125,6 +196,7 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 			rawStatus === "in_progress" && hasActiveStep ? "pending" : rawStatus;
 		if (status === "in_progress") hasActiveStep = true;
 		const rawId = step.id;
+		const rawParentId = step.parent_step_id ?? step.parentStepId;
 		return [
 			{
 				id:
@@ -133,7 +205,11 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 						: `${messageId}:${index}`,
 				label,
 				status,
-				isRepair: isRepairLabel(label),
+				kind: stepKind(step, label),
+				parentStepId:
+					typeof rawParentId === "string" && rawParentId.trim()
+						? rawParentId.trim()
+						: undefined,
 			},
 		];
 	});
@@ -142,15 +218,19 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 		(step) => step.status === "failed" || step.status === "blocked",
 	);
 	if (failureIndex < 0) return steps;
-	const completedRepair = steps
+	const repairFinished = steps
 		.slice(failureIndex + 1)
-		.some((step) => step.isRepair && step.status === "completed");
+		.some(
+			(step) =>
+				(step.kind === "repair" || step.kind === "verification") &&
+				step.status === "completed",
+		);
 	return steps.map((step, index) => {
 		if (
 			index > failureIndex &&
 			step.status === "in_progress" &&
-			!step.isRepair &&
-			!completedRepair
+			step.kind === "work" &&
+			!repairFinished
 		) {
 			return { ...step, status: "pending" };
 		}
@@ -164,6 +244,20 @@ function positiveInteger(value: unknown, fallback: number): number {
 		: fallback;
 }
 
+function normalizeRepairState(value: unknown): TaskRepairState | null {
+	if (typeof value !== "string") return null;
+	const normalized = value.trim().replaceAll("-", "_").toLowerCase();
+	switch (normalized) {
+		case "repair_required":
+		case "repairing":
+		case "verifying":
+		case "blocked":
+			return normalized;
+		default:
+			return null;
+	}
+}
+
 function buildRepairReport(
 	steps: TaskReportStep[],
 	input: Record<string, unknown>,
@@ -172,45 +266,155 @@ function buildRepairReport(
 		(step) => step.status === "failed" || step.status === "blocked",
 	);
 	if (!failure) return undefined;
-	const repairSteps = steps.slice(steps.indexOf(failure) + 1).filter((step) => step.isRepair);
-	const activeRepair = repairSteps.some((step) => step.status === "in_progress");
-	const completedRepair = repairSteps.some((step) => step.status === "completed");
-	const activeVerification =
-		completedRepair &&
-		steps.some((step) => step.status === "in_progress" && !step.isRepair);
+
+	const explicitRepair = asRecord(input.repair);
+	const laterSteps = steps.slice(steps.indexOf(failure) + 1);
+	const repairSteps = laterSteps.filter((step) => step.kind === "repair");
+	const verificationSteps = laterSteps.filter(
+		(step) => step.kind === "verification",
+	);
+	const activeRepair = repairSteps.some(
+		(step) => step.status === "in_progress",
+	);
+	const completedRepair = repairSteps.some(
+		(step) => step.status === "completed",
+	);
+	const activeVerification = verificationSteps.some(
+		(step) => step.status === "in_progress",
+	);
+	const explicitState = normalizeRepairState(explicitRepair?.state);
 	const state: TaskRepairState =
-		failure.status === "blocked"
+		explicitState ??
+		(failure.status === "blocked"
 			? "blocked"
 			: activeVerification || completedRepair
 				? "verifying"
 				: activeRepair
 					? "repairing"
-					: "repair_required";
+					: "repair_required");
 	return {
 		state,
 		failedStepId: failure.id,
 		failedStepLabel: failure.label,
-		attempt: positiveInteger(input.repair_attempt, activeRepair ? 1 : 0),
-		maxAttempts: positiveInteger(input.max_repair_attempts, 3),
+		attempt: positiveInteger(
+			explicitRepair?.attempt ?? input.repair_attempt,
+			activeRepair ? 1 : 0,
+		),
+		maxAttempts: positiveInteger(
+			explicitRepair?.max_attempts ?? input.max_repair_attempts,
+			3,
+		),
+	};
+}
+
+function titleCaseTool(tool: string): string {
+	return tool
+		.replaceAll(/[_-]+/g, " ")
+		.replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function evidenceDetail(
+	input: Record<string, unknown> | null,
+): string | undefined {
+	for (const key of [
+		"command",
+		"query",
+		"path",
+		"file_path",
+		"filePath",
+		"url",
+		"target",
+	]) {
+		const value = input?.[key];
+		if (typeof value === "string" && value.trim()) {
+			const compact = value.trim().replaceAll(/\s+/g, " ");
+			return compact.length > 96 ? `${compact.slice(0, 93)}…` : compact;
+		}
+	}
+	return undefined;
+}
+
+function evidenceFromMessages(
+	messages: ChatMessage[],
+	runStartIndex: number,
+): TaskEvidence[] {
+	const evidence = new Map<string, TaskEvidence>();
+	for (let index = runStartIndex; index < messages.length; index++) {
+		const message = messages[index];
+		if (message.role !== "tool") continue;
+		const payload = parsePayload(message.content);
+		const name = toolName(message, payload);
+		if (!name || PLAN_TOOL_NAMES.has(name)) continue;
+		const input = asRecord(payload?.input);
+		const key = message.meta?.toolCallId ?? message.id;
+		const isError = payload?.isError === true;
+		const running =
+			message.meta?.hookEventName === "tool_call_start" ||
+			(payload !== null && payload.result == null && !isError);
+		evidence.set(key, {
+			id: key,
+			label: TOOL_LABELS[name] ?? titleCaseTool(name),
+			detail: evidenceDetail(input),
+			status: isError ? "failed" : running ? "running" : "completed",
+			toolName: name,
+			createdAt: message.createdAt,
+		});
+	}
+	return [...evidence.values()]
+		.sort((left, right) => right.createdAt - left.createdAt)
+		.slice(0, 5);
+}
+
+function currentRunStart(messages: ChatMessage[]): number {
+	for (let index = messages.length - 1; index >= 0; index--) {
+		if (messages[index]?.role === "user") return index + 1;
+	}
+	return 0;
+}
+
+function buildActivityFallback(
+	messages: ChatMessage[],
+	status: ChatSessionStatus | undefined,
+	runStartIndex: number,
+): SessionTaskReport | null {
+	const evidence = evidenceFromMessages(messages, runStartIndex);
+	if (evidence.length === 0) return null;
+	const latest = evidence[0];
+	const active =
+		evidence.find((item) => item.status === "running") ??
+		(status === "running" || status === "starting" ? latest : undefined);
+	return {
+		mode: "activity",
+		explanation: active
+			? "Following live tool activity for this turn."
+			: "Execution evidence from the latest turn.",
+		steps: [],
+		evidence,
+		completedCount: evidence.filter((item) => item.status === "completed")
+			.length,
+		progressPercent: null,
+		sourceMessageId: latest.id,
+		sourceTool: latest.toolName,
+		updatedAt: latest.createdAt,
 	};
 }
 
 /**
- * Projects the newest structured planner call into stable session UI state.
- * Failed work cannot visually advance until a repair step completes; the
- * transcript remains the durable event log for reconnect and hydration.
+ * Projects the current user turn's newest structured planner event into stable
+ * UI state. The transcript remains the durable event log. Tool evidence is
+ * scoped to the same turn and plan state is never inferred from assistant prose.
  */
 export function buildSessionTaskReport(
 	messages: ChatMessage[],
+	status?: ChatSessionStatus,
 ): SessionTaskReport | null {
-	for (let index = messages.length - 1; index >= 0; index--) {
+	const runStartIndex = currentRunStart(messages);
+	for (let index = messages.length - 1; index >= runStartIndex; index--) {
 		const message = messages[index];
 		if (message.role !== "tool") continue;
 		const payload = parsePayload(message.content);
-		const toolName = String(
-			message.meta?.toolName ?? payload?.toolName ?? "",
-		).toLowerCase();
-		if (!PLAN_TOOL_NAMES.has(toolName) || payload?.isError === true) continue;
+		const name = toolName(message, payload);
+		if (!PLAN_TOOL_NAMES.has(name) || payload?.isError === true) continue;
 		const input = asRecord(payload?.input) ?? payload;
 		const steps = normalizeSteps(
 			input?.plan ?? input?.steps ?? input?.todos ?? input?.items,
@@ -221,14 +425,23 @@ export function buildSessionTaskReport(
 			typeof input?.explanation === "string" && input.explanation.trim()
 				? input.explanation.trim()
 				: undefined;
+		const completedCount = steps.filter(
+			(step) => step.status === "completed",
+		).length;
+		const activeStep = steps.find((step) => step.status === "in_progress");
 		return {
+			mode: "plan",
 			explanation,
 			steps,
+			evidence: evidenceFromMessages(messages, runStartIndex),
 			repair: buildRepairReport(steps, input),
+			activeStepId: activeStep?.id,
+			completedCount,
+			progressPercent: Math.round((completedCount / steps.length) * 100),
 			sourceMessageId: message.id,
-			sourceTool: toolName,
+			sourceTool: name,
 			updatedAt: message.createdAt,
 		};
 	}
-	return null;
+	return buildActivityFallback(messages, status, runStartIndex);
 }
