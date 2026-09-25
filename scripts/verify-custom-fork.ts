@@ -103,6 +103,10 @@ const requiredMarkers: Array<{
 		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
 	},
 	{
+		path: "docs/ANDROID_DEVICE_AUTOMATION.md",
+		markers: ["Unrestricted shell", "acknowledge_risk: true", "screenChanged"],
+	},
+	{
 		path: "docs/CODEX_LIKE_COMMAND_EXECUTION.md",
 		markers: [
 			"Structured direct execution",

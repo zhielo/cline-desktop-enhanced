@@ -78,7 +78,8 @@ Primary files:
 
 ### Specialized tools
 
-- Supervised Android device debugging.
+- Android automation includes device selection, screen metadata, UI hierarchy, validated touch/swipe/key/text actions, foreground-package guards, and before/after screenshot evidence.
+- Unrestricted `adb shell` is intentionally available for already-authorized devices and requires `acknowledge_risk: true`; see `docs/ANDROID_DEVICE_AUTOMATION.md`.
 - Reverse-engineering and Smali workflows.
 - APK comparison improvements.
 - Codex-compatible tool calls and binary attachment handling.

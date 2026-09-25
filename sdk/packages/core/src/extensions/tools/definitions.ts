@@ -381,7 +381,7 @@ export function createAndroidDeviceTool(
 	return createTool<AndroidDeviceInput, string>({
 		name: "android_device",
 		description:
-			"Use Android Debug Bridge through bounded, supervised workflows for an attached and already-authorized device. Discover devices, inspect packages and processes, install/uninstall or launch a specifically named app, capture package-filtered logcat and crash logs, pull the installed base APK, take a screenshot, or collect a bugreport. Prefer this tool over raw shell commands for mobile debugging. It requires Android Platform Tools and device authorization, does not expose an unrestricted device shell, root devices, or bypass Android security or app signing.",
+			"Use Android Debug Bridge with an attached, authorized device. Supports screen metadata, UI hierarchy, validated tap/long-press/swipe, allowlisted keys, redacted text input, screenshot evidence, and explicitly acknowledged unrestricted adb shell. Prefer structured actions; shell requires acknowledge_risk=true and can alter or delete device data. Multiple devices require device_serial. This tool does not enable root or bypass Android security.",
 		inputSchema: zodToJsonSchema(AndroidDeviceInputSchema),
 		timeoutMs: 600_000,
 		retryable: false,

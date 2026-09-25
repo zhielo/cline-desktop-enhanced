@@ -35,6 +35,10 @@ if [ "\${1:-}" = "devices" ]; then
 fi
 case "$*" in
   *"shell pidof"*) printf '4321\\n' ;;
+  *"shell wm size"*) printf 'Physical size: 1080x2400\\n' ;;
+  *"shell dumpsys input"*) printf 'SurfaceOrientation: 0\\n' ;;
+  *"shell uiautomator dump"*) printf 'dumped\\n' ;;
+  *"exec-out cat /sdcard/window_dump.xml"*) printf '<hierarchy><node text="Hello"/></hierarchy>' ;;
   *"logcat"*) printf 'E AndroidRuntime: FATAL EXCEPTION: main\\n' ;;
   *"shell pm path"*) printf 'package:/data/app/example/base.apk\\n' ;;
   *"pull"*) for last in "$@"; do :; done; printf 'apk-bytes' > "$last"; printf 'pulled\\n' ;;
@@ -109,5 +113,44 @@ describe("android device executor", () => {
 		expect((await fs.readFile(screenshot)).subarray(0, 8)).toEqual(
 			Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
 		);
+	});
+
+	it("supports validated taps, UI hierarchy, and acknowledged shell", async () => {
+		if (process.platform === "win32") return;
+		await fakeAdb();
+		const execute = createAndroidDeviceExecutor();
+		const tap = JSON.parse(
+			await execute({ operation: "tap", x: 12, y: 34 }, {} as never),
+		);
+		expect(tap.args).toEqual([
+			"-s",
+			"emulator-5554",
+			"shell",
+			"input",
+			"tap",
+			"12",
+			"34",
+		]);
+		await expect(
+			execute({ operation: "tap", x: 1080, y: 1 }, {} as never),
+		).rejects.toThrow("outside");
+		const hierarchy = JSON.parse(
+			await execute({ operation: "ui_hierarchy" }, {} as never),
+		);
+		expect(hierarchy.stdout).toContain("Hello");
+		await expect(
+			execute({ operation: "shell", shell_args: ["id"] }, {} as never),
+		).rejects.toThrow("acknowledge_risk");
+		const shell = JSON.parse(
+			await execute(
+				{
+					operation: "shell",
+					shell_args: ["sh", "-c", "id"],
+					acknowledge_risk: true,
+				},
+				{} as never,
+			),
+		);
+		expect(shell.args.at(-1)).toBe("<redacted>");
 	});
 });
