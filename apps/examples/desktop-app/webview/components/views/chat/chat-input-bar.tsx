@@ -1629,7 +1629,6 @@ function ChatInputBarImpl({
 						type="file"
 					/>
 					<div
-						aria-label="Full Access enabled"
 						className="flex shrink-0 items-center gap-1.5 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-1 font-medium text-orange-600 dark:text-orange-400"
 						title="Full Access: local tools run without repetitive approval prompts"
 					>

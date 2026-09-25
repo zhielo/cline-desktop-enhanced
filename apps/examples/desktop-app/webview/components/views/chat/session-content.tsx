@@ -24,7 +24,11 @@ export function SessionContent({
 		>
 			{taskReport ? (
 				<div className="mb-4">
-					<TaskReportPanel report={taskReport} status={status} />
+					<TaskReportPanel
+						key={taskReport.sourceMessageId}
+						report={taskReport}
+						status={status}
+					/>
 				</div>
 			) : null}
 			{children}

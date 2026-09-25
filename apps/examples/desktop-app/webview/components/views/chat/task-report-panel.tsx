@@ -136,7 +136,7 @@ export function TaskReportPanel({
 	const [expanded, setExpanded] = useState(!complete);
 	useEffect(() => {
 		setExpanded(!complete);
-	}, [complete, report.sourceMessageId]);
+	}, [complete]);
 
 	const activeStep = useMemo(
 		() =>
