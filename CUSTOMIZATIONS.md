@@ -17,7 +17,8 @@ This file is the durable customization ledger for this repository. The source on
 - Polished sticky AI task report with progress, repair, verification, and execution states.
 - Typed task lifecycle events persisted in chat metadata.
 - Stable step IDs map tool evidence and durations to their exact plan steps.
-- Transcript parsing remains only as compatibility fallback behavior.
+- Structured step kinds take priority; text-label heuristics remain only as compatibility fallback behavior.
+- One active step is enforced, failed or malformed plan updates are ignored, and an older turn's plan is not reused for a new request.
 - Copyable task reports for issue reports and debugging.
 
 Primary files:
@@ -44,9 +45,21 @@ Primary files:
 
 ### Windows reliability
 
-- Canonical Windows paths are used for temporary Git worktrees.
-- Short-path aliases, slash direction, and case differences do not break cleanup or tests.
-- The custom installer validates type safety, task reports, customization tests, installer configuration, installation, startup, and unsigned binaries.
+- Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
+- Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
+- Sidecar stores are closed during tests and logging fixtures work across platforms.
+- Desktop Vitest configuration is native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` config must not be restored.
+- React image-attachment tests explicitly enable the React `act(...)` environment.
+- The custom installer validates type safety, sidecar behavior, task reports, focused customization tests, installer configuration, installation, startup, and unsigned binaries.
+
+Primary files:
+
+- `apps/examples/desktop-app/sidecar/commands.ts`
+- `apps/examples/desktop-app/sidecar/commands-git-worktree.test.ts`
+- `apps/examples/desktop-app/vitest.config.mts`
+- `apps/examples/desktop-app/package.json`
+- `apps/examples/desktop-app/webview/lib/image-attachments.test.ts`
+- `.github/workflows/build-custom-windows-installer.yml`
 
 ### Specialized tools
 
@@ -55,11 +68,26 @@ Primary files:
 - APK comparison improvements.
 - Codex-compatible tool calls and binary attachment handling.
 
+## Required validation
+
+Before an installer build, preserve and run the checks encoded by `.github/workflows/build-custom-windows-installer.yml`:
+
+1. `bun scripts/verify-custom-fork.ts`
+2. SDK build and desktop type-check
+3. Desktop sidecar regression suite
+4. Windows installer configuration test
+5. AI task-report tests
+6. Focused customization tests
+7. Unsigned NSIS packaging and artifact upload
+
+Do not hide a new regression by weakening assertions or making a required customization check non-blocking. Fix the implementation or update the expected contract only when behavior changes intentionally.
+
 ## Rules for future AI assistants
 
-1. Read this file before changing desktop, sidecar, task-report, tool, or installer behavior.
+1. Read this file, `/AGENTS.md`, and `/.github/copilot-instructions.md` before changing desktop, sidecar, task-report, tool, or installer behavior.
 2. Preserve these features unless the user explicitly asks to replace or remove one.
 3. Commit every durable source change to the repository before triggering a build.
-4. Never rely on local-only files, an uncommitted diff, or generated `dist/` output as the only copy of a customization.
-5. Update this ledger when adding, replacing, or intentionally removing custom behavior.
+4. Never rely on local-only files, an uncommitted diff, generated `dist/` output, or a workflow workspace as the only copy of a customization.
+5. Update this ledger and `scripts/verify-custom-fork.ts` in the same commit when adding, replacing, renaming, or intentionally removing custom behavior.
 6. Run the relevant focused tests, desktop type-check, repository lint, and custom-fork verifier.
+7. Keep the personal installer unsigned and artifact-only; do not create a release unless the user explicitly changes that policy.

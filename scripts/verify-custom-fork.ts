@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const requiredMarkers: Array<{
 	path: string;
@@ -10,15 +10,28 @@ const requiredMarkers: Array<{
 			"AI task execution UI",
 			"Permanent Custom AI Instructions",
 			"Windows reliability",
+			"Required validation",
+			"vitest.config.mts",
 		],
 	},
 	{
 		path: ".github/workflows/build-custom-windows-installer.yml",
 		markers: [
 			"Build unsigned custom Windows installer",
+			"Verify custom fork preservation",
 			"Get-AuthenticodeSignature",
 			"Upload unsigned setup.exe",
+			"CUSTOMIZATIONS.md",
+			"BUILD-INFO.txt",
 		],
+	},
+	{
+		path: "apps/examples/desktop-app/vitest.config.mts",
+		markers: ["vitest/config", "import.meta.url", "defineConfig"],
+	},
+	{
+		path: "apps/examples/desktop-app/package.json",
+		markers: ["vitest.config.mts", "test:sidecar", "test:windows-installer"],
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/chat-schema.ts",
@@ -38,7 +51,13 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/sidecar/commands.ts",
-		markers: ["set_custom_ai_instructions", "filesystemPathKey"],
+		markers: [
+			"set_custom_ai_instructions",
+			"filesystemPathKey",
+			"rev-parse",
+			"worktree",
+			"update-ref",
+		],
 	},
 	{
 		path: "apps/examples/desktop-app/sidecar/chat-session.ts",
@@ -48,9 +67,21 @@ const requiredMarkers: Array<{
 		path: "apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx",
 		markers: ["Custom AI instructions", "set_custom_ai_instructions"],
 	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/image-attachments.test.ts",
+		markers: ["IS_REACT_ACT_ENVIRONMENT"],
+	},
 ];
 
+const forbiddenPaths = ["apps/examples/desktop-app/vitest.config.ts"];
 const failures: string[] = [];
+
+for (const forbiddenPath of forbiddenPaths) {
+	if (existsSync(forbiddenPath)) {
+		failures.push(`${forbiddenPath}: obsolete file must remain deleted`);
+	}
+}
+
 for (const requirement of requiredMarkers) {
 	let source: string;
 	try {
@@ -76,5 +107,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-	`Custom fork preservation check passed (${requiredMarkers.length} source contracts).`,
+	`Custom fork preservation check passed (${requiredMarkers.length} source contracts; ${forbiddenPaths.length} obsolete path blocked).`,
 );
