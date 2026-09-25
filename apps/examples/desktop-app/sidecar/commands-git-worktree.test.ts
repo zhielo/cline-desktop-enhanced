@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
+	realpathSync,
 	mkdtempSync,
 	rmSync,
 	writeFileSync,
@@ -25,7 +26,13 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 function pathKey(path: string): string {
-	const normalized = resolve(path).replaceAll("\\", "/");
+	let canonical: string;
+	try {
+		canonical = realpathSync.native(path);
+	} catch {
+		canonical = resolve(path);
+	}
+	const normalized = resolve(canonical).replaceAll("\\", "/");
 	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
@@ -62,7 +69,9 @@ describe("create_git_worktree command", () => {
 		const result = await run(repo);
 
 		expect(
-			result.path.startsWith(join(sandbox, "cline-dir", "worktrees")),
+			pathKey(result.path).startsWith(
+				`${pathKey(join(sandbox, "cline-dir", "worktrees"))}/`,
+			),
 		).toBe(true);
 		expect(result.path.endsWith(join("my-app"))).toBe(true);
 		expect(result.branch).toMatch(/^cline\/[0-9a-f]{5}$/);
@@ -104,10 +113,12 @@ describe("create_git_worktree command", () => {
 
 		// The webview matches task worktrees against this root, so it must be
 		// the same CLINE_DIR-aware location the worktree was created under.
-		expect(context.taskWorktreeRoot).toBe(
-			join(sandbox, "cline-dir", "worktrees"),
+		expect(pathKey(context.taskWorktreeRoot ?? "")).toBe(
+			pathKey(join(sandbox, "cline-dir", "worktrees")),
 		);
-		expect(dirname(dirname(result.path))).toBe(context.taskWorktreeRoot);
+		expect(pathKey(dirname(dirname(result.path)))).toBe(
+			pathKey(context.taskWorktreeRoot ?? ""),
+		);
 	});
 
 	it("resolves the repo root from a nested cwd", async () => {

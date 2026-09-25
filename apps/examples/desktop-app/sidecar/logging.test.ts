@@ -50,7 +50,9 @@ describe("desktop sidecar logging", () => {
 
 	it("warns once before falling back to stderr when the log file cannot open", () => {
 		const directory = mkdtempSync(join(tmpdir(), "cline-code-fallback-"));
-		process.env.CLINE_LOG_PATH = directory;
+		const blocker = join(directory, "not-a-directory");
+		writeFileSync(blocker, "blocked");
+		process.env.CLINE_LOG_PATH = join(blocker, "sidecar.log");
 		delete process.env.CLINE_LOG_ENABLED;
 		const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
 

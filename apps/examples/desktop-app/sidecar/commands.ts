@@ -612,76 +612,21 @@ async function getSessionFromSidecarManager(
 	environmentId?: string,
 ): Promise<JsonRecord | undefined> {
 	const store = new SqliteSessionStore();
-	const binding = environmentId
-		? getRuntimeBinding(ctx, environmentId)
-		: await findSessionRuntimeBinding(ctx, sessionId);
-	if (binding) {
-		const session = await binding.sessionManager.get(sessionId);
-		if (session) {
-			const merged = mergePersistedSessionRecord(
-				sessionId,
-				session as unknown as JsonRecord,
-				binding.kind === "local"
-					? (store.get(sessionId) as unknown as JsonRecord | undefined)
-					: undefined,
-			);
-			return {
-				...merged,
-				environmentId: binding.environmentId,
-				remoteEnvironment:
-					binding.kind === "ssh"
-						? {
-								id: binding.environmentId,
-								name: binding.remote?.profile.name,
-								host: binding.remote?.profile.host,
-							}
-						: undefined,
-			};
-		}
-	}
-
-	const persisted =
-		!environmentId || environmentId === LOCAL_ENVIRONMENT_ID
-			? (store.get(sessionId) as unknown as JsonRecord | undefined)
-			: undefined;
-	return persisted
-		? {
-				...mergePersistedSessionRecord(sessionId, persisted, persisted),
-				environmentId: LOCAL_ENVIRONMENT_ID,
-			}
-		: undefined;
-}
-
-async function listSessionsFromSidecarManager(
-	ctx: SidecarContext,
-	limit: number,
-): Promise<unknown> {
-	const max = Math.max(1, Math.floor(limit));
-	const byId = new Map<string, JsonRecord>();
-	const store = new SqliteSessionStore();
-
-	for (const binding of ctx.runtimeBindings.values()) {
-		try {
-			const sessions = await binding.sessionManager.list(max, {
-				hydrate: false,
-			});
-			for (const item of sessions) {
-				if (!item || typeof item !== "object") continue;
-				const record = item as unknown as JsonRecord;
-				const sessionId = String(record.sessionId ?? "").trim();
-				if (!sessionId) continue;
-				getEnvironmentContext(
-					ctx,
-					binding.environmentId,
-				).sessionEnvironmentIds.set(sessionId, binding.environmentId);
+	try {
+		const binding = environmentId
+			? getRuntimeBinding(ctx, environmentId)
+			: await findSessionRuntimeBinding(ctx, sessionId);
+		if (binding) {
+			const session = await binding.sessionManager.get(sessionId);
+			if (session) {
 				const merged = mergePersistedSessionRecord(
 					sessionId,
-					record,
+					session as unknown as JsonRecord,
 					binding.kind === "local"
 						? (store.get(sessionId) as unknown as JsonRecord | undefined)
 						: undefined,
 				);
-				byId.set(JSON.stringify([binding.environmentId, sessionId]), {
+				return {
 					...merged,
 					environmentId: binding.environmentId,
 					remoteEnvironment:
@@ -692,70 +637,132 @@ async function listSessionsFromSidecarManager(
 									host: binding.remote?.profile.host,
 								}
 							: undefined,
+				};
+			}
+		}
+
+		const persisted =
+			!environmentId || environmentId === LOCAL_ENVIRONMENT_ID
+				? (store.get(sessionId) as unknown as JsonRecord | undefined)
+				: undefined;
+		return persisted
+			? {
+					...mergePersistedSessionRecord(sessionId, persisted, persisted),
+					environmentId: LOCAL_ENVIRONMENT_ID,
+				}
+			: undefined;
+	} finally {
+		store.close?.();
+	}
+}
+
+async function listSessionsFromSidecarManager(
+	ctx: SidecarContext,
+	limit: number,
+): Promise<unknown> {
+	const max = Math.max(1, Math.floor(limit));
+	const byId = new Map<string, JsonRecord>();
+	const store = new SqliteSessionStore();
+	try {
+		for (const binding of ctx.runtimeBindings.values()) {
+			try {
+				const sessions = await binding.sessionManager.list(max, {
+					hydrate: false,
+				});
+				for (const item of sessions) {
+					if (!item || typeof item !== "object") continue;
+					const record = item as unknown as JsonRecord;
+					const sessionId = String(record.sessionId ?? "").trim();
+					if (!sessionId) continue;
+					getEnvironmentContext(
+						ctx,
+						binding.environmentId,
+					).sessionEnvironmentIds.set(sessionId, binding.environmentId);
+					const merged = mergePersistedSessionRecord(
+						sessionId,
+						record,
+						binding.kind === "local"
+							? (store.get(sessionId) as unknown as JsonRecord | undefined)
+							: undefined,
+					);
+					byId.set(JSON.stringify([binding.environmentId, sessionId]), {
+						...merged,
+						environmentId: binding.environmentId,
+						remoteEnvironment:
+							binding.kind === "ssh"
+								? {
+										id: binding.environmentId,
+										name: binding.remote?.profile.name,
+										host: binding.remote?.profile.host,
+									}
+								: undefined,
+					});
+				}
+			} catch {
+				// Keep history available from the other connected environments.
+			}
+		}
+
+		if (byId.size === 0) {
+			for (const session of store.list(max)) {
+				byId.set(JSON.stringify([LOCAL_ENVIRONMENT_ID, session.sessionId]), {
+					...(session as unknown as JsonRecord),
+					environmentId: LOCAL_ENVIRONMENT_ID,
 				});
 			}
-		} catch {
-			// Keep history available from the other connected environments.
 		}
-	}
 
-	if (byId.size === 0) {
-		for (const session of store.list(max)) {
-			byId.set(JSON.stringify([LOCAL_ENVIRONMENT_ID, session.sessionId]), {
-				...(session as unknown as JsonRecord),
-				environmentId: LOCAL_ENVIRONMENT_ID,
-			});
+		for (const scoped of getEnvironmentContexts(ctx)) {
+			for (const [sessionId, session] of scoped.liveSessions.entries()) {
+				if (session.config.executionTarget === "cloud") continue;
+				const key = JSON.stringify([scoped.activeEnvironmentId, sessionId]);
+				const existing = byId.get(key);
+				byId.set(key, {
+					...(existing ?? {}),
+					sessionId,
+					environmentId: scoped.activeEnvironmentId,
+					status: session.status,
+					provider: session.config.provider ?? existing?.provider ?? "",
+					model: session.config.model ?? existing?.model ?? "",
+					cwd: session.config.cwd ?? existing?.cwd ?? "",
+					workspaceRoot:
+						session.config.workspaceRoot ??
+						existing?.workspaceRoot ??
+						existing?.cwd ??
+						"",
+					prompt: session.prompt ?? existing?.prompt,
+					startedAt:
+						existing?.startedAt ?? new Date(session.startedAt).toISOString(),
+					endedAt:
+						session.endedAt !== undefined
+							? new Date(session.endedAt).toISOString()
+							: existing?.endedAt,
+					metadata: {
+						...((existing?.metadata && typeof existing.metadata === "object"
+							? existing.metadata
+							: {}) as JsonRecord),
+						...(session.title ? { title: session.title } : {}),
+					},
+				});
+			}
 		}
+		return Array.from(byId.values())
+			.sort((left, right) => {
+				const leftTime = Date.parse(
+					String(left.updatedAt ?? left.startedAt ?? ""),
+				);
+				const rightTime = Date.parse(
+					String(right.updatedAt ?? right.startedAt ?? ""),
+				);
+				return (
+					(Number.isNaN(rightTime) ? 0 : rightTime) -
+					(Number.isNaN(leftTime) ? 0 : leftTime)
+				);
+			})
+			.slice(0, max);
+	} finally {
+		store.close?.();
 	}
-
-	for (const scoped of getEnvironmentContexts(ctx)) {
-		for (const [sessionId, session] of scoped.liveSessions.entries()) {
-			if (session.config.executionTarget === "cloud") continue;
-			const key = JSON.stringify([scoped.activeEnvironmentId, sessionId]);
-			const existing = byId.get(key);
-			byId.set(key, {
-				...(existing ?? {}),
-				sessionId,
-				environmentId: scoped.activeEnvironmentId,
-				status: session.status,
-				provider: session.config.provider ?? existing?.provider ?? "",
-				model: session.config.model ?? existing?.model ?? "",
-				cwd: session.config.cwd ?? existing?.cwd ?? "",
-				workspaceRoot:
-					session.config.workspaceRoot ??
-					existing?.workspaceRoot ??
-					existing?.cwd ??
-					"",
-				prompt: session.prompt ?? existing?.prompt,
-				startedAt:
-					existing?.startedAt ?? new Date(session.startedAt).toISOString(),
-				endedAt:
-					session.endedAt !== undefined
-						? new Date(session.endedAt).toISOString()
-						: existing?.endedAt,
-				metadata: {
-					...((existing?.metadata && typeof existing.metadata === "object"
-						? existing.metadata
-						: {}) as JsonRecord),
-					...(session.title ? { title: session.title } : {}),
-				},
-			});
-		}
-	}
-	return Array.from(byId.values())
-		.sort((left, right) => {
-			const leftTime = Date.parse(
-				String(left.updatedAt ?? left.startedAt ?? ""),
-			);
-			const rightTime = Date.parse(
-				String(right.updatedAt ?? right.startedAt ?? ""),
-			);
-			return (
-				(Number.isNaN(rightTime) ? 0 : rightTime) -
-				(Number.isNaN(leftTime) ? 0 : leftTime)
-			);
-		})
-		.slice(0, max);
 }
 
 async function withSearchDeadline<T>(
@@ -960,9 +967,17 @@ async function removeTaskWorktree(
 		]);
 		repoRoot = realpathSync.native(dirname(commonDir));
 		await git(["worktree", "remove", "--force", canonicalWorktreePath]);
-		await execFileAsync("git", ["-C", repoRoot, "branch", "-D", branch], {
+		await execFileAsync("git", ["-C", repoRoot, "worktree", "prune"], {
 			encoding: "utf8",
-		}).catch(() => undefined);
+		});
+		// This ref is generated exclusively for the disposable task worktree.
+		// update-ref avoids Windows branch-lock drift after removing a worktree
+		// through a short-path alias.
+		await execFileAsync(
+			"git",
+			["-C", repoRoot, "update-ref", "-d", `refs/heads/${branch}`],
+			{ encoding: "utf8" },
+		);
 	} catch (error) {
 		ctx.logger?.error?.("Failed to remove task worktree", {
 			worktreePath,
@@ -2633,130 +2648,134 @@ export async function handleCommand(
 		}
 		ctx.logger?.log("Deleting desktop chat session", { command, sessionId });
 		const store = new SqliteSessionStore();
-		const row = store.get(sessionId);
-		const manifest = readSessionManifest(sessionId);
-		const sessionCwd =
-			row?.cwd?.trim() ||
-			(typeof manifest?.cwd === "string" ? manifest.cwd.trim() : "");
-		const binding = await getCommandSessionBinding(ctx, sessionId, args);
-		let deleted = false;
-		let deleteError: Error | null = null;
 		try {
-			if (binding) {
-				deleted = await binding.sessionManager.delete(sessionId);
-			} else {
-				const backend = await resolveSessionBackend({ backendMode: "local" });
-				const deleteSession = (
-					backend as {
-						deleteSession: (
-							sessionId: string,
-							cascade?: boolean,
-						) => Promise<boolean | { deleted: boolean }>;
-					}
-				).deleteSession.bind(backend);
-				const deleteResult = await deleteSession(sessionId, true);
-				deleted =
-					typeof deleteResult === "boolean"
-						? deleteResult
-						: deleteResult.deleted;
+			const row = store.get(sessionId);
+			const manifest = readSessionManifest(sessionId);
+			const sessionCwd =
+				row?.cwd?.trim() ||
+				(typeof manifest?.cwd === "string" ? manifest.cwd.trim() : "");
+			const binding = await getCommandSessionBinding(ctx, sessionId, args);
+			let deleted = false;
+			let deleteError: Error | null = null;
+			try {
+				if (binding) {
+					deleted = await binding.sessionManager.delete(sessionId);
+				} else {
+					const backend = await resolveSessionBackend({ backendMode: "local" });
+					const deleteSession = (
+						backend as {
+							deleteSession: (
+								sessionId: string,
+								cascade?: boolean,
+							) => Promise<boolean | { deleted: boolean }>;
+						}
+					).deleteSession.bind(backend);
+					const deleteResult = await deleteSession(sessionId, true);
+					deleted =
+						typeof deleteResult === "boolean"
+							? deleteResult
+							: deleteResult.deleted;
+				}
+			} catch (error) {
+				deleteError = error instanceof Error ? error : new Error(String(error));
 			}
-		} catch (error) {
-			deleteError = error instanceof Error ? error : new Error(String(error));
-		}
-		if (binding?.kind !== "ssh" && store.delete(sessionId, true)) {
-			deleted = true;
-		}
-		ctx.liveSessions.delete(sessionId);
-		ctx.sessionEnvironmentIds.delete(sessionId);
-		if (binding?.kind === "ssh") {
-			if (!deleted && deleteError) throw deleteError;
+			if (binding?.kind !== "ssh" && store.delete(sessionId, true)) {
+				deleted = true;
+			}
+			ctx.liveSessions.delete(sessionId);
+			ctx.sessionEnvironmentIds.delete(sessionId);
+			if (binding?.kind === "ssh") {
+				if (!deleted && deleteError) throw deleteError;
+				if (deleted) {
+					broadcastEvent(ctx, "session_deleted", {
+						sessionId,
+						command,
+						deleted: true,
+					});
+				}
+				return deleted;
+			}
+			const directoryCandidates = new Set<string>([
+				join(sharedSessionDataDir(), sessionId),
+			]);
+			for (const path of [
+				row?.messagesPath,
+				typeof manifest?.messages_path === "string"
+					? manifest.messages_path
+					: null,
+			]) {
+				if (typeof path === "string" && path.trim().length > 0) {
+					directoryCandidates.add(dirname(path));
+				}
+			}
+			for (const path of [sessionLogPath(sessionId)]) {
+				if (removePathIfExists(path, { recursive: true })) {
+					deleted = true;
+				}
+			}
+			for (const dir of directoryCandidates) {
+				if (removePathIfExists(dir, { recursive: true })) {
+					deleted = true;
+				}
+			}
+			for (const path of [
+				row?.messagesPath,
+				typeof manifest?.messages_path === "string"
+					? manifest.messages_path
+					: null,
+				join(sharedSessionDataDir(), sessionId, `${sessionId}.json`),
+			].filter((v): v is string => typeof v === "string" && v.length > 0)) {
+				if (removePathIfExists(path)) {
+					deleted = true;
+				}
+			}
+			for (const suffix of ["messages.json"]) {
+				const fileName = `${sessionId}.${suffix}`;
+				const found = findArtifactUnderDir(
+					join(sharedSessionDataDir(), rootSessionIdFrom(sessionId)),
+					fileName,
+					4,
+				);
+				if (found && removePathIfExists(found)) {
+					deleted = true;
+				}
+			}
+			if (!deleted && deleteError) {
+				ctx.logger?.error?.("Failed to delete desktop chat session", {
+					sessionId,
+					error: deleteError,
+				});
+				throw deleteError;
+			}
+			ctx.logger?.log("Desktop chat session delete completed", {
+				sessionId,
+				deleted,
+			});
+			// A task worktree goes with its task, unless another session still
+			// lives in (or under) it, e.g. a second thread started while it was
+			// the workspace. Only the exact `<home>/<id>/<repo>` shape qualifies,
+			// since removal also deletes the `<id>` parent directory.
+			const removedWorktree =
+				deleted &&
+				isTaskWorktreePath(sessionCwd) &&
+				!store.list(10_000).some((other) => {
+					const cwd = other.cwd?.trim() ?? "";
+					return cwd === sessionCwd || cwd.startsWith(sessionCwd + sep);
+				})
+					? await removeTaskWorktree(ctx, sessionCwd)
+					: undefined;
 			if (deleted) {
 				broadcastEvent(ctx, "session_deleted", {
 					sessionId,
 					command,
 					deleted: true,
+					removedWorktree,
 				});
 			}
 			return deleted;
+		} finally {
+			store.close?.();
 		}
-		const directoryCandidates = new Set<string>([
-			join(sharedSessionDataDir(), sessionId),
-		]);
-		for (const path of [
-			row?.messagesPath,
-			typeof manifest?.messages_path === "string"
-				? manifest.messages_path
-				: null,
-		]) {
-			if (typeof path === "string" && path.trim().length > 0) {
-				directoryCandidates.add(dirname(path));
-			}
-		}
-		for (const path of [sessionLogPath(sessionId)]) {
-			if (removePathIfExists(path, { recursive: true })) {
-				deleted = true;
-			}
-		}
-		for (const dir of directoryCandidates) {
-			if (removePathIfExists(dir, { recursive: true })) {
-				deleted = true;
-			}
-		}
-		for (const path of [
-			row?.messagesPath,
-			typeof manifest?.messages_path === "string"
-				? manifest.messages_path
-				: null,
-			join(sharedSessionDataDir(), sessionId, `${sessionId}.json`),
-		].filter((v): v is string => typeof v === "string" && v.length > 0)) {
-			if (removePathIfExists(path)) {
-				deleted = true;
-			}
-		}
-		for (const suffix of ["messages.json"]) {
-			const fileName = `${sessionId}.${suffix}`;
-			const found = findArtifactUnderDir(
-				join(sharedSessionDataDir(), rootSessionIdFrom(sessionId)),
-				fileName,
-				4,
-			);
-			if (found && removePathIfExists(found)) {
-				deleted = true;
-			}
-		}
-		if (!deleted && deleteError) {
-			ctx.logger?.error?.("Failed to delete desktop chat session", {
-				sessionId,
-				error: deleteError,
-			});
-			throw deleteError;
-		}
-		ctx.logger?.log("Desktop chat session delete completed", {
-			sessionId,
-			deleted,
-		});
-		// A task worktree goes with its task, unless another session still
-		// lives in (or under) it, e.g. a second thread started while it was
-		// the workspace. Only the exact `<home>/<id>/<repo>` shape qualifies,
-		// since removal also deletes the `<id>` parent directory.
-		const removedWorktree =
-			deleted &&
-			isTaskWorktreePath(sessionCwd) &&
-			!store.list(10_000).some((other) => {
-				const cwd = other.cwd?.trim() ?? "";
-				return cwd === sessionCwd || cwd.startsWith(sessionCwd + sep);
-			})
-				? await removeTaskWorktree(ctx, sessionCwd)
-				: undefined;
-		if (deleted) {
-			broadcastEvent(ctx, "session_deleted", {
-				sessionId,
-				command,
-				deleted: true,
-				removedWorktree,
-			});
-		}
-		return deleted;
 	}
 
 	// ── Workspace file search ─────────────────────────────────────────
