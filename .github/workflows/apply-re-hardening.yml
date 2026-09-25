@@ -9,6 +9,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: apply-re-hardening
+  cancel-in-progress: true
+
 jobs:
   apply-and-validate:
     if: github.actor != 'github-actions[bot]'
@@ -21,7 +25,10 @@ jobs:
         with:
           bun-version: 1.3.13
       - name: Apply source changes
-        run: set -o pipefail; python3 scripts/apply-re-hardening.py 2>&1 | tee -a /tmp/hardening.log
+        run: |
+          set -o pipefail
+          python3 scripts/apply-re-hardening.py 2>&1 | tee -a /tmp/hardening.log
+          python3 scripts/apply-re-hardening-fixes.py 2>&1 | tee -a /tmp/hardening.log
       - name: Install dependencies
         run: set -o pipefail; bun install --frozen-lockfile 2>&1 | tee -a /tmp/hardening.log
       - name: Format
@@ -43,7 +50,7 @@ jobs:
           gh pr comment 18 --body-file /tmp/comment.md
       - name: Commit validated changes
         run: |
-          git rm .github/workflows/apply-re-hardening.yml scripts/apply-re-hardening.py
+          git rm .github/workflows/apply-re-hardening.yml scripts/apply-re-hardening.py scripts/apply-re-hardening-fixes.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
