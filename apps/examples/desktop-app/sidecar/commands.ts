@@ -953,39 +953,75 @@ async function removeTaskWorktree(
 	worktreePath: string,
 ): Promise<{ path: string; repoRoot?: string }> {
 	const canonicalWorktreePath = realpathSync.native(worktreePath);
-	const git = (args: string[]) =>
-		execFileAsync("git", ["-C", canonicalWorktreePath, ...args], {
-			encoding: "utf8",
-		}).then((result) => result.stdout.trim());
 	const branch = `cline/${basename(dirname(canonicalWorktreePath))}`;
 	let repoRoot: string | undefined;
 	try {
-		const commonDir = await git([
-			"rev-parse",
-			"--path-format=absolute",
-			"--git-common-dir",
-		]);
-		repoRoot = realpathSync.native(dirname(commonDir));
-		await git(["worktree", "remove", "--force", canonicalWorktreePath]);
-		await execFileAsync("git", ["-C", repoRoot, "worktree", "prune"], {
-			encoding: "utf8",
-		});
-		// This ref is generated exclusively for the disposable task worktree.
-		// update-ref avoids Windows branch-lock drift after removing a worktree
-		// through a short-path alias.
-		await execFileAsync(
+		const { stdout } = await execFileAsync(
 			"git",
-			["-C", repoRoot, "update-ref", "-d", `refs/heads/${branch}`],
+			[
+				"-C",
+				canonicalWorktreePath,
+				"rev-parse",
+				"--path-format=absolute",
+				"--git-common-dir",
+			],
 			{ encoding: "utf8" },
 		);
+		repoRoot = realpathSync.native(dirname(stdout.trim()));
 	} catch (error) {
-		ctx.logger?.error?.("Failed to remove task worktree", {
+		ctx.logger?.error?.("Failed to resolve task worktree repository", {
 			worktreePath,
 			error,
 		});
 	}
+
+	if (repoRoot) {
+		try {
+			await execFileAsync(
+				"git",
+				[
+					"-C",
+					repoRoot,
+					"worktree",
+					"remove",
+					"--force",
+					canonicalWorktreePath,
+				],
+				{ encoding: "utf8" },
+			);
+		} catch (error) {
+			ctx.logger?.error?.("Git could not remove task worktree; pruning it", {
+				worktreePath,
+				error,
+			});
+		}
+
+		// The path may have been addressed through an 8.3 alias that Git did not
+		// match to its registered long path. Remove it first, then prune the stale
+		// registration before deleting the generated branch ref.
+		removePathIfExists(canonicalWorktreePath, { recursive: true });
+		await execFileAsync("git", ["-C", repoRoot, "worktree", "prune"], {
+			encoding: "utf8",
+		}).catch((error) => {
+			ctx.logger?.error?.("Failed to prune removed task worktree", {
+				worktreePath,
+				error,
+			});
+		});
+		await execFileAsync(
+			"git",
+			["-C", repoRoot, "update-ref", "-d", `refs/heads/${branch}`],
+			{ encoding: "utf8" },
+		).catch((error) => {
+			ctx.logger?.error?.("Failed to delete generated task branch", {
+				branch,
+				error,
+			});
+		});
+	}
+
 	// The `<id>` directory that held the worktree.
-	removePathIfExists(dirname(worktreePath), { recursive: true });
+	removePathIfExists(dirname(canonicalWorktreePath), { recursive: true });
 	return { path: worktreePath, repoRoot };
 }
 

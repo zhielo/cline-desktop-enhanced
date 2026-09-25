@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { serializeAttachments } from "../hooks/chat-session/attachments";
 import { usePendingAttachments } from "../hooks/use-pending-attachments";
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 import {
 	cloudImageAttachmentError,
 	imageAttachmentMediaType,

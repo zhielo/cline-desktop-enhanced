@@ -110,7 +110,7 @@ jobs:
 
       - name: Test AI task report
         working-directory: apps/examples/desktop-app
-        run: bun x vitest run webview/lib/task-report.test.ts
+        run: bun x vitest run webview/lib/task-report.test.ts --config vitest.config.mts
 
       - name: Run focused customization tests
         shell: bash
