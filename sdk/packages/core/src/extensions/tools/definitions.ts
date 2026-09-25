@@ -1129,4 +1129,3 @@ export function createDefaultTools(
 
 	return tools as unknown as AgentTool[];
 				}
-}
