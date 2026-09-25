@@ -1,44 +1,25 @@
-name: Build signed custom Windows installer
+name: Build unsigned custom Windows installer
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: custom-windows-installer-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   build-windows-installer:
-    name: Build signed Windows x64 setup.exe
+    name: Build unsigned Windows x64 setup.exe
     runs-on: windows-latest
     timeout-minutes: 120
-    environment: PublishDesktop
 
     steps:
-      - name: Verify signing configuration
-        shell: bash
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP }}
-        run: |
-          missing=()
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID \
-                      AZURE_TRUSTED_SIGNING_ENDPOINT \
-                      AZURE_TRUSTED_SIGNING_ACCOUNT_NAME \
-                      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP; do
-            [ -n "${!name}" ] || missing+=("$name")
-          done
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "Missing required Azure Trusted Signing secrets:"
-            printf '  - %s\n' "${missing[@]}"
-            echo "This workflow never falls back to an unsigned build."
-            exit 1
-          fi
-
       - name: Checkout source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -62,7 +43,7 @@ jobs:
             exit 1
           fi
           echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "filename=Cline-Enhanced_${PACKAGE_VERSION}_x64-setup.exe" >> "$GITHUB_OUTPUT"
+          echo "filename=Cline-Enhanced_${PACKAGE_VERSION}_x64-unsigned-setup.exe" >> "$GITHUB_OUTPUT"
 
       # The desktop packaging script embeds Linux remote helpers. Bun's
       # Windows extraction path cannot reliably unpack these target runtimes,
@@ -119,6 +100,10 @@ jobs:
         working-directory: apps/examples/desktop-app
         run: bun run test:sidecar
 
+      - name: Test Windows installer configuration
+        working-directory: apps/examples/desktop-app
+        run: bun run test:windows-installer
+
       - name: Run focused customization tests
         shell: bash
         run: |
@@ -128,45 +113,11 @@ jobs:
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             --config vitest.config.ts
 
-      - name: Azure login with GitHub OIDC
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      # Prime this token before the Rust build. The signing script retrieves it
-      # from the Azure CLI cache when Tauri signs each staged PE file.
-      - name: Prime Azure Trusted Signing token
-        run: az account get-access-token --resource https://codesigning.azure.net --query expiresOn --output tsv
-
-      - name: Write signing configuration
-        shell: bash
-        run: |
-          SCRIPT_PATH="${GITHUB_WORKSPACE//\\//}/apps/examples/desktop-app/scripts/tauri-sign-windows.ps1"
-          SIGN_CONF="${RUNNER_TEMP//\\//}/tauri-windows-sign.conf.json"
-          cat > "$SIGN_CONF" <<EOF
-          {
-            "\$schema": "https://schema.tauri.app/config/2",
-            "bundle": {
-              "windows": {
-                "signCommand": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ${SCRIPT_PATH} %1"
-              }
-            }
-          }
-          EOF
-          echo "SIGN_CONF=${SIGN_CONF}" >> "$GITHUB_ENV"
-
-      - name: Build and sign NSIS installer
-        shell: bash
+      - name: Build unsigned NSIS installer
         working-directory: apps/examples/desktop-app
-        env:
-          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
-          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_DESKTOP }}
-        run: bunx tauri build --bundles nsis --config "$SIGN_CONF"
+        run: bunx tauri build --bundles nsis
 
-      - name: Collect and verify signed installer
+      - name: Collect and verify unsigned installer
         id: installer
         shell: pwsh
         working-directory: apps/examples/desktop-app
@@ -179,8 +130,8 @@ jobs:
           if (-not $setup) { throw "No setup.exe was produced under $bundleRoot" }
 
           $signature = Get-AuthenticodeSignature $setup.FullName
-          if ($signature.Status -ne 'Valid') {
-            throw "Installer signature is not valid: $($signature.Status) - $($signature.StatusMessage)"
+          if ($signature.Status -ne 'NotSigned') {
+            throw "Expected an unsigned test installer, but signature status is $($signature.Status)"
           }
 
           $out = 'dist/custom-installer'
@@ -189,8 +140,8 @@ jobs:
           Copy-Item $setup.FullName $destination -Force
 
           $copiedSignature = Get-AuthenticodeSignature $destination
-          if ($copiedSignature.Status -ne 'Valid') {
-            throw "Copied installer signature is not valid: $($copiedSignature.Status)"
+          if ($copiedSignature.Status -ne 'NotSigned') {
+            throw "Copied installer is unexpectedly signed: $($copiedSignature.Status)"
           }
 
           $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -199,14 +150,13 @@ jobs:
             "Version: $env:VERSION"
             "Commit: $env:GITHUB_SHA"
             "Runner: $env:RUNNER_OS $env:RUNNER_ARCH"
-            "Signed: yes"
-            "Signer: $($copiedSignature.SignerCertificate.Subject)"
-            "Timestamp certificate: $($copiedSignature.TimeStamperCertificate.Subject)"
+            "Signed: no"
+            "Purpose: private use and testing"
           ) | Out-File (Join-Path $out 'BUILD-INFO.txt') -Encoding utf8
           "path=$destination" >> $env:GITHUB_OUTPUT
           Get-ChildItem $out | Format-Table Name, Length
 
-      - name: Smoke-test signed installer and installed binaries
+      - name: Smoke-test unsigned installer and installed binaries
         shell: pwsh
         working-directory: apps/examples/desktop-app
         env:
@@ -214,8 +164,8 @@ jobs:
         run: |
           $setup = (Resolve-Path "dist/custom-installer/$env:OUTPUT_FILENAME").Path
           $setupSignature = Get-AuthenticodeSignature $setup
-          if ($setupSignature.Status -ne 'Valid') {
-            throw "Refusing to install an invalid or unsigned installer: $($setupSignature.Status)"
+          if ($setupSignature.Status -ne 'NotSigned') {
+            throw "Expected unsigned test installer, got signature status: $($setupSignature.Status)"
           }
 
           $process = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
@@ -244,8 +194,8 @@ jobs:
 
           foreach ($binary in @($appExe, $sidecarExe)) {
             $signature = Get-AuthenticodeSignature $binary.FullName
-            if ($signature.Status -ne 'Valid') {
-              throw "$($binary.Name) is not validly signed: $($signature.Status)"
+            if ($signature.Status -ne 'NotSigned') {
+              throw "$($binary.Name) is unexpectedly signed: $($signature.Status)"
             }
           }
 
@@ -275,14 +225,14 @@ jobs:
             throw 'Installed app stayed open but its code-sidecar.exe did not start'
           }
 
-          Write-Host 'Signed installer, installed app, and sidecar verified successfully.'
+          Write-Host 'Unsigned installer, installed app, and sidecar verified successfully.'
           Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Id $sidecar.ProcessId -Force -ErrorAction SilentlyContinue
 
-      - name: Upload signed setup.exe
+      - name: Upload unsigned setup.exe
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: cline-enhanced-windows-x64-signed-${{ steps.version.outputs.version }}
+          name: cline-enhanced-windows-x64-unsigned-${{ steps.version.outputs.version }}
           path: apps/examples/desktop-app/dist/custom-installer/*
           if-no-files-found: error
           retention-days: 30
