@@ -287,7 +287,7 @@ export function getCoreBuiltinToolCatalog(
  * availability context. Hosts consult this before dispatching a typed
  * `/skill` command: when the tool is available the command passes through as
  * typed and the model loads the instructions via the tool; when it is not
- * (e.g. the yolo preset or a user toggle disables it), textual expansion is
+ * (e.g. a user toggle disables it), textual expansion is
  * the only delivery path left.
  */
 export function isSkillsToolAvailable(

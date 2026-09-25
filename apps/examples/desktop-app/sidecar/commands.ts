@@ -16,6 +16,7 @@ import {
 	isAbsolute,
 	join,
 	posix,
+	resolve,
 	sep,
 } from "node:path";
 import { isDeepStrictEqual, promisify } from "node:util";
@@ -879,6 +880,17 @@ function taskWorktreesRoot(): string {
 	return join(resolveClineDir(), "worktrees");
 }
 
+function filesystemPathKey(path: string): string {
+	let canonical: string;
+	try {
+		canonical = realpathSync.native(path);
+	} catch {
+		canonical = resolve(path);
+	}
+	const normalized = resolve(canonical);
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
 /**
  * Creates a git worktree for the repo containing `cwd` and checks out a fresh
  * branch in it, so a task can run isolated from the user's working tree.
@@ -908,12 +920,16 @@ async function createGitWorktree(
 		["-C", repoRoot, "worktree", "add", "-b", branch, worktreePath, "HEAD"],
 		{ encoding: "utf8" },
 	);
-	return { path: worktreePath, branch };
+	return { path: realpathSync.native(worktreePath), branch };
 }
 
 /** True for paths of the exact `~/.cline/worktrees/<id>/<repo>` shape. */
 function isTaskWorktreePath(path: string): boolean {
-	return path.length > 0 && dirname(dirname(path)) === taskWorktreesRoot();
+	return (
+		path.length > 0 &&
+		filesystemPathKey(dirname(dirname(path))) ===
+			filesystemPathKey(taskWorktreesRoot())
+	);
 }
 
 /**
@@ -927,11 +943,12 @@ async function removeTaskWorktree(
 	ctx: SidecarContext,
 	worktreePath: string,
 ): Promise<{ path: string; repoRoot?: string }> {
+	const canonicalWorktreePath = realpathSync.native(worktreePath);
 	const git = (args: string[]) =>
-		execFileAsync("git", ["-C", worktreePath, ...args], {
+		execFileAsync("git", ["-C", canonicalWorktreePath, ...args], {
 			encoding: "utf8",
 		}).then((result) => result.stdout.trim());
-	const branch = `cline/${basename(dirname(worktreePath))}`;
+	const branch = `cline/${basename(dirname(canonicalWorktreePath))}`;
 	let repoRoot: string | undefined;
 	try {
 		const commonDir = await git([
@@ -939,8 +956,8 @@ async function removeTaskWorktree(
 			"--path-format=absolute",
 			"--git-common-dir",
 		]);
-		repoRoot = dirname(commonDir);
-		await git(["worktree", "remove", "--force", worktreePath]);
+		repoRoot = realpathSync.native(dirname(commonDir));
+		await git(["worktree", "remove", "--force", canonicalWorktreePath]);
 		await execFileAsync("git", ["-C", repoRoot, "branch", "-D", branch], {
 			encoding: "utf8",
 		}).catch(() => undefined);

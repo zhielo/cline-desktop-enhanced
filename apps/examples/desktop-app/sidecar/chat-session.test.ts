@@ -7,7 +7,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { SessionNotFoundError } from "@cline/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { materializeUserFiles } from "./attachments";
@@ -667,7 +667,7 @@ describe("session forks", () => {
 		await restoreStarted;
 		try {
 			expect(ctx.restoringWorkspacePaths).toEqual(
-				new Set(["/workspace/project"]),
+				new Set([resolve("/workspace/project")]),
 			);
 			await expect(
 				handleChatSessionCommand(ctx, {
@@ -1067,7 +1067,7 @@ describe("session forks", () => {
 					},
 				],
 			]),
-			restoringWorkspacePaths: new Set(["/workspace/project"]),
+			restoringWorkspacePaths: new Set([resolve("/workspace/project")]),
 			...localRuntimeContext({ send }, { sessionIds: [sessionId] }),
 		} as unknown as SidecarContext;
 
@@ -1886,7 +1886,7 @@ Follow the desktop send workflow instructions.`,
 		expect(session.prompt).toBe("/desktop-send-skill write the docs");
 	});
 
-	it("expands a skill command in yolo mode, where the skills tool is unavailable", async () => {
+	it("passes a skill command through in yolo mode when the skills tool is available", async () => {
 		const workspace = createWorkspaceWithSkill();
 		const { ctx, send, session, sessionId } = createContext(workspace);
 		(session.config as Record<string, unknown>).mode = "yolo";
@@ -1897,11 +1897,11 @@ Follow the desktop send workflow instructions.`,
 			prompt: "/desktop-send-skill write the docs",
 		});
 
-		// The yolo preset has no skills tool, so textual expansion is the only
-		// way the instructions reach the model.
+		// The yolo preset includes the skills tool, so preserve the typed command
+		// and let the runtime load its instructions without rewriting the transcript.
 		expect(send).toHaveBeenCalledWith(
 			expect.objectContaining({
-				prompt: "Follow the desktop send skill instructions. write the docs",
+				prompt: "/desktop-send-skill write the docs",
 			}),
 		);
 	});

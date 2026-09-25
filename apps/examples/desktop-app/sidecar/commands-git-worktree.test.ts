@@ -7,7 +7,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { SqliteSessionStore } from "@cline/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleCommand } from "./commands";
@@ -22,6 +22,18 @@ function git(cwd: string, ...args: string[]): string {
 		["-c", "user.name=test", "-c", "user.email=test@example.com", ...args],
 		{ cwd, encoding: "utf8" },
 	).trim();
+}
+
+function pathKey(path: string): string {
+	const normalized = resolve(path).replaceAll("\\", "/");
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function listedWorktreePaths(): string[] {
+	return git(repo, "worktree", "list", "--porcelain")
+		.split("\n")
+		.filter((line) => line.startsWith("worktree "))
+		.map((line) => pathKey(line.slice("worktree ".length)));
 }
 
 beforeEach(() => {
@@ -58,7 +70,7 @@ describe("create_git_worktree command", () => {
 		expect(git(result.path, "branch", "--show-current")).toBe(result.branch);
 		// The original checkout is untouched.
 		expect(git(repo, "branch", "--show-current")).toBe("main");
-		expect(git(repo, "worktree", "list")).toContain(result.path);
+		expect(listedWorktreePaths()).toContain(pathKey(result.path));
 	});
 
 	it("reports the worktree root it creates under in the process context", async () => {
@@ -105,7 +117,7 @@ describe("create_git_worktree command", () => {
 		const result = await run(nested);
 
 		expect(result.path.endsWith("my-app")).toBe(true);
-		expect(git(repo, "worktree", "list")).toContain(result.path);
+		expect(listedWorktreePaths()).toContain(pathKey(result.path));
 	});
 
 	it("rejects a folder that is not a git repository", async () => {
@@ -127,7 +139,7 @@ describe("remove_git_worktree command", () => {
 		await handleCommand(ctx, "remove_git_worktree", { path: worktree.path });
 
 		expect(existsSync(dirname(worktree.path))).toBe(false);
-		expect(git(repo, "worktree", "list")).not.toContain(worktree.path);
+		expect(listedWorktreePaths()).not.toContain(pathKey(worktree.path));
 		expect(git(repo, "branch", "--list", worktree.branch)).toBe("");
 	});
 
@@ -203,16 +215,22 @@ describe("delete_chat_session worktree cleanup", () => {
 
 		expect(deleted).toBe(true);
 		// The UI needs both paths to move off the vanished workspace.
-		expect(events).toContainEqual({
-			name: "session_deleted",
-			payload: expect.objectContaining({
+		const deletedEvent = events.find(
+			(event) => event.name === "session_deleted",
+		);
+		expect(deletedEvent?.payload).toEqual(
+			expect.objectContaining({
 				sessionId: "session-wt",
-				removedWorktree: { path: worktree.path, repoRoot: repo },
+				removedWorktree: expect.objectContaining({ path: worktree.path }),
 			}),
-		});
+		);
+		const removed = (
+			deletedEvent?.payload as { removedWorktree?: { repoRoot?: string } }
+		).removedWorktree;
+		expect(pathKey(removed?.repoRoot ?? "")).toBe(pathKey(repo));
 		expect(existsSync(worktree.path)).toBe(false);
 		expect(existsSync(dirname(worktree.path))).toBe(false);
-		expect(git(repo, "worktree", "list")).not.toContain(worktree.path);
+		expect(listedWorktreePaths()).not.toContain(pathKey(worktree.path));
 		expect(git(repo, "branch", "--list", worktree.branch)).toBe("");
 	});
 
@@ -241,7 +259,7 @@ describe("delete_chat_session worktree cleanup", () => {
 		const { events } = await deleteSession(store, "session-a");
 
 		expect(existsSync(worktree.path)).toBe(true);
-		expect(git(repo, "worktree", "list")).toContain(worktree.path);
+		expect(listedWorktreePaths()).toContain(pathKey(worktree.path));
 		expect(events[0]?.payload).not.toHaveProperty("removedWorktree.path");
 	});
 
@@ -276,7 +294,7 @@ describe("delete_chat_session worktree cleanup", () => {
 		await deleteSession(new SqliteSessionStore(), "session-home");
 
 		expect(existsSync(worktree.path)).toBe(true);
-		expect(git(repo, "worktree", "list")).toContain(worktree.path);
+		expect(listedWorktreePaths()).toContain(pathKey(worktree.path));
 	});
 
 	it("leaves a regular workspace folder alone", async () => {
