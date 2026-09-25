@@ -89,6 +89,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify custom fork preservation
+        run: bun run scripts/verify-custom-fork.ts
+
       - name: Build SDK packages
         run: bun run build:sdk
 
@@ -143,6 +146,7 @@ jobs:
           New-Item -ItemType Directory -Path $out -Force | Out-Null
           $destination = Join-Path $out $env:OUTPUT_FILENAME
           Copy-Item $setup.FullName $destination -Force
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'CUSTOMIZATIONS.md') (Join-Path $out 'CUSTOMIZATIONS.md') -Force
 
           $copiedSignature = Get-AuthenticodeSignature $destination
           if ($copiedSignature.Status -ne 'NotSigned') {
@@ -157,6 +161,7 @@ jobs:
             "Runner: $env:RUNNER_OS $env:RUNNER_ARCH"
             "Signed: no"
             "Purpose: private use and testing"
+            "Customization ledger: CUSTOMIZATIONS.md"
           ) | Out-File (Join-Path $out 'BUILD-INFO.txt') -Encoding utf8
           "path=$destination" >> $env:GITHUB_OUTPUT
           Get-ChildItem $out | Format-Table Name, Length

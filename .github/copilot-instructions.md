@@ -1,3 +1,13 @@
+# Custom fork preservation
+
+Read `/AGENTS.md` and `/CUSTOMIZATIONS.md` before editing this repository.
+
+This is a customized private-use Cline Desktop fork. Preserve the unsigned Windows installer workflow, typed AI task-report protocol, permanent Custom AI Instructions setting, Windows worktree path handling, and specialized Android/reverse-engineering tools unless the user explicitly requests a replacement.
+
+All durable changes must be committed source changes. Do not leave a customization only in a local patch, generated file, build artifact, or CI workspace. When custom behavior changes, update `CUSTOMIZATIONS.md` and `scripts/verify-custom-fork.ts` in the same commit.
+
+---
+
 # Copilot Instructions for Cline
 
 This is a VS Code extension. Read `.clinerules/general.md` for tribal knowledge and nuanced patterns.
