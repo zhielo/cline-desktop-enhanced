@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AndroidDeviceExecutor } from "../types";
 
 const MAX_TEXT_BYTES = 200_000;
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024;
+const MAX_UI_BYTES = 4 * 1024 * 1024;
 
 type ProcessResult = {
 	exitCode: number | null;
@@ -42,9 +44,7 @@ async function discoverAdb(): Promise<string | undefined> {
 		if (path.isAbsolute(candidate)) {
 			try {
 				if ((await fs.stat(candidate)).isFile()) return candidate;
-			} catch {
-				continue;
-			}
+			} catch {}
 		} else if (await commandAvailable(candidate)) return candidate;
 	}
 	return undefined;
@@ -140,6 +140,147 @@ function selectedDevice(serial: string | undefined): string[] {
 	return serial ? ["-s", serial] : [];
 }
 
+async function resolveDevice(
+	adb: string,
+	requested: string | undefined,
+	signal?: AbortSignal,
+): Promise<string> {
+	const result = await runAdb(adb, ["devices", "-l"], 15_000, signal);
+	if (result.exitCode !== 0)
+		throw new Error(`Unable to enumerate Android devices: ${result.stderr}`);
+	const devices = result.stdout
+		.toString("utf8")
+		.split(/\r?\n/)
+		.slice(1)
+		.map((line) => line.trim().split(/\s+/, 2))
+		.filter(([serial]) => serial);
+	if (requested) {
+		const found = devices.find(([serial]) => serial === requested);
+		if (!found) throw new Error(`Android device ${requested} is not attached`);
+		if (found[1] !== "device")
+			throw new Error(`Android device ${requested} is ${found[1]}`);
+		return requested;
+	}
+	const ready = devices.filter(([, state]) => state === "device");
+	if (ready.length === 0)
+		throw new Error("No authorized Android device is attached");
+	if (ready.length > 1)
+		throw new Error(
+			`Multiple authorized Android devices are attached; set device_serial (${ready.map(([serial]) => serial).join(", ")})`,
+		);
+	return ready[0][0];
+}
+
+type ScreenInfo = {
+	width: number;
+	height: number;
+	rotation: number | null;
+	orientation: "portrait" | "landscape" | "square";
+};
+async function screenInfo(
+	adb: string,
+	selected: string[],
+	signal?: AbortSignal,
+): Promise<ScreenInfo> {
+	const [size, input] = await Promise.all([
+		runAdb(adb, [...selected, "shell", "wm", "size"], 15_000, signal),
+		runAdb(adb, [...selected, "shell", "dumpsys", "input"], 15_000, signal),
+	]);
+	const matches = [
+		...size.stdout
+			.toString("utf8")
+			.matchAll(/(?:Physical|Override) size:\s*(\d+)x(\d+)/gi),
+	];
+	const match = matches.at(-1);
+	if (!match) throw new Error("Unable to determine Android display size");
+	const width = Number(match[1]);
+	const height = Number(match[2]);
+	const rotation = input.stdout
+		.toString("utf8")
+		.match(/SurfaceOrientation:\s*(\d+)/i);
+	return {
+		width,
+		height,
+		rotation: rotation ? Number(rotation[1]) : null,
+		orientation:
+			width === height ? "square" : width > height ? "landscape" : "portrait",
+	};
+}
+function point(
+	x: number | undefined,
+	y: number | undefined,
+	screen: ScreenInfo,
+	label: string,
+): [number, number] {
+	if (x === undefined || y === undefined)
+		throw new Error(`${label} coordinates are required`);
+	if (x < 0 || x >= screen.width || y < 0 || y >= screen.height)
+		throw new Error(
+			`${label} (${x}, ${y}) is outside the ${screen.width}x${screen.height} display`,
+		);
+	return [x, y];
+}
+async function foreground(
+	adb: string,
+	selected: string[],
+	packageName: string | undefined,
+	signal?: AbortSignal,
+) {
+	if (!packageName) return;
+	const result = await runAdb(
+		adb,
+		[...selected, "shell", "dumpsys", "window", "windows"],
+		15_000,
+		signal,
+	);
+	const focus = result.stdout
+		.toString("utf8")
+		.split(/\r?\n/)
+		.find((line) => /mCurrentFocus|mFocusedApp/.test(line));
+	if (!focus?.includes(packageName))
+		throw new Error(
+			`Refusing interaction because ${packageName} is not the foreground package`,
+		);
+}
+async function evidence(
+	adb: string,
+	selected: string[],
+	output: string,
+	timeout: number,
+	signal?: AbortSignal,
+) {
+	if (!path.isAbsolute(output))
+		throw new Error("screenshot evidence path must be absolute");
+	const result = await runAdb(
+		adb,
+		[...selected, "exec-out", "screencap", "-p"],
+		timeout,
+		signal,
+		MAX_SCREENSHOT_BYTES,
+	);
+	const png =
+		result.stdout.length >= 8 &&
+		result.stdout
+			.subarray(0, 8)
+			.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+	const succeeded = result.exitCode === 0 && png;
+	if (succeeded) {
+		await fs.mkdir(path.dirname(output), { recursive: true, mode: 0o700 });
+		const temporary = `${output}.${process.pid}.tmp`;
+		await fs.writeFile(temporary, result.stdout, { mode: 0o600 });
+		await fs.rm(output, { force: true });
+		await fs.rename(temporary, output);
+	}
+	return {
+		outputPath: output,
+		succeeded,
+		bytes: result.stdout.length,
+		sha256: succeeded
+			? createHash("sha256").update(result.stdout).digest("hex")
+			: undefined,
+	};
+}
+
 function textResult(
 	operation: string,
 	command: string,
@@ -176,7 +317,6 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 			);
 		}
 		const timeoutMs = input.timeout_ms ?? 120_000;
-		const selected = selectedDevice(input.device_serial);
 
 		if (input.operation === "discover") {
 			const [version, devices] = await Promise.all([
@@ -197,11 +337,89 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 			);
 		}
 
+		if (input.operation === "devices") {
+			const args = ["devices", "-l"];
+			return textResult(
+				input.operation,
+				adb,
+				args,
+				await runAdb(adb, args, timeoutMs, context.signal),
+				started,
+			);
+		}
+		const deviceSerial = await resolveDevice(
+			adb,
+			input.device_serial,
+			context.signal,
+		);
+		const selected = selectedDevice(deviceSerial);
+		if (input.operation === "screen_info")
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					deviceSerial,
+					...(await screenInfo(adb, selected, context.signal)),
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		if (input.operation === "ui_hierarchy") {
+			const dump = [
+				...selected,
+				"shell",
+				"uiautomator",
+				"dump",
+				"/sdcard/window_dump.xml",
+			];
+			const dumped = await runAdb(adb, dump, timeoutMs, context.signal);
+			if (dumped.exitCode !== 0)
+				return textResult(input.operation, adb, dump, dumped, started);
+			const args = [...selected, "exec-out", "cat", "/sdcard/window_dump.xml"];
+			const result = await runAdb(
+				adb,
+				args,
+				timeoutMs,
+				context.signal,
+				MAX_UI_BYTES,
+			);
+			if (input.output_path && result.exitCode === 0) {
+				const output = requireAbsolute(input.output_path, "output_path");
+				await fs.mkdir(path.dirname(output), { recursive: true, mode: 0o700 });
+				await fs.writeFile(output, result.stdout, { mode: 0o600 });
+			}
+			return textResult(input.operation, adb, args, result, started, {
+				deviceSerial,
+				bytes: result.stdout.length,
+			});
+		}
+		const interaction = [
+			"tap",
+			"long_press",
+			"swipe",
+			"key_event",
+			"text_input",
+		].includes(input.operation);
+		if (interaction)
+			await foreground(
+				adb,
+				selected,
+				input.require_foreground_package,
+				context.signal,
+			);
+		const beforeScreenshot = input.before_screenshot_path
+			? await evidence(
+					adb,
+					selected,
+					input.before_screenshot_path,
+					timeoutMs,
+					context.signal,
+				)
+			: undefined;
 		let args: string[];
+		let screen: ScreenInfo | undefined;
+		let sensitive = false;
 		switch (input.operation) {
-			case "devices":
-				args = ["devices", "-l"];
-				break;
 			case "package_info":
 				args = [
 					...selected,
@@ -257,6 +475,81 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 					"force-stop",
 					requirePackage(input.package),
 				];
+				break;
+			case "tap": {
+				screen = await screenInfo(adb, selected, context.signal);
+				const [x, y] = point(input.x, input.y, screen, "tap");
+				args = [...selected, "shell", "input", "tap", String(x), String(y)];
+				break;
+			}
+			case "long_press": {
+				screen = await screenInfo(adb, selected, context.signal);
+				const [x, y] = point(input.x, input.y, screen, "long_press");
+				args = [
+					...selected,
+					"shell",
+					"input",
+					"swipe",
+					String(x),
+					String(y),
+					String(x),
+					String(y),
+					String(input.duration_ms ?? 750),
+				];
+				break;
+			}
+			case "swipe": {
+				screen = await screenInfo(adb, selected, context.signal);
+				const [sx, sy] = point(
+					input.start_x,
+					input.start_y,
+					screen,
+					"swipe start",
+				);
+				const [ex, ey] = point(input.end_x, input.end_y, screen, "swipe end");
+				args = [
+					...selected,
+					"shell",
+					"input",
+					"swipe",
+					String(sx),
+					String(sy),
+					String(ex),
+					String(ey),
+					String(input.duration_ms ?? 300),
+				];
+				break;
+			}
+			case "key_event":
+				if (!input.key_code) throw new Error("key_code is required");
+				args = [
+					...selected,
+					"shell",
+					"input",
+					"keyevent",
+					`KEYCODE_${input.key_code}`,
+				];
+				break;
+			case "text_input":
+				if (input.text === undefined) throw new Error("text is required");
+				args = [
+					...selected,
+					"shell",
+					"input",
+					"text",
+					input.text.replaceAll("%", "%25").replaceAll(" ", "%s"),
+				];
+				sensitive = true;
+				break;
+			case "shell":
+				if (!input.acknowledge_risk)
+					throw new Error(
+						"acknowledge_risk must be true for unrestricted adb shell",
+					);
+				if (!input.shell_args?.length)
+					throw new Error("shell_args is required");
+				args = [...selected, "shell", ...input.shell_args];
+				sensitive = true;
 				break;
 			case "processes":
 				args = [...selected, "shell", "ps", "-A"];
@@ -417,8 +710,34 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 			}
 		}
 		const result = await runAdb(adb, args, timeoutMs, context.signal);
-		return textResult(input.operation, adb, args, result, started, {
-			deviceSerial: input.device_serial,
-		});
+		const afterScreenshot = input.after_screenshot_path
+			? await evidence(
+					adb,
+					selected,
+					input.after_screenshot_path,
+					timeoutMs,
+					context.signal,
+				)
+			: undefined;
+		return textResult(
+			input.operation,
+			adb,
+			sensitive ? [...selected, "shell", "<redacted>"] : args,
+			result,
+			started,
+			{
+				deviceSerial,
+				screen,
+				beforeScreenshot,
+				afterScreenshot,
+				screenChanged:
+					beforeScreenshot?.sha256 && afterScreenshot?.sha256
+						? beforeScreenshot.sha256 !== afterScreenshot.sha256
+						: undefined,
+				argumentCount: sensitive
+					? args.length - selected.length - 1
+					: undefined,
+			},
+		);
 	};
 }
