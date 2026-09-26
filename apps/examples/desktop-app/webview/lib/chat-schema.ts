@@ -94,6 +94,20 @@ export const TaskPlanStepSchema = z.object({
 	completedAtMs: z.number().int().nonnegative().optional(),
 	repairAttempt: z.number().int().nonnegative().optional(),
 	maxRepairAttempts: z.number().int().nonnegative().optional(),
+	skipReason: z.string().min(1).optional(),
+	checkpointRunCount: z.number().int().positive().optional(),
+	validation: z
+		.array(
+			z.object({
+				command: z.string().min(1),
+				status: z.enum(["pending", "running", "passed", "failed", "skipped"]),
+				startedAtMs: z.number().int().nonnegative().optional(),
+				completedAtMs: z.number().int().nonnegative().optional(),
+				exitCode: z.number().int().optional(),
+				error: z.string().min(1).optional(),
+			}),
+		)
+		.optional(),
 });
 
 export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
@@ -123,6 +137,13 @@ export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
 					reason: z.string().min(1),
 				}),
 			)
+			.optional(),
+		rollback: z
+			.object({
+				checkpointRunCount: z.number().int().positive(),
+				atMs: z.number().int().nonnegative(),
+				reason: z.string().min(1),
+			})
 			.optional(),
 	}),
 	z.object({

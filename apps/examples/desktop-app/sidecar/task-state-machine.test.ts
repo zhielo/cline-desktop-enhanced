@@ -4,9 +4,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	advanceDurableTaskState,
+	beginDurableTaskValidation,
 	type DurableTaskStep,
 	persistDurableTaskState,
 	readDurableTaskState,
+	readOrMigrateDurableTaskState,
+	recordDurableTaskValidation,
+	rollbackDurableTaskState,
 } from "./task-state-machine";
 
 const previousSessionDataDir = process.env.CLINE_SESSION_DATA_DIR;
@@ -104,6 +108,81 @@ describe("advanceDurableTaskState", () => {
 		).toThrow("completed -> running");
 	});
 
+	it("requires a reason for every skipped step", () => {
+		expect(() =>
+			advanceDurableTaskState({
+				planId: "plan-1",
+				steps: steps(["skipped"]),
+			}),
+		).toThrow("requires a reason");
+		expect(
+			advanceDurableTaskState({
+				planId: "plan-1",
+				steps: [{ ...steps(["skipped"])[0], skipReason: "Not applicable" }],
+			}).status,
+		).toBe("skipped");
+	});
+
+	it("records automatic validation and blocks completion on failure", () => {
+		const completed = advanceDurableTaskState({
+			planId: "plan-1",
+			steps: [
+				{
+					...steps(["completed"])[0],
+					validationCommands: ["bun test", "bun run typecheck"],
+				},
+			],
+		});
+		const validating = beginDurableTaskValidation({
+			state: completed,
+			stepId: "step-1",
+			atMs: 20,
+		});
+		expect(validating.status).toBe("verifying");
+		const running = recordDurableTaskValidation({
+			state: validating,
+			stepId: "step-1",
+			command: "bun test",
+			status: "running",
+			atMs: 21,
+		});
+		const failed = recordDurableTaskValidation({
+			state: running,
+			stepId: "step-1",
+			command: "bun test",
+			status: "failed",
+			exitCode: 1,
+			atMs: 22,
+		});
+		expect(failed.status).toBe("failed");
+		expect(failed.repair?.state).toBe("repair_required");
+	});
+
+	it("rewinds task progress at and after a restored checkpoint", () => {
+		const completed = advanceDurableTaskState({
+			planId: "plan-1",
+			steps: [
+				{ ...steps(["completed"])[0], checkpointRunCount: 1 },
+				{
+					...steps(["completed", "completed"])[1],
+					checkpointRunCount: 2,
+				},
+			],
+			atMs: 10,
+		});
+		const rolledBack = rollbackDurableTaskState({
+			state: completed,
+			checkpointRunCount: 2,
+			atMs: 20,
+		});
+		expect(rolledBack.steps.map((step) => step.status)).toEqual([
+			"completed",
+			"pending",
+		]);
+		expect(rolledBack.status).toBe("planned");
+		expect(rolledBack.rollback).toMatchObject({ checkpointRunCount: 2 });
+	});
+
 	it("persists and reloads task state independently from chat projection", () => {
 		sessionDataDir = mkdtempSync(join(tmpdir(), "cline-task-state-"));
 		process.env.CLINE_SESSION_DATA_DIR = sessionDataDir;
@@ -129,5 +208,36 @@ describe("advanceDurableTaskState", () => {
 		});
 		persistDurableTaskState("session-1", state);
 		expect(readDurableTaskState("session-1")).toEqual(state);
+	});
+
+	it("migrates the latest projected task report once", () => {
+		sessionDataDir = mkdtempSync(join(tmpdir(), "cline-task-state-"));
+		process.env.CLINE_SESSION_DATA_DIR = sessionDataDir;
+		const migrated = readOrMigrateDurableTaskState("legacy-session", [
+			{
+				role: "tool",
+				meta: {
+					taskEvent: {
+						type: "plan.updated",
+						planId: "legacy-plan",
+						updatedAtMs: 123,
+						steps: [
+							{
+								id: "legacy-step",
+								label: "Legacy projected work",
+								status: "in_progress",
+								kind: "work",
+							},
+						],
+					},
+				},
+			},
+		]);
+		expect(migrated).toMatchObject({
+			planId: "legacy-plan",
+			status: "running",
+			transitions: [{ reason: "migration.projected-report" }],
+		});
+		expect(readDurableTaskState("legacy-session")).toEqual(migrated);
 	});
 });
