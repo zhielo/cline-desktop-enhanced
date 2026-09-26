@@ -33,6 +33,15 @@ export type DurableTaskStepStatus =
 
 export type DurableTaskStepKind = "work" | "repair" | "verification";
 
+export type DurableTaskValidation = {
+	command: string;
+	status: "pending" | "running" | "passed" | "failed" | "skipped";
+	startedAtMs?: number;
+	completedAtMs?: number;
+	exitCode?: number;
+	error?: string;
+};
+
 export type DurableTaskStep = {
 	id: string;
 	label: string;
@@ -48,6 +57,9 @@ export type DurableTaskStep = {
 	completedAtMs?: number;
 	repairAttempt?: number;
 	maxRepairAttempts?: number;
+	skipReason?: string;
+	checkpointRunCount?: number;
+	validation?: DurableTaskValidation[];
 };
 
 export type DurableTaskTransition = {
@@ -71,6 +83,11 @@ export type DurableTaskState = {
 	repair?: DurableTaskRepair;
 	updatedAtMs: number;
 	transitions: DurableTaskTransition[];
+	rollback?: {
+		checkpointRunCount: number;
+		atMs: number;
+		reason: string;
+	};
 };
 
 const TERMINAL_STEP_STATUSES = new Set<DurableTaskStepStatus>([
@@ -176,7 +193,11 @@ const ALLOWED_TRANSITIONS: Record<
 		"blocked",
 		"cancelled",
 	]),
-	completed: new Set(["completed"]),
+	// A completed projection may still have declared validation commands that
+	// the host has not executed yet. Only that host-driven verification path
+	// reopens completion; ordinary plan updates remain terminal because they do
+	// not add a pending validation record.
+	completed: new Set(["completed", "verifying"]),
 	cancelled: new Set(["cancelled"]),
 	skipped: new Set(["skipped"]),
 };
@@ -196,6 +217,23 @@ function deriveTaskStatus(
 	}
 	if (repair?.state === "repairing") return "repairing";
 	if (repair?.state === "verifying") return "verifying";
+	if (
+		steps.some((step) =>
+			step.validation?.some((validation) => validation.status === "failed"),
+		)
+	) {
+		return "failed";
+	}
+	if (
+		steps.some((step) =>
+			step.validation?.some(
+				(validation) =>
+					validation.status === "pending" || validation.status === "running",
+			),
+		)
+	) {
+		return "verifying";
+	}
 	const active = steps.find((step) => step.status === "in_progress");
 	if (active?.kind === "repair") return "repairing";
 	if (active?.kind === "verification") return "verifying";
@@ -220,6 +258,29 @@ function validateSteps(steps: DurableTaskStep[]): string | undefined {
 	for (const [index, step] of steps.entries()) {
 		if (ids.has(step.id)) return `Duplicate task step id: ${step.id}`;
 		ids.add(step.id);
+		if (step.status === "skipped" && !step.skipReason?.trim()) {
+			return `Skipped task step requires a reason: ${step.id}`;
+		}
+		if (
+			step.checkpointRunCount !== undefined &&
+			(!Number.isInteger(step.checkpointRunCount) ||
+				step.checkpointRunCount < 1)
+		) {
+			return `Invalid checkpoint run count for task step: ${step.id}`;
+		}
+		if (
+			step.validation &&
+			(step.validation.length === 0 ||
+				step.validation.some(
+					(item) =>
+						!item.command.trim() ||
+						!["pending", "running", "passed", "failed", "skipped"].includes(
+							item.status,
+						),
+				))
+		) {
+			return `Invalid validation state for task step: ${step.id}`;
+		}
 		if (step.status === "in_progress") activeCount += 1;
 		if (
 			failedIndex < 0 &&
@@ -260,10 +321,14 @@ export function advanceDurableTaskState(input: {
 	const atMs = input.atMs ?? Date.now();
 	const status = deriveTaskStatus(input.steps, input.repair);
 	const previous = input.previous;
+	const reason = input.reason ?? "plan.updated";
 	if (
 		previous &&
 		previous.planId === input.planId &&
-		!ALLOWED_TRANSITIONS[previous.status].has(status)
+		(!ALLOWED_TRANSITIONS[previous.status].has(status) ||
+			(previous.status === "completed" &&
+				status === "verifying" &&
+				!reason.startsWith("validation.started:")))
 	) {
 		throw new Error(`Invalid task transition: ${previous.status} -> ${status}`);
 	}
@@ -271,7 +336,7 @@ export function advanceDurableTaskState(input: {
 		...(previous ? { from: previous.status } : {}),
 		to: status,
 		atMs,
-		reason: input.reason ?? "plan.updated",
+		reason,
 	};
 	return {
 		planId: input.planId,
@@ -285,6 +350,9 @@ export function advanceDurableTaskState(input: {
 				? [...step.validationCommands]
 				: undefined,
 			artifacts: step.artifacts ? [...step.artifacts] : undefined,
+			validation: step.validation
+				? step.validation.map((validation) => ({ ...validation }))
+				: undefined,
 		})),
 		...(input.steps.find((step) => step.status === "in_progress")
 			? {
@@ -294,6 +362,7 @@ export function advanceDurableTaskState(input: {
 				}
 			: {}),
 		...(input.repair ? { repair: { ...input.repair } } : {}),
+		...(previous?.rollback ? { rollback: { ...previous.rollback } } : {}),
 		updatedAtMs: atMs,
 		transitions:
 			previous?.planId === input.planId
@@ -302,6 +371,153 @@ export function advanceDurableTaskState(input: {
 						transition,
 					]
 				: [transition],
+	};
+}
+
+export function beginDurableTaskValidation(input: {
+	state: DurableTaskState;
+	stepId: string;
+	atMs?: number;
+}): DurableTaskState {
+	const step = input.state.steps.find((item) => item.id === input.stepId);
+	if (!step) throw new Error(`Unknown task step: ${input.stepId}`);
+	if (!step.validationCommands?.length) {
+		throw new Error(`Task step has no validation commands: ${input.stepId}`);
+	}
+	const atMs = input.atMs ?? Date.now();
+	return advanceDurableTaskState({
+		planId: input.state.planId,
+		previous: input.state,
+		atMs,
+		reason: `validation.started:${input.stepId}`,
+		repair: { ...input.state.repair, state: "verifying" },
+		steps: input.state.steps.map((item) =>
+			item.id === input.stepId
+				? {
+						...item,
+						status: "in_progress",
+						completedAtMs: undefined,
+						validation: item.validationCommands?.map((command) => ({
+							command,
+							status: "pending" as const,
+						})),
+					}
+				: item,
+		),
+	});
+}
+
+export function recordDurableTaskValidation(input: {
+	state: DurableTaskState;
+	stepId: string;
+	command: string;
+	status: DurableTaskValidation["status"];
+	atMs?: number;
+	exitCode?: number;
+	error?: string;
+}): DurableTaskState {
+	const atMs = input.atMs ?? Date.now();
+	const step = input.state.steps.find((item) => item.id === input.stepId);
+	if (!step?.validation) {
+		throw new Error(`Task validation has not started: ${input.stepId}`);
+	}
+	const validations = step.validation.map((item) =>
+		item.command === input.command
+			? {
+					...item,
+					status: input.status,
+					...(input.status === "running" && item.startedAtMs === undefined
+						? { startedAtMs: atMs }
+						: {}),
+					...(input.status === "passed" ||
+					input.status === "failed" ||
+					input.status === "skipped"
+						? { completedAtMs: atMs }
+						: {}),
+					...(input.exitCode !== undefined ? { exitCode: input.exitCode } : {}),
+					...(input.error ? { error: input.error } : {}),
+				}
+			: item,
+	);
+	const failed = validations.some((item) => item.status === "failed");
+	const finished = validations.every((item) =>
+		["passed", "failed", "skipped"].includes(item.status),
+	);
+	const nextSteps = input.state.steps.map((item) =>
+		item.id === input.stepId
+			? {
+					...item,
+					status: failed
+						? ("failed" as const)
+						: finished
+							? ("completed" as const)
+							: ("in_progress" as const),
+					validation: validations,
+					...(finished ? { completedAtMs: atMs } : {}),
+				}
+			: item,
+	);
+	return advanceDurableTaskState({
+		planId: input.state.planId,
+		previous: input.state,
+		atMs,
+		reason: `validation.${input.status}:${input.stepId}`,
+		repair: failed
+			? { ...input.state.repair, state: "repair_required" }
+			: finished
+				? undefined
+				: { ...input.state.repair, state: "verifying" },
+		steps: nextSteps,
+	});
+}
+
+export function rollbackDurableTaskState(input: {
+	state: DurableTaskState;
+	checkpointRunCount: number;
+	atMs?: number;
+	reason?: string;
+}): DurableTaskState {
+	if (
+		!Number.isInteger(input.checkpointRunCount) ||
+		input.checkpointRunCount < 1
+	) {
+		throw new Error("checkpointRunCount must be a positive integer");
+	}
+	const atMs = input.atMs ?? Date.now();
+	const reason =
+		input.reason ?? `checkpoint.rollback:${input.checkpointRunCount}`;
+	const steps = input.state.steps.map((step) =>
+		step.checkpointRunCount !== undefined &&
+		step.checkpointRunCount >= input.checkpointRunCount
+			? {
+					...step,
+					status: "pending" as const,
+					startedAtMs: undefined,
+					completedAtMs: undefined,
+					repairAttempt: undefined,
+					skipReason: undefined,
+					artifacts: undefined,
+					validation: undefined,
+				}
+			: step,
+	);
+	const status = deriveTaskStatus(steps);
+	return {
+		...input.state,
+		status,
+		steps,
+		activeStepId: undefined,
+		repair: undefined,
+		rollback: {
+			checkpointRunCount: input.checkpointRunCount,
+			atMs,
+			reason,
+		},
+		updatedAtMs: atMs,
+		transitions: [
+			...input.state.transitions.slice(-(MAX_TASK_TRANSITIONS - 1)),
+			{ from: input.state.status, to: status, atMs, reason },
+		],
 	};
 }
 
@@ -329,7 +545,20 @@ function isDurableTaskState(value: unknown): value is DurableTaskState {
 			typeof step.status === "string" &&
 			STEP_STATUSES.has(step.status as DurableTaskStepStatus) &&
 			typeof step.kind === "string" &&
-			STEP_KINDS.has(step.kind as DurableTaskStepKind),
+			STEP_KINDS.has(step.kind as DurableTaskStepKind) &&
+			(step.skipReason === undefined || typeof step.skipReason === "string") &&
+			(step.checkpointRunCount === undefined ||
+				(typeof step.checkpointRunCount === "number" &&
+					Number.isInteger(step.checkpointRunCount) &&
+					step.checkpointRunCount >= 1)) &&
+			(step.validation === undefined ||
+				(Array.isArray(step.validation) &&
+					step.validation.every(
+						(item) =>
+							item &&
+							typeof item.command === "string" &&
+							typeof item.status === "string",
+					))),
 	);
 	if (!stepsAreValid) return false;
 	const steps = state.steps as DurableTaskStep[];
@@ -349,6 +578,18 @@ function isDurableTaskState(value: unknown): value is DurableTaskState {
 		return false;
 	}
 	if (state.status !== deriveTaskStatus(steps, repair)) return false;
+	if (
+		state.rollback !== undefined &&
+		(typeof state.rollback !== "object" ||
+			!Number.isInteger(state.rollback.checkpointRunCount) ||
+			state.rollback.checkpointRunCount < 1 ||
+			!Number.isInteger(state.rollback.atMs) ||
+			state.rollback.atMs < 0 ||
+			typeof state.rollback.reason !== "string" ||
+			!state.rollback.reason)
+	) {
+		return false;
+	}
 	const transitionsAreValid =
 		state.transitions.length > 0 &&
 		state.transitions.length <= MAX_TASK_TRANSITIONS &&
@@ -375,6 +616,90 @@ function isDurableTaskState(value: unknown): value is DurableTaskState {
 	);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: undefined;
+}
+
+function projectedTaskEvent(
+	value: unknown,
+): Record<string, unknown> | undefined {
+	const record = asRecord(value);
+	if (!record) return undefined;
+	const direct = asRecord(record.taskEvent);
+	if (direct?.type === "plan.updated") return direct;
+	const meta = asRecord(record.meta);
+	const fromMeta = asRecord(meta?.taskEvent);
+	if (fromMeta?.type === "plan.updated") return fromMeta;
+	const metadata = asRecord(record.metadata);
+	const fromMetadata = asRecord(metadata?.taskEvent);
+	if (fromMetadata?.type === "plan.updated") return fromMetadata;
+	if (typeof record.content === "string") {
+		try {
+			const parsed = asRecord(JSON.parse(record.content));
+			return projectedTaskEvent(parsed);
+		} catch {
+			return undefined;
+		}
+	}
+	return undefined;
+}
+
+function migrateProjectedTaskState(
+	messages: unknown[],
+): DurableTaskState | undefined {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const event = projectedTaskEvent(messages[index]);
+		if (!event) continue;
+		const planId =
+			typeof event.planId === "string" && event.planId.trim()
+				? event.planId.trim()
+				: undefined;
+		if (!planId || !Array.isArray(event.steps)) continue;
+		const steps = event.steps.flatMap((rawStep) => {
+			const step = asRecord(rawStep);
+			if (
+				!step ||
+				typeof step.id !== "string" ||
+				typeof step.label !== "string" ||
+				typeof step.status !== "string" ||
+				!STEP_STATUSES.has(step.status as DurableTaskStepStatus)
+			) {
+				return [];
+			}
+			const kind =
+				typeof step.kind === "string" &&
+				STEP_KINDS.has(step.kind as DurableTaskStepKind)
+					? (step.kind as DurableTaskStepKind)
+					: "work";
+			return [
+				{
+					...step,
+					id: step.id,
+					label: step.label,
+					status: step.status as DurableTaskStepStatus,
+					kind,
+				} as DurableTaskStep,
+			];
+		});
+		try {
+			return advanceDurableTaskState({
+				planId,
+				steps,
+				atMs:
+					typeof event.updatedAtMs === "number" &&
+					Number.isInteger(event.updatedAtMs) &&
+					event.updatedAtMs >= 0
+						? event.updatedAtMs
+						: Date.now(),
+				reason: "migration.projected-report",
+			});
+		} catch {}
+	}
+	return undefined;
+}
+
 export function readDurableTaskState(
 	sessionId: string,
 ): DurableTaskState | undefined {
@@ -391,6 +716,18 @@ export function readDurableTaskState(
 	} catch {
 		return undefined;
 	}
+}
+
+export function readOrMigrateDurableTaskState(
+	sessionId: string,
+	messages: unknown[] = [],
+): DurableTaskState | undefined {
+	const current = readDurableTaskState(sessionId);
+	if (current) return current;
+	const migrated = migrateProjectedTaskState(messages);
+	if (!migrated) return undefined;
+	persistDurableTaskState(sessionId, migrated);
+	return migrated;
 }
 
 export function persistDurableTaskState(
