@@ -103,6 +103,18 @@ const requiredMarkers: Array<{
 		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
+		markers: [
+			"ProcessSessionManager",
+			"DEFAULT_MAX_PROCESS_SESSIONS = 64",
+			"DEFAULT_PROCESS_OUTPUT_BYTES = 1024 * 1024",
+			"interactive: false",
+			"highestDroppedCursor",
+			"process.kill(-child.pid",
+			"taskkill.exe",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",
 		markers: [
 			'path.join(process.env.USERPROFILE, "Documents")',
