@@ -398,24 +398,39 @@ const CLOUD_DISCOVERY_BUDGET_MS = 2_000;
 
 function openUrlInDefaultBrowser(url: string): Promise<void> {
 	const platform = process.platform;
-	// Match Cline's official desktop host launcher. The empty title argument is
-	// required by Windows `start`; without it, a quoted URL can be interpreted
-	// as the new console window title instead of the browser target.
-	const command =
-		platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
-	const args = platform === "win32" ? ["/c", "start", "", url] : [url];
-	const spawned = spawn(command, args, {
-		stdio: "ignore",
-		detached: true,
-		windowsHide: true,
-	});
+	// Match Cline's current official desktop host. On Windows, do not pass the
+	// OAuth URL through cmd.exe: `cmd /c start` re-parses metacharacters such as
+	// &, ^, and |. rundll32 forwards the URL directly to the registered protocol
+	// handler and reliably opens the user's default browser in packaged builds.
+	const spawned =
+		platform === "darwin"
+			? spawn("open", [url], { stdio: "ignore", detached: true })
+			: platform === "win32"
+				? spawn("rundll32", ["url.dll,FileProtocolHandler", url], {
+						stdio: "ignore",
+						detached: true,
+						windowsHide: true,
+					})
+				: spawn("xdg-open", [url], {
+						stdio: "ignore",
+						detached: true,
+					});
 	return new Promise((resolve, reject) => {
+		const graceTimer = setTimeout(resolve, 2_000);
 		spawned.once("spawn", () => {
 			spawned.unref();
-			resolve();
 		});
 		spawned.once("error", (error) => {
+			clearTimeout(graceTimer);
 			reject(new Error(`could not open browser: ${error.message}`));
+		});
+		spawned.once("exit", (code) => {
+			clearTimeout(graceTimer);
+			if (code === 0 || code === null) {
+				resolve();
+			} else {
+				reject(new Error(`browser opener exited with code ${code}`));
+			}
 		});
 	});
 }

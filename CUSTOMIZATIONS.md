@@ -45,7 +45,7 @@ Primary files:
 
 ### Windows reliability
 
-- Cline account sign-in uses the original official callback-based OAuth process: the Cline API authorization page opens in the default browser, the SDK receives the redirect on its local callback server, and the authorization code is exchanged for access and refresh tokens. The newer WorkOS device-code path is deliberately disabled for the desktop app. Windows URL launching matches the official Cline desktop host (`cmd /c start "" <url>`).
+- Cline account sign-in uses the original official callback-based OAuth process: the Cline API authorization page opens in the default browser, the SDK receives the redirect on its local callback server, and the authorization code is exchanged for access and refresh tokens. The newer WorkOS device-code path is deliberately disabled for the desktop app. Windows URL launching matches the current official Cline desktop host and uses `rundll32 url.dll,FileProtocolHandler` so OAuth URLs reach the registered default browser without `cmd.exe` re-parsing.
 - Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
 - Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
 - Sidecar stores are closed during tests and logging fixtures work across platforms.
