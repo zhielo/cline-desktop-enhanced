@@ -27,7 +27,7 @@ Example:
 
 APK, AAB, DEX, and JAR inputs prefer JADX when installed. Ghidra uses `analyzeHeadless`; IDA uses autonomous mode; child output is bounded and timed out. Successful analysis is stored under an artifact SHA-256 and reused by default. Set `reuse_analysis` to `false` for an isolated temporary run. ZIP inspection reads only the central directory and does not extract files.
 
-JADX options include `jadx_mode`, `jadx_threads`, `jadx_single_class`, `jadx_output_format`, `jadx_deobfuscate`, `jadx_call_graph`, `jadx_export_gradle`, `jadx_no_resources`, `jadx_no_sources`, and `jadx_mappings_path`. Ghidra accepts `max_cpu`. IDA batch decompilation uses Hex-Rays' `ALL` target so every eligible non-library function is included.
+JADX options include `jadx_mode`, `jadx_threads`, `jadx_single_class`, `jadx_output_format`, `jadx_deobfuscate`, `jadx_call_graph`, `jadx_export_gradle`, `jadx_no_resources`, `jadx_no_sources`, and `jadx_mappings_path`. Ghidra accepts `max_cpu`. IDA batch decompilation generates a bounded IDAPython script that calls `ida_hexrays.decompile()` for every eligible function, writes a non-empty pseudocode artifact, records per-function failures, and exits IDA explicitly. It does not pass output paths through the incompatible `-Ohexrays:<path>:ALL` form.
 
 For protected or obfuscated Android applications, `disassemble_smali` uses `apktool` for APK-family containers or `baksmali` for raw DEX files. The resulting `.smali` files can be edited with normal file tools. `assemble_smali` builds an edited Smali directory into a DEX using `smali`; `rebuild_apk` builds an edited decoded directory into an unsigned APK using `apktool`. Build outputs are written atomically, symbolic links are rejected in build inputs, and the tool never executes the analyzed application. APK signing remains a separate, explicitly configured workflow.
 
@@ -55,7 +55,7 @@ bun run build
 
 ## Windows setup for Ghidra 12 and IDA 9.x
 
-The reverse-engineering executor now searches the normal Windows application locations in `Program Files`, `Program Files (x86)`, and `%LOCALAPPDATA%\\Programs`. For portable Ghidra distributions it also checks Ghidra-named directories under `%USERPROFILE%` and `%USERPROFILE%\\Downloads`. Explicit `GHIDRA_INSTALL_DIR`, `GHIDRA_HOME`, `IDADIR`, and `IDA_HOME` values still take precedence.
+The reverse-engineering executor performs a bounded two-level search under `%USERPROFILE%\\Documents`, `Program Files`, `Program Files (x86)`, and `%LOCALAPPDATA%\\Programs`. This finds nested portable Ghidra ZIP layouts without scanning arbitrary drive roots. Explicit `GHIDRA_INSTALL_DIR`, `GHIDRA_HOME`, `IDADIR`, and `IDA_HOME` values still take precedence.
 
 Ask Cline to **discover reverse-engineering tools** or call:
 
@@ -66,7 +66,7 @@ Ask Cline to **discover reverse-engineering tools** or call:
 }
 ```
 
-The result refreshes the sidecar's Windows `PATH` from the user and machine environment, then reports detected versions, headless and GUI launchers, Ghidra's bundled PyGhidra wheel directory, the analysis cache directory, and IDA's idalib activation script. Tools installed while Cline is open can therefore be detected without killing the sidecar. For IDA 9.0–9.3, activate idalib once using the exact command returned by discovery. This uses the installed licensed IDA instance and does not alter or bypass licensing.
+The result refreshes the sidecar's Windows `PATH` plus persisted `GHIDRA_HOME`, `GHIDRA_INSTALL_DIR`, `IDA_HOME`, `IDADIR`, and `JADX_HOME` values from the user and machine environment, then reports detected versions, headless and GUI launchers, Ghidra's bundled PyGhidra wheel directory, the analysis cache directory, and IDA's idalib activation script. Tools installed while Cline is open can therefore be detected without killing the sidecar. For IDA 9.0–9.3, activate idalib once using the exact command returned by discovery. This uses the installed licensed IDA instance and does not alter or bypass licensing.
 
 Use `inspect` before processing an unknown artifact. ZIP, APK, AAB, and JAR
 containers are parsed without extraction and report traversal, symlink,
@@ -109,6 +109,4 @@ bugreports. Operations support device serial selection, timeout/cancellation,
 bounded text output, and Windows process-tree termination. APK pulls and
 screenshots update destinations atomically.
 
-The tool does not expose an unrestricted device shell, clear app data, root a
-device, bypass Android authorization, or bypass app signing. Full Access
-removes Cline approval prompts; Android must still authorize the device.
+The tool exposes unrestricted `adb shell` only for an already-authorized device and only when `acknowledge_risk: true` is supplied. It does not root a device, bypass Android authorization, or bypass app signing. Full Access removes Cline approval prompts; Android must still authorize the device.
