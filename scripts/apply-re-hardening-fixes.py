@@ -10,13 +10,9 @@ def replace_once(path: str, old: str, new: str) -> None:
 
 replace_once(
     "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",
-    '''async function toolVersion(
-\tengine: Engine,
-\tcommand: string | undefined,
-): Promise<string | undefined> {
+    '''async function toolVersion(engine: Engine, command: string | undefined): Promise<string | undefined> {
 \treturn (await toolIdentity(engine, command)).version;
 }
-
 ''',
     "",
 )
