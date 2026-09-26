@@ -65,19 +65,13 @@ jobs:
           fi
           python3 - <<'PY'
           from pathlib import Path
-          import re
           path = Path("sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts")
           source = path.read_text()
-          pattern = r'(engine === "ida"\s*\? \{.*?script_args: input\.script_args \?\? \[\],)(\n\s*\})'
-          source, count = re.subn(
-              pattern,
-              r"\1\n\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION,\2",
-              source,
-              count=1,
-              flags=re.S,
-          )
-          if count != 1:
-              raise RuntimeError("could not add the IDA script version to the options hash")
+          ida_start = source.index(': engine === "ida"')
+          marker = "script_args: input.script_args ?? [],"
+          marker_start = source.index(marker, ida_start)
+          line_end = source.index("\n", marker_start) + 1
+          source = source[:line_end] + "\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION,\n" + source[line_end:]
           path.write_text(source)
           PY
       - name: Install dependencies
