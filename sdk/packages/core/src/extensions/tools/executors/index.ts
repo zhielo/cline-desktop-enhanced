@@ -18,14 +18,15 @@ import {
 	createFileReadExecutor,
 	type FileReadExecutorOptions,
 } from "./file-read";
-import { createSearchExecutor, type SearchExecutorOptions } from "./search";
-import { createReverseEngineeringExecutor } from "./reverse-engineering";
 import { createLiveDebuggerExecutor } from "./live-debugger";
+import { createReverseEngineeringExecutor } from "./reverse-engineering";
+import { createSearchExecutor, type SearchExecutorOptions } from "./search";
 import {
 	createWebFetchExecutor,
 	type WebFetchExecutorOptions,
 } from "./web-fetch";
 
+export { createAndroidDeviceExecutor } from "./android-device";
 // Re-export individual executors and their options types
 export {
 	type ApplyPatchExecutorOptions,
@@ -33,7 +34,6 @@ export {
 	createApplyPatchExecutor,
 	type PatchFileChange,
 } from "./apply-patch";
-export { createAndroidDeviceExecutor } from "./android-device";
 export { PATCH_MARKERS, PatchActionType } from "./apply-patch-parser";
 export {
 	CommandExitError,
@@ -45,13 +45,28 @@ export {
 	createFileReadExecutor,
 	type FileReadExecutorOptions,
 } from "./file-read";
+export { createLiveDebuggerExecutor } from "./live-debugger";
+export {
+	DEFAULT_COMPLETED_PROCESS_RETENTION_MS,
+	DEFAULT_MAX_PROCESS_SESSIONS,
+	DEFAULT_MAX_PROCESS_SESSIONS_PER_OWNER,
+	DEFAULT_PROCESS_OUTPUT_BYTES,
+	ProcessSessionManager,
+	type ProcessSessionManagerOptions,
+	type ProcessSessionOutputChunk,
+	type ProcessSessionOutputStream,
+	type ProcessSessionReadResult,
+	type ProcessSessionSignal,
+	type ProcessSessionSnapshot,
+	type ProcessSessionStartOptions,
+	type ProcessSessionState,
+} from "./process-session-manager";
+export { createReverseEngineeringExecutor } from "./reverse-engineering";
 export {
 	RunCommandExecutionController,
 	type RunningCommandRegistration,
 } from "./run-command-execution-controller";
 export { createSearchExecutor, type SearchExecutorOptions } from "./search";
-export { createReverseEngineeringExecutor } from "./reverse-engineering";
-export { createLiveDebuggerExecutor } from "./live-debugger";
 export {
 	createWebFetchExecutor,
 	type WebFetchExecutorOptions,
