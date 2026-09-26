@@ -53,40 +53,6 @@ describe("runCancellableProviderOAuthLogin", () => {
 		expect(result).toEqual({ provider: "cline", accessToken: "saved-token" });
 	});
 
-	it("forwards copyable device authorization details to the caller", async () => {
-		const onAuthorization = vi.fn();
-		const { dependencies } = makeDependencies({
-			login: (async (
-				_provider: string,
-				_existing: unknown,
-				_openUrl: (url: string) => void,
-				_onUserCode: ((code: string) => void) | undefined,
-				emitAuthorization:
-					| ((details: { userCode: string; authorizationUrl: string }) => void)
-					| undefined,
-			) => {
-				emitAuthorization?.({
-					userCode: "ABCD-EFGH",
-					authorizationUrl: "https://example.com/device?code=ABCD-EFGH",
-				});
-				return { accessToken: "fresh-token" };
-			}) as never,
-		});
-
-		await runCancellableProviderOAuthLogin(
-			makeManager(),
-			"cline",
-			() => undefined,
-			{ onAuthorization },
-			dependencies,
-		);
-
-		expect(onAuthorization).toHaveBeenCalledWith({
-			userCode: "ABCD-EFGH",
-			authorizationUrl: "https://example.com/device?code=ABCD-EFGH",
-		});
-	});
-
 	it("rejects promptly on cancel and never persists a late completion", async () => {
 		let resolveLogin: (credentials: Credentials) => void = () => undefined;
 		const { dependencies, save } = makeDependencies({

@@ -81,8 +81,7 @@ const requiredMarkers: Array<{
 			"rev-parse",
 			"worktree",
 			"update-ref",
-			'"explorer.exe"',
-			"authorizationUrl",
+			'"start"',
 		],
 	},
 	{
@@ -98,16 +97,12 @@ const requiredMarkers: Array<{
 		markers: ["IS_REACT_ACT_ENVIRONMENT"],
 	},
 	{
-		path: "apps/examples/desktop-app/webview/hooks/use-oauth-user-code.ts",
+		path: "apps/examples/desktop-app/sidecar/oauth-login.ts",
 		markers: [
-			'desktopClient.subscribe("provider_oauth_user_code"',
-			"lifetime of the mounted login surface",
-			"authorizationUrl",
+			"loginClineOAuth",
+			"useWorkOSDeviceAuth: false",
+			"original browser callback flow",
 		],
-	},
-	{
-		path: "apps/examples/desktop-app/webview/components/oauth-authorization-prompt.tsx",
-		markers: ["Cline sign-in URL", "Open sign-in page", "Copy sign-in link"],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
