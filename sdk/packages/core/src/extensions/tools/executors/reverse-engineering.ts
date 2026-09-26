@@ -39,6 +39,7 @@ type SupplementalToolInventory = Record<string, string | undefined>;
 const ANALYSIS_MANIFEST = "cline-analysis.json";
 const ANALYSIS_SCHEMA_VERSION = 2;
 const GHIDRA_SCRIPT_VERSION = 2;
+const IDA_DECOMPILE_SCRIPT_VERSION = 1;
 const analysisLocks = new Map<string, Promise<void>>();
 
 async function withAnalysisLock<T>(
@@ -75,12 +76,13 @@ function expandWindowsEnvironment(value: string): string {
 	});
 }
 
-async function readWindowsRegistryPath(
+async function readWindowsRegistryValue(
 	key: string,
+	name: string,
 ): Promise<string | undefined> {
 	if (process.platform !== "win32") return undefined;
 	return new Promise((resolve) => {
-		const child = spawn("reg.exe", ["query", key, "/v", "Path"], {
+		const child = spawn("reg.exe", ["query", key, "/v", name], {
 			stdio: ["ignore", "pipe", "ignore"],
 			windowsHide: true,
 		});
@@ -101,17 +103,18 @@ async function readWindowsRegistryPath(
 }
 
 /**
- * Desktop sidecars inherit their environment at startup. Refresh PATH from the
- * Windows registry before discovery so tools installed while the app is open
- * become available without killing the sidecar.
+ * Desktop sidecars inherit their environment at startup. Refresh PATH and
+ * reverse-engineering install variables from the Windows registry before
+ * discovery so tools configured while the app is open become available.
  */
 async function refreshProcessPath(): Promise<boolean> {
 	if (process.platform !== "win32") return false;
+	const machineEnvironment =
+		"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment";
+	const userEnvironment = "HKCU\\Environment";
 	const [machinePath, userPath] = await Promise.all([
-		readWindowsRegistryPath(
-			"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
-		),
-		readWindowsRegistryPath("HKCU\\Environment"),
+		readWindowsRegistryValue(machineEnvironment, "Path"),
+		readWindowsRegistryValue(userEnvironment, "Path"),
 	]);
 	const entries = [
 		...splitPathEntries(process.env.PATH),
@@ -126,8 +129,26 @@ async function refreshProcessPath(): Promise<boolean> {
 		return true;
 	});
 	const next = merged.join(path.delimiter);
-	const changed = next !== process.env.PATH;
+	let changed = next !== process.env.PATH;
 	process.env.PATH = next;
+
+	for (const name of [
+		"GHIDRA_HOME",
+		"GHIDRA_INSTALL_DIR",
+		"IDA_HOME",
+		"IDADIR",
+		"JADX_HOME",
+	]) {
+		const [machineValue, userValue] = await Promise.all([
+			readWindowsRegistryValue(machineEnvironment, name),
+			readWindowsRegistryValue(userEnvironment, name),
+		]);
+		const value = userValue ?? machineValue;
+		if (value && process.env[name] !== value) {
+			process.env[name] = value;
+			changed = true;
+		}
+	}
 	return changed;
 }
 
@@ -143,24 +164,31 @@ async function exists(filePath: string): Promise<boolean> {
 async function listMatchingDirectories(
 	parent: string | undefined,
 	prefixes: string[],
+	maxDepth = 1,
 ): Promise<string[]> {
-	if (!parent || !(await exists(parent))) return [];
-	try {
-		const entries = await fs.readdir(parent, { withFileTypes: true });
-		return entries
-			.filter(
-				(entry) =>
-					entry.isDirectory() &&
-					prefixes.some((prefix) =>
-						entry.name.toLowerCase().startsWith(prefix.toLowerCase()),
-					),
+	if (!parent || maxDepth < 1 || !(await exists(parent))) return [];
+	const matches: string[] = [];
+	const visit = async (directory: string, depth: number): Promise<void> => {
+		let entries: Dirent[];
+		try {
+			entries = await fs.readdir(directory, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const entry of entries) {
+			if (!entry.isDirectory()) continue;
+			const candidate = path.join(directory, entry.name);
+			if (
+				prefixes.some((prefix) =>
+					entry.name.toLowerCase().startsWith(prefix.toLowerCase()),
+				)
 			)
-			.map((entry) => path.join(parent, entry.name))
-			.sort()
-			.reverse();
-	} catch {
-		return [];
-	}
+				matches.push(candidate);
+			if (depth < maxDepth) await visit(candidate, depth + 1);
+		}
+	};
+	await visit(parent, 1);
+	return matches.sort().reverse();
 }
 
 async function platformInstallRoots(engine: Engine): Promise<string[]> {
@@ -187,6 +215,9 @@ async function platformInstallRoots(engine: Engine): Promise<string[]> {
 		return [...new Set(roots)];
 	}
 	const parents = [
+		process.env.USERPROFILE
+			? path.join(process.env.USERPROFILE, "Documents")
+			: undefined,
 		process.env.ProgramFiles,
 		process.env["ProgramFiles(x86)"],
 		process.env.LOCALAPPDATA
@@ -201,17 +232,7 @@ async function platformInstallRoots(engine: Engine): Promise<string[]> {
 				: ["jadx"];
 	const roots: string[] = [];
 	for (const parent of parents) {
-		roots.push(...(await listMatchingDirectories(parent, prefixes)));
-	}
-	if (engine === "ghidra") {
-		const userHome = process.env.USERPROFILE;
-		roots.push(
-			...(await listMatchingDirectories(userHome, ["ghidra"])),
-			...(await listMatchingDirectories(
-				userHome ? path.join(userHome, "Downloads") : undefined,
-				["ghidra"],
-			)),
-		);
+		roots.push(...(await listMatchingDirectories(parent, prefixes, 2)));
 	}
 	return [...new Set(roots)];
 }
@@ -1731,6 +1752,58 @@ async function ensureGhidraDecompileScript(outputDir: string) {
 	return scriptPath;
 }
 
+async function ensureIdaDecompileScript(
+	outputDir: string,
+	outputPath: string,
+) {
+	const scriptPath = path.join(outputDir, "cline_decompile_all.py");
+	const source = `# Generated by Cline Enhanced for authorized static analysis.
+import traceback
+import ida_auto
+import ida_funcs
+import ida_hexrays
+import idautils
+import idc
+
+OUTPUT_PATH = ${JSON.stringify(outputPath)}
+
+def main():
+    ida_auto.auto_wait()
+    if not ida_hexrays.init_hexrays_plugin():
+        raise RuntimeError("Hex-Rays decompiler is unavailable")
+    decompiled = 0
+    with open(OUTPUT_PATH, "w", encoding="utf-8", errors="replace") as output:
+        for address in idautils.Functions():
+            function = ida_funcs.get_func(address)
+            if function is None:
+                continue
+            output.write("/* %s @ 0x%x */\\n" % (idc.get_func_name(address), address))
+            try:
+                pseudocode = ida_hexrays.decompile(function)
+                if pseudocode is None:
+                    raise RuntimeError("decompiler returned no result")
+                output.write(str(pseudocode))
+                output.write("\\n\\n")
+                decompiled += 1
+            except Exception as error:
+                output.write("/* decompilation failed: %s */\\n\\n" % error)
+    if decompiled == 0:
+        raise RuntimeError("Hex-Rays did not decompile any function")
+
+exit_code = 0
+try:
+    main()
+except Exception:
+    exit_code = 1
+    with open(OUTPUT_PATH + ".error.txt", "w", encoding="utf-8", errors="replace") as error_output:
+        traceback.print_exc(file=error_output)
+finally:
+    idc.qexit(exit_code)
+`;
+	await fs.writeFile(scriptPath, source, { mode: 0o600 });
+	return scriptPath;
+}
+
 function installationRoot(command: string | undefined, engine: Engine) {
 	if (!command || !path.isAbsolute(command)) return undefined;
 	const commandDirectory = path.dirname(command);
@@ -1776,6 +1849,7 @@ function analysisOptionsHash(
 			: engine === "ida"
 				? {
 						operation: input.operation,
+						idaDecompileScriptVersion: IDA_DECOMPILE_SCRIPT_VERSION,
 						script_path: input.script_path ?? null,
 						script_args: input.script_args ?? [],
 					}
@@ -2442,12 +2516,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					args = ["-A", `-L${path.join(outputDir, "ida.log")}`];
 					if (!databaseExists) args.push(`-o${idaDatabase}`);
 					if (input.operation === "decompile") {
-						const decompilerOptions = databaseExists
-							? "-Ohexrays:-nosave"
-							: "-Ohexrays";
-						args.push(
-							`${decompilerOptions}:${path.join(outputDir, "decompiled.c")}:ALL`,
+						const decompileScript = await ensureIdaDecompileScript(
+							outputDir,
+							path.join(outputDir, "decompiled.c"),
 						);
+						args.push(`-S${shellLikeQuote(decompileScript)}`);
 					}
 					if (input.script_path) {
 						args.push(
@@ -2506,14 +2579,31 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					2,
 				);
 			}
+			const decompileOutput = path.join(outputDir, "decompiled.c");
+			if (input.operation === "decompile") {
+				await Promise.all([
+					fs.rm(decompileOutput, { force: true }),
+					fs.rm(`${decompileOutput}.error.txt`, { force: true }),
+				]);
+			}
 			const result = await runSupervised(
 				command,
 				args,
 				timeoutMs,
 				context.signal,
 			);
+			const decompileStat =
+				input.operation === "decompile"
+					? await fs.stat(decompileOutput).catch(() => undefined)
+					: undefined;
+			const artifactVerified =
+				input.operation !== "decompile" ||
+				(Boolean(decompileStat?.isFile()) && (decompileStat?.size ?? 0) > 0);
 			const succeeded =
-				result.exitCode === 0 && !result.timedOut && !result.cancelled;
+				result.exitCode === 0 &&
+				!result.timedOut &&
+				!result.cancelled &&
+				artifactVerified;
 			if (succeeded) {
 				await writeAnalysisManifest(outputDir, {
 					schemaVersion: ANALYSIS_SCHEMA_VERSION,
@@ -2542,6 +2632,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					durationMs: Date.now() - started,
 					artifacts,
 					artifactsTruncated: artifacts.length >= 200,
+					artifactVerified,
+					succeeded,
 					...result,
 				},
 				null,

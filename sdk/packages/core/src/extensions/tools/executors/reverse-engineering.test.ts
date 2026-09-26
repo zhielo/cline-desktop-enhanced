@@ -321,7 +321,21 @@ describe("reverse-engineering engine execution", () => {
 		);
 		temporaryDirectories.push(directory);
 		const bin = path.join(directory, "bin");
-		await executable(bin, "idat64", 'printf "%s\\n" "$@"');
+		await executable(
+			bin,
+			"idat64",
+			`for arg in "$@"; do
+  case "$arg" in
+    -S*)
+      script="\${arg#-S}"
+      output="$(sed -n 's/^OUTPUT_PATH = "\\(.*\\)"$/\\1/p' "$script")"
+      mkdir -p "$(dirname "$output")"
+      printf 'int recovered(void) { return 1; }\\n' > "$output"
+      ;;
+  esac
+done
+printf "%s\\n" "$@"`,
+		);
 		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
 		const target = path.join(directory, "sample.bin");
 		await fs.writeFile(target, "sample");
@@ -340,9 +354,22 @@ describe("reverse-engineering engine execution", () => {
 		);
 
 		expect(result.exitCode).toBe(0);
-		expect(result.args).toContain(
-			`-Ohexrays:${path.join(outputDirectory, "decompiled.c")}:ALL`,
+		expect(result.succeeded).toBe(true);
+		expect(result.artifactVerified).toBe(true);
+		expect(
+			result.args.some((argument: string) => argument.startsWith("-Ohexrays")),
+		).toBe(false);
+		const scriptArgument = result.args.find((argument: string) =>
+			argument.startsWith("-S"),
 		);
+		expect(scriptArgument).toBeDefined();
+		const scriptPath = scriptArgument.slice(2).replace(/^"|"$/g, "");
+		const scriptSource = await fs.readFile(scriptPath, "utf8");
+		expect(scriptSource).toContain("ida_hexrays.decompile(function)");
+		expect(scriptSource).toContain("idc.qexit(exit_code)");
+		expect(
+			await fs.readFile(path.join(outputDirectory, "decompiled.c"), "utf8"),
+		).toContain("int recovered");
 		expect(
 			JSON.parse(
 				await fs.readFile(

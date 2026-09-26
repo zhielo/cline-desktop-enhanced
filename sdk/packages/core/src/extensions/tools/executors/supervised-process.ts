@@ -116,6 +116,7 @@ export async function runSupervised(
 		let stderr = "";
 		let timedOut = false;
 		let cancelled = false;
+		let childExited = false;
 		let settled = false;
 		child.stdout?.on("data", (chunk) => {
 			stdout = boundedAppend(stdout, chunk);
@@ -142,15 +143,20 @@ export async function runSupervised(
 				});
 		};
 		const timer = setTimeout(() => {
+			if (childExited) return;
 			timedOut = true;
 			killProcessTree(child);
 		}, timeoutMs);
 		const abort = () => {
+			if (childExited) return;
 			cancelled = true;
 			killProcessTree(child);
 		};
 		signal?.addEventListener("abort", abort, { once: true });
 		child.once("error", (error) => finish({ exitCode: null, error }));
+		child.once("exit", () => {
+			childExited = true;
+		});
 		// close fires only after stdio has drained; exit can precede the final chunks.
 		child.once("close", (exitCode) => finish({ exitCode }));
 	});

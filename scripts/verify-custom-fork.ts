@@ -103,8 +103,24 @@ const requiredMarkers: Array<{
 		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",
+		markers: [
+			'path.join(process.env.USERPROFILE, "Documents")',
+			"listMatchingDirectories(parent, prefixes, 2)",
+			"GHIDRA_INSTALL_DIR",
+			"cline_decompile_all.py",
+			"ida_hexrays.decompile(function)",
+			"artifactVerified",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/supervised-process.ts",
-		markers: ['child.once("close"', "process.kill(-child.pid", "exited_early"],
+		markers: [
+			'child.once("close"',
+			"process.kill(-child.pid",
+			"exited_early",
+			"childExited",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/live-debugger.ts",
