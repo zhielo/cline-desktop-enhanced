@@ -112,10 +112,23 @@ const requiredMarkers: Array<{
 			"rev-parse",
 			"worktree",
 			"update-ref",
+			"handoff_git_worktree",
+			"Apply to Local conflicted",
+			"Discard requires explicit confirmation",
 			'"rundll32"',
 			"url.dll,FileProtocolHandler",
 			"onAuthorization",
 			"authorizationUrl",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/worktree-handoff-bar.tsx",
+		markers: [
+			"Apply to Local",
+			"Create Branch",
+			"Open PR",
+			"Keep",
+			"Discard worktree",
 		],
 	},
 	{
@@ -284,6 +297,15 @@ const requiredMarkers: Array<{
 			"Scoped computer use",
 			"atomically persists a versioned task-state artifact",
 			"Do not publish a GitHub Release",
+		],
+	},
+	{
+		path: "docs/WORKTREE_HANDOFF.md",
+		markers: [
+			"Apply to Local",
+			"explicit confirmation",
+			"Cleanup is idempotent",
+			"does not publish a GitHub Release",
 		],
 	},
 	{
