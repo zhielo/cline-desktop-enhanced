@@ -47,6 +47,15 @@ export {
 } from "./file-read";
 export { createLiveDebuggerExecutor } from "./live-debugger";
 export {
+	createStreamingSecretRedactor,
+	isSensitiveEnvironmentVariable,
+	type PreparedProcessEnvironment,
+	type ProcessEnvironmentPolicyOptions,
+	prepareProcessEnvironment,
+	redactSensitiveText,
+	type StreamingSecretRedactor,
+} from "./process-environment-policy";
+export {
 	DEFAULT_COMPLETED_PROCESS_RETENTION_MS,
 	DEFAULT_MAX_PROCESS_SESSIONS,
 	DEFAULT_MAX_PROCESS_SESSIONS_PER_OWNER,

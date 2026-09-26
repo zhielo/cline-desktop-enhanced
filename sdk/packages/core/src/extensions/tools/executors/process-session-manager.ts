@@ -9,6 +9,12 @@ import {
 	type ProcessStartTokenProbeResult,
 	probeProcessStartTokenAsync,
 } from "../../../runtime/process-start-token";
+import {
+	createStreamingSecretRedactor,
+	prepareProcessEnvironment,
+	redactSensitiveText,
+	type StreamingSecretRedactor,
+} from "./process-environment-policy";
 
 export const DEFAULT_MAX_PROCESS_SESSIONS = 64;
 export const DEFAULT_MAX_PROCESS_SESSIONS_PER_OWNER = 8;
@@ -73,6 +79,16 @@ export interface ProcessSessionManagerOptions {
 	maxSessionsPerOwner?: number;
 	maxOutputBytes?: number;
 	completedRetentionMs?: number;
+	/**
+	 * Whether sessions inherit non-sensitive variables from the host.
+	 * @default true
+	 */
+	inheritEnvironment?: boolean;
+	/**
+	 * Exact sensitive variable names approved by the host. Values remain
+	 * redacted from all retained output.
+	 */
+	allowedSensitiveEnvironmentVariables?: string[];
 	processStartTokenProbe?: (
 		pid: number,
 	) => ProcessStartTokenProbeResult | Promise<ProcessStartTokenProbeResult>;
@@ -91,6 +107,9 @@ interface ManagedProcessSession {
 	output: BoundedProcessOutput;
 	stdoutDecoder: StringDecoder;
 	stderrDecoder: StringDecoder;
+	stdoutRedactor: StreamingSecretRedactor;
+	stderrRedactor: StreamingSecretRedactor;
+	secretValues: string[];
 	cleanupTimer?: NodeJS.Timeout;
 	cancelRequested: boolean;
 	settled: boolean;
@@ -256,6 +275,8 @@ export class ProcessSessionManager {
 	private readonly maxSessionsPerOwner: number;
 	private readonly maxOutputBytes: number;
 	private readonly completedRetentionMs: number;
+	private readonly inheritEnvironment: boolean;
+	private readonly allowedSensitiveEnvironmentVariables: string[];
 	private readonly processStartTokenProbe: NonNullable<
 		ProcessSessionManagerOptions["processStartTokenProbe"]
 	>;
@@ -282,6 +303,10 @@ export class ProcessSessionManager {
 			DEFAULT_COMPLETED_PROCESS_RETENTION_MS,
 			0,
 		);
+		this.inheritEnvironment = options.inheritEnvironment !== false;
+		this.allowedSensitiveEnvironmentVariables = [
+			...(options.allowedSensitiveEnvironmentVariables ?? []),
+		];
 		this.processStartTokenProbe =
 			options.processStartTokenProbe ?? probeProcessStartTokenAsync;
 		this.spawnProcess =
@@ -307,9 +332,15 @@ export class ProcessSessionManager {
 		const processId = randomUUID();
 		const startedAtMs = Date.now();
 		const args = [...(options.args ?? [])];
+		const preparedEnvironment = prepareProcessEnvironment({
+			overrides: options.env,
+			inheritEnvironment: this.inheritEnvironment,
+			allowedSensitiveEnvironmentVariables:
+				this.allowedSensitiveEnvironmentVariables,
+		});
 		const child = this.spawnProcess(options.executable, args, {
 			cwd: options.cwd,
-			env: { ...process.env, ...options.env },
+			env: preparedEnvironment.environment,
 			detached: process.platform !== "win32",
 			windowsHide: true,
 			shell: false,
@@ -333,6 +364,13 @@ export class ProcessSessionManager {
 			output: new BoundedProcessOutput(this.maxOutputBytes),
 			stdoutDecoder: new StringDecoder("utf8"),
 			stderrDecoder: new StringDecoder("utf8"),
+			stdoutRedactor: createStreamingSecretRedactor(
+				preparedEnvironment.secretValues,
+			),
+			stderrRedactor: createStreamingSecretRedactor(
+				preparedEnvironment.secretValues,
+			),
+			secretValues: preparedEnvironment.secretValues,
 			cancelRequested: false,
 			settled: false,
 		};
@@ -465,18 +503,36 @@ export class ProcessSessionManager {
 			session.snapshot.droppedOutputBytes = session.output.omittedBytes;
 		};
 		session.child.stdout.on("data", (data: Buffer) => {
-			append("stdout", session.stdoutDecoder.write(data));
+			append(
+				"stdout",
+				session.stdoutRedactor.push(session.stdoutDecoder.write(data)),
+			);
 		});
 		session.child.stderr.on("data", (data: Buffer) => {
-			append("stderr", session.stderrDecoder.write(data));
+			append(
+				"stderr",
+				session.stderrRedactor.push(session.stderrDecoder.write(data)),
+			);
 		});
 		session.child.once("error", (error) => {
-			session.snapshot.error = error.message;
+			session.snapshot.error = redactSensitiveText(
+				error.message,
+				session.secretValues,
+			);
 			this.complete(session, "failed", null, null);
 		});
 		session.child.once("close", (exitCode, exitSignal) => {
-			append("stdout", session.stdoutDecoder.end());
-			append("stderr", session.stderrDecoder.end());
+			append(
+				"stdout",
+				session.stdoutRedactor.push(session.stdoutDecoder.end()) +
+					session.stdoutRedactor.finish(),
+			);
+			append(
+				"stderr",
+				session.stderrRedactor.push(session.stderrDecoder.end()) +
+					session.stderrRedactor.finish(),
+			);
+			session.secretValues = [];
 			this.complete(
 				session,
 				session.cancelRequested ? "cancelled" : "exited",

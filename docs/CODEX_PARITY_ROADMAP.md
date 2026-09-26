@@ -76,6 +76,8 @@ Required lifecycle:
 
 Parent issue: #24
 
+Implementation status: SDK command and process-session execution now has a host-enforced environment-secret foundation. Sensitive inherited and override variables are withheld unless the host grants an exact name, and retained output is sanitized before entering UI, result, detached-log, or session buffers. Filesystem, network, MCP, and complete profile enforcement remain follow-up work under #24.
+
 Add read-only, workspace, workspace plus network policy, Full Access, and custom named profiles. Keep approval UX separate from technical enforcement.
 
 Enforcement should cover filesystem roots, command execution, network enablement/destination policy, MCP/plugin side effects, and background tasks. Full Access remains available and still cannot bypass operating-system permissions, remote authentication, licensing, or parser/resource limits.

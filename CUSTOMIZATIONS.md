@@ -70,6 +70,7 @@ Primary files:
 
 - Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event. The implemented behavior contract is recorded in `docs/CODEX_LIKE_COMMAND_EXECUTION.md`.
 - The SDK includes a host-scoped, non-TTY `ProcessSessionManager` foundation with stable process IDs, owner isolation, cursor-based stdout/stderr reads, writable stdin, process-tree signalling, bounded head/tail output, global/per-owner limits, and completed-session expiry. It deliberately reports `interactive: false` until a real Unix PTY/Windows ConPTY boundary is added; the existing `run_commands` behavior is not changed by this foundation.
+- Agent-started SDK processes withhold credential-bearing inherited and override environment variables unless the host explicitly grants an exact name. Known and pattern-detected secrets are redacted before streamed output, final results, errors, detached logs, or process-session buffers retain them. The policy and its remaining security boundary are documented in `docs/PROCESS_ENVIRONMENT_SECURITY.md`.
 - Codex-grade process sessions, durable task state, worktree handoff, additive permission profiles, parallel orchestration, telemetry-gated PowerShell optimization, and optional scoped computer use must follow the phased contract in `docs/CODEX_PARITY_ROADMAP.md` and GitHub issue #20.
 
 Primary files:
@@ -78,7 +79,9 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/definitions.ts`
 - `sdk/packages/core/src/extensions/tools/executors/bash.ts`
 - `sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts`
+- `sdk/packages/core/src/extensions/tools/executors/process-environment-policy.ts`
 - `docs/CODEX_LIKE_COMMAND_EXECUTION.md`
+- `docs/PROCESS_ENVIRONMENT_SECURITY.md`
 - `docs/CODEX_PARITY_ROADMAP.md`
 
 ### Specialized tools
