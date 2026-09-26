@@ -38,6 +38,9 @@ export interface ProcessSessionStartOptions {
 	cwd: string;
 	env?: Record<string, string>;
 	toolCallId?: string;
+	interactive?: boolean;
+	columns?: number;
+	rows?: number;
 }
 
 export interface ProcessSessionSnapshot {
@@ -55,7 +58,9 @@ export interface ProcessSessionSnapshot {
 	exitCode?: number | null;
 	exitSignal?: NodeJS.Signals | null;
 	error?: string;
-	interactive: false;
+	interactive: boolean;
+	terminalColumns?: number;
+	terminalRows?: number;
 	latestCursor: number;
 	droppedOutputBytes: number;
 }
@@ -97,13 +102,68 @@ export interface ProcessSessionManagerOptions {
 		args: readonly string[],
 		options: SpawnOptionsWithoutStdio,
 	) => ChildProcessWithoutNullStreams;
+	spawnTerminalProcess?: ProcessSessionTerminalSpawner;
+}
+
+export interface ProcessSessionTerminal {
+	readonly closed: boolean;
+	write(data: string | Uint8Array): number;
+	resize(columns: number, rows: number): void;
+	close(): void;
+}
+
+export interface ProcessSessionTerminalProcess {
+	readonly pid: number;
+	readonly terminal: ProcessSessionTerminal;
+	readonly exited: Promise<number>;
+	readonly exitCode: number | null;
+	readonly signalCode: NodeJS.Signals | null;
+	kill(signal?: NodeJS.Signals): void;
+}
+
+export type ProcessSessionTerminalSpawner = (
+	command: string,
+	args: readonly string[],
+	options: {
+		cwd: string;
+		env: Record<string, string | undefined>;
+		columns: number;
+		rows: number;
+		onData: (data: Uint8Array) => void;
+	},
+) => ProcessSessionTerminalProcess;
+
+interface BunTerminalRuntime {
+	Terminal: new (options: {
+		cols: number;
+		rows: number;
+		name: string;
+		data: (terminal: ProcessSessionTerminal, data: Uint8Array) => void;
+	}) => ProcessSessionTerminal;
+	spawn(
+		command: string[],
+		options: {
+			cwd: string;
+			env: Record<string, string | undefined>;
+			detached: boolean;
+			windowsHide: boolean;
+			terminal: ProcessSessionTerminal;
+		},
+	): {
+		pid: number;
+		exited: Promise<number>;
+		exitCode: number | null;
+		signalCode: NodeJS.Signals | null;
+		kill(signal?: NodeJS.Signals): void;
+	};
 }
 
 type StoredOutputChunk = ProcessSessionOutputChunk & { bytes: number };
 
 interface ManagedProcessSession {
 	snapshot: ProcessSessionSnapshot;
-	child: ChildProcessWithoutNullStreams;
+	child?: ChildProcessWithoutNullStreams;
+	terminalProcess?: ProcessSessionTerminalProcess;
 	output: BoundedProcessOutput;
 	stdoutDecoder: StringDecoder;
 	stderrDecoder: StringDecoder;
@@ -113,6 +173,49 @@ interface ManagedProcessSession {
 	cleanupTimer?: NodeJS.Timeout;
 	cancelRequested: boolean;
 	settled: boolean;
+}
+
+function spawnBunTerminalProcess(
+	command: string,
+	args: readonly string[],
+	options: Parameters<ProcessSessionTerminalSpawner>[2],
+): ProcessSessionTerminalProcess {
+	const bun = (globalThis as { Bun?: BunTerminalRuntime }).Bun;
+	if (!bun || typeof bun.Terminal !== "function") {
+		throw new Error(
+			"Interactive process sessions require Bun 1.3.14 or newer with Bun.Terminal support",
+		);
+	}
+	const terminal = new bun.Terminal({
+		cols: options.columns,
+		rows: options.rows,
+		name: "xterm-256color",
+		data: (_terminal, data) => options.onData(data),
+	});
+	try {
+		const child = bun.spawn([command, ...args], {
+			cwd: options.cwd,
+			env: options.env,
+			detached: process.platform !== "win32",
+			windowsHide: true,
+			terminal,
+		});
+		return {
+			pid: child.pid,
+			terminal,
+			exited: child.exited,
+			get exitCode() {
+				return child.exitCode;
+			},
+			get signalCode() {
+				return child.signalCode;
+			},
+			kill: (signal) => child.kill(signal),
+		};
+	} catch (error) {
+		terminal.close();
+		throw error;
+	}
 }
 
 function positiveInteger(
@@ -262,12 +365,10 @@ class BoundedProcessOutput {
 }
 
 /**
- * Host-scoped lifecycle service for durable, non-TTY child processes.
+ * Host-scoped lifecycle service for resumable child processes.
  *
- * This deliberately reports `interactive: false`: ordinary pipes are not a
- * substitute for Unix PTY or Windows ConPTY semantics. A later native boundary
- * can implement real terminal sessions without changing these ownership,
- * cursor, resource-limit, and lifecycle contracts.
+ * Pipe-based execution remains the default. Explicit interactive sessions use
+ * Bun.Terminal, backed by a Unix PTY or Windows ConPTY in Bun 1.3.14+.
  */
 export class ProcessSessionManager {
 	private readonly sessions = new Map<string, ManagedProcessSession>();
@@ -283,6 +384,7 @@ export class ProcessSessionManager {
 	private readonly spawnProcess: NonNullable<
 		ProcessSessionManagerOptions["spawnProcess"]
 	>;
+	private readonly spawnTerminalProcess: ProcessSessionTerminalSpawner;
 
 	constructor(options: ProcessSessionManagerOptions = {}) {
 		this.maxSessions = positiveInteger(
@@ -316,6 +418,8 @@ export class ProcessSessionManager {
 					...spawnOptions,
 					stdio: ["pipe", "pipe", "pipe"],
 				}));
+		this.spawnTerminalProcess =
+			options.spawnTerminalProcess ?? spawnBunTerminalProcess;
 	}
 
 	async start(
@@ -338,65 +442,110 @@ export class ProcessSessionManager {
 			allowedSensitiveEnvironmentVariables:
 				this.allowedSensitiveEnvironmentVariables,
 		});
-		const child = this.spawnProcess(options.executable, args, {
-			cwd: options.cwd,
-			env: preparedEnvironment.environment,
-			detached: process.platform !== "win32",
-			windowsHide: true,
-			shell: false,
-		});
-		const managed: ManagedProcessSession = {
+		const interactive = options.interactive === true;
+		const terminalColumns = positiveInteger(options.columns, 80);
+		const terminalRows = positiveInteger(options.rows, 24);
+		const output = new BoundedProcessOutput(this.maxOutputBytes);
+		const stdoutDecoder = new StringDecoder("utf8");
+		const stderrDecoder = new StringDecoder("utf8");
+		const stdoutRedactor = createStreamingSecretRedactor(
+			preparedEnvironment.secretValues,
+		);
+		const stderrRedactor = createStreamingSecretRedactor(
+			preparedEnvironment.secretValues,
+		);
+		let managed: ManagedProcessSession | undefined;
+		const pendingTerminalData: Uint8Array[] = [];
+		const appendTerminalData = (data: Uint8Array): void => {
+			if (!managed) {
+				pendingTerminalData.push(Uint8Array.from(data));
+				return;
+			}
+			this.appendOutput(
+				managed,
+				"stdout",
+				managed.stdoutRedactor.push(
+					managed.stdoutDecoder.write(Buffer.from(data)),
+				),
+			);
+		};
+		const terminalProcess = interactive
+			? this.spawnTerminalProcess(options.executable, args, {
+					cwd: options.cwd,
+					env: preparedEnvironment.environment,
+					columns: terminalColumns,
+					rows: terminalRows,
+					onData: appendTerminalData,
+				})
+			: undefined;
+		const child = terminalProcess
+			? undefined
+			: this.spawnProcess(options.executable, args, {
+					cwd: options.cwd,
+					env: preparedEnvironment.environment,
+					detached: process.platform !== "win32",
+					windowsHide: true,
+					shell: false,
+				});
+		managed = {
 			snapshot: {
 				processId,
 				ownerSessionId: options.ownerSessionId,
 				...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
 				state: "starting",
-				pid: child.pid ?? null,
+				pid: terminalProcess?.pid ?? child?.pid ?? null,
 				executable: options.executable,
 				args,
 				cwd: options.cwd,
 				startedAtMs,
-				interactive: false,
+				interactive,
+				...(interactive
+					? {
+							terminalColumns,
+							terminalRows,
+						}
+					: {}),
 				latestCursor: 0,
 				droppedOutputBytes: 0,
 			},
 			child,
-			output: new BoundedProcessOutput(this.maxOutputBytes),
-			stdoutDecoder: new StringDecoder("utf8"),
-			stderrDecoder: new StringDecoder("utf8"),
-			stdoutRedactor: createStreamingSecretRedactor(
-				preparedEnvironment.secretValues,
-			),
-			stderrRedactor: createStreamingSecretRedactor(
-				preparedEnvironment.secretValues,
-			),
+			terminalProcess,
+			output,
+			stdoutDecoder,
+			stderrDecoder,
+			stdoutRedactor,
+			stderrRedactor,
 			secretValues: preparedEnvironment.secretValues,
 			cancelRequested: false,
 			settled: false,
 		};
 		this.sessions.set(processId, managed);
 		this.bindLifecycle(managed);
+		for (const data of pendingTerminalData) appendTerminalData(data);
 
-		await new Promise<void>((resolve, reject) => {
-			const onSpawn = () => {
-				child.removeListener("error", onError);
-				resolve();
-			};
-			const onError = (error: Error) => {
-				child.removeListener("spawn", onSpawn);
-				reject(error);
-			};
-			child.once("spawn", onSpawn);
-			child.once("error", onError);
-		}).catch((error: unknown) => {
-			// bindLifecycle records the durable failure state before this rejection.
-			throw error;
-		});
+		if (child) {
+			await new Promise<void>((resolve, reject) => {
+				const onSpawn = () => {
+					child.removeListener("error", onError);
+					resolve();
+				};
+				const onError = (error: Error) => {
+					child.removeListener("spawn", onSpawn);
+					reject(error);
+				};
+				child.once("spawn", onSpawn);
+				child.once("error", onError);
+			}).catch((error: unknown) => {
+				// bindLifecycle records the durable failure state before this rejection.
+				throw error;
+			});
+		}
 
 		if (!managed.settled) managed.snapshot.state = "running";
-		if (child.pid) {
+		const pid = managed.snapshot.pid;
+		if (pid) {
 			try {
-				const identity = await this.processStartTokenProbe(child.pid);
+				const identity = await this.processStartTokenProbe(pid);
 				if (identity.status === "found") {
 					managed.snapshot.processStartToken = identity.token;
 				}
@@ -441,15 +590,39 @@ export class ProcessSessionManager {
 		input: string,
 	): Promise<void> {
 		const session = this.requireActive(ownerSessionId, processId);
-		if (!session.child.stdin.writable) {
+		if (session.terminalProcess) {
+			session.terminalProcess.terminal.write(input);
+			return;
+		}
+		const child = session.child;
+		if (!child) throw new Error(`Process session ${processId} has no stdin`);
+		if (!child.stdin.writable) {
 			throw new Error(`Process session ${processId} stdin is closed`);
 		}
 		await new Promise<void>((resolve, reject) => {
-			session.child.stdin.write(input, "utf8", (error) => {
+			child.stdin.write(input, "utf8", (error) => {
 				if (error) reject(error);
 				else resolve();
 			});
 		});
+	}
+
+	resize(
+		ownerSessionId: string,
+		processId: string,
+		columns: number,
+		rows: number,
+	): ProcessSessionSnapshot {
+		const session = this.requireActive(ownerSessionId, processId);
+		if (!session.terminalProcess) {
+			throw new Error(`Process session ${processId} is not interactive`);
+		}
+		const normalizedColumns = positiveInteger(columns, 80);
+		const normalizedRows = positiveInteger(rows, 24);
+		session.terminalProcess.terminal.resize(normalizedColumns, normalizedRows);
+		session.snapshot.terminalColumns = normalizedColumns;
+		session.snapshot.terminalRows = normalizedRows;
+		return this.copySnapshot(session);
 	}
 
 	async signal(
@@ -458,15 +631,27 @@ export class ProcessSessionManager {
 		signal: ProcessSessionSignal,
 	): Promise<void> {
 		const session = this.requireActive(ownerSessionId, processId);
-		session.cancelRequested = true;
 		if (signal === "interrupt") {
-			if (!session.child.kill("SIGINT")) {
+			if (session.terminalProcess) {
+				session.terminalProcess.terminal.write("\u0003");
+				if (process.platform !== "win32" && session.snapshot.pid) {
+					try {
+						process.kill(-session.snapshot.pid, "SIGINT");
+					} catch {
+						session.terminalProcess.kill("SIGINT");
+					}
+				}
+				return;
+			}
+			session.cancelRequested = true;
+			if (!session.child?.kill("SIGINT")) {
 				throw new Error(`Could not interrupt process session ${processId}`);
 			}
 			return;
 		}
+		session.cancelRequested = true;
 		await this.killProcessTree(
-			session.child,
+			session,
 			signal === "kill" ? "SIGKILL" : "SIGTERM",
 		);
 	}
@@ -487,7 +672,7 @@ export class ProcessSessionManager {
 		await Promise.allSettled(
 			active.map(async (session) => {
 				session.cancelRequested = true;
-				await this.killProcessTree(session.child, "SIGKILL");
+				await this.killProcessTree(session, "SIGKILL");
 			}),
 		);
 		for (const session of this.sessions.values()) {
@@ -497,49 +682,92 @@ export class ProcessSessionManager {
 	}
 
 	private bindLifecycle(session: ManagedProcessSession): void {
-		const append = (stream: ProcessSessionOutputStream, text: string): void => {
-			session.output.append(stream, text);
-			session.snapshot.latestCursor = session.output.cursor;
-			session.snapshot.droppedOutputBytes = session.output.omittedBytes;
-		};
-		session.child.stdout.on("data", (data: Buffer) => {
-			append(
-				"stdout",
-				session.stdoutRedactor.push(session.stdoutDecoder.write(data)),
-			);
-		});
-		session.child.stderr.on("data", (data: Buffer) => {
-			append(
-				"stderr",
-				session.stderrRedactor.push(session.stderrDecoder.write(data)),
-			);
-		});
-		session.child.once("error", (error) => {
-			session.snapshot.error = redactSensitiveText(
-				error.message,
-				session.secretValues,
-			);
-			this.complete(session, "failed", null, null);
-		});
-		session.child.once("close", (exitCode, exitSignal) => {
-			append(
-				"stdout",
-				session.stdoutRedactor.push(session.stdoutDecoder.end()) +
-					session.stdoutRedactor.finish(),
-			);
-			append(
+		const child = session.child;
+		if (child) {
+			child.stdout.on("data", (data: Buffer) => {
+				this.appendOutput(
+					session,
+					"stdout",
+					session.stdoutRedactor.push(session.stdoutDecoder.write(data)),
+				);
+			});
+			child.stderr.on("data", (data: Buffer) => {
+				this.appendOutput(
+					session,
+					"stderr",
+					session.stderrRedactor.push(session.stderrDecoder.write(data)),
+				);
+			});
+			child.once("error", (error) => {
+				session.snapshot.error = redactSensitiveText(
+					error.message,
+					session.secretValues,
+				);
+				this.complete(session, "failed", null, null);
+			});
+			child.once("close", (exitCode, exitSignal) => {
+				this.flushOutput(session, true);
+				this.complete(
+					session,
+					session.cancelRequested ? "cancelled" : "exited",
+					exitCode,
+					exitSignal,
+				);
+			});
+			return;
+		}
+		const terminalProcess = session.terminalProcess;
+		if (!terminalProcess) return;
+		void terminalProcess.exited.then(
+			(exitCode) => {
+				this.flushOutput(session, false);
+				this.complete(
+					session,
+					session.cancelRequested ? "cancelled" : "exited",
+					exitCode,
+					terminalProcess.signalCode,
+				);
+			},
+			(error: unknown) => {
+				session.snapshot.error = redactSensitiveText(
+					error instanceof Error ? error.message : String(error),
+					session.secretValues,
+				);
+				this.flushOutput(session, false);
+				this.complete(session, "failed", null, terminalProcess.signalCode);
+			},
+		);
+	}
+
+	private appendOutput(
+		session: ManagedProcessSession,
+		stream: ProcessSessionOutputStream,
+		text: string,
+	): void {
+		session.output.append(stream, text);
+		session.snapshot.latestCursor = session.output.cursor;
+		session.snapshot.droppedOutputBytes = session.output.omittedBytes;
+	}
+
+	private flushOutput(
+		session: ManagedProcessSession,
+		includeStderr: boolean,
+	): void {
+		this.appendOutput(
+			session,
+			"stdout",
+			session.stdoutRedactor.push(session.stdoutDecoder.end()) +
+				session.stdoutRedactor.finish(),
+		);
+		if (includeStderr) {
+			this.appendOutput(
+				session,
 				"stderr",
 				session.stderrRedactor.push(session.stderrDecoder.end()) +
 					session.stderrRedactor.finish(),
 			);
-			session.secretValues = [];
-			this.complete(
-				session,
-				session.cancelRequested ? "cancelled" : "exited",
-				exitCode,
-				exitSignal,
-			);
-		});
+		}
+		session.secretValues = [];
 	}
 
 	private complete(
@@ -556,7 +784,10 @@ export class ProcessSessionManager {
 		session.snapshot.exitSignal = exitSignal;
 		session.snapshot.latestCursor = session.output.cursor;
 		session.snapshot.droppedOutputBytes = session.output.omittedBytes;
-		session.child.stdin.destroy();
+		session.child?.stdin.destroy();
+		if (session.terminalProcess && !session.terminalProcess.terminal.closed) {
+			session.terminalProcess.terminal.close();
+		}
 		session.cleanupTimer = setTimeout(() => {
 			this.sessions.delete(session.snapshot.processId);
 		}, this.completedRetentionMs);
@@ -620,25 +851,34 @@ export class ProcessSessionManager {
 	}
 
 	private async killProcessTree(
-		child: ChildProcessWithoutNullStreams,
+		session: ManagedProcessSession,
 		signal: Extract<NodeJS.Signals, "SIGTERM" | "SIGKILL">,
 	): Promise<void> {
-		if (!child.pid) return;
+		const pid = session.snapshot.pid;
+		if (!pid) return;
+		const killDirect = (): boolean => {
+			if (session.child) return session.child.kill(signal);
+			if (session.terminalProcess) {
+				session.terminalProcess.kill(signal);
+				return true;
+			}
+			return false;
+		};
 		if (process.platform !== "win32") {
 			try {
-				process.kill(-child.pid, signal);
+				process.kill(-pid, signal);
 				return;
 			} catch {
-				if (child.kill(signal)) return;
-				throw new Error(`Could not signal process tree ${child.pid}`);
+				if (killDirect()) return;
+				throw new Error(`Could not signal process tree ${pid}`);
 			}
 		}
 		await new Promise<void>((resolve) => {
-			const killer = spawn(
-				"taskkill.exe",
-				["/PID", String(child.pid), "/T", "/F"],
-				{ stdio: "ignore", shell: false, windowsHide: true },
-			);
+			const killer = spawn("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
+				stdio: "ignore",
+				shell: false,
+				windowsHide: true,
+			});
 			let settled = false;
 			const finish = () => {
 				if (settled) return;
@@ -648,11 +888,11 @@ export class ProcessSessionManager {
 			};
 			const watchdog = setTimeout(() => {
 				killer.kill();
-				child.kill();
+				killDirect();
 				finish();
 			}, 5_000);
 			killer.once("error", () => {
-				child.kill();
+				killDirect();
 				finish();
 			});
 			killer.once("close", finish);

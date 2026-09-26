@@ -307,7 +307,7 @@ export interface DefaultToolsConfig {
 	enableBash?: boolean;
 
 	/**
-	 * Enable resumable non-TTY process sessions.
+	 * Enable resumable pipe or native-terminal process sessions.
 	 * @default true in Act/YOLO presets; false in Plan mode
 	 */
 	enableProcessSessions?: boolean;

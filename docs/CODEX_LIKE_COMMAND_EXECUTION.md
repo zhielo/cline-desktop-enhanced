@@ -28,11 +28,24 @@ The implementation records these metrics without command text, arguments, stdout
 
 Low-cardinality attributes identify direct versus shell execution, timeout-source configuration, and completion success where applicable. The bounded command preview is attached only to the first progress event for a command instead of being repeated with every output chunk.
 
+### Resumable native terminal sessions
+
+- `process_session` keeps direct-argv, pipe-based execution as its default.
+- `start` with `interactive: true` attaches Bun's maintained native terminal boundary: Unix PTY on Linux/macOS and Windows ConPTY on Windows.
+- Interactive sessions support cursor-based bounded output, stdin writes, terminal resize, Ctrl+C interrupt, process-tree terminate/kill, owner isolation, expiry, environment filtering, and secret redaction.
+- PTY and ConPTY merge stdout and stderr into the terminal stream, which is reported as `stdout`; pipe sessions retain separate stream identities.
+- Initial dimensions default to 80×24 and are bounded by the public schema. The snapshot records the current dimensions and whether native terminal semantics are active.
+- Bun 1.3.14 is the minimum repository runtime because it is the first pinned Bun release providing `Bun.Terminal` through Windows ConPTY. The custom Windows installer compiles and runs a real ConPTY input/resize smoke test before packaging, exercising the same embedded runtime boundary used by `code-sidecar.exe`.
+- Existing `run_commands` and non-interactive `process_session` behavior remains unchanged. Hosts without `Bun.Terminal` fail an interactive start explicitly instead of silently substituting pipes.
+
 ## Primary source and regression files
 
 - `sdk/packages/core/src/extensions/tools/schemas.ts`
 - `sdk/packages/core/src/extensions/tools/definitions.ts`
 - `sdk/packages/core/src/extensions/tools/executors/bash.ts`
+- `sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts`
+- `sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts`
+- `sdk/packages/core/scripts/process-session-terminal-smoke.ts`
 - `sdk/packages/core/src/extensions/tools/definitions.test.ts`
 - `sdk/packages/core/src/extensions/tools/executors/bash.test.ts`
 - `CUSTOMIZATIONS.md`
@@ -46,7 +59,7 @@ The root project config and the example VS Code project config use `.mts` so Vit
 
 After changing this behavior:
 
-1. Install and run with Bun 1.3.13.
+1. Install and run with Bun 1.3.14.
 2. Run `bun run build:sdk`.
 3. Run the focused `definitions.test.ts` and `executors/bash.test.ts` suites.
 4. Run Biome on changed source, tests, and verifier files.
@@ -56,7 +69,7 @@ After changing this behavior:
 
 ## Remaining phased roadmap
 
-1. Complete the public `process_session` foundation with a maintained Unix PTY/Windows ConPTY adapter before advertising interactive terminal semantics.
+1. Add conservative restart recovery using persisted identity only when the kernel start token can be revalidated; never recover by PID alone.
 2. Compare direct and shell duration, time to first output, and output-volume metrics on Windows.
 3. Optimize the Hub-to-sidecar-to-WebSocket path if transport remains the dominant delay.
 4. Add a feature-flagged Prewarmed PowerShell worker only when measurements show shell startup is the dominant delay.

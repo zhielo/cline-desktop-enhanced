@@ -33,7 +33,7 @@ official upstream update cannot silently replace this customized build.
 
 ## Build
 
-Use Bun 1.3.13 and Node 22 or later:
+Use Bun 1.3.14 and Node 22 or later:
 
 ```powershell
 bun install

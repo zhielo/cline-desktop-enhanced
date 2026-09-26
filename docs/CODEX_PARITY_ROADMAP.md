@@ -18,7 +18,7 @@ Parent issue: #21
 
 Evolve command execution from spawn-and-collect into a host-scoped process service while retaining one-shot `run_commands` compatibility.
 
-Implementation status: `ProcessSessionManager` is exposed through the additive `process_session` tool in Act and Full Access modes. It provides direct argv start, stable IDs, owner-scoped lifecycle access, cursor reads, piped stdin, signals, explicit close, bounded head/tail output, resource limits, and expiry while preserving one-shot `run_commands`. Plan mode deliberately disables it so the process API cannot bypass the read-only command guard. It reports `interactive: false`; a maintained Unix PTY/Windows ConPTY boundary and restart recovery remain follow-up work under #21.
+Implementation status: `ProcessSessionManager` is exposed through the additive `process_session` tool in Act and Full Access modes. It provides direct argv start, stable IDs, owner-scoped lifecycle access, cursor reads, stdin, signals, terminal resize, explicit close, bounded head/tail output, resource limits, and expiry while preserving one-shot `run_commands`. Pipe execution remains the default; explicit interactive sessions use Bun's maintained Unix PTY/Windows ConPTY boundary and report their terminal dimensions. Plan mode deliberately disables the tool so it cannot bypass the read-only command guard. Conservative restart recovery with kernel start-token revalidation remains follow-up work under #21.
 
 Required operations:
 
