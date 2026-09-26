@@ -41,18 +41,19 @@ jobs:
         run: set -o pipefail; cd sdk/packages/core && bun x vitest run src/extensions/tools/executors/reverse-engineering.test.ts src/extensions/tools/executors/supervised-process.test.ts src/extensions/tools/executors/live-debugger.test.ts --config vitest.config.ts 2>&1 | tee -a /tmp/hardening.log
       - name: Verify custom fork
         run: set -o pipefail; bun scripts/verify-custom-fork.ts 2>&1 | tee -a /tmp/hardening.log
+      - name: Commit validated changes
+        run: |
+          set -o pipefail
+          git rm .github/workflows/apply-re-hardening.yml scripts/apply-re-hardening.py scripts/apply-re-hardening-fixes.py 2>&1 | tee -a /tmp/hardening.log
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          HUSKY=0 git commit -m "feat: harden reverse engineering and add live debugging" 2>&1 | tee -a /tmp/hardening.log
+          git push 2>&1 | tee -a /tmp/hardening.log
       - name: Report failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          { echo 'Hardening workflow failed. Last log lines:'; echo '```text'; tail -n 180 /tmp/hardening.log; echo '```'; } > /tmp/comment.md
+          { echo 'Hardening workflow failed. Last log lines:'; echo '```text'; tail -n 220 /tmp/hardening.log; echo '```'; } > /tmp/comment.md
           gh pr comment 18 --body-file /tmp/comment.md
-      - name: Commit validated changes
-        run: |
-          git rm .github/workflows/apply-re-hardening.yml scripts/apply-re-hardening.py scripts/apply-re-hardening-fixes.py
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m "feat: harden reverse engineering and add live debugging"
-          git push
