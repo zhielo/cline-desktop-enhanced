@@ -26,10 +26,11 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { OAuthAuthorizationPrompt } from "@/components/oauth-authorization-prompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useOAuthUserCode } from "@/hooks/use-oauth-user-code";
+import { useOAuthAuthorization } from "@/hooks/use-oauth-user-code";
 import { openExternalUrl } from "@/lib/desktop-client";
 import {
 	getProviderAuthKind,
@@ -541,7 +542,7 @@ export function ProviderDetailContent({
 	onDisconnect?: () => void;
 	variant?: "page" | "panel";
 }) {
-	const deviceUserCode = useOAuthUserCode(oauthLoginPending);
+	const oauthAuthorization = useOAuthAuthorization(oauthLoginPending);
 	const [shownSecrets, setShownSecrets] = useState<Record<string, boolean>>({});
 	const [localConfigValues, setLocalConfigValues] = useState<
 		Record<string, ProviderConfigFieldPrimitive>
@@ -824,13 +825,11 @@ export function ProviderDetailContent({
 								</span>
 							</Button>
 						) : null}
-						{oauthLoginPending && deviceUserCode ? (
-							<p className="mt-3 text-xs text-muted-foreground">
-								Confirm this code in your browser:{" "}
-								<span className="font-mono font-medium text-foreground">
-									{deviceUserCode}
-								</span>
-							</p>
+						{oauthLoginPending ? (
+							<OAuthAuthorizationPrompt
+								authorization={oauthAuthorization}
+								className="mt-3"
+							/>
 						) : null}
 						{apiKeyField ? (
 							<div className="mt-3">

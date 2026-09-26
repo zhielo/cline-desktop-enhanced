@@ -81,6 +81,8 @@ const requiredMarkers: Array<{
 			"rev-parse",
 			"worktree",
 			"update-ref",
+			'"explorer.exe"',
+			"authorizationUrl",
 		],
 	},
 	{
@@ -100,7 +102,12 @@ const requiredMarkers: Array<{
 		markers: [
 			'desktopClient.subscribe("provider_oauth_user_code"',
 			"lifetime of the mounted login surface",
+			"authorizationUrl",
 		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/oauth-authorization-prompt.tsx",
+		markers: ["Cline sign-in URL", "Open sign-in page", "Copy sign-in link"],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/schemas.ts",

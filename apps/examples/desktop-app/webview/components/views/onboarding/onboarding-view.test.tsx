@@ -20,10 +20,7 @@ const { invoke, openExternalUrl, subscribe, subscriptionHandlers } = vi.hoisted(
 		invoke: vi.fn(),
 		openExternalUrl: vi.fn(),
 		subscribe: vi.fn(),
-		subscriptionHandlers: new Map<
-			string,
-			Set<(payload: unknown) => void>
-		>(),
+		subscriptionHandlers: new Map<string, Set<(payload: unknown) => void>>(),
 	}),
 );
 vi.mock("@/lib/desktop-client", () => ({
@@ -575,7 +572,12 @@ describe("OnboardingView", () => {
 				for (const handler of subscriptionHandlers.get(
 					"provider_oauth_user_code",
 				) ?? []) {
-					handler({ provider: "cline", userCode: "ABCD-EFGH" });
+					handler({
+						provider: "cline",
+						userCode: "ABCD-EFGH",
+						authorizationUrl:
+							"https://api.workos.com/user_management/authorize/device?code=ABCD-EFGH",
+					});
 				}
 				return await new Promise(() => undefined);
 			}
@@ -594,6 +596,17 @@ describe("OnboardingView", () => {
 
 		expect(container.textContent).toContain(
 			"Confirm this code in your browser: ABCD-EFGH",
+		);
+		expect(
+			container.querySelector<HTMLInputElement>(
+				'input[aria-label="Cline sign-in URL"]',
+			)?.value,
+		).toContain("api.workos.com");
+		await act(async () => {
+			buttonByText("Open sign-in page").click();
+		});
+		expect(openExternalUrl).toHaveBeenCalledWith(
+			"https://api.workos.com/user_management/authorize/device?code=ABCD-EFGH",
 		);
 	});
 

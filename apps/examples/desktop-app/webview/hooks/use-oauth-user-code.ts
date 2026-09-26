@@ -1,13 +1,23 @@
 import { useEffect, useState } from "react";
 import { desktopClient } from "@/lib/desktop-client";
 
+export type OAuthAuthorizationState = {
+	userCode: string | null;
+	authorizationUrl: string | null;
+};
+
 /**
- * Device sign-in confirmation code pushed by the sidecar while a provider
- * OAuth login is pending, so the user can match it against the code shown in
- * their browser. Cleared whenever the pending flow ends.
+ * Device sign-in details pushed by the sidecar while a provider OAuth login is
+ * pending. The URL remains available as a manual fallback when the OS browser
+ * launcher fails. Cleared whenever the pending flow ends.
  */
-export function useOAuthUserCode(pending: boolean): string | null {
-	const [userCode, setUserCode] = useState<string | null>(null);
+export function useOAuthAuthorization(
+	pending: boolean,
+): OAuthAuthorizationState {
+	const [authorization, setAuthorization] = useState<OAuthAuthorizationState>({
+		userCode: null,
+		authorizationUrl: null,
+	});
 
 	// Subscribe for the lifetime of the mounted login surface, not only after
 	// `pending` becomes true. The sidecar can obtain and broadcast the device
@@ -17,18 +27,38 @@ export function useOAuthUserCode(pending: boolean): string | null {
 	// the desktop never displays.
 	useEffect(() => {
 		return desktopClient.subscribe("provider_oauth_user_code", (payload) => {
-			const code = (payload as { userCode?: unknown } | null)?.userCode;
-			if (typeof code === "string" && code) {
-				setUserCode(code);
+			const details = payload as {
+				userCode?: unknown;
+				authorizationUrl?: unknown;
+			} | null;
+			const code =
+				typeof details?.userCode === "string" && details.userCode
+					? details.userCode
+					: null;
+			const url =
+				typeof details?.authorizationUrl === "string" &&
+				details.authorizationUrl
+					? details.authorizationUrl
+					: null;
+			if (code || url) {
+				setAuthorization({
+					userCode: code,
+					authorizationUrl: url,
+				});
 			}
 		});
 	}, []);
 
 	useEffect(() => {
 		if (!pending) {
-			setUserCode(null);
+			setAuthorization({ userCode: null, authorizationUrl: null });
 		}
 	}, [pending]);
 
-	return userCode;
+	return authorization;
+}
+
+/** Compatibility helper for consumers that only need the confirmation code. */
+export function useOAuthUserCode(pending: boolean): string | null {
+	return useOAuthAuthorization(pending).userCode;
 }

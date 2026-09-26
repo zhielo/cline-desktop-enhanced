@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClineLogo } from "@/components/cline-logo";
 import { ImportSessionsDialog } from "@/components/import-sessions-dialog";
+import { OAuthAuthorizationPrompt } from "@/components/oauth-authorization-prompt";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,7 +28,7 @@ import { GitHubConnectStep } from "@/components/views/onboarding/onboarding-gith
 import { useAccount } from "@/contexts/account-context";
 import { OAUTH_MANAGED_PROVIDERS } from "@/hooks/chat-session/constants";
 import { isFeatureEnabled, useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useOAuthUserCode } from "@/hooks/use-oauth-user-code";
+import { useOAuthAuthorization } from "@/hooks/use-oauth-user-code";
 import { isClineAccountNotAuthenticatedResult } from "@/lib/cline-account-state";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import {
@@ -337,7 +338,7 @@ function ConnectStep({
 }) {
 	const { user, refreshAccount } = useAccount();
 	const [signingIn, setSigningIn] = useState(false);
-	const deviceUserCode = useOAuthUserCode(signingIn);
+	const oauthAuthorization = useOAuthAuthorization(signingIn);
 	const [signInError, setSignInError] = useState<string | null>(null);
 	const [clineApiKey, setClineApiKey] = useState("");
 	const [clineKeySaving, setClineKeySaving] = useState(false);
@@ -651,13 +652,11 @@ function ConnectStep({
 							)}
 						</div>
 					)}
-					{!user && signingIn && deviceUserCode ? (
-						<p className="mt-4 ml-12 text-sm text-muted-foreground max-[720px]:ml-0">
-							Confirm this code in your browser:{" "}
-							<span className="font-mono font-medium text-foreground">
-								{deviceUserCode}
-							</span>
-						</p>
+					{!user && signingIn ? (
+						<OAuthAuthorizationPrompt
+							authorization={oauthAuthorization}
+							className="mt-4 ml-12 max-[720px]:ml-0"
+						/>
 					) : null}
 					{signInError ? (
 						<p
