@@ -81,6 +81,8 @@ Primary files:
 - Android automation includes device selection, screen metadata, UI hierarchy, validated touch/swipe/key/text actions, foreground-package guards, and before/after screenshot evidence.
 - Unrestricted `adb shell` is intentionally available for already-authorized devices and requires `acknowledge_risk: true`; see `docs/ANDROID_DEVICE_AUTOMATION.md`.
 - Reverse-engineering and Smali workflows, with cross-platform IDA/Ghidra discovery, executable/version/capability reporting, version-and-option-aware cache reuse, complete output draining, process-tree cancellation, and verified GUI startup.
+- Windows reverse-engineering discovery refreshes persisted tool environment variables and performs a bounded two-level search under `Documents`, `Program Files`, and `%LOCALAPPDATA%\Programs`; it does not scan arbitrary drive roots.
+- IDA Hex-Rays batch decompilation uses a generated bounded IDAPython script, verifies a non-empty pseudocode artifact, and never passes output paths through the incompatible `-Ohexrays:<path>:ALL` form.
 - A separate opt-in `live_debugger` tool provides explicitly acknowledged, bounded, one-shot GDB/LLDB launch and attach workflows with command-safe breakpoint and address validation; see `docs/LIVE_DEBUGGING.md`.
 - APK comparison improvements.
 - Codex-compatible tool calls and binary attachment handling.
