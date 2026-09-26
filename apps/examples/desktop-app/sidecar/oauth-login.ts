@@ -45,13 +45,26 @@ async function loginProviderForDesktop(
 	existing: Parameters<typeof loginLocalProvider>[1],
 	openUrl: (url: string) => void,
 	onUserCode?: (userCode: string) => void,
+	onAuthorization?: (authorization: {
+		userCode: string;
+		authorizationUrl: string;
+	}) => void,
 ): ReturnType<typeof loginLocalProvider> {
 	if (providerId !== "cline" && providerId !== "cline-pass") {
 		return loginLocalProvider(providerId, existing, openUrl);
 	}
 	const device = await startClineDeviceAuth();
+	const authorizationUrl =
+		device.verificationUriComplete ?? device.verificationUri;
 	onUserCode?.(device.userCode);
-	openUrl(device.verificationUriComplete ?? device.verificationUri);
+	// Deliver the exact URL to the webview before attempting the OS browser
+	// handoff. Windows protocol launchers can fail silently; the UI must still
+	// offer a copyable link and confirmation code.
+	onAuthorization?.({
+		userCode: device.userCode,
+		authorizationUrl,
+	});
+	openUrl(authorizationUrl);
 	return completeClineDeviceAuth({
 		deviceCode: device.deviceCode,
 		expiresInSeconds: device.expiresInSeconds,
@@ -82,6 +95,11 @@ export async function runCancellableProviderOAuthLogin(
 		owner?: object;
 		/** Receives the device sign-in confirmation code, when the flow has one. */
 		onUserCode?: (userCode: string) => void;
+		/** Receives a copyable fallback URL before the OS browser handoff. */
+		onAuthorization?: (authorization: {
+			userCode: string;
+			authorizationUrl: string;
+		}) => void;
 	} = {},
 	dependencies: OAuthLoginDependencies = defaultDependencies,
 ): Promise<{ provider: string; accessToken: string }> {
@@ -109,7 +127,13 @@ export async function runCancellableProviderOAuthLogin(
 		// after cancellation is observed and cannot become an unhandled
 		// rejection that kills the sidecar.
 		const credentials = await Promise.race([
-			dependencies.login(providerId, existing, openUrl, options.onUserCode),
+			dependencies.login(
+				providerId,
+				existing,
+				openUrl,
+				options.onUserCode,
+				options.onAuthorization,
+			),
 			cancellation,
 		]);
 		if (entry.cancelled) {

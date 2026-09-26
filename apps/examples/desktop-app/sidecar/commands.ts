@@ -90,13 +90,13 @@ import { resolveClineDir } from "@cline/shared/storage";
 import packageJson from "../package.json";
 import { CLINE_ACCOUNT_NOT_AUTHENTICATED_RESULT } from "../webview/lib/cline-account-state";
 import { MAX_RECORDED_AUDIO_BYTES } from "../webview/lib/voice-input-limits";
-import { resolveDesktopTelemetryUser } from "./client-context";
 import {
 	appendAttachmentUpload,
 	beginAttachmentUpload,
 	discardAttachmentUploads,
 	finishAttachmentUpload,
 } from "./attachment-uploads";
+import { resolveDesktopTelemetryUser } from "./client-context";
 import { resolveFreshClineAuthToken } from "./cline-auth";
 import {
 	getCloudSessionManager,
@@ -399,14 +399,21 @@ const CLOUD_DISCOVERY_BUDGET_MS = 2_000;
 function openUrlInDefaultBrowser(url: string): Promise<void> {
 	const platform = process.platform;
 	// On Windows the URL must not pass through cmd.exe: `cmd /c start <url>`
-	// re-parses metacharacters (&, ^, |) that are valid inside http(s) URLs,
-	// turning a crafted URL into command execution. rundll32 hands the URL
-	// straight to the protocol handler with no shell parsing.
+	// re-parses metacharacters (&, ^, |, %) that are valid inside OAuth URLs.
+	// Explorer receives the URL as a direct argv value and delegates it to the
+	// registered protocol handler. It is more reliable in packaged desktop
+	// processes than rundll32's FileProtocolHandler, which can exit 0 without
+	// opening a browser.
+	const windowsDirectory =
+		process.env.SystemRoot?.trim() || process.env.WINDIR?.trim();
+	const windowsExplorer = windowsDirectory
+		? join(windowsDirectory, "explorer.exe")
+		: "explorer.exe";
 	const spawned =
 		platform === "darwin"
 			? spawn("open", [url], { stdio: "ignore", detached: true })
 			: platform === "win32"
-				? spawn("rundll32", ["url.dll,FileProtocolHandler", url], {
+				? spawn(windowsExplorer, [url], {
 						stdio: "ignore",
 						detached: true,
 					})
@@ -417,8 +424,7 @@ function openUrlInDefaultBrowser(url: string): Promise<void> {
 	// A missing opener binary emits an async "error" event; without a listener
 	// it becomes an uncaught exception that kills the sidecar. Launchers hand
 	// off to the browser and exit quickly, so a fast non-zero exit means the
-	// handoff failed (xdg-open exits 3 when no handler is available; rundll32
-	// exits 0 even on failure, so Windows stays best-effort). If the launcher
+	// handoff failed (xdg-open exits 3 when no handler is available). If the launcher
 	// is still running after the grace window, assume the handoff worked
 	// rather than blocking on a launcher that lingers.
 	return new Promise((resolve, reject) => {
@@ -3232,6 +3238,12 @@ export async function handleCommand(
 					broadcastEvent(ctx, "provider_oauth_user_code", {
 						provider: providerId,
 						userCode,
+					}),
+				onAuthorization: ({ userCode, authorizationUrl }) =>
+					broadcastEvent(ctx, "provider_oauth_user_code", {
+						provider: providerId,
+						userCode,
+						authorizationUrl,
 					}),
 			},
 		);

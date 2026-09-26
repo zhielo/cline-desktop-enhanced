@@ -45,7 +45,7 @@ Primary files:
 
 ### Windows reliability
 
-- Cline device-code sign-in subscribes before a browser round-trip can begin, so a fast one-shot confirmation-code event is not lost between the click and React's pending-state render.
+- Cline device-code sign-in subscribes before a browser round-trip can begin, so a fast one-shot confirmation-code event is not lost between the click and React's pending-state render. Windows opens OAuth URLs through `explorer.exe` using direct argv, and every sign-in surface receives the exact authorization URL before that OS handoff so it can show a selectable link plus Open and Copy fallbacks.
 - Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
 - Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
 - Sidecar stores are closed during tests and logging fixtures work across platforms.
@@ -67,6 +67,7 @@ Primary files:
 - `apps/examples/vscode/package.json`
 - `apps/examples/desktop-app/webview/lib/image-attachments.test.ts`
 - `apps/examples/desktop-app/webview/hooks/use-oauth-user-code.ts`
+- `apps/examples/desktop-app/webview/components/oauth-authorization-prompt.tsx`
 - `apps/examples/desktop-app/webview/components/views/onboarding/onboarding-view.test.tsx`
 - `.github/workflows/build-custom-windows-installer.yml`
 
