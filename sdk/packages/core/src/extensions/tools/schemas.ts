@@ -213,6 +213,10 @@ export const ReverseEngineeringInputSchema = z.object({
 	jadx_mappings_path: z.string().min(1).optional(),
 });
 
+/** Only debugger locations that cannot introduce an additional GDB/LLDB command. */
+const SAFE_DEBUGGER_LOCATION_PATTERN =
+	/^(?:0x[0-9a-fA-F]+|[A-Za-z_.$][\w.$:+-]*)$/;
+
 /** Supervised one-shot live debugging for explicitly authorized local targets. */
 export const LiveDebuggerInputSchema = z.object({
 	operation: z.enum([
@@ -231,11 +235,13 @@ export const LiveDebuggerInputSchema = z.object({
 	target: z.string().min(1).optional(),
 	args: z.array(z.string().max(32_768)).max(256).optional(),
 	pid: z.number().int().positive().optional(),
-	breakpoint: z.string().min(1).max(1_024).optional(),
-	address: z
+	breakpoint: z
 		.string()
-		.regex(/^(?:0x[0-9a-fA-F]+|[A-Za-z_.$][\w.$:+-]*)$/)
+		.min(1)
+		.max(1_024)
+		.regex(SAFE_DEBUGGER_LOCATION_PATTERN)
 		.optional(),
+	address: z.string().regex(SAFE_DEBUGGER_LOCATION_PATTERN).optional(),
 	length: z.number().int().min(1).max(4_096).optional(),
 	steps: z.number().int().min(1).max(100).optional(),
 	timeout_ms: z.number().int().positive().max(120_000).optional(),

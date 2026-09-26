@@ -111,6 +111,10 @@ const requiredMarkers: Array<{
 		markers: ["acknowledge_risk=true", "persistentSession", "process detach"],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
+		markers: ["SAFE_DEBUGGER_LOCATION_PATTERN"],
+	},
+	{
 		path: "docs/LIVE_DEBUGGING.md",
 		markers: [
 			"one-shot",

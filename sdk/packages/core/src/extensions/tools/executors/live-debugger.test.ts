@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { LiveDebuggerInputSchema } from "../schemas";
 import { createLiveDebuggerExecutor } from "./live-debugger";
 
 const originalPath = process.env.PATH;
@@ -64,4 +65,34 @@ it("requires explicit risk acknowledgement", async () => {
 			{} as never,
 		),
 	).rejects.toThrow("acknowledge_risk=true");
+});
+
+describe("debugger location validation", () => {
+	it("accepts bounded symbols and addresses", () => {
+		for (const breakpoint of ["main", "Namespace::method", "0x401000"]) {
+			expect(
+				LiveDebuggerInputSchema.parse({
+					operation: "launch",
+					target: "/tmp/sample",
+					breakpoint,
+				}).breakpoint,
+			).toBe(breakpoint);
+		}
+	});
+
+	it("rejects breakpoint values that could introduce debugger commands", () => {
+		for (const breakpoint of [
+			"main; shell whoami",
+			"main\nshell whoami",
+			"main -ex quit",
+		]) {
+			expect(() =>
+				LiveDebuggerInputSchema.parse({
+					operation: "launch",
+					target: "/tmp/sample",
+					breakpoint,
+				}),
+			).toThrow();
+		}
+	});
 });
