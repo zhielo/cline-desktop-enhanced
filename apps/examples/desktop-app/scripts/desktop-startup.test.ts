@@ -11,6 +11,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Match the desktop host's endpoint wait. A cold Windows runner can spend
+// several seconds starting the embedded Hub before the sidecar publishes its
+// own ready line; 15 seconds produced intermittent false negatives after an
+// otherwise valid installer had already built and installed successfully.
+const SIDECAR_READY_TIMEOUT_MS = 30_000;
+
 // Exercise the actual compiled entrypoint: source-only tests miss mixed SDK
 // build identities between the desktop client and its embedded Hub daemon.
 test("compiled desktop backend publishes its endpoint with its own Hub", async () => {
@@ -75,7 +81,7 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			stderr,
 		});
 		let endpoint: string | undefined;
-		const deadline = Date.now() + 15_000;
+		const deadline = Date.now() + SIDECAR_READY_TIMEOUT_MS;
 		while (Date.now() < deadline) {
 			for (const line of readFileSync(stdoutPath, "utf8").split("\n")) {
 				try {

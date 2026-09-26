@@ -26,6 +26,15 @@ const requiredMarkers: Array<{
 			"BUILD-INFO.txt",
 			"CLINE_TEST_SIDECAR_BIN",
 			"scripts/desktop-startup.test.ts",
+			"Record installer smoke-test result",
+			"always() && steps.installer.outcome == 'success'",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/desktop-startup.test.ts",
+		markers: [
+			"SIDECAR_READY_TIMEOUT_MS = 30_000",
+			"Backend never became ready",
 		],
 	},
 	{
