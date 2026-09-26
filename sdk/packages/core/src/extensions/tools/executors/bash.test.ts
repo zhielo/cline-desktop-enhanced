@@ -58,6 +58,82 @@ describe("createShellExecutor", () => {
 		expect(output.trim()).toBe("hello");
 	});
 
+	it("withholds sensitive environment variables while preserving safe ones", async () => {
+		const shell = createShellExecutor({
+			env: {
+				TEST_API_KEY: "environment-secret-value",
+				SAFE_BUILD_FLAG: "enabled",
+			},
+		});
+		const output = await shell(
+			{
+				command: process.execPath,
+				args: [
+					"-e",
+					"console.log(process.env.TEST_API_KEY ?? 'missing'); console.log(process.env.SAFE_BUILD_FLAG)",
+				],
+			},
+			process.cwd(),
+			ctx,
+		);
+		expect(output).toContain("missing");
+		expect(output).toContain("enabled");
+		expect(output).not.toContain("environment-secret-value");
+	});
+
+	it("redacts explicitly granted secrets from streamed and final output", async () => {
+		const updates: string[] = [];
+		const secret = "granted-environment-secret";
+		const shell = createShellExecutor({
+			env: { TEST_API_KEY: secret },
+			allowedSensitiveEnvironmentVariables: ["test_api_key"],
+		});
+		const output = await shell(
+			{
+				command: process.execPath,
+				args: [
+					"-e",
+					"const value=process.env.TEST_API_KEY; process.stdout.write(value.slice(0, 10)); setTimeout(() => process.stdout.write(value.slice(10) + ' done'), 20)",
+				],
+			},
+			process.cwd(),
+			{
+				...ctx,
+				emitUpdate: (update) => {
+					if (
+						update &&
+						typeof update === "object" &&
+						"chunk" in update &&
+						typeof update.chunk === "string"
+					) {
+						updates.push(update.chunk);
+					}
+				},
+			},
+		);
+		expect(output).toContain("[REDACTED]");
+		expect(output).not.toContain(secret);
+		expect(updates.join("")).toContain("[REDACTED]");
+		expect(updates.join("")).not.toContain(secret);
+	});
+
+	it("redacts sensitive assignments not sourced from the environment", async () => {
+		const shell = createShellExecutor();
+		const output = await shell(
+			{
+				command: process.execPath,
+				args: [
+					"-e",
+					"process.stdout.write('token=split-'); setTimeout(() => process.stdout.write('secret-value\\n'), 20)",
+				],
+			},
+			process.cwd(),
+			ctx,
+		);
+		expect(output).toContain("token=[REDACTED]");
+		expect(output).not.toContain("split-secret-value");
+	});
+
 	it("streams stdout and stderr with ANSI escapes before completion", async () => {
 		const updates: Array<Record<string, unknown>> = [];
 		let resolveBothStreams: (() => void) | undefined;
@@ -210,7 +286,9 @@ describe("createShellExecutor", () => {
 		const shell = createShellExecutor({
 			timeoutMs: 2_000,
 			executionController: controller,
-			detachedLogRetentionMs: 250,
+			detachedLogRetentionMs: 750,
+			env: { TEST_API_KEY: "detached-log-secret" },
+			allowedSensitiveEnvironmentVariables: ["TEST_API_KEY"],
 			processStartTokenProbe: (pid) => ({
 				status: "found",
 				token: `test-process-${pid}`,
@@ -221,7 +299,7 @@ describe("createShellExecutor", () => {
 				command: process.execPath,
 				args: [
 					"-e",
-					"process.stdout.write('started:' + process.pid + '\\n'); setTimeout(() => process.stdout.write('finished\\n'), 300)",
+					"process.stdout.write('started:' + process.pid + '\\n'); setTimeout(() => process.stdout.write('token=' + process.env.TEST_API_KEY + '\\n'), 100); setTimeout(() => process.stdout.write('finished\\n'), 300)",
 				],
 			},
 			process.cwd(),
@@ -277,6 +355,9 @@ describe("createShellExecutor", () => {
 			});
 			await new Promise((resolve) => setTimeout(resolve, 350));
 			expect(await fileExists(logPath)).toBe(true);
+			const logOutput = await readFile(logPath, "utf8");
+			expect(logOutput).toContain("token=[REDACTED]");
+			expect(logOutput).not.toContain("detached-log-secret");
 			await expect.poll(() => fileExists(dirname(logPath))).toBe(false);
 		} finally {
 			await rm(dirname(logPath), { recursive: true, force: true });

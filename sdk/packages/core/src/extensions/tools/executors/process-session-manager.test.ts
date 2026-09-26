@@ -81,6 +81,57 @@ describe("ProcessSessionManager", () => {
 		}
 	});
 
+	it("filters environment secrets and redacts explicitly granted values", async () => {
+		const filteredManager = new ProcessSessionManager();
+		try {
+			const filtered = await filteredManager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: [
+					"-e",
+					"console.log(process.env.TEST_API_KEY ?? 'missing'); console.log(process.env.SAFE_FLAG)",
+				],
+				cwd: process.cwd(),
+				env: {
+					TEST_API_KEY: "session-secret-value",
+					SAFE_FLAG: "enabled",
+				},
+			});
+			await waitForCompletion(filteredManager, filtered.processId);
+			const output = filteredManager
+				.read(OWNER, filtered.processId)
+				.chunks.map((chunk) => chunk.text)
+				.join("");
+			expect(output).toContain("missing");
+			expect(output).toContain("enabled");
+			expect(output).not.toContain("session-secret-value");
+		} finally {
+			await filteredManager.dispose();
+		}
+
+		const grantedManager = new ProcessSessionManager({
+			allowedSensitiveEnvironmentVariables: ["TEST_API_KEY"],
+		});
+		try {
+			const granted = await grantedManager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", "console.log(process.env.TEST_API_KEY)"],
+				cwd: process.cwd(),
+				env: { TEST_API_KEY: "session-secret-value" },
+			});
+			await waitForCompletion(grantedManager, granted.processId);
+			const output = grantedManager
+				.read(OWNER, granted.processId)
+				.chunks.map((chunk) => chunk.text)
+				.join("");
+			expect(output).toContain("[REDACTED]");
+			expect(output).not.toContain("session-secret-value");
+		} finally {
+			await grantedManager.dispose();
+		}
+	});
+
 	it("retains a bounded head and tail and reports omitted output", async () => {
 		const manager = new ProcessSessionManager({ maxOutputBytes: 80 });
 		try {

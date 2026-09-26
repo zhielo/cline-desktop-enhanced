@@ -33,6 +33,11 @@ import {
 	MAX_COMMAND_OUTPUT_CHARS,
 	truncateCommandOutput,
 } from "./output-limits";
+import {
+	createStreamingSecretRedactor,
+	prepareProcessEnvironment,
+	redactSensitiveText,
+} from "./process-environment-policy";
 import type { RunCommandExecutionController } from "./run-command-execution-controller";
 
 const MAX_DETACHED_LOG_BYTES = 10 * 1024 * 1024;
@@ -365,6 +370,20 @@ export interface ShellExecutorOptions {
 	env?: Record<string, string>;
 
 	/**
+	 * Whether to inherit non-sensitive variables from the host process.
+	 * Credential-bearing variables remain filtered unless explicitly granted.
+	 * @default true
+	 */
+	inheritEnvironment?: boolean;
+
+	/**
+	 * Exact environment-variable names the host has approved for this executor.
+	 * Matching is case-insensitive. Granted values are still redacted from
+	 * streamed output, final results, errors, and detached logs.
+	 */
+	allowedSensitiveEnvironmentVariables?: string[];
+
+	/**
 	 * Whether to combine stdout and stderr
 	 * @default true
 	 */
@@ -400,12 +419,16 @@ interface SpawnConfig {
  * Collects stream output with bounded memory: the first half of the budget
  * is kept verbatim, the rest rolls so the latest output always survives.
  */
-function createRollingCollector(maxChars: number) {
+function createRollingCollector(
+	maxChars: number,
+	secretValues: readonly string[] = [],
+) {
 	const headLimit = Math.ceil(maxChars / 2);
 	const tailLimit = Math.max(1, maxChars - headLimit);
 	// StringDecoder keeps multibyte UTF-8 sequences split across stream
 	// chunks intact instead of corrupting them at chunk boundaries.
 	const decoder = new StringDecoder("utf8");
+	const redactor = createStreamingSecretRedactor(secretValues);
 	let head = "";
 	let tail = "";
 	let totalChars = 0;
@@ -424,7 +447,7 @@ function createRollingCollector(maxChars: number) {
 
 	return {
 		append(data: Buffer): string {
-			const text = decoder.write(data);
+			const text = redactor.push(decoder.write(data));
 			appendText(text);
 			return text;
 		},
@@ -439,7 +462,7 @@ function createRollingCollector(maxChars: number) {
 			// Flush bytes the decoder buffered for an incomplete multibyte
 			// sequence at end-of-stream; otherwise the final characters of
 			// non-ASCII output are silently dropped.
-			const finalChunk = decoder.end();
+			const finalChunk = redactor.push(decoder.end()) + redactor.finish();
 			appendText(finalChunk);
 			return {
 				text: head + tail,
@@ -675,16 +698,23 @@ function spawnAndCollect(
 	detachedLogRetentionMs: number,
 	executionController?: RunCommandExecutionController,
 	processStartTokenProbe: ProcessStartTokenProbe = probeProcessStartTokenAsync,
+	inheritEnvironment = true,
+	allowedSensitiveEnvironmentVariables: readonly string[] = [],
 ): Promise<string> {
 	if (context.signal?.aborted) {
 		return Promise.reject(new Error("Command was aborted"));
 	}
 	return new Promise((resolve, reject) => {
 		const isWindows = process.platform === "win32";
+		const preparedEnvironment = prepareProcessEnvironment({
+			overrides: config.env,
+			inheritEnvironment,
+			allowedSensitiveEnvironmentVariables,
+		});
 
 		const child = spawn(config.executable, config.args, {
 			cwd: config.cwd,
-			env: { ...process.env, ...config.env },
+			env: preparedEnvironment.environment,
 			stdio: ["pipe", "pipe", "pipe"],
 			detached: !isWindows,
 			// Prevent a console window from flashing on Windows when the
@@ -694,8 +724,14 @@ function spawnAndCollect(
 		});
 		const childPid = child.pid;
 
-		const stdout = createRollingCollector(maxOutputChars);
-		const stderr = createRollingCollector(maxOutputChars);
+		const stdout = createRollingCollector(
+			maxOutputChars,
+			preparedEnvironment.secretValues,
+		);
+		const stderr = createRollingCollector(
+			maxOutputChars,
+			preparedEnvironment.secretValues,
+		);
 		const executionId = randomUUID();
 		const supportsDetachment = Boolean(
 			executionController && context.sessionId,
@@ -1046,22 +1082,31 @@ function spawnAndCollect(
 
 		child.on("error", (error) => {
 			if (killed) return;
+			const sanitizedMessage = redactSensitiveText(
+				error.message,
+				preparedEnvironment.secretValues,
+			);
 			if (detached) {
-				detachedLog?.write(`\n[Command failed: ${error.message}]\n`);
+				detachedLog?.write(`\n[Command failed: ${sanitizedMessage}]\n`);
 				detachedLog?.complete();
 				return;
 			}
 			progress.stop({ flush: true });
 			cleanup();
 			settle(() =>
-				reject(new Error(`Failed to execute command: ${error.message}`)),
+				reject(new Error(`Failed to execute command: ${sanitizedMessage}`)),
 			);
 		});
 
 		child.stdin?.on("error", (error) => {
 			if (killed || settled) return;
 			killAndReject(
-				new Error(`Failed to write command input: ${error.message}`),
+				new Error(
+					`Failed to write command input: ${redactSensitiveText(
+						error.message,
+						preparedEnvironment.secretValues,
+					)}`,
+				),
 			);
 		});
 		child.stdin?.end(config.input, "utf8");
@@ -1088,6 +1133,8 @@ export function createShellExecutor(
 		shell = getDefaultShell(process.platform),
 		timeoutMs = 30000,
 		env = {},
+		inheritEnvironment = true,
+		allowedSensitiveEnvironmentVariables = [],
 		combineOutput = true,
 		executionController,
 		processStartTokenProbe = probeProcessStartTokenAsync,
@@ -1128,6 +1175,8 @@ export function createShellExecutor(
 			detachedLogRetentionMs,
 			executionController,
 			processStartTokenProbe,
+			inheritEnvironment,
+			allowedSensitiveEnvironmentVariables,
 		);
 	};
 }

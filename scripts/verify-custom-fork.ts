@@ -102,7 +102,22 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/bash.ts",
-		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
+		markers: [
+			"COMMAND_PROGRESS_FLUSH_INTERVAL_MS",
+			"emittedOutput",
+			"prepareProcessEnvironment",
+			"allowedSensitiveEnvironmentVariables",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-environment-policy.ts",
+		markers: [
+			"prepareProcessEnvironment",
+			"isSensitiveEnvironmentVariable",
+			"createStreamingSecretRedactor",
+			"OTEL_EXPORTER_OTLP_HEADERS",
+			"PRIVATE_KEY_PATTERN",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
@@ -177,6 +192,15 @@ const requiredMarkers: Array<{
 			"prewarmed PowerShell worker",
 			"Scoped computer use",
 			"Do not publish a GitHub Release",
+		],
+	},
+	{
+		path: "docs/PROCESS_ENVIRONMENT_SECURITY.md",
+		markers: [
+			"allowedSensitiveEnvironmentVariables",
+			"Output redaction",
+			"Security boundary",
+			"does not publish a GitHub Release",
 		],
 	},
 	{
