@@ -84,6 +84,12 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		headlessToolNames: ["run_commands"],
 	},
 	{
+		id: "process_session",
+		description:
+			"Start and manage resumable non-TTY processes with stable IDs, incremental output reads, stdin, and process-tree signals.",
+		headlessToolNames: ["process_session"],
+	},
+	{
 		id: "editor",
 		description:
 			"Make controlled filesystem edits on text files with create, replace, and insert operations.",
@@ -139,6 +145,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 			| "enableAndroidDevice"
 			| "enableSearch"
 			| "enableBash"
+			| "enableProcessSessions"
 			| "enableWebFetch"
 			| "enableApplyPatch"
 			| "enableEditor"
@@ -154,6 +161,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 	android_device: "enableAndroidDevice",
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
+	process_session: "enableProcessSessions",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",
@@ -175,6 +183,7 @@ type ResolvedToolFlags = Pick<
 	| "enableAndroidDevice"
 	| "enableSearch"
 	| "enableBash"
+	| "enableProcessSessions"
 	| "enableWebFetch"
 	| "enableApplyPatch"
 	| "enableEditor"

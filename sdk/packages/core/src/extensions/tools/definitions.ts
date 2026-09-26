@@ -4,6 +4,7 @@
  * Factory functions for creating the default tools.
  */
 
+import { isAbsolute, resolve } from "node:path";
 import {
 	type AgentTool,
 	type AgentToolContext,
@@ -23,6 +24,10 @@ import {
 	MAX_READ_OUTPUT_CHARS,
 	MAX_SEARCH_OUTPUT_CHARS,
 } from "./executors/output-limits";
+import {
+	ProcessSessionManager,
+	type ProcessSessionSignal,
+} from "./executors/process-session-manager";
 import {
 	coalesceOrphanReadRanges,
 	formatError,
@@ -48,6 +53,8 @@ import {
 	FetchWebContentInputSchema,
 	type LiveDebuggerInput,
 	LiveDebuggerInputSchema,
+	type ProcessSessionInput,
+	ProcessSessionInputSchema,
 	type ReadFileRequest,
 	type ReadFilesInput,
 	ReadFilesInputSchema,
@@ -706,6 +713,94 @@ export function createShellTool(
 	return tool;
 }
 
+let defaultProcessSessionManager: ProcessSessionManager | undefined;
+
+function getDefaultProcessSessionManager(): ProcessSessionManager {
+	defaultProcessSessionManager ??= new ProcessSessionManager();
+	return defaultProcessSessionManager;
+}
+
+function requireProcessSessionOwner(context: AgentToolContext): string {
+	if (!context.sessionId) {
+		throw new Error(
+			"process_session requires a host-provided sessionId for ownership isolation",
+		);
+	}
+	return context.sessionId;
+}
+
+/**
+ * Create the host-scoped resumable process-session tool.
+ *
+ * Sessions use direct argv execution and ordinary stdin/stdout/stderr pipes.
+ * They deliberately report interactive:false until a maintained PTY/ConPTY
+ * adapter is available; callers must not treat this as terminal emulation.
+ */
+export function createProcessSessionTool(
+	manager: ProcessSessionManager = getDefaultProcessSessionManager(),
+	config: Pick<DefaultToolsConfig, "cwd"> = {},
+): AgentTool<ProcessSessionInput, unknown> {
+	const workspaceCwd = config.cwd ?? process.cwd();
+	return createTool<ProcessSessionInput, unknown>({
+		name: "process_session",
+		description:
+			"Start and manage resumable non-TTY processes. Use start with an executable and explicit argv, then read with the returned process_id and nextCursor. Use write for stdin, signal for interrupt/terminate/kill, list for owned sessions, and close only after completion. Output is bounded and secret-redacted. This is pipe-based execution, not an interactive terminal.",
+		inputSchema: zodToJsonSchema(ProcessSessionInputSchema),
+		timeoutMs: 30_000,
+		retryable: false,
+		maxRetries: 0,
+		executionMode: "sequential",
+		execute: async (input, context) => {
+			const validated = validateWithZod(ProcessSessionInputSchema, input);
+			const ownerSessionId = requireProcessSessionOwner(context);
+			switch (validated.action) {
+				case "start": {
+					const cwd = validated.cwd
+						? isAbsolute(validated.cwd)
+							? validated.cwd
+							: resolve(workspaceCwd, validated.cwd)
+						: workspaceCwd;
+					return manager.start({
+						ownerSessionId,
+						executable: validated.executable,
+						args: validated.args,
+						cwd,
+						env: validated.env,
+						toolCallId: context.toolCallId,
+					});
+				}
+				case "list":
+					return manager.list(ownerSessionId);
+				case "read":
+					return manager.read(
+						ownerSessionId,
+						validated.process_id,
+						validated.cursor ?? 0,
+					);
+				case "write":
+					await manager.writeStdin(
+						ownerSessionId,
+						validated.process_id,
+						validated.input,
+					);
+					return manager.get(ownerSessionId, validated.process_id);
+				case "signal":
+					await manager.signal(
+						ownerSessionId,
+						validated.process_id,
+						validated.signal as ProcessSessionSignal,
+					);
+					return manager.get(ownerSessionId, validated.process_id);
+				case "close":
+					return {
+						processId: validated.process_id,
+						closed: manager.close(ownerSessionId, validated.process_id),
+					};
+			}
+		},
+	});
+}
+
 /**
  * Create the fetch_web_content tool
  *
@@ -1081,6 +1176,7 @@ export function createDefaultTools(
 		enableLiveDebugger = false,
 		enableAndroidDevice = true,
 		enableBash = true,
+		enableProcessSessions = false,
 		enableWebFetch = true,
 		enableApplyPatch = false,
 		enableEditor = true,
@@ -1115,6 +1211,14 @@ export function createDefaultTools(
 	// Add run_commands tool if enabled and executor provided
 	if (enableBash && executors.bash) {
 		tools.push(createShellTool(executors.bash, config));
+	}
+	if (enableProcessSessions) {
+		tools.push(
+			createProcessSessionTool(
+				config.processSessionManager ?? getDefaultProcessSessionManager(),
+				config,
+			),
+		);
 	}
 
 	// Add fetch_web_content tool if enabled and executor provided

@@ -13,6 +13,19 @@ describe("builtin tool catalog", () => {
 		expect(catalog.some((entry) => entry.id === "teams")).toBe(true);
 	});
 
+	it("enables process sessions in act mode but not plan mode", () => {
+		expect(
+			getCoreBuiltinToolCatalog({ mode: "act" }).find(
+				(entry) => entry.id === "process_session",
+			)?.defaultEnabled,
+		).toBe(true);
+		expect(
+			getCoreBuiltinToolCatalog({ mode: "plan" }).find(
+				(entry) => entry.id === "process_session",
+			)?.defaultEnabled,
+		).toBe(false);
+	});
+
 	it("includes the unified tasks tool outside yolo mode", () => {
 		for (const mode of ["act", "plan"] as const) {
 			const entry = getCoreBuiltinToolCatalog({ mode }).find(

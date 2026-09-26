@@ -166,6 +166,27 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
+		markers: [
+			"ProcessSessionInputSchema",
+			'action: z.literal("start")',
+			"signal: z",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/definitions.ts",
+		markers: [
+			'name: "process_session"',
+			"requireProcessSessionOwner",
+			"createProcessSessionTool",
+			"interactive terminal",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/runtime.ts",
+		markers: ["process_session", "enableProcessSessions"],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",
 		markers: [
 			'path.join(process.env.USERPROFILE, "Documents")',

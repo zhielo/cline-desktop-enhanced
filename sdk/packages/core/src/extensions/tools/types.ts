@@ -10,6 +10,7 @@ import type {
 	ITelemetryService,
 	TextContent,
 } from "@cline/shared";
+import type { ProcessSessionManager } from "./executors/process-session-manager";
 import type {
 	AndroidDeviceInput,
 	ApplyPatchInput,
@@ -255,6 +256,7 @@ export type DefaultToolName =
 	| "live_debugger"
 	| "android_device"
 	| "run_commands"
+	| "process_session"
 	| "fetch_web_content"
 	| "apply_patch"
 	| "editor"
@@ -303,6 +305,18 @@ export interface DefaultToolsConfig {
 	 * @default true
 	 */
 	enableBash?: boolean;
+
+	/**
+	 * Enable resumable non-TTY process sessions.
+	 * @default true in Act/YOLO presets; false in Plan mode
+	 */
+	enableProcessSessions?: boolean;
+
+	/**
+	 * Host-scoped process manager. Reuse one instance across runtime rebuilds so
+	 * process IDs and buffered output remain valid between model turns.
+	 */
+	processSessionManager?: ProcessSessionManager;
 
 	/**
 	 * Enable the fetch_web_content tool
