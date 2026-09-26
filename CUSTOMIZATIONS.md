@@ -51,6 +51,7 @@ Primary files:
 - Desktop, example VS Code, and repository-root Vitest configurations are native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` configs must not be restored.
 - React image-attachment tests explicitly enable the React `act(...)` environment.
 - The custom installer validates type safety, sidecar behavior, task reports, focused customization tests, installer configuration, installation, startup, and unsigned binaries.
+- Installed-sidecar smoke validation executes the installed `code-sidecar.exe` against an isolated Hub, waits for its ready contract, and checks `/health`; it does not depend on a racy one-time Windows process-name/path snapshot while the sidecar transitions into its detached daemon.
 
 Primary files:
 
