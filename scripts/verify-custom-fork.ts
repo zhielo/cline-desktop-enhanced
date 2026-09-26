@@ -81,7 +81,8 @@ const requiredMarkers: Array<{
 			"rev-parse",
 			"worktree",
 			"update-ref",
-			'"start"',
+			'"rundll32"',
+			"url.dll,FileProtocolHandler",
 		],
 	},
 	{
