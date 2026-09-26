@@ -19,32 +19,10 @@ import {
 } from "./output-limits";
 
 function detectImageMediaType(header: Buffer): string | undefined {
-	if (
-		header.length >= 8 &&
-		header
-			.subarray(0, 8)
-			.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
-	)
-		return "image/png";
-	if (
-		header.length >= 3 &&
-		header[0] === 0xff &&
-		header[1] === 0xd8 &&
-		header[2] === 0xff
-	)
-		return "image/jpeg";
-	if (
-		header.length >= 6 &&
-		(header.subarray(0, 6).toString("ascii") === "GIF87a" ||
-			header.subarray(0, 6).toString("ascii") === "GIF89a")
-	)
-		return "image/gif";
-	if (
-		header.length >= 12 &&
-		header.subarray(0, 4).toString("ascii") === "RIFF" &&
-		header.subarray(8, 12).toString("ascii") === "WEBP"
-	)
-		return "image/webp";
+	if (header.length >= 8 && header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+	if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return "image/jpeg";
+	if (header.length >= 6 && (header.subarray(0, 6).toString("ascii") === "GIF87a" || header.subarray(0, 6).toString("ascii") === "GIF89a")) return "image/gif";
+	if (header.length >= 12 && header.subarray(0, 4).toString("ascii") === "RIFF" && header.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
 	return undefined;
 }
 
@@ -53,15 +31,7 @@ function looksBinary(header: Buffer): boolean {
 	if (header.length === 0) return false;
 	let controls = 0;
 	for (const byte of header) {
-		if (
-			byte < 0x20 &&
-			byte !== 0x09 &&
-			byte !== 0x0a &&
-			byte !== 0x0d &&
-			byte !== 0x0c &&
-			byte !== 0x08
-		)
-			controls++;
+		if (byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d && byte !== 0x0c && byte !== 0x08) controls++;
 	}
 	return controls / header.length > 0.1;
 }
@@ -300,14 +270,10 @@ export function createFileReadExecutor(
 
 		const extension = path.extname(resolvedPath).toLowerCase();
 		if ([".png", ".jpg", ".jpeg", ".gif", ".webp"].includes(extension)) {
-			throw new Error(
-				`File extension ${extension} does not match a supported image signature.`,
-			);
+			throw new Error(`File extension ${extension} does not match a supported image signature.`);
 		}
 		if (looksBinary(header)) {
-			throw new Error(
-				"Binary file content is not supported by read_files. Use reverse_engineer or a targeted binary inspection tool.",
-			);
+			throw new Error("Binary file content is not supported by read_files. Use reverse_engineer or a targeted binary inspection tool.");
 		}
 
 		if (stat.size > MAX_TEXT_STREAM_BYTES) {
