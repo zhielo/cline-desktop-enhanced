@@ -152,6 +152,27 @@ const requiredMarkers: Array<{
 			"Do not publish a GitHub Release",
 		],
 	},
+	{
+		path: "docs/CODEX_PARITY_ROADMAP.md",
+		markers: [
+			"Resumable process sessions",
+			"Durable task state machine",
+			"Worktree-first isolation and handoff",
+			"Additive permission profiles",
+			"Parallel agent orchestration",
+			"prewarmed PowerShell worker",
+			"Scoped computer use",
+			"Do not publish a GitHub Release",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/CUSTOM_DESKTOP.md",
+		markers: [
+			"bounded two-level search",
+			"ida_hexrays.decompile()",
+			"acknowledge_risk: true",
+		],
+	},
 ];
 
 const forbiddenPaths = [

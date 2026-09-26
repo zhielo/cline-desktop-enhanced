@@ -67,7 +67,8 @@ Primary files:
 
 ### Command execution performance
 
-- Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event. The full implementation contract and phased roadmap are recorded in `docs/CODEX_LIKE_COMMAND_EXECUTION.md`.
+- Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event. The implemented behavior contract is recorded in `docs/CODEX_LIKE_COMMAND_EXECUTION.md`.
+- Codex-grade process sessions, durable task state, worktree handoff, additive permission profiles, parallel orchestration, telemetry-gated PowerShell optimization, and optional scoped computer use must follow the phased contract in `docs/CODEX_PARITY_ROADMAP.md` and GitHub issue #20.
 
 Primary files:
 
@@ -75,6 +76,7 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/definitions.ts`
 - `sdk/packages/core/src/extensions/tools/executors/bash.ts`
 - `docs/CODEX_LIKE_COMMAND_EXECUTION.md`
+- `docs/CODEX_PARITY_ROADMAP.md`
 
 ### Specialized tools
 
