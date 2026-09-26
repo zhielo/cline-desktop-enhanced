@@ -98,16 +98,21 @@ Primary files:
 
 - Plan-tool updates are normalized by a host-side durable task state machine rather than trusted as presentation-only data. It enforces stable step identity, one active step, valid task transitions, terminal-state protection, and a repair/verification gate before work can advance past a failed or blocked step.
 - Each session stores an atomic, versioned `task-state.json` artifact alongside its session data. Starting or re-attaching a session restores the canonical plan and active step so subsequent tool evidence remains associated after a desktop restart.
-- Typed `plan.updated` events expose the canonical task state and transition history plus optional acceptance criteria, validation commands, owning agent, worktree, artifacts, timestamps, and repair attempt limits. Existing task-report rendering remains compatible with older projection-only events.
-- Phase 2 follow-ups remain intentionally additive: automatic validation execution, explicit skip-reason enforcement, checkpoint-aware task rollback, and migration of pre-state-machine sessions. The current unsigned installer workflow and private artifact-only release policy are unchanged.
+- Typed `plan.updated` events expose the canonical task state and transition history plus optional acceptance criteria, validation commands and results, owning agent, worktree, checkpoint run, artifacts, timestamps, repair attempt limits, skip reasons, and rollback metadata.
+- In Full Access or explicitly auto-approved sessions, newly completed local steps execute their declared validation commands sequentially with bounded runtime and no retained command output. A failure marks the step failed, records only a sanitized status, and skips later commands until repair.
+- Every skipped step requires a non-empty reason. Restoring a workspace checkpoint rewinds task steps associated with that checkpoint or a later run, and records the rollback in the task transition history.
+- Sessions without `task-state.json` migrate the newest compatible projected `plan.updated` report once, then use the canonical artifact. Existing projection-only reports remain readable.
+- See `docs/DURABLE_TASK_EXECUTION.md`. The unsigned installer workflow and private artifact-only release policy are unchanged.
 
 Primary files:
 
 - `apps/examples/desktop-app/sidecar/task-state-machine.ts`
+- `apps/examples/desktop-app/sidecar/task-validation.ts`
 - `apps/examples/desktop-app/sidecar/context.ts`
 - `apps/examples/desktop-app/sidecar/chat-session.ts`
 - `apps/examples/desktop-app/webview/lib/chat-schema.ts`
 - `apps/examples/desktop-app/webview/lib/task-report.ts`
+- `docs/DURABLE_TASK_EXECUTION.md`
 - `docs/CODEX_PARITY_ROADMAP.md`
 
 ### Specialized tools

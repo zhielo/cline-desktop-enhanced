@@ -76,9 +76,20 @@ const requiredMarkers: Array<{
 			"advanceDurableTaskState",
 			"persistDurableTaskState",
 			"readDurableTaskState",
+			"readOrMigrateDurableTaskState",
+			"rollbackDurableTaskState",
+			"Skipped task step requires a reason",
 			"Only one task step may be in progress",
 			"Work cannot advance past a failed step",
 			"sharedSessionTaskStatePath",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/task-validation.ts",
+		markers: [
+			"runDurableTaskValidations",
+			"validationCandidates",
+			"Validation timed out",
 		],
 	},
 	{
@@ -273,6 +284,15 @@ const requiredMarkers: Array<{
 			"Scoped computer use",
 			"atomically persists a versioned task-state artifact",
 			"Do not publish a GitHub Release",
+		],
+	},
+	{
+		path: "docs/DURABLE_TASK_EXECUTION.md",
+		markers: [
+			"Automatic validation",
+			"Checkpoint rollback",
+			"migration.projected-report",
+			"does not publish a GitHub Release",
 		],
 	},
 	{

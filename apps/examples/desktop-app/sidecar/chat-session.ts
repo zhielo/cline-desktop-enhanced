@@ -58,7 +58,11 @@ import { mergeDesktopAiInstructions } from "./desktop-settings";
 import { isCloudAgentsEnabled } from "./feature-flags";
 import { readSessionManifest, sharedSessionDataDir } from "./paths";
 import { persistSessionMessages } from "./session-data/messages";
-import { readDurableTaskState } from "./task-state-machine";
+import {
+	persistDurableTaskState,
+	readOrMigrateDurableTaskState,
+	rollbackDurableTaskState,
+} from "./task-state-machine";
 import type {
 	ChatSessionCommandRequest,
 	JsonRecord,
@@ -1069,7 +1073,10 @@ async function handleStart(
 				requestedSessionId && binding.kind === "local"
 					? readSessionMetadataTitle(requestedSessionId)
 					: undefined,
-			taskState: readDurableTaskState(sessionId),
+			taskState: readOrMigrateDurableTaskState(
+				sessionId,
+				initialMessages ?? [],
+			),
 			status: "idle",
 		},
 	);
@@ -1147,7 +1154,12 @@ async function handleAttach(
 			title:
 				(typeof metadata?.title === "string" ? metadata.title : undefined) ||
 				existing?.title,
-			taskState: existing?.taskState ?? readDurableTaskState(sessionId),
+			taskState:
+				existing?.taskState ??
+				readOrMigrateDurableTaskState(
+					sessionId,
+					existing?.messages ?? readPersistedChatMessages(sessionId) ?? [],
+				),
 			endedAt: isoTimestampToMs(session.endedAt),
 			attachedViaHub: true,
 			// Preserve tracked attachment files so re-attach (called on every
@@ -1881,6 +1893,12 @@ async function handleRestoreCheckpoint(
 			requestedConfig.workspaceRoot.trim()) ||
 		"";
 	if (!cwd) throw new Error("config.cwd or config.workspaceRoot is required");
+	const sourceTaskState =
+		ctx.liveSessions.get(sourceSessionId)?.taskState ??
+		readOrMigrateDurableTaskState(
+			sourceSessionId,
+			readPersistedChatMessages(sourceSessionId) ?? [],
+		);
 	const binding = getSessionRuntimeBinding(
 		ctx,
 		sourceSessionId,
@@ -1924,6 +1942,15 @@ async function handleRestoreCheckpoint(
 			throw new Error("Checkpoint restore did not return a new session");
 		}
 		restoredSessionId = sessionId;
+		const restoredTaskState = sourceTaskState
+			? rollbackDurableTaskState({
+					state: sourceTaskState,
+					checkpointRunCount: runCount,
+				})
+			: undefined;
+		if (restoredTaskState) {
+			persistDurableTaskState(sessionId, restoredTaskState);
+		}
 		discardAllTrackedAttachments(
 			sourceSessionId,
 			ctx.liveSessions.get(sourceSessionId),
@@ -1941,6 +1968,7 @@ async function handleRestoreCheckpoint(
 				messages: restoredMessages,
 				prompt: derivePromptFromMessages(restoredMessages),
 				title: readSessionMetadataTitle(sourceSessionId),
+				taskState: restoredTaskState,
 				status: "idle",
 			}),
 		);

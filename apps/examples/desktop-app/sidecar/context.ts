@@ -38,6 +38,10 @@ import {
 	type DurableTaskStep,
 	persistDurableTaskState,
 } from "./task-state-machine";
+import {
+	runDurableTaskValidations,
+	validationCandidates,
+} from "./task-validation";
 import type {
 	LiveSession,
 	PendingAskQuestion,
@@ -55,6 +59,7 @@ const hubClientInitialization = new WeakMap<
 	Promise<NodeHubClient>
 >();
 const approvalReadinessUpdates = new WeakMap<SidecarContext, Promise<void>>();
+const activeTaskValidations = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Helpers — WebSocket broadcast
@@ -465,6 +470,10 @@ function buildPlanTaskEvent(
 } | null {
 	const record = taskRecord(input);
 	if (!record) return null;
+	const previous = session?.taskState;
+	const previousSteps = new Map(
+		previous?.steps.map((step) => [step.id, step] as const),
+	);
 	const rawSteps = record.plan ?? record.steps ?? record.todos ?? record.items;
 	if (!Array.isArray(rawSteps)) return null;
 	const steps: DurableTaskStep[] = rawSteps.flatMap((rawStep, index) => {
@@ -500,6 +509,12 @@ function buildPlanTaskEvent(
 		const maxRepairAttempts = taskNonnegativeNumber(
 			step.max_repair_attempts ?? step.maxRepairAttempts,
 		);
+		const skipReason = taskString(step.skip_reason ?? step.skipReason);
+		const checkpointRunCount = taskNonnegativeNumber(
+			step.checkpoint_run_count ?? step.checkpointRunCount,
+		);
+		const previousStep =
+			typeof rawId === "string" ? previousSteps.get(rawId.trim()) : undefined;
 		return [
 			{
 				id:
@@ -524,6 +539,21 @@ function buildPlanTaskEvent(
 				...(completedAtMs !== undefined ? { completedAtMs } : {}),
 				...(repairAttempt !== undefined ? { repairAttempt } : {}),
 				...(maxRepairAttempts !== undefined ? { maxRepairAttempts } : {}),
+				...(skipReason ? { skipReason } : {}),
+				...(checkpointRunCount !== undefined
+					? { checkpointRunCount }
+					: previousStep?.checkpointRunCount !== undefined
+						? { checkpointRunCount: previousStep.checkpointRunCount }
+						: {}),
+				...(previousStep?.validation &&
+				JSON.stringify(previousStep.validationCommands) ===
+					JSON.stringify(validationCommands)
+					? {
+							validation: previousStep.validation.map((item) => ({
+								...item,
+							})),
+						}
+					: {}),
 			},
 		];
 	});
@@ -551,7 +581,6 @@ function buildPlanTaskEvent(
 			}
 		: undefined;
 	const explicitPlanId = taskString(record.plan_id ?? record.planId);
-	const previous = session?.taskState;
 	const previousStepIds = new Set(previous?.steps.map((step) => step.id));
 	const overlapsPreviousPlan = steps.some((step) =>
 		previousStepIds.has(step.id),
@@ -587,12 +616,109 @@ function buildPlanTaskEvent(
 			steps: state.steps,
 			...(state.activeStepId ? { activeStepId: state.activeStepId } : {}),
 			...(state.repair ? { repair: state.repair } : {}),
+			...(state.rollback ? { rollback: state.rollback } : {}),
 			updatedAtMs: state.updatedAtMs,
 			transitions: state.transitions,
 		},
 		activeStepId: state.activeStepId,
 		state,
 	};
+}
+
+function durableTaskPlanEvent(
+	state: DurableTaskState,
+): Record<string, unknown> {
+	return {
+		type: "plan.updated",
+		planId: state.planId,
+		state: state.status,
+		steps: state.steps,
+		...(state.activeStepId ? { activeStepId: state.activeStepId } : {}),
+		...(state.repair ? { repair: state.repair } : {}),
+		...(state.rollback ? { rollback: state.rollback } : {}),
+		updatedAtMs: state.updatedAtMs,
+		transitions: state.transitions,
+	};
+}
+
+function schedulePendingTaskValidations(
+	ctx: SidecarContext,
+	sessionId: string,
+): void {
+	const session = ctx.liveSessions.get(sessionId);
+	const state = session?.taskState;
+	if (!session || !state) return;
+	if (
+		session.config.mode !== "yolo" &&
+		session.config.autoApproveTools !== true
+	) {
+		return;
+	}
+	if (
+		(session.environmentId ?? LOCAL_ENVIRONMENT_ID) !== LOCAL_ENVIRONMENT_ID
+	) {
+		return;
+	}
+	const stepId = validationCandidates(state)[0];
+	if (!stepId || activeTaskValidations.has(sessionId)) return;
+	const step = state.steps.find((item) => item.id === stepId);
+	const cwd =
+		step?.worktree?.trim() ||
+		(typeof session.config.cwd === "string" ? session.config.cwd.trim() : "") ||
+		(typeof session.config.workspaceRoot === "string"
+			? session.config.workspaceRoot.trim()
+			: "");
+	if (!cwd) return;
+	activeTaskValidations.add(sessionId);
+	let expectedState = state;
+	void runDurableTaskValidations({
+		state,
+		stepId,
+		cwd,
+		onState(nextState) {
+			const current = ctx.liveSessions.get(sessionId);
+			if (!current || current.taskState !== expectedState) {
+				throw new Error("Task plan changed during automatic validation");
+			}
+			current.taskState = nextState;
+			expectedState = nextState;
+			current.activeTaskStepId = nextState.activeStepId;
+			persistDurableTaskState(sessionId, nextState);
+			const toolCallId = `task-validation:${stepId}:${nextState.updatedAtMs}`;
+			emitChunk(
+				ctx,
+				sessionId,
+				"chat_tool_call_start",
+				JSON.stringify({
+					toolCallId,
+					toolName: "task_validation",
+					input: { planId: nextState.planId, stepId },
+					taskEvent: durableTaskPlanEvent(nextState),
+				}),
+			);
+			emitChunk(
+				ctx,
+				sessionId,
+				"chat_tool_call_end",
+				JSON.stringify({
+					toolCallId,
+					toolName: "task_validation",
+					output: { state: nextState.status },
+				}),
+			);
+		},
+	})
+		.catch((error) => {
+			ctx.logger?.error?.("Automatic task validation failed", {
+				sessionId,
+				stepId,
+				error,
+			});
+		})
+		.finally(() => {
+			activeTaskValidations.delete(sessionId);
+			schedulePendingTaskValidations(ctx, sessionId);
+		});
 }
 
 function captureTaskToolStart(
@@ -703,6 +829,9 @@ function handleAgentEvent(
 						...task,
 					}),
 				);
+				if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) {
+					schedulePendingTaskValidations(ctx, sessionId);
+				}
 			}
 			break;
 		}
@@ -1473,6 +1602,9 @@ export function handleHubLiveEvent(
 					...task,
 				}),
 			);
+			if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) {
+				schedulePendingTaskValidations(ctx, sessionId);
+			}
 			return;
 		}
 		case "tool.updated": {
