@@ -1,15 +1,18 @@
+import { resolve } from "node:path";
 import type { AgentToolContext, ITelemetryService } from "@cline/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildRunCommandsDescription,
 	createDefaultTools,
 	createEditorTool,
+	createProcessSessionTool,
 	createReadFilesTool,
 	createSearchTool,
 	createShellTool,
 	createSkillsTool,
 } from "./definitions";
 import { CommandExitError } from "./executors/bash";
+import type { ProcessSessionManager } from "./executors/process-session-manager";
 import { RUN_COMMAND_QUERY_PREVIEW_LIMIT, TimeoutError } from "./helpers";
 import { type EditFileInput, INPUT_ARG_CHAR_LIMIT } from "./schemas";
 import type { SkillsExecutorWithMetadata } from "./types";
@@ -35,6 +38,69 @@ function createMockSkillsExecutor(
 	executor.configuredSkills = configuredSkills;
 	return executor;
 }
+
+describe("process_session tool", () => {
+	it("uses the host session id for ownership and resolves relative cwd", async () => {
+		const processId = "11111111-1111-4111-8111-111111111111";
+		const manager = {
+			start: vi.fn(async () => ({
+				processId,
+				ownerSessionId: "session-1",
+				state: "running",
+				pid: 42,
+				executable: "node",
+				args: ["server.js"],
+				cwd: "/workspace/app",
+				startedAtMs: 1,
+				interactive: false,
+				latestCursor: 0,
+				droppedOutputBytes: 0,
+			})),
+			list: vi.fn(() => []),
+			get: vi.fn(),
+			read: vi.fn(),
+			writeStdin: vi.fn(),
+			signal: vi.fn(),
+			close: vi.fn(),
+		} as unknown as ProcessSessionManager;
+		const tool = createProcessSessionTool(manager, { cwd: "/workspace" });
+
+		await tool.execute(
+			{
+				action: "start",
+				executable: "node",
+				args: ["server.js"],
+				cwd: "app",
+			},
+			{
+				sessionId: "session-1",
+				agentId: "agent-1",
+				iteration: 1,
+				toolCallId: "tool-1",
+			},
+		);
+
+		expect(manager.start).toHaveBeenCalledWith({
+			ownerSessionId: "session-1",
+			executable: "node",
+			args: ["server.js"],
+			cwd: resolve("/workspace", "app"),
+			env: undefined,
+			toolCallId: "tool-1",
+		});
+	});
+
+	it("rejects calls without a host session id", async () => {
+		const manager = {} as ProcessSessionManager;
+		const tool = createProcessSessionTool(manager);
+		await expect(
+			tool.execute(
+				{ action: "list" },
+				{ agentId: "agent-1", iteration: 1 },
+			),
+		).rejects.toThrow("host-provided sessionId");
+	});
+});
 
 describe("default skills tool", () => {
 	it("is included only when enabled with a skills executor", () => {

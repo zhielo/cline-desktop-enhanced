@@ -34,6 +34,7 @@ describe("default tool presets", () => {
 		// plan-mode command-guard hook registered by the runtime builder is
 		// the hard backstop behind the prompt contract.
 		expect(ToolPresets.plan.enableBash).toBe(true);
+		expect(ToolPresets.plan.enableProcessSessions).toBe(false);
 		expect(ToolPresets.plan.enableEditor).toBe(false);
 	});
 
@@ -55,6 +56,7 @@ describe("default tool presets", () => {
 			"read_files",
 				"search_codebase",
 			"run_commands",
+			"process_session",
 				"fetch_web_content",
 			"editor",
 				"skills",

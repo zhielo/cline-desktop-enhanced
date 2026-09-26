@@ -56,12 +56,13 @@ After changing this behavior:
 
 ## Remaining phased roadmap
 
-1. Compare direct and shell duration, time to first output, and output-volume metrics on Windows.
-2. Optimize the Hub-to-sidecar-to-WebSocket path if transport remains the dominant delay.
-3. Add a feature-flagged Prewarmed PowerShell worker only when measurements show shell startup is the dominant delay.
-4. Initially serialize worker commands per workspace, automatically restart on failure, and fall back to the existing executor.
-5. Keep direct argv commands outside the PowerShell worker.
-6. Consider native Rust/Tokio process supervision only after the worker behavior is stable and measured.
+1. Complete the public `process_session` foundation with a maintained Unix PTY/Windows ConPTY adapter before advertising interactive terminal semantics.
+2. Compare direct and shell duration, time to first output, and output-volume metrics on Windows.
+3. Optimize the Hub-to-sidecar-to-WebSocket path if transport remains the dominant delay.
+4. Add a feature-flagged Prewarmed PowerShell worker only when measurements show shell startup is the dominant delay.
+5. Initially serialize worker commands per workspace, automatically restart on failure, and fall back to the existing executor.
+6. Keep direct argv commands outside the PowerShell worker.
+7. Consider native Rust/Tokio process supervision only after the worker behavior is stable and measured.
 
 ## Release and build policy
 

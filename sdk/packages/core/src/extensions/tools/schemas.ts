@@ -542,6 +542,72 @@ export type StructuredCommandInput = z.infer<
 	typeof StructuredCommandInputSchema
 >;
 
+const ProcessSessionProcessIdSchema = z
+	.string()
+	.uuid()
+	.describe("Stable process session ID returned by the start action");
+
+export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
+	z.object({
+		action: z.literal("start"),
+		executable: z
+			.string()
+			.min(1)
+			.describe("Executable name or absolute path; shell syntax is not accepted"),
+		args: z
+			.array(z.string())
+			.max(256)
+			.optional()
+			.describe("Explicit argv entries passed directly to the executable"),
+		cwd: z
+			.string()
+			.optional()
+			.describe(
+				"Working directory. Relative paths resolve from the configured workspace",
+			),
+		env: z
+			.record(z.string(), z.string())
+			.optional()
+			.describe(
+				"Environment overrides. Sensitive variables remain host-filtered and output-redacted",
+			),
+	}),
+	z.object({
+		action: z.literal("list"),
+	}),
+	z.object({
+		action: z.literal("read"),
+		process_id: ProcessSessionProcessIdSchema,
+		cursor: z.coerce
+			.number()
+			.int()
+			.nonnegative()
+			.optional()
+			.describe("Return output chunks after this cursor; omit for the beginning"),
+	}),
+	z.object({
+		action: z.literal("write"),
+		process_id: ProcessSessionProcessIdSchema,
+		input: z
+			.string()
+			.max(64 * 1024)
+			.describe("Text written to the process stdin pipe"),
+	}),
+	z.object({
+		action: z.literal("signal"),
+		process_id: ProcessSessionProcessIdSchema,
+		signal: z
+			.enum(["interrupt", "terminate", "kill"])
+			.describe("Portable process-tree signal"),
+	}),
+	z.object({
+		action: z.literal("close"),
+		process_id: ProcessSessionProcessIdSchema,
+	}),
+]);
+
+export type ProcessSessionInput = z.infer<typeof ProcessSessionInputSchema>;
+
 /**
  * Web fetch request parameters
  */
