@@ -167,6 +167,7 @@ jobs:
           Get-ChildItem $out | Format-Table Name, Length
 
       - name: Smoke-test unsigned installer and installed binaries
+        id: smoke
         shell: pwsh
         working-directory: apps/examples/desktop-app
         env:
@@ -243,7 +244,16 @@ jobs:
           Write-Host 'Unsigned installer, installed app, and sidecar verified successfully.'
           Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
 
+      - name: Record installer smoke-test result
+        if: ${{ always() && steps.installer.outcome == 'success' }}
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        run: |
+          "Smoke test: ${{ steps.smoke.outcome }}" |
+            Out-File 'dist/custom-installer/BUILD-INFO.txt' -Encoding utf8 -Append
+
       - name: Upload unsigned setup.exe
+        if: ${{ always() && steps.installer.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cline-enhanced-windows-x64-unsigned-${{ steps.version.outputs.version }}
