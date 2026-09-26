@@ -20,6 +20,7 @@ import {
 } from "./file-read";
 import { createSearchExecutor, type SearchExecutorOptions } from "./search";
 import { createReverseEngineeringExecutor } from "./reverse-engineering";
+import { createLiveDebuggerExecutor } from "./live-debugger";
 import {
 	createWebFetchExecutor,
 	type WebFetchExecutorOptions,
@@ -50,6 +51,7 @@ export {
 } from "./run-command-execution-controller";
 export { createSearchExecutor, type SearchExecutorOptions } from "./search";
 export { createReverseEngineeringExecutor } from "./reverse-engineering";
+export { createLiveDebuggerExecutor } from "./live-debugger";
 export {
 	createWebFetchExecutor,
 	type WebFetchExecutorOptions,
@@ -103,6 +105,7 @@ export function createDefaultExecutors(
 		readFile: createFileReadExecutor(options.fileRead),
 		search: createSearchExecutor(options.search),
 		reverseEngineering: createReverseEngineeringExecutor(),
+		liveDebugger: createLiveDebuggerExecutor(),
 		androidDevice: createAndroidDeviceExecutor(),
 		bash: createDefaultShellExecutor(options.bash),
 		webFetch: createWebFetchExecutor(options.webFetch),

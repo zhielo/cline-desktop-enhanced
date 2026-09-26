@@ -60,6 +60,12 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		headlessToolNames: ["reverse_engineer"],
 	},
 	{
+		id: "live_debugger",
+		description:
+			"Run explicitly authorized, supervised one-shot GDB or LLDB workflows.",
+		headlessToolNames: ["live_debugger"],
+	},
+	{
 		id: "android_device",
 		description:
 			"Debug an attached authorized Android device with supervised ADB workflows.",
@@ -129,6 +135,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 			DefaultToolsConfig,
 			| "enableReadFiles"
 			| "enableReverseEngineering"
+			| "enableLiveDebugger"
 			| "enableAndroidDevice"
 			| "enableSearch"
 			| "enableBash"
@@ -143,6 +150,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 > = {
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
+	live_debugger: "enableLiveDebugger",
 	android_device: "enableAndroidDevice",
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
@@ -163,6 +171,7 @@ type ResolvedToolFlags = Pick<
 	DefaultToolsConfig,
 	| "enableReadFiles"
 	| "enableReverseEngineering"
+	| "enableLiveDebugger"
 	| "enableAndroidDevice"
 	| "enableSearch"
 	| "enableBash"

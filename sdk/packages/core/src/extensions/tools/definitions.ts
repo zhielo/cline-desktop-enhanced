@@ -46,6 +46,8 @@ import {
 	EditFileInputSchema,
 	type FetchWebContentInput,
 	FetchWebContentInputSchema,
+	type LiveDebuggerInput,
+	LiveDebuggerInputSchema,
 	type ReadFileRequest,
 	type ReadFilesInput,
 	ReadFilesInputSchema,
@@ -70,6 +72,7 @@ import type {
 	DefaultToolsConfig,
 	EditorExecutor,
 	FileReadExecutor,
+	LiveDebuggerExecutor,
 	ReverseEngineeringExecutor,
 	SearchExecutor,
 	ShellExecutor,
@@ -370,6 +373,20 @@ export function createReverseEngineeringTool(
 			"Discover and use installed Ghidra, IDA, JADX, Apktool, Baksmali, Smali, Android SDK build tools, Android Studio plugins, APKID, Androguard, Frida, Objection, radare2/Rizin, Cutter, LLVM, and Java signing tools for authorized analysis. Start with discover whenever the required toolchain is not already known; it scans PATH, environment variables, standard install roots, Android SDK versions, Android Studio installations, and plugin descriptors, then returns a task-to-tool selection guide. Choose the narrowest operation: compare_apks for original-versus-modified APKs; verify_apk_signature for signer/scheme details; inspect for structural triage; scan_strings for bounded URLs/domains/paths/API clues; JADX decompile for readable Java; disassemble_smali plus search_smali/read_smali_method for protected or obfuscated DEX and complete method bodies; and Ghidra/IDA for native .so libraries. compare_apks reports changed manifests, signatures, DEX, native libraries, resources, and assets without full extraction. Use extract only when raw files are required, assemble_smali/rebuild_apk for an editable round trip, and script/open_gui for advanced engine work. Analysis workspaces are cached by artifact hash and reused by default. Automatically prefer this structured tool over ad-hoc shell scripts for binary/APK work. Uses bounded output, supervised processes, timeouts, cancellation, private output directories, and archive resource ceilings. It does not execute target binaries or bypass licensing.",
 		inputSchema: zodToJsonSchema(ReverseEngineeringInputSchema),
 		timeoutMs: 3_600_000,
+		retryable: false,
+		execute: executor,
+	});
+}
+
+export function createLiveDebuggerTool(
+	executor: LiveDebuggerExecutor,
+): AgentTool<LiveDebuggerInput, string> {
+	return createTool<LiveDebuggerInput, string>({
+		name: "live_debugger",
+		description:
+			"Use an installed GDB or LLDB for explicitly authorized local live debugging. This is separate from static reverse_engineer analysis. Start with discover. Every operation that launches or attaches requires acknowledge_risk=true. Invocations are one-shot and supervised: launch or attach, collect bounded backtrace/register/memory/disassembly evidence, detach when applicable, and exit. Remote debugging, arbitrary command strings, privilege escalation, and hidden persistent sessions are not supported.",
+		inputSchema: zodToJsonSchema(LiveDebuggerInputSchema),
+		timeoutMs: 120_000,
 		retryable: false,
 		execute: executor,
 	});
@@ -1061,6 +1078,7 @@ export function createDefaultTools(
 		enableReadFiles = true,
 		enableSearch = true,
 		enableReverseEngineering = true,
+		enableLiveDebugger = false,
 		enableAndroidDevice = true,
 		enableBash = true,
 		enableWebFetch = true,
@@ -1081,6 +1099,9 @@ export function createDefaultTools(
 
 	if (enableReverseEngineering && executors.reverseEngineering) {
 		tools.push(createReverseEngineeringTool(executors.reverseEngineering));
+	}
+	if (enableLiveDebugger && executors.liveDebugger) {
+		tools.push(createLiveDebuggerTool(executors.liveDebugger));
 	}
 	if (enableAndroidDevice && executors.androidDevice) {
 		tools.push(createAndroidDeviceTool(executors.androidDevice));

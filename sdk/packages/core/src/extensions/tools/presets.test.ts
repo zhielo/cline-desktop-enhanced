@@ -53,11 +53,11 @@ describe("default tool presets", () => {
 
 		expect(tools.map((tool) => tool.name)).toEqual([
 			"read_files",
-				"search_codebase",
+			"search_codebase",
 			"run_commands",
-				"fetch_web_content",
+			"fetch_web_content",
 			"editor",
-				"skills",
+			"skills",
 		]);
 	});
 });

@@ -103,6 +103,22 @@ const requiredMarkers: Array<{
 		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/executors/supervised-process.ts",
+		markers: ['child.once("close"', "process.kill(-child.pid", "exited_early"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/live-debugger.ts",
+		markers: ["acknowledge_risk=true", "persistentSession", "process detach"],
+	},
+	{
+		path: "docs/LIVE_DEBUGGING.md",
+		markers: [
+			"one-shot",
+			"acknowledge_risk: true",
+			"Remote debugging is rejected",
+		],
+	},
+	{
 		path: "docs/ANDROID_DEVICE_AUTOMATION.md",
 		markers: ["Unrestricted shell", "acknowledge_risk: true", "screenChanged"],
 	},
