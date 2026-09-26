@@ -24,6 +24,17 @@ const requiredMarkers: Array<{
 			"Upload unsigned setup.exe",
 			"CUSTOMIZATIONS.md",
 			"BUILD-INFO.txt",
+			"CLINE_TEST_SIDECAR_BIN",
+			"scripts/desktop-startup.test.ts",
+			"Record installer smoke-test result",
+			"always() && steps.installer.outcome == 'success'",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/desktop-startup.test.ts",
+		markers: [
+			"SIDECAR_READY_TIMEOUT_MS = 30_000",
+			"Backend never became ready",
 		],
 	},
 	{
@@ -85,6 +96,13 @@ const requiredMarkers: Array<{
 		markers: ["IS_REACT_ACT_ENVIRONMENT"],
 	},
 	{
+		path: "apps/examples/desktop-app/webview/hooks/use-oauth-user-code.ts",
+		markers: [
+			'desktopClient.subscribe("provider_oauth_user_code"',
+			"lifetime of the mounted login surface",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
 		markers: ["StructuredCommandInputSchema", "invoke an executable directly"],
 	},
@@ -100,7 +118,34 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/bash.ts",
-		markers: ["COMMAND_PROGRESS_FLUSH_INTERVAL_MS", "emittedOutput"],
+		markers: [
+			"COMMAND_PROGRESS_FLUSH_INTERVAL_MS",
+			"emittedOutput",
+			"prepareProcessEnvironment",
+			"allowedSensitiveEnvironmentVariables",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-environment-policy.ts",
+		markers: [
+			"prepareProcessEnvironment",
+			"isSensitiveEnvironmentVariable",
+			"createStreamingSecretRedactor",
+			"OTEL_EXPORTER_OTLP_HEADERS",
+			"PRIVATE_KEY_PATTERN",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
+		markers: [
+			"ProcessSessionManager",
+			"DEFAULT_MAX_PROCESS_SESSIONS = 64",
+			"DEFAULT_PROCESS_OUTPUT_BYTES = 1024 * 1024",
+			"interactive: false",
+			"highestDroppedCursor",
+			"process.kill(-child.pid",
+			"taskkill.exe",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",
@@ -150,6 +195,36 @@ const requiredMarkers: Array<{
 			"cline.run_commands.time_to_first_output_ms",
 			"Prewarmed PowerShell worker",
 			"Do not publish a GitHub Release",
+		],
+	},
+	{
+		path: "docs/CODEX_PARITY_ROADMAP.md",
+		markers: [
+			"Resumable process sessions",
+			"Durable task state machine",
+			"Worktree-first isolation and handoff",
+			"Additive permission profiles",
+			"Parallel agent orchestration",
+			"prewarmed PowerShell worker",
+			"Scoped computer use",
+			"Do not publish a GitHub Release",
+		],
+	},
+	{
+		path: "docs/PROCESS_ENVIRONMENT_SECURITY.md",
+		markers: [
+			"allowedSensitiveEnvironmentVariables",
+			"Output redaction",
+			"Security boundary",
+			"does not publish a GitHub Release",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/CUSTOM_DESKTOP.md",
+		markers: [
+			"bounded two-level search",
+			"ida_hexrays.decompile()",
+			"acknowledge_risk: true",
 		],
 	},
 ];
