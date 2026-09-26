@@ -83,6 +83,8 @@ const requiredMarkers: Array<{
 			"update-ref",
 			'"rundll32"',
 			"url.dll,FileProtocolHandler",
+			"onAuthorization",
+			"authorizationUrl",
 		],
 	},
 	{
@@ -100,10 +102,23 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/examples/desktop-app/sidecar/oauth-login.ts",
 		markers: [
-			"loginClineOAuth",
-			"useWorkOSDeviceAuth: false",
-			"original browser callback flow",
+			"startClineDeviceAuth",
+			"completeClineDeviceAuth",
+			"onAuthorization",
+			"verificationUriComplete",
 		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/hooks/use-oauth-user-code.ts",
+		markers: [
+			'desktopClient.subscribe("provider_oauth_user_code"',
+			"lifetime of the mounted login surface",
+			"authorizationUrl",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/oauth-authorization-prompt.tsx",
+		markers: ["Cline sign-in URL", "Open sign-in page", "Copy sign-in link"],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/schemas.ts",

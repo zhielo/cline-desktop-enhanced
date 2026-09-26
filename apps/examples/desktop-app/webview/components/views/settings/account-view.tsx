@@ -24,7 +24,9 @@ import {
 	UserCircleIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { OAuthAuthorizationPrompt } from "@/components/oauth-authorization-prompt";
 import { useAccount } from "@/contexts/account-context";
+import { useOAuthAuthorization } from "@/hooks/use-oauth-user-code";
 import { isClineAccountNotAuthenticatedResult } from "@/lib/cline-account-state";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import { OAUTH_LOGIN_TIMEOUT_MS } from "@/lib/provider-connection";
@@ -182,6 +184,9 @@ export function AccountView() {
 	const [accountActionPending, setAccountActionPending] = useState<
 		"sign-in" | "sign-out" | null
 	>(null);
+	const oauthAuthorization = useOAuthAuthorization(
+		accountActionPending === "sign-in",
+	);
 	// Organization id being switched to, "" while switching to the personal
 	// account, null when no switch is in flight.
 	const [switchTargetId, setSwitchTargetId] = useState<string | null>(null);
@@ -507,6 +512,12 @@ export function AccountView() {
 						<ExternalLink className="h-4 w-4" />
 					</button>
 				</div>
+				{accountActionPending === "sign-in" ? (
+					<OAuthAuthorizationPrompt
+						authorization={oauthAuthorization}
+						className="w-full max-w-xl text-left"
+					/>
+				) : null}
 			</div>
 		</div>
 	);

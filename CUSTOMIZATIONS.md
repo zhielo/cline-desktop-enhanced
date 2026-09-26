@@ -45,7 +45,7 @@ Primary files:
 
 ### Windows reliability
 
-- Cline account sign-in uses the original official callback-based OAuth process: the Cline API authorization page opens in the default browser, the SDK receives the redirect on its local callback server, and the authorization code is exchanged for access and refresh tokens. The newer WorkOS device-code path is deliberately disabled for the desktop app. Windows URL launching matches the current official Cline desktop host and uses `rundll32 url.dll,FileProtocolHandler` so OAuth URLs reach the registered default browser without `cmd.exe` re-parsing.
+- Cline account sign-in follows the current official desktop WorkOS device-code flow: obtain device authorization, publish the confirmation code and exact verification URL to the webview before browser handoff, open the default browser, poll for completion, and register the resulting tokens with the Cline API. No local callback server is required. Windows URL launching uses `rundll32 url.dll,FileProtocolHandler`, and every sign-in surface retains selectable Open and Copy fallbacks if the OS handoff fails.
 - Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
 - Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
 - Sidecar stores are closed during tests and logging fixtures work across platforms.
@@ -68,6 +68,9 @@ Primary files:
 - `apps/examples/desktop-app/webview/lib/image-attachments.test.ts`
 - `apps/examples/desktop-app/sidecar/oauth-login.ts`
 - `apps/examples/desktop-app/sidecar/oauth-login.test.ts`
+- `apps/examples/desktop-app/webview/hooks/use-oauth-user-code.ts`
+- `apps/examples/desktop-app/webview/components/oauth-authorization-prompt.tsx`
+- `apps/examples/desktop-app/webview/components/views/onboarding/onboarding-view.test.tsx`
 - `.github/workflows/build-custom-windows-installer.yml`
 
 ### Command execution performance

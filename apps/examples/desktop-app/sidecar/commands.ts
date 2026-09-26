@@ -3220,6 +3220,19 @@ export async function handleCommand(
 			},
 			{
 				owner: options?.connection,
+				// Publish device authorization details before the browser handoff so
+				// the UI always has a manual Open/Copy fallback on Windows.
+				onUserCode: (userCode) =>
+					broadcastEvent(ctx, "provider_oauth_user_code", {
+						provider: providerId,
+						userCode,
+					}),
+				onAuthorization: ({ userCode, authorizationUrl }) =>
+					broadcastEvent(ctx, "provider_oauth_user_code", {
+						provider: providerId,
+						userCode,
+						authorizationUrl,
+					}),
 			},
 		);
 		const storageProviderId =
