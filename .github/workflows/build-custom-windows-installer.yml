@@ -209,6 +209,22 @@ jobs:
             }
           }
 
+          # Validate the installed sidecar by its observable contract instead of
+          # relying on a Win32_Process name/path snapshot. The app can replace
+          # its first sidecar with the detached Hub daemon during startup, so a
+          # one-time CIM query can miss a healthy transition. This established
+          # startup test uses isolated CLINE_* paths, waits for the ready line,
+          # and verifies the installed binary's /health endpoint.
+          $env:CLINE_TEST_SIDECAR_BIN = $sidecarExe.FullName
+          try {
+            & bun test scripts/desktop-startup.test.ts
+            if ($LASTEXITCODE -ne 0) {
+              throw "Installed code-sidecar.exe startup test failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            Remove-Item Env:\CLINE_TEST_SIDECAR_BIN -ErrorAction SilentlyContinue
+          }
+
           $app = Start-Process -FilePath $appExe.FullName -PassThru
           Start-Sleep -Seconds 15
           $app.Refresh()
@@ -224,20 +240,8 @@ jobs:
             throw "Installed app exited during startup with code $($app.ExitCode). Events:`n$events"
           }
 
-          $sidecar = Get-CimInstance Win32_Process |
-            Where-Object {
-              $_.Name -eq 'code-sidecar.exe' -and
-              $_.ExecutablePath -like "$installLocation*"
-            } |
-            Select-Object -First 1
-          if (-not $sidecar) {
-            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
-            throw 'Installed app stayed open but its code-sidecar.exe did not start'
-          }
-
           Write-Host 'Unsigned installer, installed app, and sidecar verified successfully.'
           Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
-          Stop-Process -Id $sidecar.ProcessId -Force -ErrorAction SilentlyContinue
 
       - name: Upload unsigned setup.exe
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

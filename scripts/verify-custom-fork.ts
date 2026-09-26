@@ -24,6 +24,8 @@ const requiredMarkers: Array<{
 			"Upload unsigned setup.exe",
 			"CUSTOMIZATIONS.md",
 			"BUILD-INFO.txt",
+			"CLINE_TEST_SIDECAR_BIN",
+			"scripts/desktop-startup.test.ts",
 		],
 	},
 	{
