@@ -2,6 +2,19 @@ import { ProcessSessionManager } from "../src/extensions/tools/executors/process
 
 const OWNER = "terminal-smoke";
 const manager = new ProcessSessionManager();
+const bun = (
+	globalThis as {
+		Bun?: {
+			sleep(milliseconds: number): Promise<void>;
+			which(executable: string): string | null;
+		};
+	}
+).Bun;
+
+if (!bun) {
+	throw new Error("The terminal smoke test must run under Bun");
+}
+const bunRuntime = bun;
 
 async function waitForCompletion(processId: string): Promise<void> {
 	const deadline = Date.now() + 10_000;
@@ -13,13 +26,13 @@ async function waitForCompletion(processId: string): Promise<void> {
 				`Interactive process ended in unexpected state: ${state}`,
 			);
 		}
-		await Bun.sleep(10);
+		await bunRuntime.sleep(10);
 	}
 	throw new Error("Interactive process did not complete");
 }
 
 try {
-	const bunExecutable = Bun.which("bun");
+	const bunExecutable = bunRuntime.which("bun");
 	if (!bunExecutable) {
 		throw new Error("The terminal smoke test requires Bun on PATH");
 	}
