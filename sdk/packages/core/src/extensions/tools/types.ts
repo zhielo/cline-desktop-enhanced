@@ -14,6 +14,7 @@ import type {
 	AndroidDeviceInput,
 	ApplyPatchInput,
 	EditFileInput,
+	LiveDebuggerInput,
 	ReadFileRequest,
 	ReverseEngineeringInput,
 	StructuredCommandInput,
@@ -67,6 +68,11 @@ export type FileReadExecutor = (
  */
 export type ReverseEngineeringExecutor = (
 	input: ReverseEngineeringInput,
+	context: AgentToolContext,
+) => Promise<string>;
+
+export type LiveDebuggerExecutor = (
+	input: LiveDebuggerInput,
 	context: AgentToolContext,
 ) => Promise<string>;
 
@@ -215,6 +221,8 @@ export interface ToolExecutors {
 	search?: SearchExecutor;
 	/** Supervised reverse-engineering implementation */
 	reverseEngineering?: ReverseEngineeringExecutor;
+	/** Explicitly authorized one-shot GDB/LLDB workflows */
+	liveDebugger?: LiveDebuggerExecutor;
 	/** Supervised Android Debug Bridge workflows */
 	androidDevice?: AndroidDeviceExecutor;
 	/** Shell command execution implementation */
@@ -244,6 +252,7 @@ export type DefaultToolName =
 	| "read_files"
 	| "search_codebase"
 	| "reverse_engineer"
+	| "live_debugger"
 	| "android_device"
 	| "run_commands"
 	| "fetch_web_content"
@@ -276,6 +285,9 @@ export interface DefaultToolsConfig {
 	 * @default true
 	 */
 	enableReverseEngineering?: boolean;
+
+	/** Enable the live_debugger tool. @default false */
+	enableLiveDebugger?: boolean;
 
 	/** Enable the android_device tool. @default true */
 	enableAndroidDevice?: boolean;

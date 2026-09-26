@@ -37,6 +37,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		DefaultToolsConfig,
 		| "enableReadFiles"
 		| "enableReverseEngineering"
+		| "enableLiveDebugger"
 		| "enableAndroidDevice"
 		| "enableSearch"
 		| "enableBash"
@@ -50,6 +51,7 @@ const TOOL_NAME_TO_FLAG: Record<
 > = {
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
+	live_debugger: "enableLiveDebugger",
 	android_device: "enableAndroidDevice",
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",

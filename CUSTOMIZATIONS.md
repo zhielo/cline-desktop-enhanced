@@ -80,9 +80,17 @@ Primary files:
 
 - Android automation includes device selection, screen metadata, UI hierarchy, validated touch/swipe/key/text actions, foreground-package guards, and before/after screenshot evidence.
 - Unrestricted `adb shell` is intentionally available for already-authorized devices and requires `acknowledge_risk: true`; see `docs/ANDROID_DEVICE_AUTOMATION.md`.
-- Reverse-engineering and Smali workflows.
+- Reverse-engineering and Smali workflows, with cross-platform IDA/Ghidra discovery, executable/version/capability reporting, version-and-option-aware cache reuse, complete output draining, process-tree cancellation, and verified GUI startup.
+- A separate opt-in `live_debugger` tool provides explicitly acknowledged, bounded, one-shot GDB/LLDB launch and attach workflows with command-safe breakpoint and address validation; see `docs/LIVE_DEBUGGING.md`.
 - APK comparison improvements.
 - Codex-compatible tool calls and binary attachment handling.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts`
+- `sdk/packages/core/src/extensions/tools/executors/supervised-process.ts`
+- `sdk/packages/core/src/extensions/tools/executors/live-debugger.ts`
+- `docs/LIVE_DEBUGGING.md`
 
 ## Required validation
 

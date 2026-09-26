@@ -7,6 +7,11 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import { inflateRaw } from "node:zlib";
 import type { ReverseEngineeringExecutor } from "../types";
+import {
+	commandAvailable,
+	launchDetachedGui,
+	runSupervised,
+} from "./supervised-process";
 
 const MAX_OUTPUT_CHARS = 200_000;
 const MAX_ZIP_ENTRIES = 100_000;
@@ -32,6 +37,8 @@ type AndroidReUtilities = {
 type SupplementalToolInventory = Record<string, string | undefined>;
 
 const ANALYSIS_MANIFEST = "cline-analysis.json";
+const ANALYSIS_SCHEMA_VERSION = 2;
+const GHIDRA_SCRIPT_VERSION = 2;
 const analysisLocks = new Map<string, Promise<void>>();
 
 async function withAnalysisLock<T>(
@@ -156,8 +163,29 @@ async function listMatchingDirectories(
 	}
 }
 
-async function windowsInstallRoots(engine: Engine): Promise<string[]> {
-	if (process.platform !== "win32") return [];
+async function platformInstallRoots(engine: Engine): Promise<string[]> {
+	if (process.platform !== "win32") {
+		const parents =
+			process.platform === "darwin"
+				? [
+						"/Applications",
+						path.join(os.homedir(), "Applications"),
+						"/opt",
+						"/usr/local",
+						os.homedir(),
+					]
+				: ["/opt", "/usr/local", os.homedir()];
+		const prefixes =
+			engine === "ghidra"
+				? ["ghidra", "Ghidra"]
+				: engine === "ida"
+					? ["IDA Professional", "IDA Pro", "ida", "idapro"]
+					: ["jadx"];
+		const roots: string[] = [];
+		for (const parent of parents)
+			roots.push(...(await listMatchingDirectories(parent, prefixes)));
+		return [...new Set(roots)];
+	}
 	const parents = [
 		process.env.ProgramFiles,
 		process.env["ProgramFiles(x86)"],
@@ -190,7 +218,7 @@ async function windowsInstallRoots(engine: Engine): Promise<string[]> {
 
 async function executableCandidates(engine: Engine): Promise<string[]> {
 	const win = process.platform === "win32";
-	const discoveredRoots = await windowsInstallRoots(engine);
+	const discoveredRoots = await platformInstallRoots(engine);
 	if (engine === "ghidra") {
 		const home = process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR;
 		const roots = [...(home ? [home] : []), ...discoveredRoots];
@@ -202,6 +230,15 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 					win ? "analyzeHeadless.bat" : "analyzeHeadless",
 				),
 				path.join(root, win ? "ghidraRun.bat" : "ghidraRun"),
+				path.join(
+					root,
+					"Contents",
+					"Resources",
+					"ghidra",
+					"support",
+					"analyzeHeadless",
+				),
+				path.join(root, "Contents", "Resources", "ghidra", "ghidraRun"),
 			]),
 			win ? "analyzeHeadless.bat" : "analyzeHeadless",
 			win ? "ghidraRun.bat" : "ghidraRun",
@@ -212,9 +249,14 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 		const roots = [...(home ? [home] : []), ...discoveredRoots];
 		const names = win
 			? ["idat64.exe", "ida64.exe", "idat.exe", "ida.exe"]
-			: ["idat64", "ida64", "idat", "ida"];
+			: ["idat64", "ida64", "idat", "ida", "idat32", "ida32"];
 		return [
-			...roots.flatMap((root) => names.map((name) => path.join(root, name))),
+			...roots.flatMap((root) =>
+				names.flatMap((name) => [
+					path.join(root, name),
+					path.join(root, "Contents", "MacOS", name),
+				]),
+			),
 			...names,
 		];
 	}
@@ -230,26 +272,6 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 		),
 		...names,
 	];
-}
-
-async function commandAvailable(command: string): Promise<boolean> {
-	if (path.isAbsolute(command)) {
-		try {
-			const stat = await fs.stat(command);
-			return stat.isFile();
-		} catch {
-			return false;
-		}
-	}
-	const locator = process.platform === "win32" ? "where" : "which";
-	return new Promise((resolve) => {
-		const child = spawn(locator, [command], {
-			stdio: "ignore",
-			windowsHide: true,
-		});
-		child.once("error", () => resolve(false));
-		child.once("exit", (code) => resolve(code === 0));
-	});
 }
 
 async function discover(
@@ -554,107 +576,74 @@ function boundedAppend(current: string, chunk: Buffer | string): string {
 	return (current + chunk.toString()).slice(0, MAX_OUTPUT_CHARS);
 }
 
-function spawnPortable(command: string, args: string[]) {
-	if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
-		return spawn(
-			process.env.ComSpec ?? "cmd.exe",
-			["/d", "/s", "/c", command, ...args],
-			{
-				windowsHide: true,
-				stdio: ["ignore", "pipe", "pipe"],
-				windowsVerbatimArguments: false,
-			},
-		);
-	}
-	return spawn(command, args, {
-		windowsHide: true,
-		stdio: ["ignore", "pipe", "pipe"],
-	});
-}
-
-async function runSupervised(
-	command: string,
-	args: string[],
-	timeoutMs: number,
-	signal?: AbortSignal,
-) {
-	return new Promise<{
-		exitCode: number | null;
-		stdout: string;
-		stderr: string;
-		timedOut: boolean;
-		cancelled: boolean;
-	}>((resolve, reject) => {
-		if (signal?.aborted) {
-			resolve({
-				exitCode: null,
-				stdout: "",
-				stderr: "",
-				timedOut: false,
-				cancelled: true,
-			});
-			return;
+async function toolIdentity(engine: Engine, command: string | undefined) {
+	if (!command)
+		return {
+			version: undefined,
+			versionSource: undefined,
+			executable: undefined,
+		};
+	const root = installationRoot(command, engine);
+	if (engine === "ghidra" && root) {
+		for (const propertiesPath of [
+			path.join(root, "Ghidra", "application.properties"),
+			path.join(root, "application.properties"),
+		]) {
+			const source = await fs.readFile(propertiesPath, "utf8").catch(() => "");
+			const version = /^application\.version\s*=\s*(.+)$/m
+				.exec(source)?.[1]
+				?.trim();
+			if (version)
+				return {
+					version,
+					versionSource: propertiesPath,
+					executable: command,
+					installDirectory: root,
+				};
 		}
-		const child = spawnPortable(command, args);
-		let stdout = "";
-		let stderr = "";
-		let timedOut = false;
-		let cancelled = false;
-		child.stdout?.on("data", (chunk) => {
-			stdout = boundedAppend(stdout, chunk);
-		});
-		child.stderr?.on("data", (chunk) => {
-			stderr = boundedAppend(stderr, chunk);
-		});
-		const kill = () => {
-			if (child.pid && process.platform === "win32")
-				spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-					stdio: "ignore",
-					windowsHide: true,
-				});
-			else child.kill("SIGKILL");
-		};
-		const timer = setTimeout(() => {
-			timedOut = true;
-			kill();
-		}, timeoutMs);
-		const abort = () => {
-			cancelled = true;
-			kill();
-		};
-		signal?.addEventListener("abort", abort, { once: true });
-		child.once("error", (error) => {
-			clearTimeout(timer);
-			signal?.removeEventListener("abort", abort);
-			reject(error);
-		});
-		child.once("exit", (exitCode) => {
-			clearTimeout(timer);
-			signal?.removeEventListener("abort", abort);
-			resolve({ exitCode, stdout, stderr, timedOut, cancelled });
-		});
-	});
-}
-
-async function toolVersion(
-	engine: Engine,
-	command: string | undefined,
-): Promise<string | undefined> {
-	if (!command) return undefined;
-	if (engine === "ghidra" || engine === "ida") {
-		const root = installationRoot(command, engine);
-		return root ? path.basename(root) : undefined;
 	}
-	try {
-		const result = await runSupervised(command, ["--version"], 10_000);
-		const version = `${result.stdout}\n${result.stderr}`
-			.trim()
-			.split(/\r?\n/)
-			.find(Boolean);
-		return version?.slice(0, 300);
-	} catch {
-		return undefined;
+	if (engine === "ida" && root) {
+		for (const versionPath of [
+			path.join(root, "version.txt"),
+			path.join(root, "ida.version"),
+		]) {
+			const version = (await fs.readFile(versionPath, "utf8").catch(() => ""))
+				.trim()
+				.split(/\r?\n/)
+				.find(Boolean);
+			if (version)
+				return {
+					version: version.slice(0, 300),
+					versionSource: versionPath,
+					executable: command,
+					installDirectory: root,
+				};
+		}
 	}
+	if (engine === "jadx") {
+		try {
+			const result = await runSupervised(command, ["--version"], 10_000);
+			const version = `${result.stdout}\n${result.stderr}`
+				.trim()
+				.split(/\r?\n/)
+				.find(Boolean)
+				?.slice(0, 300);
+			return {
+				version,
+				versionSource: "--version",
+				executable: command,
+				installDirectory: root,
+			};
+		} catch {
+			/* discovery remains best effort */
+		}
+	}
+	return {
+		version: root ? path.basename(root) : path.basename(command),
+		versionSource: root ? "directory-name" : "executable-name",
+		executable: command,
+		installDirectory: root,
+	};
 }
 
 interface ZipEntry {
@@ -1754,6 +1743,54 @@ function installationRoot(command: string | undefined, engine: Engine) {
 	return commandDirectory;
 }
 
+async function detectHexRays(
+	command: string | undefined,
+): Promise<boolean | undefined> {
+	const root = installationRoot(command, "ida");
+	if (!root) return undefined;
+	for (const directory of [root, path.join(root, "plugins")]) {
+		const entries = await fs.readdir(directory).catch(() => []);
+		if (
+			entries.some((entry) =>
+				/(?:hexrays|hexx64|hexarm|hexarm64|hexmips|hexppc)/i.test(entry),
+			)
+		)
+			return true;
+	}
+	return false;
+}
+
+function analysisOptionsHash(
+	engine: Engine,
+	input: Record<string, unknown>,
+): string {
+	const relevant =
+		engine === "ghidra"
+			? {
+					operation: input.operation,
+					max_cpu: input.max_cpu ?? null,
+					script_path: input.script_path ?? null,
+					script_args: input.script_args ?? [],
+					ghidraScriptVersion: GHIDRA_SCRIPT_VERSION,
+				}
+			: engine === "ida"
+				? {
+						operation: input.operation,
+						script_path: input.script_path ?? null,
+						script_args: input.script_args ?? [],
+					}
+				: {
+						operation: input.operation,
+						jadx_mode: input.jadx_mode ?? "auto",
+						jadx_threads: input.jadx_threads ?? null,
+						jadx_output_format: input.jadx_output_format ?? "java",
+						jadx_deobfuscate: input.jadx_deobfuscate ?? false,
+						jadx_no_resources: input.jadx_no_resources ?? false,
+						jadx_no_sources: input.jadx_no_sources ?? false,
+					};
+	return createHash("sha256").update(JSON.stringify(relevant)).digest("hex");
+}
+
 async function installationCapabilities(
 	available: ToolInventory,
 	androidUtilities: AndroidReUtilities,
@@ -1765,6 +1802,13 @@ async function installationCapabilities(
 	const idalibActivationScript = idaHome
 		? path.join(idaHome, "idalib", "python", "py-activate-idalib.py")
 		: undefined;
+	const [ghidraIdentity, idaIdentity, jadxIdentity, hexRays] =
+		await Promise.all([
+			toolIdentity("ghidra", ghidraCommand),
+			toolIdentity("ida", idaCommand),
+			toolIdentity("jadx", available.jadx),
+			detectHexRays(idaCommand),
+		]);
 	const bundledPyGhidra = ghidraHome
 		? path.join(ghidraHome, "Ghidra", "Features", "PyGhidra", "pypkg", "dist")
 		: undefined;
@@ -1773,7 +1817,9 @@ async function installationCapabilities(
 		ghidra: {
 			headless: ghidraCommand,
 			gui: await discover("ghidra", true),
-			version: await toolVersion("ghidra", ghidraCommand),
+			version: ghidraIdentity.version,
+			versionSource: ghidraIdentity.versionSource,
+			executableVerified: Boolean(ghidraCommand),
 			installDirectory: ghidraHome,
 			bundledPyGhidra:
 				bundledPyGhidra && (await exists(bundledPyGhidra))
@@ -1783,7 +1829,10 @@ async function installationCapabilities(
 		ida: {
 			headless: idaCommand,
 			gui: await discover("ida", true),
-			version: await toolVersion("ida", idaCommand),
+			version: idaIdentity.version,
+			versionSource: idaIdentity.versionSource,
+			hexRays: { detected: hexRays, requiredForDecompile: true },
+			executableVerified: Boolean(idaCommand),
 			installDirectory: idaHome,
 			idalibActivationScript:
 				idalibActivationScript && (await exists(idalibActivationScript))
@@ -1793,7 +1842,8 @@ async function installationCapabilities(
 		jadx: {
 			cli: available.jadx,
 			gui: await discover("jadx", true),
-			version: await toolVersion("jadx", available.jadx),
+			version: jadxIdentity.version,
+			versionSource: jadxIdentity.versionSource,
 		},
 		androidBuildTools: androidUtilities,
 		androidStudio: await discoverAndroidStudio(),
@@ -1834,27 +1884,6 @@ function chooseAuto(
 			: available.jadx
 				? "jadx"
 				: undefined;
-}
-
-function launchGui(command: string, args: string[]) {
-	const child =
-		process.platform === "win32" && /\.(bat|cmd)$/i.test(command)
-			? spawn(
-					process.env.ComSpec ?? "cmd.exe",
-					["/d", "/s", "/c", command, ...args],
-					{
-						detached: true,
-						stdio: "ignore",
-						windowsHide: false,
-					},
-				)
-			: spawn(command, args, {
-					detached: true,
-					stdio: "ignore",
-					windowsHide: false,
-				});
-	child.unref();
-	return { launched: true, pid: child.pid ?? null };
 }
 
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
@@ -2333,12 +2362,26 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 		const timeoutMs = input.timeout_ms ?? 900_000;
+		const engineIdentity = await toolIdentity(engine, available[engine]);
+		const optionsHash = analysisOptionsHash(engine, input);
+		if (
+			engine === "ida" &&
+			input.operation === "decompile" &&
+			(await detectHexRays(command)) === false
+		) {
+			throw new Error(
+				"IDA decompile requires an installed Hex-Rays decompiler; no compatible plugin was detected.",
+			);
+		}
 
 		return withAnalysisLock(outputDir, async () => {
 			const existingManifest = await readAnalysisManifest(outputDir);
 			const sameArtifact =
+				existingManifest?.schemaVersion === ANALYSIS_SCHEMA_VERSION &&
 				existingManifest?.sha256 === hash &&
-				existingManifest?.engine === engine;
+				existingManifest?.engine === engine &&
+				existingManifest?.engineVersion === engineIdentity.version &&
+				existingManifest?.analysisOptionsHash === optionsHash;
 			const projectName = `cline-${hash.slice(0, 16)}`;
 			const ghidraProject = path.join(outputDir, `${projectName}.gpr`);
 			const idaDatabase = path.join(outputDir, "analysis.i64");
@@ -2457,7 +2500,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						outputDirectory: outputDir,
 						reusedAnalysis,
 						handoffTarget: args[0],
-						...launchGui(command, args),
+						...(await launchDetachedGui(command, args)),
 					},
 					null,
 					2,
@@ -2473,11 +2516,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				result.exitCode === 0 && !result.timedOut && !result.cancelled;
 			if (succeeded) {
 				await writeAnalysisManifest(outputDir, {
-					schemaVersion: 1,
+					schemaVersion: ANALYSIS_SCHEMA_VERSION,
 					sha256: hash,
 					target,
 					engine,
-					engineVersion: await toolVersion(engine, available[engine]),
+					engineVersion: engineIdentity.version,
+					engineVersionSource: engineIdentity.versionSource,
+					analysisOptionsHash: optionsHash,
 					operation: input.operation,
 					updatedAt: new Date().toISOString(),
 				});

@@ -23,6 +23,7 @@ export const ToolPresets = {
 	 * Good for coding assistants and task automation
 	 */
 	act: {
+		enableLiveDebugger: false,
 		enableReadFiles: true,
 		enableReverseEngineering: true,
 		enableAndroidDevice: true,
@@ -45,6 +46,7 @@ export const ToolPresets = {
 	 * the plan-mode command-guard hook the runtime builder registers.
 	 */
 	plan: {
+		enableLiveDebugger: false,
 		enableReadFiles: true,
 		enableReverseEngineering: true,
 		enableAndroidDevice: false,
@@ -65,6 +67,7 @@ export const ToolPresets = {
 	 * Good for code exploration and analysis agents
 	 */
 	search: {
+		enableLiveDebugger: false,
 		enableReadFiles: true,
 		enableReverseEngineering: true,
 		enableAndroidDevice: false,
@@ -84,6 +87,7 @@ export const ToolPresets = {
 	 * Minimal tools for focused tasks
 	 */
 	minimal: {
+		enableLiveDebugger: false,
 		enableReadFiles: false,
 		enableReverseEngineering: true,
 		enableAndroidDevice: true,
@@ -104,6 +108,7 @@ export const ToolPresets = {
 	 * Good for trusted local automation workflows.
 	 */
 	yolo: {
+		enableLiveDebugger: false,
 		enableReadFiles: true,
 		enableReverseEngineering: true,
 		enableAndroidDevice: true,
