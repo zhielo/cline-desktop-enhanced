@@ -63,7 +63,7 @@ Every task step must support stable identity, acceptance criteria, validation co
 
 Parent issue: #23
 
-Substantial tasks and parallel writers should run in managed worktrees. Preserve the existing Windows canonical-path and cleanup hardening.
+Implementation status: complete. New local tasks can run from an exact selected revision in a managed worktree with a durable identity and source metadata. The desktop detects dirty/conflicting state and exposes Apply to Local, Create Branch, Open PR, Keep, and explicitly confirmed Discard actions. Apply aborts cleanly on conflict, Keep survives session deletion, and idempotent cleanup independently removes stale generated branches while preserving user branches. See `docs/WORKTREE_HANDOFF.md`.
 
 Required lifecycle:
 

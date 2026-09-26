@@ -48,6 +48,8 @@ Primary files:
 - Cline account sign-in follows the current official desktop WorkOS device-code flow: obtain device authorization, publish the confirmation code and exact verification URL to the webview before browser handoff, open the default browser, poll for completion, and register the resulting tokens with the Cline API. No local callback server is required. Windows URL launching uses `rundll32 url.dll,FileProtocolHandler`, and every sign-in surface retains selectable Open and Copy fallbacks if the OS handoff fails.
 - Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
 - Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
+- Managed task worktrees persist their identity, source revision/repository, base branch, generated branch, and retention decision. The chat exposes Apply to Local, Create Branch, Open PR, Keep, and explicitly confirmed Discard actions after checking both checkouts for dirty or conflicting state.
+- Apply to Local accepts committed work only and aborts a conflicting cherry-pick; Keep prevents session deletion from cleaning the worktree; cleanup remains idempotent and never deletes renamed/user-created branches.
 - Sidecar stores are closed during tests and logging fixtures work across platforms.
 - Desktop, example VS Code, and repository-root Vitest configurations are native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` configs must not be restored.
 - React image-attachment tests explicitly enable the React `act(...)` environment.
@@ -59,6 +61,8 @@ Primary files:
 
 - `apps/examples/desktop-app/sidecar/commands.ts`
 - `apps/examples/desktop-app/sidecar/commands-git-worktree.test.ts`
+- `apps/examples/desktop-app/webview/components/views/chat/worktree-handoff-bar.tsx`
+- `docs/WORKTREE_HANDOFF.md`
 - `vitest.config.mts`
 - `sdk/tsconfig.json`
 - `apps/examples/desktop-app/vitest.config.mts`

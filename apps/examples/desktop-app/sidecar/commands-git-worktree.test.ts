@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
-	realpathSync,
 	mkdtempSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -47,6 +47,8 @@ beforeEach(() => {
 	sandbox = mkdtempSync(join(tmpdir(), "cline-worktree-"));
 	repo = join(sandbox, "my-app");
 	git(sandbox, "init", "-q", "-b", "main", repo);
+	git(repo, "config", "user.name", "test");
+	git(repo, "config", "user.email", "test@example.com");
 	git(repo, "commit", "-q", "--allow-empty", "-m", "init");
 	vi.stubEnv("CLINE_DIR", join(sandbox, "cline-dir"));
 });
@@ -316,5 +318,95 @@ describe("delete_chat_session worktree cleanup", () => {
 
 		expect(existsSync(repo)).toBe(true);
 		expect(git(repo, "branch", "--show-current")).toBe("main");
+	});
+});
+
+describe("managed worktree handoff", () => {
+	const ctx = {
+		logger: { log: vi.fn(), error: vi.fn(), debug: vi.fn() },
+	} as unknown as SidecarContext;
+
+	it("persists identity and reports clean handoff state", async () => {
+		const worktree = await run(repo);
+		const status = (await handleCommand(ctx, "get_git_worktree_handoff", {
+			path: worktree.path,
+		})) as {
+			id: string;
+			sourceRepo: string;
+			sourceRevision: string;
+			dirty: boolean;
+			commitsAhead: number;
+		};
+		expect(status.id).toMatch(/^[0-9a-f]{5}$/);
+		expect(pathKey(status.sourceRepo)).toBe(pathKey(repo));
+		expect(status.sourceRevision).toMatch(/^[0-9a-f]{40}$/);
+		expect(status.dirty).toBe(false);
+		expect(status.commitsAhead).toBe(0);
+	});
+
+	it("creates a named branch without changing the local checkout", async () => {
+		const worktree = await run(repo);
+		const result = (await handleCommand(ctx, "handoff_git_worktree", {
+			path: worktree.path,
+			action: "create_branch",
+			branch: "feature/handoff",
+		})) as { branch: string };
+		expect(result.branch).toBe("feature/handoff");
+		expect(git(worktree.path, "branch", "--show-current")).toBe(
+			"feature/handoff",
+		);
+		expect(git(repo, "branch", "--show-current")).toBe("main");
+	});
+
+	it("applies committed work to a clean local checkout", async () => {
+		const worktree = await run(repo);
+		writeFileSync(join(worktree.path, "applied.txt"), "from task\n");
+		git(worktree.path, "add", "applied.txt");
+		git(worktree.path, "commit", "-q", "-m", "task change");
+		const result = (await handleCommand(ctx, "handoff_git_worktree", {
+			path: worktree.path,
+			action: "apply_local",
+		})) as { commits: number };
+		expect(result.commits).toBe(1);
+		expect(existsSync(join(repo, "applied.txt"))).toBe(true);
+	});
+
+	it("refuses handoff when either checkout has unsafe local changes", async () => {
+		const worktree = await run(repo);
+		writeFileSync(join(worktree.path, "dirty.txt"), "dirty");
+		await expect(
+			handleCommand(ctx, "handoff_git_worktree", {
+				path: worktree.path,
+				action: "apply_local",
+			}),
+		).rejects.toThrow("Commit or discard worktree changes");
+	});
+
+	it("marks a worktree retained when Keep is selected", async () => {
+		const worktree = await run(repo);
+		await handleCommand(ctx, "handoff_git_worktree", {
+			path: worktree.path,
+			action: "keep",
+		});
+		const status = (await handleCommand(ctx, "get_git_worktree_handoff", {
+			path: worktree.path,
+		})) as { retained?: boolean };
+		expect(status.retained).toBe(true);
+	});
+
+	it("requires confirmation before discard and cleanup is idempotent", async () => {
+		const worktree = await run(repo);
+		await expect(
+			handleCommand(ctx, "handoff_git_worktree", {
+				path: worktree.path,
+				action: "discard",
+			}),
+		).rejects.toThrow("explicit confirmation");
+		await handleCommand(ctx, "handoff_git_worktree", {
+			path: worktree.path,
+			action: "discard",
+			confirmDiscard: true,
+		});
+		expect(existsSync(worktree.path)).toBe(false);
 	});
 });

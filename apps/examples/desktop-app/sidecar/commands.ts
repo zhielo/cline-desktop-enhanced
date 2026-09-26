@@ -4,9 +4,11 @@ import {
 	existsSync,
 	mkdirSync,
 	readdirSync,
+	readFileSync,
 	realpathSync,
 	rmSync,
 	statSync,
+	writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import {
@@ -894,14 +896,64 @@ function filesystemPathKey(path: string): string {
 	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
+type TaskWorktreeMetadata = {
+	version: 1;
+	id: string;
+	path: string;
+	sourceRepo: string;
+	sourceRevision: string;
+	baseBranch?: string;
+	branch: string;
+	generatedBranch: string;
+	createdAt: string;
+	retained?: boolean;
+};
+
+function taskWorktreeMetadataPath(worktreePath: string): string {
+	return join(dirname(worktreePath), "worktree.json");
+}
+
+function writeTaskWorktreeMetadata(metadata: TaskWorktreeMetadata): void {
+	writeFileSync(
+		taskWorktreeMetadataPath(metadata.path),
+		`${JSON.stringify(metadata, null, 2)}\n`,
+		{ encoding: "utf8", mode: 0o600 },
+	);
+}
+
+function readTaskWorktreeMetadata(
+	worktreePath: string,
+): TaskWorktreeMetadata | undefined {
+	try {
+		const value = JSON.parse(
+			readFileSync(taskWorktreeMetadataPath(worktreePath), "utf8"),
+		) as Partial<TaskWorktreeMetadata>;
+		return value.version === 1 &&
+			typeof value.id === "string" &&
+			typeof value.path === "string" &&
+			typeof value.sourceRepo === "string" &&
+			typeof value.sourceRevision === "string" &&
+			typeof value.branch === "string" &&
+			typeof value.createdAt === "string"
+			? {
+					...(value as TaskWorktreeMetadata),
+					generatedBranch:
+						typeof value.generatedBranch === "string"
+							? value.generatedBranch
+							: `cline/${value.id}`,
+				}
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * Creates a git worktree for the repo containing `cwd` and checks out a fresh
  * branch in it, so a task can run isolated from the user's working tree.
  * Mirrors the CLI's `--worktree` layout: `~/.cline/worktrees/<id>/<repo>`.
  */
-async function createGitWorktree(
-	cwd: string,
-): Promise<{ path: string; branch: string }> {
+async function createGitWorktree(cwd: string): Promise<TaskWorktreeMetadata> {
 	const { stdout } = await execFileAsync(
 		"git",
 		["rev-parse", "--show-toplevel"],
@@ -909,7 +961,16 @@ async function createGitWorktree(
 	).catch(() => {
 		throw new Error(`Not a git repository: ${cwd}`);
 	});
-	const repoRoot = stdout.trim();
+	const repoRoot = realpathSync.native(stdout.trim());
+	const [{ stdout: revisionOut }, { stdout: baseBranchOut }] =
+		await Promise.all([
+			execFileAsync("git", ["-C", repoRoot, "rev-parse", "HEAD"], {
+				encoding: "utf8",
+			}),
+			execFileAsync("git", ["-C", repoRoot, "branch", "--show-current"], {
+				encoding: "utf8",
+			}),
+		]);
 	const id = randomUUID().replaceAll("-", "").slice(0, 5);
 	const branch = `cline/${id}`;
 	const worktreePath = join(
@@ -920,10 +981,32 @@ async function createGitWorktree(
 	mkdirSync(dirname(worktreePath), { recursive: true });
 	await execFileAsync(
 		"git",
-		["-C", repoRoot, "worktree", "add", "-b", branch, worktreePath, "HEAD"],
+		[
+			"-C",
+			repoRoot,
+			"worktree",
+			"add",
+			"-b",
+			branch,
+			worktreePath,
+			revisionOut.trim(),
+		],
 		{ encoding: "utf8" },
 	);
-	return { path: realpathSync.native(worktreePath), branch };
+	const path = realpathSync.native(worktreePath);
+	const metadata: TaskWorktreeMetadata = {
+		version: 1,
+		id,
+		path,
+		sourceRepo: repoRoot,
+		sourceRevision: revisionOut.trim(),
+		...(baseBranchOut.trim() ? { baseBranch: baseBranchOut.trim() } : {}),
+		branch,
+		generatedBranch: branch,
+		createdAt: new Date().toISOString(),
+	};
+	writeTaskWorktreeMetadata(metadata);
+	return metadata;
 }
 
 /** True for paths of the exact `~/.cline/worktrees/<id>/<repo>` shape. */
@@ -946,9 +1029,17 @@ async function removeTaskWorktree(
 	ctx: SidecarContext,
 	worktreePath: string,
 ): Promise<{ path: string; repoRoot?: string }> {
-	const canonicalWorktreePath = realpathSync.native(worktreePath);
-	const branch = `cline/${basename(dirname(canonicalWorktreePath))}`;
-	let repoRoot: string | undefined;
+	const canonicalWorktreePath = existsSync(worktreePath)
+		? realpathSync.native(worktreePath)
+		: resolve(worktreePath);
+	const metadata = readTaskWorktreeMetadata(canonicalWorktreePath);
+	const branch =
+		metadata?.generatedBranch ??
+		`cline/${basename(dirname(canonicalWorktreePath))}`;
+	let repoRoot =
+		metadata?.sourceRepo && existsSync(metadata.sourceRepo)
+			? metadata.sourceRepo
+			: undefined;
 	try {
 		const { stdout } = await execFileAsync(
 			"git",
@@ -963,10 +1054,12 @@ async function removeTaskWorktree(
 		);
 		repoRoot = realpathSync.native(dirname(stdout.trim()));
 	} catch (error) {
-		ctx.logger?.error?.("Failed to resolve task worktree repository", {
-			worktreePath,
-			error,
-		});
+		if (!repoRoot && existsSync(canonicalWorktreePath)) {
+			ctx.logger?.error?.("Failed to resolve task worktree repository", {
+				worktreePath,
+				error,
+			});
+		}
 	}
 
 	if (repoRoot) {
@@ -1017,6 +1110,240 @@ async function removeTaskWorktree(
 	// The `<id>` directory that held the worktree.
 	removePathIfExists(dirname(canonicalWorktreePath), { recursive: true });
 	return { path: worktreePath, repoRoot };
+}
+
+type TaskWorktreeHandoffStatus = TaskWorktreeMetadata & {
+	dirty: boolean;
+	conflicts: string[];
+	commitsAhead: number;
+	currentBranch: string;
+	sourceDirty: boolean;
+};
+
+async function ensureTaskWorktreeMetadata(
+	worktreePath: string,
+): Promise<TaskWorktreeMetadata> {
+	const canonicalPath = realpathSync.native(worktreePath);
+	if (!isTaskWorktreePath(canonicalPath)) {
+		throw new Error(`Not a task worktree: ${worktreePath}`);
+	}
+	const existing = readTaskWorktreeMetadata(canonicalPath);
+	if (existing) return existing;
+	const { stdout: commonDirOut } = await execFileAsync(
+		"git",
+		[
+			"-C",
+			canonicalPath,
+			"rev-parse",
+			"--path-format=absolute",
+			"--git-common-dir",
+		],
+		{ encoding: "utf8" },
+	);
+	const sourceRepo = realpathSync.native(dirname(commonDirOut.trim()));
+	const [{ stdout: branchOut }, { stdout: sourceHeadOut }] = await Promise.all([
+		execFileAsync("git", ["-C", canonicalPath, "branch", "--show-current"], {
+			encoding: "utf8",
+		}),
+		execFileAsync("git", ["-C", sourceRepo, "rev-parse", "HEAD"], {
+			encoding: "utf8",
+		}),
+	]);
+	const { stdout: revisionOut } = await execFileAsync(
+		"git",
+		["-C", canonicalPath, "merge-base", "HEAD", sourceHeadOut.trim()],
+		{ encoding: "utf8" },
+	);
+	const id = basename(dirname(canonicalPath));
+	const metadata: TaskWorktreeMetadata = {
+		version: 1,
+		id,
+		path: canonicalPath,
+		sourceRepo,
+		sourceRevision: revisionOut.trim(),
+		branch: branchOut.trim() || `cline/${id}`,
+		generatedBranch: `cline/${id}`,
+		createdAt: new Date().toISOString(),
+	};
+	writeTaskWorktreeMetadata(metadata);
+	return metadata;
+}
+
+async function inspectTaskWorktree(
+	worktreePath: string,
+): Promise<TaskWorktreeHandoffStatus> {
+	const metadata = await ensureTaskWorktreeMetadata(worktreePath);
+	const [status, conflicts, branch, ahead, sourceStatus] = await Promise.all([
+		execFileAsync(
+			"git",
+			[
+				"-C",
+				metadata.path,
+				"status",
+				"--porcelain=v1",
+				"--untracked-files=all",
+			],
+			{ encoding: "utf8" },
+		),
+		execFileAsync(
+			"git",
+			["-C", metadata.path, "diff", "--name-only", "--diff-filter=U"],
+			{ encoding: "utf8" },
+		),
+		execFileAsync("git", ["-C", metadata.path, "branch", "--show-current"], {
+			encoding: "utf8",
+		}),
+		execFileAsync(
+			"git",
+			[
+				"-C",
+				metadata.path,
+				"rev-list",
+				"--count",
+				`${metadata.sourceRevision}..HEAD`,
+			],
+			{ encoding: "utf8" },
+		),
+		execFileAsync(
+			"git",
+			[
+				"-C",
+				metadata.sourceRepo,
+				"status",
+				"--porcelain=v1",
+				"--untracked-files=all",
+			],
+			{ encoding: "utf8" },
+		),
+	]);
+	return {
+		...metadata,
+		dirty: Boolean(status.stdout.trim()),
+		conflicts: conflicts.stdout
+			.split("\n")
+			.map((value) => value.trim())
+			.filter(Boolean),
+		commitsAhead: Number.parseInt(ahead.stdout.trim(), 10) || 0,
+		currentBranch: branch.stdout.trim() || metadata.branch,
+		sourceDirty: Boolean(sourceStatus.stdout.trim()),
+	};
+}
+
+function validateHandoffBranch(value: string): string {
+	const branch = value.trim();
+	if (!branch || branch.startsWith("-") || /[~^:?*[\\\s]/.test(branch)) {
+		throw new Error("Invalid branch name");
+	}
+	return branch;
+}
+
+async function handoffTaskWorktree(
+	ctx: SidecarContext,
+	args?: Record<string, unknown>,
+): Promise<unknown> {
+	const path = typeof args?.path === "string" ? args.path.trim() : "";
+	const action = typeof args?.action === "string" ? args.action.trim() : "";
+	if (!path || !isTaskWorktreePath(path)) {
+		throw new Error(`Not a task worktree: ${path}`);
+	}
+	if (action === "discard") {
+		if (args?.confirmDiscard !== true) {
+			throw new Error("Discard requires explicit confirmation");
+		}
+		return { action, ...(await removeTaskWorktree(ctx, path)) };
+	}
+	const status = await inspectTaskWorktree(path);
+	if (action === "inspect" || !action) return status;
+	if (status.conflicts.length > 0) {
+		throw new Error("Resolve worktree conflicts before handoff");
+	}
+	if (action === "keep") {
+		const metadata = { ...status, retained: true };
+		writeTaskWorktreeMetadata(metadata);
+		return { action, path: status.path, branch: status.currentBranch };
+	}
+	if (action === "create_branch") {
+		const branch = validateHandoffBranch(String(args?.branch ?? ""));
+		await execFileAsync("git", ["-C", status.path, "branch", "-m", branch], {
+			encoding: "utf8",
+		});
+		writeTaskWorktreeMetadata({ ...status, branch });
+		return { action, path: status.path, branch };
+	}
+	if (status.dirty) {
+		throw new Error("Commit or discard worktree changes before handoff");
+	}
+	if (status.commitsAhead < 1) {
+		throw new Error("The worktree has no commits to hand off");
+	}
+	if (action === "apply_local") {
+		if (status.sourceDirty) {
+			throw new Error("Local workspace is dirty; commit or stash it first");
+		}
+		const { stdout } = await execFileAsync(
+			"git",
+			[
+				"-C",
+				status.path,
+				"rev-list",
+				"--reverse",
+				`${status.sourceRevision}..HEAD`,
+			],
+			{ encoding: "utf8" },
+		);
+		const commits = stdout
+			.split("\n")
+			.map((value) => value.trim())
+			.filter(Boolean);
+		try {
+			await execFileAsync(
+				"git",
+				["-C", status.sourceRepo, "cherry-pick", ...commits],
+				{ encoding: "utf8" },
+			);
+		} catch (error) {
+			await execFileAsync(
+				"git",
+				["-C", status.sourceRepo, "cherry-pick", "--abort"],
+				{ encoding: "utf8" },
+			).catch(() => undefined);
+			throw new Error(
+				"Apply to Local conflicted; the local workspace was restored",
+				{
+					cause: error,
+				},
+			);
+		}
+		return { action, path: status.path, commits: commits.length };
+	}
+	if (action === "open_pr") {
+		await execFileAsync(
+			"git",
+			["-C", status.path, "push", "-u", "origin", status.currentBranch],
+			{
+				encoding: "utf8",
+				env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+			},
+		);
+		const { stdout } = await execFileAsync(
+			"gh",
+			[
+				"pr",
+				"create",
+				"--fill",
+				"--head",
+				status.currentBranch,
+				...(status.baseBranch ? ["--base", status.baseBranch] : []),
+			],
+			{
+				cwd: status.path,
+				encoding: "utf8",
+				env: { ...process.env, GH_PROMPT_DISABLED: "1" },
+			},
+		);
+		return { action, path: status.path, url: stdout.trim() };
+	}
+	throw new Error(`Unsupported worktree handoff action: ${action}`);
 }
 
 const REMOTE_FILE_SEARCH_OUTPUT_LIMIT_BYTES = 256 * 1024;
@@ -2788,6 +3115,7 @@ export async function handleCommand(
 			const removedWorktree =
 				deleted &&
 				isTaskWorktreePath(sessionCwd) &&
+				readTaskWorktreeMetadata(sessionCwd)?.retained !== true &&
 				!store.list(10_000).some((other) => {
 					const cwd = other.cwd?.trim() ?? "";
 					return cwd === sessionCwd || cwd.startsWith(sessionCwd + sep);
@@ -3582,6 +3910,12 @@ export async function handleCommand(
 		const cwd = typeof args?.cwd === "string" ? args.cwd.trim() : "";
 		if (!cwd) throw new Error("cwd is required");
 		return await createGitWorktree(cwd);
+	}
+	if (command === "get_git_worktree_handoff") {
+		return await handoffTaskWorktree(ctx, { ...args, action: "inspect" });
+	}
+	if (command === "handoff_git_worktree") {
+		return await handoffTaskWorktree(ctx, args);
 	}
 
 	// Rolls back a worktree from `create_git_worktree` whose session never
