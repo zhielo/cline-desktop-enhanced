@@ -31,6 +31,27 @@ jobs:
           source, count = re.subn(pattern, "\n", source, count=1, flags=re.S)
           if count != 1:
               raise RuntimeError("could not remove the brittle IDA options-hash patch")
+          source = source.replace(
+              r"\t\tlet reusedAnalysis = false;\n\t\tlet args: string[];",
+              r"\t\t\tlet reusedAnalysis = false;\n\t\t\tlet args: string[];",
+          ).replace(
+              r"\t\tlet reusedAnalysis = false;\n\t\tlet args: string[];\n\t\tlet expectedOutput: string | undefined;",
+              r"\t\t\tlet reusedAnalysis = false;\n\t\t\tlet args: string[];\n\t\t\tlet expectedOutput: string | undefined;",
+          )
+          for name in ("old_ida", "new_ida", "old_success", "new_success"):
+              block_pattern = rf"({name} = r'''\n)(.*?)(\n''')"
+              match = re.search(block_pattern, source, flags=re.S)
+              if not match:
+                  raise RuntimeError(f"could not find {name}")
+              body = "\n".join("\t" + line if line.startswith("\t") else line for line in match.group(2).split("\n"))
+              source = source[:match.start()] + match.group(1) + body + match.group(3) + source[match.end():]
+          source = source.replace(
+              r"\t\t\tartifactsTruncated: artifacts.length >= 200,\n\t\t\t...result,",
+              r"\t\t\t\t\tartifactsTruncated: artifacts.length >= 200,\n\t\t\t\t\t...result,",
+          ).replace(
+              r"\t\t\tartifactsTruncated: artifacts.length >= 200,\n\t\t\tsucceeded,\n\t\t\t...result,",
+              r"\t\t\t\t\tartifactsTruncated: artifacts.length >= 200,\n\t\t\t\t\tsucceeded,\n\t\t\t\t\t...result,",
+          )
           path.write_text(source)
           PY
           set +e
