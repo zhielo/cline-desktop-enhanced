@@ -24,21 +24,13 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           path = Path(".github/scripts/apply-real-tool-fixes.py")
           source = path.read_text()
-          source = source.replace(
-              r"\n\t\t\t\t\tscript_path: input.script_path",
-              r"\n\t\t\t\tscript_path: input.script_path",
-          )
-          source = source.replace(
-              r"\n\t\t\t\t\tscript_args: input.script_args",
-              r"\n\t\t\t\tscript_args: input.script_args",
-          )
-          source = source.replace(
-              r"\n\t\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION",
-              r"\n\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION",
-          )
-          source = source.replace(r"\n\t\t\t\t\t}", r"\n\t\t\t\t}")
+          pattern = r"\nreplace_once\(\n(?:(?!\nreplace_once\().)*?idaScriptVersion: IDA_SCRIPT_VERSION.*?\n\)\n"
+          source, count = re.subn(pattern, "\n", source, count=1, flags=re.S)
+          if count != 1:
+              raise RuntimeError("could not remove the brittle IDA options-hash patch")
           path.write_text(source)
           PY
           set +e
@@ -50,6 +42,23 @@ jobs:
             echo "::error title=Patch script failed::$encoded"
             exit "$status"
           fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          path = Path("sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts")
+          source = path.read_text()
+          pattern = r'(engine === "ida"\s*\? \{.*?script_args: input\.script_args \?\? \[\],)(\n\s*\})'
+          source, count = re.subn(
+              pattern,
+              r"\1\n\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION,\2",
+              source,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise RuntimeError("could not add the IDA script version to the options hash")
+          path.write_text(source)
+          PY
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Format touched files
