@@ -15,12 +15,19 @@ import {
 	sortProvidersForApiKeySetup,
 } from "./onboarding-view";
 
-const { invoke, openExternalUrl } = vi.hoisted(() => ({
-	invoke: vi.fn(),
-	openExternalUrl: vi.fn(),
-}));
+const { invoke, openExternalUrl, subscribe, subscriptionHandlers } = vi.hoisted(
+	() => ({
+		invoke: vi.fn(),
+		openExternalUrl: vi.fn(),
+		subscribe: vi.fn(),
+		subscriptionHandlers: new Map<
+			string,
+			Set<(payload: unknown) => void>
+		>(),
+	}),
+);
 vi.mock("@/lib/desktop-client", () => ({
-	desktopClient: { invoke, subscribe: vi.fn(() => () => {}) },
+	desktopClient: { invoke, subscribe },
 	openExternalUrl,
 }));
 
@@ -137,6 +144,18 @@ describe("OnboardingView", () => {
 		Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 		window.localStorage.clear();
 		invoke.mockReset();
+		subscribe.mockReset();
+		subscriptionHandlers.clear();
+		subscribe.mockImplementation(
+			(eventName: string, handler: (payload: unknown) => void) => {
+				const handlers =
+					subscriptionHandlers.get(eventName) ??
+					new Set<(payload: unknown) => void>();
+				handlers.add(handler);
+				subscriptionHandlers.set(eventName, handlers);
+				return () => handlers.delete(handler);
+			},
+		);
 		// AccountProvider fetches the account on mount; unresolved auth means
 		// the signed-out variant of the connect step renders.
 		invoke.mockImplementation(async (command: string) => {
@@ -543,6 +562,39 @@ describe("OnboardingView", () => {
 		expect(invoke).toHaveBeenCalledWith("cancel_provider_oauth_login", {
 			provider: "cline",
 		});
+	});
+
+	it("shows a device code emitted synchronously when browser sign-in starts", async () => {
+		await render();
+		await act(async () => {
+			buttonByText("Get started").click();
+		});
+
+		invoke.mockImplementation(async (command: string) => {
+			if (command === "run_provider_oauth_login") {
+				for (const handler of subscriptionHandlers.get(
+					"provider_oauth_user_code",
+				) ?? []) {
+					handler({ provider: "cline", userCode: "ABCD-EFGH" });
+				}
+				return await new Promise(() => undefined);
+			}
+			if (command === "cline_account") {
+				throw new Error("No Cline account auth token found");
+			}
+			if (command === "list_provider_catalog") {
+				return { providers: [makeProvider()], settingsPath: "/tmp/p.json" };
+			}
+			return {};
+		});
+
+		await act(async () => {
+			buttonByText("Sign in").click();
+		});
+
+		expect(container.textContent).toContain(
+			"Confirm this code in your browser: ABCD-EFGH",
+		);
 	});
 
 	it("connects with a Cline API key when OAuth sign-in is not used", async () => {

@@ -96,6 +96,13 @@ const requiredMarkers: Array<{
 		markers: ["IS_REACT_ACT_ENVIRONMENT"],
 	},
 	{
+		path: "apps/examples/desktop-app/webview/hooks/use-oauth-user-code.ts",
+		markers: [
+			'desktopClient.subscribe("provider_oauth_user_code"',
+			"lifetime of the mounted login surface",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
 		markers: ["StructuredCommandInputSchema", "invoke an executable directly"],
 	},
