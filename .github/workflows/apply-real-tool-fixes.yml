@@ -22,6 +22,25 @@ jobs:
       - name: Apply fixes
         shell: bash
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path(".github/scripts/apply-real-tool-fixes.py")
+          source = path.read_text()
+          source = source.replace(
+              r"\n\t\t\t\t\tscript_path: input.script_path",
+              r"\n\t\t\t\tscript_path: input.script_path",
+          )
+          source = source.replace(
+              r"\n\t\t\t\t\tscript_args: input.script_args",
+              r"\n\t\t\t\tscript_args: input.script_args",
+          )
+          source = source.replace(
+              r"\n\t\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION",
+              r"\n\t\t\t\tidaScriptVersion: IDA_SCRIPT_VERSION",
+          )
+          source = source.replace(r"\n\t\t\t\t\t}", r"\n\t\t\t\t}")
+          path.write_text(source)
+          PY
           set +e
           output="$(python3 .github/scripts/apply-real-tool-fixes.py 2>&1)"
           status=$?
