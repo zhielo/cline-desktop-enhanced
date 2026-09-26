@@ -59,7 +59,25 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/chat-schema.ts",
-		markers: ["TaskProtocolEventSchema", "taskStepId", "taskEvent"],
+		markers: [
+			"TaskProtocolEventSchema",
+			"TaskExecutionStatusSchema",
+			"acceptanceCriteria",
+			"transitions",
+			"taskStepId",
+			"taskEvent",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/task-state-machine.ts",
+		markers: [
+			"advanceDurableTaskState",
+			"persistDurableTaskState",
+			"readDurableTaskState",
+			"Only one task step may be in progress",
+			"Work cannot advance past a failed step",
+			"sharedSessionTaskStatePath",
+		],
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/task-report.ts",
@@ -246,6 +264,7 @@ const requiredMarkers: Array<{
 			"Parallel agent orchestration",
 			"prewarmed PowerShell worker",
 			"Scoped computer use",
+			"atomically persists a versioned task-state artifact",
 			"Do not publish a GitHub Release",
 		],
 	},

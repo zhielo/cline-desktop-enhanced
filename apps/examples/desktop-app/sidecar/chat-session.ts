@@ -40,7 +40,6 @@ import {
 	trackQueuedAttachments,
 } from "./attachments";
 import { createDesktopExtensionContext } from "./client-context";
-import { mergeDesktopAiInstructions } from "./desktop-settings";
 import {
 	getCloudSessionManager,
 	isCloudOuterSessionId,
@@ -55,9 +54,11 @@ import {
 	requestSidecarAskQuestion,
 	sendEvent,
 } from "./context";
+import { mergeDesktopAiInstructions } from "./desktop-settings";
 import { isCloudAgentsEnabled } from "./feature-flags";
 import { readSessionManifest, sharedSessionDataDir } from "./paths";
 import { persistSessionMessages } from "./session-data/messages";
+import { readDurableTaskState } from "./task-state-machine";
 import type {
 	ChatSessionCommandRequest,
 	JsonRecord,
@@ -393,7 +394,9 @@ function createLiveSession(
 		prompt: overrides?.prompt,
 		title: overrides?.title,
 		attachedViaHub: overrides?.attachedViaHub ?? false,
-		activeTaskStepId: overrides?.activeTaskStepId,
+		activeTaskStepId:
+			overrides?.activeTaskStepId ?? overrides?.taskState?.activeStepId,
+		taskState: overrides?.taskState,
 		taskToolStepIds: overrides?.taskToolStepIds ?? new Map(),
 		queuedAttachmentFiles: overrides?.queuedAttachmentFiles,
 		consumedAttachmentFiles: overrides?.consumedAttachmentFiles,
@@ -1066,6 +1069,7 @@ async function handleStart(
 				requestedSessionId && binding.kind === "local"
 					? readSessionMetadataTitle(requestedSessionId)
 					: undefined,
+			taskState: readDurableTaskState(sessionId),
 			status: "idle",
 		},
 	);
@@ -1143,6 +1147,7 @@ async function handleAttach(
 			title:
 				(typeof metadata?.title === "string" ? metadata.title : undefined) ||
 				existing?.title,
+			taskState: existing?.taskState ?? readDurableTaskState(sessionId),
 			endedAt: isoTimestampToMs(session.endedAt),
 			attachedViaHub: true,
 			// Preserve tracked attachment files so re-attach (called on every

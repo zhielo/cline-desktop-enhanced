@@ -5,6 +5,7 @@ import type { RuntimeCapabilities } from "@cline/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { materializeUserFiles } from "./attachments";
 import { CloudSessionManager, type CloudSessionRecord } from "./cloud-sessions";
+import { readDurableTaskState } from "./task-state-machine";
 import type { LiveSession, SidecarContext } from "./types";
 
 const createCoreMock = vi.hoisted(() => vi.fn());
@@ -1762,6 +1763,73 @@ describe("Chat chunk pipe selection", () => {
 		});
 
 		expect(chunksFor(ctx, "chat_text")).toEqual(["remote ", "run"]);
+	});
+
+	it("persists canonical task transitions from plan tool events", async () => {
+		const { handleHubLiveEvent } = await import("./context");
+		const testSessionDataDir = join(
+			tmpdir(),
+			`cline-task-events-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+		);
+		vi.stubEnv("CLINE_SESSION_DATA_DIR", testSessionDataDir);
+		const ctx = await createStreamingContext("session-1");
+
+		handleHubLiveEvent(ctx, {
+			event: "tool.started",
+			sessionId: "session-1",
+			payload: {
+				toolCallId: "plan-call-1",
+				toolName: "update_plan",
+				input: {
+					plan_id: "plan-1",
+					steps: [
+						{
+							id: "implement",
+							label: "Implement durable task state",
+							status: "in_progress",
+							acceptance_criteria: ["State survives restart"],
+							validation_commands: ["bun test"],
+						},
+					],
+				},
+			},
+		});
+		handleHubLiveEvent(ctx, {
+			event: "tool.started",
+			sessionId: "session-1",
+			payload: {
+				toolCallId: "plan-call-2",
+				toolName: "update_plan",
+				input: {
+					plan_id: "plan-1",
+					steps: [
+						{
+							id: "implement",
+							label: "Implement durable task state",
+							status: "completed",
+						},
+					],
+				},
+			},
+		});
+
+		const persisted = readDurableTaskState("session-1");
+		expect(persisted).toMatchObject({
+			planId: "plan-1",
+			status: "completed",
+			transitions: [{ to: "running" }, { from: "running", to: "completed" }],
+		});
+		const emitted = chunksFor(ctx, "chat_tool_call_start").map((chunk) =>
+			JSON.parse(chunk),
+		);
+		expect(emitted.at(-1)?.taskEvent).toMatchObject({
+			type: "plan.updated",
+			planId: "plan-1",
+			state: "completed",
+		});
+
+		rmSync(testSessionDataDir, { recursive: true, force: true });
+		vi.unstubAllEnvs();
 	});
 
 	it("mutes the whole observer projection, not just text", async () => {

@@ -11,6 +11,7 @@ import type {
 } from "@cline/core";
 import type { MessageWithMetadata } from "@cline/llms";
 import type { UserContext } from "@cline/shared";
+import type { DurableTaskState } from "./task-state-machine";
 
 export const LOCAL_ENVIRONMENT_ID = "local";
 
@@ -81,6 +82,8 @@ export type LiveSession = {
 	lastQueuedPromptStartId?: string;
 	/** Active structured-plan step used to associate live tool evidence. */
 	activeTaskStepId?: string;
+	/** Authoritative task state reconstructed from persisted plan updates. */
+	taskState?: DurableTaskState;
 	/** Step association captured when each tool starts, cleared when it finishes. */
 	taskToolStepIds?: Map<string, string>;
 	/** Materialized attachment files whose prompt was submitted; deleted when the turn ends. */

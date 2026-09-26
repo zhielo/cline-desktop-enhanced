@@ -66,12 +66,34 @@ export const TaskStepStatusSchema = z.enum([
 
 export const TaskStepKindSchema = z.enum(["work", "repair", "verification"]);
 
+export const TaskExecutionStatusSchema = z.enum([
+	"planned",
+	"running",
+	"verifying",
+	"repairing",
+	"completed",
+	"waiting_for_user",
+	"blocked",
+	"failed",
+	"cancelled",
+	"skipped",
+]);
+
 export const TaskPlanStepSchema = z.object({
 	id: z.string().min(1),
 	label: z.string().min(1),
 	status: TaskStepStatusSchema,
 	kind: TaskStepKindSchema.default("work"),
 	parentStepId: z.string().min(1).optional(),
+	acceptanceCriteria: z.array(z.string().min(1)).optional(),
+	validationCommands: z.array(z.string().min(1)).optional(),
+	ownerAgentId: z.string().min(1).optional(),
+	worktree: z.string().min(1).optional(),
+	artifacts: z.array(z.string().min(1)).optional(),
+	startedAtMs: z.number().int().nonnegative().optional(),
+	completedAtMs: z.number().int().nonnegative().optional(),
+	repairAttempt: z.number().int().nonnegative().optional(),
+	maxRepairAttempts: z.number().int().nonnegative().optional(),
 });
 
 export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
@@ -79,6 +101,7 @@ export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
 		type: z.literal("plan.updated"),
 		planId: z.string().min(1),
 		explanation: z.string().optional(),
+		state: TaskExecutionStatusSchema.optional(),
 		steps: z.array(TaskPlanStepSchema),
 		activeStepId: z.string().min(1).optional(),
 		repair: z
@@ -89,6 +112,17 @@ export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
 				attempt: z.number().int().nonnegative().optional(),
 				maxAttempts: z.number().int().positive().optional(),
 			})
+			.optional(),
+		updatedAtMs: z.number().int().nonnegative().optional(),
+		transitions: z
+			.array(
+				z.object({
+					from: TaskExecutionStatusSchema.optional(),
+					to: TaskExecutionStatusSchema,
+					atMs: z.number().int().nonnegative(),
+					reason: z.string().min(1),
+				}),
+			)
 			.optional(),
 	}),
 	z.object({

@@ -63,13 +63,24 @@ describe("buildSessionTaskReport", () => {
 		const event = TaskProtocolEventSchema.parse({
 			type: "plan.updated",
 			planId: "plan-1",
+			state: "running",
 			activeStepId: "step-1",
+			updatedAtMs: 100,
+			transitions: [{ to: "running", atMs: 100, reason: "plan.updated" }],
 			steps: [
 				{
 					id: "step-1",
 					label: "Implement the protocol",
 					status: "in_progress",
 					kind: "work",
+					acceptanceCriteria: ["Protocol state is persisted"],
+					validationCommands: ["bun test"],
+					ownerAgentId: "agent-1",
+					worktree: "C:/worktrees/task-1",
+					artifacts: ["task-report.json"],
+					startedAtMs: 100,
+					repairAttempt: 0,
+					maxRepairAttempts: 3,
 				},
 			],
 		});

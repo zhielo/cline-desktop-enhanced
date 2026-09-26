@@ -47,6 +47,8 @@ Parent issue: #22
 
 Promote the current task-report projection into authoritative persisted task state.
 
+Implementation status: the desktop sidecar now normalizes plan-tool updates through a transition-validating state machine and atomically persists a versioned task-state artifact per session. The artifact restores the current plan and active step after desktop restart or session re-attachment. Typed plan events carry the canonical task status, stable plan/step IDs, acceptance criteria, validation commands, owner, worktree, artifacts, timestamps, repair limits, and transition history to the webview. Invalid plans, duplicate/parallel active steps, terminal-state regressions, and advancement past unrepaired failures are rejected. Automatic validation execution, explicit skip reasons, checkpoint-aware rollback, and task-state migration for older sessions remain follow-up work under #22.
+
 Canonical states:
 
 `planned → running → verifying → repairing → completed`

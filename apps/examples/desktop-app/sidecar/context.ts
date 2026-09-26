@@ -31,6 +31,13 @@ import {
 	getDesktopFeatureFlagsService,
 } from "./feature-flags";
 import { sessionLogPath } from "./paths";
+import {
+	advanceDurableTaskState,
+	type DurableTaskRepair,
+	type DurableTaskState,
+	type DurableTaskStep,
+	persistDurableTaskState,
+} from "./task-state-machine";
 import type {
 	LiveSession,
 	PendingAskQuestion,
@@ -427,18 +434,40 @@ function normalizeTaskStepKind(
 	return "work";
 }
 
+function taskString(value: unknown): string | undefined {
+	return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function taskStringArray(value: unknown): string[] | undefined {
+	const values = Array.isArray(value)
+		? value.flatMap((item) => {
+				const normalized = taskString(item);
+				return normalized ? [normalized] : [];
+			})
+		: [];
+	return values.length > 0 ? values : undefined;
+}
+
+function taskNonnegativeNumber(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isInteger(value) && value >= 0
+		? value
+		: undefined;
+}
+
 function buildPlanTaskEvent(
 	toolCallId: string,
 	input: unknown,
+	session?: LiveSession,
 ): {
 	event: Record<string, unknown>;
 	activeStepId?: string;
+	state: DurableTaskState;
 } | null {
 	const record = taskRecord(input);
 	if (!record) return null;
 	const rawSteps = record.plan ?? record.steps ?? record.todos ?? record.items;
 	if (!Array.isArray(rawSteps)) return null;
-	const steps = rawSteps.flatMap((rawStep, index) => {
+	const steps: DurableTaskStep[] = rawSteps.flatMap((rawStep, index) => {
 		const step = taskRecord(rawStep);
 		if (!step) return [];
 		const label = ["step", "label", "title", "content", "text"]
@@ -448,6 +477,29 @@ function buildPlanTaskEvent(
 		if (typeof label !== "string" || !status) return [];
 		const rawId = step.id;
 		const rawParentId = step.parent_step_id ?? step.parentStepId;
+		const acceptanceCriteria = taskStringArray(
+			step.acceptance_criteria ?? step.acceptanceCriteria,
+		);
+		const validationCommands = taskStringArray(
+			step.validation_commands ?? step.validationCommands,
+		);
+		const ownerAgentId = taskString(
+			step.owner_agent_id ?? step.ownerAgentId ?? step.agent_id ?? step.agentId,
+		);
+		const worktree = taskString(step.worktree ?? step.worktree_path);
+		const artifacts = taskStringArray(step.artifacts);
+		const startedAtMs = taskNonnegativeNumber(
+			step.started_at_ms ?? step.startedAtMs,
+		);
+		const completedAtMs = taskNonnegativeNumber(
+			step.completed_at_ms ?? step.completedAtMs,
+		);
+		const repairAttempt = taskNonnegativeNumber(
+			step.repair_attempt ?? step.repairAttempt,
+		);
+		const maxRepairAttempts = taskNonnegativeNumber(
+			step.max_repair_attempts ?? step.maxRepairAttempts,
+		);
 		return [
 			{
 				id:
@@ -463,11 +515,19 @@ function buildPlanTaskEvent(
 				...(typeof rawParentId === "string" && rawParentId.trim()
 					? { parentStepId: rawParentId.trim() }
 					: {}),
+				...(acceptanceCriteria ? { acceptanceCriteria } : {}),
+				...(validationCommands ? { validationCommands } : {}),
+				...(ownerAgentId ? { ownerAgentId } : {}),
+				...(worktree ? { worktree } : {}),
+				...(artifacts ? { artifacts } : {}),
+				...(startedAtMs !== undefined ? { startedAtMs } : {}),
+				...(completedAtMs !== undefined ? { completedAtMs } : {}),
+				...(repairAttempt !== undefined ? { repairAttempt } : {}),
+				...(maxRepairAttempts !== undefined ? { maxRepairAttempts } : {}),
 			},
 		];
 	});
 	if (steps.length === 0) return null;
-	const activeStepId = steps.find((step) => step.status === "in_progress")?.id;
 	const explicitRepair = taskRecord(record.repair);
 	const rawRepairState = explicitRepair?.state;
 	const repairState =
@@ -477,7 +537,7 @@ function buildPlanTaskEvent(
 		rawRepairState === "blocked"
 			? rawRepairState
 			: undefined;
-	const repair = explicitRepair
+	const repair: DurableTaskRepair | undefined = explicitRepair
 		? {
 				...(repairState ? { state: repairState } : {}),
 				...(typeof explicitRepair.attempt === "number"
@@ -490,18 +550,48 @@ function buildPlanTaskEvent(
 						: {}),
 			}
 		: undefined;
+	const explicitPlanId = taskString(record.plan_id ?? record.planId);
+	const previous = session?.taskState;
+	const previousStepIds = new Set(previous?.steps.map((step) => step.id));
+	const overlapsPreviousPlan = steps.some((step) =>
+		previousStepIds.has(step.id),
+	);
+	const previousPlanIsOpen =
+		previous !== undefined &&
+		previous.status !== "completed" &&
+		previous.status !== "cancelled" &&
+		previous.status !== "skipped";
+	const planId =
+		explicitPlanId ??
+		(overlapsPreviousPlan && previousPlanIsOpen ? previous.planId : toolCallId);
+	let state: DurableTaskState;
+	try {
+		state = advanceDurableTaskState({
+			planId,
+			steps,
+			repair,
+			previous: previous?.planId === planId ? previous : undefined,
+			reason: taskString(record.reason) ?? "plan.updated",
+		});
+	} catch {
+		return null;
+	}
 	return {
 		event: {
 			type: "plan.updated",
-			planId: toolCallId,
+			planId: state.planId,
 			...(typeof record.explanation === "string" && record.explanation.trim()
 				? { explanation: record.explanation.trim() }
 				: {}),
-			steps,
-			...(activeStepId ? { activeStepId } : {}),
-			...(repair ? { repair } : {}),
+			state: state.status,
+			steps: state.steps,
+			...(state.activeStepId ? { activeStepId: state.activeStepId } : {}),
+			...(state.repair ? { repair: state.repair } : {}),
+			updatedAtMs: state.updatedAtMs,
+			transitions: state.transitions,
 		},
-		activeStepId,
+		activeStepId: state.activeStepId,
+		state,
 	};
 }
 
@@ -510,11 +600,22 @@ function captureTaskToolStart(
 	toolCallId: string,
 	toolName: string,
 	input: unknown,
+	sessionId?: string,
 ): { taskStepId?: string; taskEvent?: Record<string, unknown> } {
 	if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) {
-		const plan = buildPlanTaskEvent(toolCallId, input);
+		const plan = buildPlanTaskEvent(toolCallId, input, session);
 		if (!plan) return {};
-		if (session) session.activeTaskStepId = plan.activeStepId;
+		if (session) {
+			if (sessionId) {
+				try {
+					persistDurableTaskState(sessionId, plan.state);
+				} catch {
+					return {};
+				}
+			}
+			session.taskState = plan.state;
+			session.activeTaskStepId = plan.activeStepId;
+		}
 		return { taskEvent: plan.event };
 	}
 	const taskStepId = session?.activeTaskStepId;
@@ -589,6 +690,7 @@ function handleAgentEvent(
 					toolCallId,
 					toolName,
 					event.input,
+					sessionId,
 				);
 				emitChunk(
 					ctx,
@@ -1358,6 +1460,7 @@ export function handleHubLiveEvent(
 				toolCallId,
 				toolName,
 				event.payload?.input,
+				sessionId,
 			);
 			emitChunk(
 				ctx,

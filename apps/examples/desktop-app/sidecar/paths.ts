@@ -54,6 +54,10 @@ export function sharedSessionMessagesWritePath(sessionId: string): string {
 	return sharedSessionMessagesPath(sessionId);
 }
 
+export function sharedSessionTaskStatePath(sessionId: string): string {
+	return sharedSessionArtifactPath(sessionId, "task-state.json");
+}
+
 // ---------------------------------------------------------------------------
 // Tool approval directory (kept for file cleanup compatibility)
 // ---------------------------------------------------------------------------
