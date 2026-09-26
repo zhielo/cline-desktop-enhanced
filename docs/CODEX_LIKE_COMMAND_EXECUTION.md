@@ -35,7 +35,7 @@ Low-cardinality attributes identify direct versus shell execution, timeout-sourc
 - Interactive sessions support cursor-based bounded output, stdin writes, terminal resize, Ctrl+C interrupt, process-tree terminate/kill, owner isolation, expiry, environment filtering, and secret redaction.
 - PTY and ConPTY merge stdout and stderr into the terminal stream, which is reported as `stdout`; pipe sessions retain separate stream identities.
 - Initial dimensions default to 80×24 and are bounded by the public schema. The snapshot records the current dimensions and whether native terminal semantics are active.
-- Bun 1.3.14 is the minimum repository runtime because it is the first pinned Bun release providing `Bun.Terminal` through Windows ConPTY. The custom Windows installer compiles and runs a real ConPTY input/resize smoke test before packaging, exercising the same embedded runtime boundary used by `code-sidecar.exe`.
+- The Windows installer uses Bun 1.3.14 because it is the first pinned Bun release providing `Bun.Terminal` through Windows ConPTY. POSIX PTY support remains compatible with the repository's default Bun 1.3.13 toolchain. The installer compiles and runs a real ConPTY input/resize smoke test before packaging, exercising the same embedded runtime boundary used by `code-sidecar.exe`.
 - Existing `run_commands` and non-interactive `process_session` behavior remains unchanged. Hosts without `Bun.Terminal` fail an interactive start explicitly instead of silently substituting pipes.
 
 ## Primary source and regression files

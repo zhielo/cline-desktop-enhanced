@@ -2,7 +2,7 @@
 
 This repository contains durable private-use Cline Desktop customizations. **Read `CUSTOMIZATIONS.md` before changing desktop, sidecar, task-report, tool, or installer behavior.** Preserve the listed features unless the user explicitly asks to replace or remove them. Every durable change must be committed as source; never leave a customization only in a local patch, generated output, build artifact, or CI workspace. Update `CUSTOMIZATIONS.md` and `scripts/verify-custom-fork.ts` when custom behavior changes.
 
-This is the **Cline** monorepo. Toolchain is **Bun 1.3.14** (package manager + task runner) with **Node >=22** as the runtime. Do not use npm/yarn/pnpm.
+This is the **Cline** monorepo. Toolchain is **Bun 1.3.13** (package manager + task runner) with **Node >=22** as the runtime. Do not use npm/yarn/pnpm.
 
 ## Cloud Agent Instructions
 
