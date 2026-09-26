@@ -26,11 +26,9 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { OAuthAuthorizationPrompt } from "@/components/oauth-authorization-prompt";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useOAuthAuthorization } from "@/hooks/use-oauth-user-code";
 import { openExternalUrl } from "@/lib/desktop-client";
 import {
 	getProviderAuthKind,
@@ -542,7 +540,6 @@ export function ProviderDetailContent({
 	onDisconnect?: () => void;
 	variant?: "page" | "panel";
 }) {
-	const oauthAuthorization = useOAuthAuthorization(oauthLoginPending);
 	const [shownSecrets, setShownSecrets] = useState<Record<string, boolean>>({});
 	const [localConfigValues, setLocalConfigValues] = useState<
 		Record<string, ProviderConfigFieldPrimitive>
@@ -824,12 +821,6 @@ export function ProviderDetailContent({
 										: "Sign in with browser"}
 								</span>
 							</Button>
-						) : null}
-						{oauthLoginPending ? (
-							<OAuthAuthorizationPrompt
-								authorization={oauthAuthorization}
-								className="mt-3"
-							/>
 						) : null}
 						{apiKeyField ? (
 							<div className="mt-3">

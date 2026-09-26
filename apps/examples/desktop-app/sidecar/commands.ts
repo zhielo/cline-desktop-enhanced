@@ -398,51 +398,24 @@ const CLOUD_DISCOVERY_BUDGET_MS = 2_000;
 
 function openUrlInDefaultBrowser(url: string): Promise<void> {
 	const platform = process.platform;
-	// On Windows the URL must not pass through cmd.exe: `cmd /c start <url>`
-	// re-parses metacharacters (&, ^, |, %) that are valid inside OAuth URLs.
-	// Explorer receives the URL as a direct argv value and delegates it to the
-	// registered protocol handler. It is more reliable in packaged desktop
-	// processes than rundll32's FileProtocolHandler, which can exit 0 without
-	// opening a browser.
-	const windowsDirectory =
-		process.env.SystemRoot?.trim() || process.env.WINDIR?.trim();
-	const windowsExplorer = windowsDirectory
-		? join(windowsDirectory, "explorer.exe")
-		: "explorer.exe";
-	const spawned =
-		platform === "darwin"
-			? spawn("open", [url], { stdio: "ignore", detached: true })
-			: platform === "win32"
-				? spawn(windowsExplorer, [url], {
-						stdio: "ignore",
-						detached: true,
-					})
-				: spawn("xdg-open", [url], {
-						stdio: "ignore",
-						detached: true,
-					});
-	// A missing opener binary emits an async "error" event; without a listener
-	// it becomes an uncaught exception that kills the sidecar. Launchers hand
-	// off to the browser and exit quickly, so a fast non-zero exit means the
-	// handoff failed (xdg-open exits 3 when no handler is available). If the launcher
-	// is still running after the grace window, assume the handoff worked
-	// rather than blocking on a launcher that lingers.
+	// Match Cline's official desktop host launcher. The empty title argument is
+	// required by Windows `start`; without it, a quoted URL can be interpreted
+	// as the new console window title instead of the browser target.
+	const command =
+		platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
+	const args = platform === "win32" ? ["/c", "start", "", url] : [url];
+	const spawned = spawn(command, args, {
+		stdio: "ignore",
+		detached: true,
+		windowsHide: true,
+	});
 	return new Promise((resolve, reject) => {
-		const graceTimer = setTimeout(resolve, 2_000);
 		spawned.once("spawn", () => {
 			spawned.unref();
+			resolve();
 		});
 		spawned.once("error", (error) => {
-			clearTimeout(graceTimer);
 			reject(new Error(`could not open browser: ${error.message}`));
-		});
-		spawned.once("exit", (code) => {
-			clearTimeout(graceTimer);
-			if (code === 0 || code === null) {
-				resolve();
-			} else {
-				reject(new Error(`browser opener exited with code ${code}`));
-			}
 		});
 	});
 }
@@ -3232,19 +3205,6 @@ export async function handleCommand(
 			},
 			{
 				owner: options?.connection,
-				// Push the device sign-in confirmation code so the webview can
-				// show it while the user confirms it in the browser.
-				onUserCode: (userCode) =>
-					broadcastEvent(ctx, "provider_oauth_user_code", {
-						provider: providerId,
-						userCode,
-					}),
-				onAuthorization: ({ userCode, authorizationUrl }) =>
-					broadcastEvent(ctx, "provider_oauth_user_code", {
-						provider: providerId,
-						userCode,
-						authorizationUrl,
-					}),
 			},
 		);
 		const storageProviderId =
