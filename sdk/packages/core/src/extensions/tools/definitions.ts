@@ -732,9 +732,9 @@ function requireProcessSessionOwner(context: AgentToolContext): string {
 /**
  * Create the host-scoped resumable process-session tool.
  *
- * Sessions use direct argv execution and ordinary stdin/stdout/stderr pipes.
- * They deliberately report interactive:false until a maintained PTY/ConPTY
- * adapter is available; callers must not treat this as terminal emulation.
+ * Sessions use direct argv execution. Start defaults to ordinary pipes; an
+ * explicit interactive:true request attaches Bun's native Unix PTY or Windows
+ * ConPTY boundary.
  */
 export function createProcessSessionTool(
 	manager: ProcessSessionManager = getDefaultProcessSessionManager(),
@@ -744,7 +744,7 @@ export function createProcessSessionTool(
 	return createTool<ProcessSessionInput, unknown>({
 		name: "process_session",
 		description:
-			"Start and manage resumable non-TTY processes. Use start with an executable and explicit argv, then read with the returned process_id and nextCursor. Use write for stdin, signal for interrupt/terminate/kill, list for owned sessions, and close only after completion. Output is bounded and secret-redacted. This is pipe-based execution, not an interactive terminal.",
+			"Start and manage resumable processes. Use start with an executable and explicit argv; set interactive:true only when a program requires a real terminal (Unix PTY or Windows ConPTY). Read with the returned process_id and nextCursor, write terminal or pipe input, resize interactive terminals, signal interrupt/terminate/kill, list owned sessions, and close only after completion. Output is bounded and secret-redacted.",
 		inputSchema: zodToJsonSchema(ProcessSessionInputSchema),
 		timeoutMs: 30_000,
 		retryable: false,
@@ -767,6 +767,9 @@ export function createProcessSessionTool(
 						cwd,
 						env: validated.env,
 						toolCallId: context.toolCallId,
+						interactive: validated.interactive,
+						columns: validated.columns,
+						rows: validated.rows,
 					});
 				}
 				case "list":
@@ -784,6 +787,13 @@ export function createProcessSessionTool(
 						validated.input,
 					);
 					return manager.get(ownerSessionId, validated.process_id);
+				case "resize":
+					return manager.resize(
+						ownerSessionId,
+						validated.process_id,
+						validated.columns,
+						validated.rows,
+					);
 				case "signal":
 					await manager.signal(
 						ownerSessionId,

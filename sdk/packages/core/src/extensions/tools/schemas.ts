@@ -573,6 +573,26 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 			.describe(
 				"Environment overrides. Sensitive variables remain host-filtered and output-redacted",
 			),
+		interactive: z
+			.boolean()
+			.optional()
+			.describe(
+				"Attach a real Unix PTY or Windows ConPTY for interactive terminal programs",
+			),
+		columns: z.coerce
+			.number()
+			.int()
+			.min(20)
+			.max(500)
+			.optional()
+			.describe("Initial interactive terminal width; defaults to 80"),
+		rows: z.coerce
+			.number()
+			.int()
+			.min(5)
+			.max(200)
+			.optional()
+			.describe("Initial interactive terminal height; defaults to 24"),
 	}),
 	z.object({
 		action: z.literal("list"),
@@ -595,7 +615,23 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 		input: z
 			.string()
 			.max(64 * 1024)
-			.describe("Text written to the process stdin pipe"),
+			.describe("Text written to the process stdin pipe or native terminal"),
+	}),
+	z.object({
+		action: z.literal("resize"),
+		process_id: ProcessSessionProcessIdSchema,
+		columns: z.coerce
+			.number()
+			.int()
+			.min(20)
+			.max(500)
+			.describe("New terminal width"),
+		rows: z.coerce
+			.number()
+			.int()
+			.min(5)
+			.max(200)
+			.describe("New terminal height"),
 	}),
 	z.object({
 		action: z.literal("signal"),

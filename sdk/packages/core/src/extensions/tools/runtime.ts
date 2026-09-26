@@ -86,7 +86,7 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 	{
 		id: "process_session",
 		description:
-			"Start and manage resumable non-TTY processes with stable IDs, incremental output reads, stdin, and process-tree signals.",
+			"Start and manage resumable pipe or native-terminal processes with stable IDs, incremental output reads, stdin, resize, and process-tree signals.",
 		headlessToolNames: ["process_session"],
 	},
 	{

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	ProcessSessionManager,
 	type ProcessSessionSnapshot,
+	type ProcessSessionTerminalProcess,
 } from "./process-session-manager";
 
 const OWNER = "test-owner";
@@ -76,6 +77,95 @@ describe("ProcessSessionManager", () => {
 					.chunks.map((chunk) => chunk.text)
 					.join(""),
 			).toContain("echo:hello");
+		} finally {
+			await manager.dispose();
+		}
+	});
+
+	it("attaches a real terminal, accepts input, and resizes it", async () => {
+		let resolveExit: ((exitCode: number) => void) | undefined;
+		let resizedTo: [number, number] | undefined;
+		const manager = new ProcessSessionManager({
+			processStartTokenProbe: async () => ({ status: "missing" }),
+			spawnTerminalProcess: (_command, _args, options) => {
+				const exited = new Promise<number>((resolve) => {
+					resolveExit = resolve;
+				});
+				const terminal = {
+					closed: false,
+					write: (data: string | Uint8Array) => {
+						const text =
+							typeof data === "string"
+								? data
+								: Buffer.from(data).toString("utf8");
+						options.onData(Buffer.from(`input:${text}`, "utf8"));
+						resolveExit?.(0);
+						return Buffer.byteLength(text);
+					},
+					resize: (columns: number, rows: number) => {
+						resizedTo = [columns, rows];
+					},
+					close: () => {},
+				};
+				queueMicrotask(() =>
+					options.onData(Buffer.from("tty:true:true\n", "utf8")),
+				);
+				return {
+					pid: 12345,
+					terminal,
+					exited,
+					exitCode: null,
+					signalCode: null,
+					kill: () => resolveExit?.(137),
+				} satisfies ProcessSessionTerminalProcess;
+			},
+		});
+		try {
+			const started = await manager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", "interactive fixture"],
+				cwd: process.cwd(),
+				interactive: true,
+				columns: 90,
+				rows: 30,
+			});
+			expect(started).toMatchObject({
+				interactive: true,
+				terminalColumns: 90,
+				terminalRows: 30,
+			});
+			expect(manager.resize(OWNER, started.processId, 100, 40)).toMatchObject({
+				terminalColumns: 100,
+				terminalRows: 40,
+			});
+			expect(resizedTo).toEqual([100, 40]);
+			await manager.writeStdin(OWNER, started.processId, "ping");
+			await waitForCompletion(manager, started.processId);
+			const result = manager.read(OWNER, started.processId);
+			const output = result.chunks.map((chunk) => chunk.text).join("");
+			expect(output).toContain("tty:true:true");
+			expect(output).toContain("input:ping");
+			expect(result.chunks.every((chunk) => chunk.stream === "stdout")).toBe(
+				true,
+			);
+		} finally {
+			await manager.dispose();
+		}
+	});
+
+	it("rejects resize for pipe-based sessions", async () => {
+		const manager = new ProcessSessionManager();
+		try {
+			const started = await manager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", "setTimeout(() => {}, 1000)"],
+				cwd: process.cwd(),
+			});
+			expect(() => manager.resize(OWNER, started.processId, 100, 40)).toThrow(
+				"is not interactive",
+			);
 		} finally {
 			await manager.dispose();
 		}
