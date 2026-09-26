@@ -1,11 +1,11 @@
 import type { ProviderSettingsManager } from "@cline/core";
 import {
-	createOAuthClientCallbacks,
+	completeClineDeviceAuth,
 	getProviderAuthStorageId,
-	loginClineOAuth,
 	loginLocalProvider,
 	markLocalProviderEnabled,
 	saveLocalProviderOAuthCredentials,
+	startClineDeviceAuth,
 } from "@cline/core";
 import { getClineEnvironmentConfig } from "@cline/shared";
 
@@ -35,32 +35,43 @@ export type OAuthLoginDependencies = {
 };
 
 /**
- * Preserve Cline's original browser callback flow for the desktop app:
- * authorize through the Cline API, receive the redirect on the SDK's local
- * callback server, then exchange the authorization code for credentials.
- * This deliberately disables the newer WorkOS device-code flow.
+ * Cline account providers sign in with the WorkOS device-code grant, whose
+ * browser page asks the user to confirm a short code. `loginLocalProvider`
+ * runs that flow but discards the code, so use the split helpers instead and
+ * surface the code through `onUserCode` for the UI to display.
  */
 async function loginProviderForDesktop(
 	providerId: string,
 	existing: Parameters<typeof loginLocalProvider>[1],
 	openUrl: (url: string) => void,
+	onUserCode?: (userCode: string) => void,
+	onAuthorization?: (authorization: {
+		userCode: string;
+		authorizationUrl: string;
+	}) => void,
 ): ReturnType<typeof loginLocalProvider> {
 	if (providerId !== "cline" && providerId !== "cline-pass") {
 		return loginLocalProvider(providerId, existing, openUrl);
 	}
-	const callbacks = createOAuthClientCallbacks({
-		onPrompt: async (prompt) => prompt.defaultValue ?? "",
-		openUrl,
-		onOpenUrlError: ({ error }) => {
-			throw error instanceof Error ? error : new Error(String(error));
-		},
+	const device = await startClineDeviceAuth();
+	const authorizationUrl =
+		device.verificationUriComplete ?? device.verificationUri;
+	onUserCode?.(device.userCode);
+	// Deliver the exact URL to the webview before attempting the OS browser
+	// handoff. Windows protocol launchers can fail silently; the UI must still
+	// offer a copyable link and confirmation code.
+	onAuthorization?.({
+		userCode: device.userCode,
+		authorizationUrl,
 	});
-	return loginClineOAuth({
+	openUrl(authorizationUrl);
+	return completeClineDeviceAuth({
+		deviceCode: device.deviceCode,
+		expiresInSeconds: device.expiresInSeconds,
+		pollIntervalSeconds: device.pollIntervalSeconds,
 		apiBaseUrl:
 			existing?.baseUrl?.trim() || getClineEnvironmentConfig().apiBaseUrl,
 		provider: providerId,
-		useWorkOSDeviceAuth: false,
-		callbacks,
 	});
 }
 
@@ -82,6 +93,13 @@ export async function runCancellableProviderOAuthLogin(
 	openUrl: (url: string) => void,
 	options: {
 		owner?: object;
+		/** Receives the device sign-in confirmation code, when the flow has one. */
+		onUserCode?: (userCode: string) => void;
+		/** Receives a copyable fallback URL before the OS browser handoff. */
+		onAuthorization?: (authorization: {
+			userCode: string;
+			authorizationUrl: string;
+		}) => void;
 	} = {},
 	dependencies: OAuthLoginDependencies = defaultDependencies,
 ): Promise<{ provider: string; accessToken: string }> {
@@ -109,7 +127,13 @@ export async function runCancellableProviderOAuthLogin(
 		// after cancellation is observed and cannot become an unhandled
 		// rejection that kills the sidecar.
 		const credentials = await Promise.race([
-			dependencies.login(providerId, existing, openUrl),
+			dependencies.login(
+				providerId,
+				existing,
+				openUrl,
+				options.onUserCode,
+				options.onAuthorization,
+			),
 			cancellation,
 		]);
 		if (entry.cancelled) {
