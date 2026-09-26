@@ -2759,7 +2759,7 @@ export async function handleCommand(
 					deleted = true;
 				}
 			}
-			for (const suffix of ["messages.json"]) {
+			for (const suffix of ["messages.json", "task-state.json"]) {
 				const fileName = `${sessionId}.${suffix}`;
 				const found = findArtifactUnderDir(
 					join(sharedSessionDataDir(), rootSessionIdFrom(sessionId)),

@@ -86,12 +86,26 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/definitions.ts`
 - `sdk/packages/core/src/extensions/tools/executors/bash.ts`
 - `sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts`
-- `sdk/packages/core/src/extensions/tools/schemas.ts`
-- `sdk/packages/core/src/extensions/tools/definitions.ts`
 - `sdk/packages/core/src/extensions/tools/runtime.ts`
 - `sdk/packages/core/src/extensions/tools/executors/process-environment-policy.ts`
 - `docs/CODEX_LIKE_COMMAND_EXECUTION.md`
 - `docs/PROCESS_ENVIRONMENT_SECURITY.md`
+- `docs/CODEX_PARITY_ROADMAP.md`
+
+### Durable task execution
+
+- Plan-tool updates are normalized by a host-side durable task state machine rather than trusted as presentation-only data. It enforces stable step identity, one active step, valid task transitions, terminal-state protection, and a repair/verification gate before work can advance past a failed or blocked step.
+- Each session stores an atomic, versioned `task-state.json` artifact alongside its session data. Starting or re-attaching a session restores the canonical plan and active step so subsequent tool evidence remains associated after a desktop restart.
+- Typed `plan.updated` events expose the canonical task state and transition history plus optional acceptance criteria, validation commands, owning agent, worktree, artifacts, timestamps, and repair attempt limits. Existing task-report rendering remains compatible with older projection-only events.
+- Phase 2 follow-ups remain intentionally additive: automatic validation execution, explicit skip-reason enforcement, checkpoint-aware task rollback, and migration of pre-state-machine sessions. The current unsigned installer workflow and private artifact-only release policy are unchanged.
+
+Primary files:
+
+- `apps/examples/desktop-app/sidecar/task-state-machine.ts`
+- `apps/examples/desktop-app/sidecar/context.ts`
+- `apps/examples/desktop-app/sidecar/chat-session.ts`
+- `apps/examples/desktop-app/webview/lib/chat-schema.ts`
+- `apps/examples/desktop-app/webview/lib/task-report.ts`
 - `docs/CODEX_PARITY_ROADMAP.md`
 
 ### Specialized tools
