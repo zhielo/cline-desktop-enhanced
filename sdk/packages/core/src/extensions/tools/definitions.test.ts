@@ -94,10 +94,7 @@ describe("process_session tool", () => {
 		const manager = {} as ProcessSessionManager;
 		const tool = createProcessSessionTool(manager);
 		await expect(
-			tool.execute(
-				{ action: "list" },
-				{ agentId: "agent-1", iteration: 1 },
-			),
+			tool.execute({ action: "list" }, { agentId: "agent-1", iteration: 1 }),
 		).rejects.toThrow("host-provided sessionId");
 	});
 });

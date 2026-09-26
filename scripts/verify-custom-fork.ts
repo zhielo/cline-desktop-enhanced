@@ -170,7 +170,7 @@ const requiredMarkers: Array<{
 		markers: [
 			"ProcessSessionInputSchema",
 			'action: z.literal("start")',
-			'signal: z',
+			"signal: z",
 		],
 	},
 	{

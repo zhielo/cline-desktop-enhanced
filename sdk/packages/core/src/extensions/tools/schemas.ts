@@ -553,7 +553,9 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 		executable: z
 			.string()
 			.min(1)
-			.describe("Executable name or absolute path; shell syntax is not accepted"),
+			.describe(
+				"Executable name or absolute path; shell syntax is not accepted",
+			),
 		args: z
 			.array(z.string())
 			.max(256)
@@ -583,7 +585,9 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 			.int()
 			.nonnegative()
 			.optional()
-			.describe("Return output chunks after this cursor; omit for the beginning"),
+			.describe(
+				"Return output chunks after this cursor; omit for the beginning",
+			),
 	}),
 	z.object({
 		action: z.literal("write"),

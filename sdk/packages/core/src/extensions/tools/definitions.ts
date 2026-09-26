@@ -19,15 +19,15 @@ import {
 import { captureRunCommandsTimeout } from "../../services/telemetry/core-events";
 import { CommandExitError } from "./executors/bash";
 import {
-	ProcessSessionManager,
-	type ProcessSessionSignal,
-} from "./executors/process-session-manager";
-import {
 	MAX_COMMAND_OUTPUT_CHARS,
 	MAX_READ_LINES,
 	MAX_READ_OUTPUT_CHARS,
 	MAX_SEARCH_OUTPUT_CHARS,
 } from "./executors/output-limits";
+import {
+	ProcessSessionManager,
+	type ProcessSessionSignal,
+} from "./executors/process-session-manager";
 import {
 	coalesceOrphanReadRanges,
 	formatError,

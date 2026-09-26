@@ -41,6 +41,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableAndroidDevice"
 		| "enableSearch"
 		| "enableBash"
+		| "enableProcessSessions"
 		| "enableWebFetch"
 		| "enableApplyPatch"
 		| "enableEditor"
@@ -55,6 +56,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	android_device: "enableAndroidDevice",
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
+	process_session: "enableProcessSessions",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",

@@ -10,6 +10,7 @@ import type {
 	ITelemetryService,
 	TextContent,
 } from "@cline/shared";
+import type { ProcessSessionManager } from "./executors/process-session-manager";
 import type {
 	AndroidDeviceInput,
 	ApplyPatchInput,
@@ -19,7 +20,6 @@ import type {
 	ReverseEngineeringInput,
 	StructuredCommandInput,
 } from "./schemas";
-import type { ProcessSessionManager } from "./executors/process-session-manager";
 
 // =============================================================================
 // Tool Result Types
