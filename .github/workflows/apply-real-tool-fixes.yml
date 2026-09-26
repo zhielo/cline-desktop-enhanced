@@ -20,7 +20,17 @@ jobs:
         with:
           bun-version: 1.3.13
       - name: Apply fixes
-        run: python3 .github/scripts/apply-real-tool-fixes.py
+        shell: bash
+        run: |
+          set +e
+          output="$(python3 .github/scripts/apply-real-tool-fixes.py 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            encoded="$(printf '%s' "$output" | sed 's/%/%25/g; s/\r/%0D/g; :a;N;$!ba;s/\n/%0A/g')"
+            echo "::error title=Patch script failed::$encoded"
+            exit "$status"
+          fi
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Format touched files
