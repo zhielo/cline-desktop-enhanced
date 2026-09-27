@@ -28,6 +28,7 @@ import {
 } from "../../extensions/mcp";
 import {
 	createBuiltinTools,
+	createPermissionProfileExtension,
 	DEFAULT_MODEL_TOOL_ROUTING_RULES,
 	type RunCommandExecutionController,
 	resolveToolPresetName,
@@ -572,9 +573,14 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 						telemetry: telemetry ?? config.telemetry,
 					})
 				: undefined;
+		const permissionProfileGuard =
+			config.permissionProfile && normalized.enableTools
+				? createPermissionProfileExtension(config.permissionProfile)
+				: undefined;
 		const injectedExtensions = [
 			userInstructionPlugin,
 			planModeCommandGuard,
+			permissionProfileGuard,
 		].filter((extension) => extension !== undefined);
 		const runtimeExtensions =
 			injectedExtensions.length > 0

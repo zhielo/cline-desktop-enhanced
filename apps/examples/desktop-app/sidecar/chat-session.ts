@@ -644,6 +644,8 @@ function buildCoreSessionConfig(
 		apiTimeoutMs:
 			config.apiTimeoutMs ?? config.api_timeout_ms ?? 10 * 60 * 1000,
 		enableTools: config.enableTools ?? config.enable_tools ?? true,
+		permissionProfile:
+			config.permissionProfile ?? config.permission_profile ?? undefined,
 		...(thinking !== undefined ? { thinking } : {}),
 		...(reasoningEffort ? { reasoningEffort } : {}),
 		...(thinkingBudgetTokens !== undefined ? { thinkingBudgetTokens } : {}),
