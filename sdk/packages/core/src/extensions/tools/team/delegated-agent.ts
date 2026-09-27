@@ -82,6 +82,7 @@ export interface BuildDelegatedAgentConfigOptions {
 	requestToolApproval?: (
 		request: ToolApprovalRequest,
 	) => Promise<ToolApprovalResult> | ToolApprovalResult;
+	consumePendingUserMessage?: () => string | undefined;
 	role?: string;
 	cwd?: string;
 }
@@ -144,6 +145,7 @@ export function buildDelegatedAgentConfig(
 		hookErrorMode: options.hookErrorMode,
 		toolPolicies: options.toolPolicies,
 		requestToolApproval: options.requestToolApproval,
+		consumePendingUserMessage: options.consumePendingUserMessage,
 		logger: runtimeConfig.logger,
 		role: options.role,
 	};

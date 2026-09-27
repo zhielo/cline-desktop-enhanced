@@ -560,7 +560,9 @@ function AgentRosterRow({
 	const isRunning = state === "running";
 	const task = agent.prompt?.trim();
 	const lastAction = agent.lastAction?.trim();
-	const canControl = agent.kind === "teamtask" && Boolean(onControlAgent);
+	const canControl =
+		Boolean(onControlAgent) &&
+		(agent.kind === "teamtask" || (agent.kind === "subagent" && isRunning));
 	const overlapFiles = agent.overlapFiles ?? [];
 
 	const control = async (

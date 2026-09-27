@@ -8,6 +8,7 @@ const runMock = vi.fn();
 const getAgentIdMock = vi.fn(() => "sub-agent-1");
 const getConversationIdMock = vi.fn(() => "conv-sub-1");
 const agentConstructorSpy = vi.fn();
+const abortMock = vi.fn();
 
 vi.mock("../../../runtime/orchestration/session-runtime-orchestrator", () => {
 	return {
@@ -30,6 +31,10 @@ vi.mock("../../../runtime/orchestration/session-runtime-orchestrator", () => {
 
 			async run(input: string): Promise<unknown> {
 				return runMock(input);
+			}
+
+			abort(reason?: unknown): void {
+				abortMock(reason);
 			}
 		},
 	};
@@ -156,6 +161,59 @@ describe("createSpawnAgentTool", () => {
 				extensions,
 			}),
 		);
+	});
+
+	it("exposes an independent stop and steer handle only while running", async () => {
+		const { createSpawnAgentTool } = await import("./spawn-agent-tool.js");
+		let resolveRun: ((value: unknown) => void) | undefined;
+		runMock.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveRun = resolve;
+				}),
+		);
+		const onSubAgentControlReady = vi.fn();
+		const onSubAgentControlReleased = vi.fn();
+		const tool = createSpawnAgentTool({
+			configProvider: createDelegatedAgentConfigProvider({
+				providerId: "anthropic",
+				modelId: "mock-model",
+			}),
+			subAgentTools: [],
+			onSubAgentControlReady,
+			onSubAgentControlReleased,
+		});
+
+		const running = tool.execute(
+			{ systemPrompt: "System", task: "Long task" },
+			{
+				agentId: "parent-1",
+				conversationId: "conv-parent",
+				iteration: 1,
+			},
+		);
+		await vi.waitFor(() => {
+			expect(onSubAgentControlReady).toHaveBeenCalledTimes(1);
+		});
+		const handle = onSubAgentControlReady.mock.calls[0]?.[0];
+		handle.steer("Focus on tests");
+		const config = agentConstructorSpy.mock.calls.at(-1)?.[0] as AgentConfig;
+		expect(config.consumePendingUserMessage?.()).toBe("Focus on tests");
+		expect(config.consumePendingUserMessage?.()).toBeUndefined();
+		handle.abort("Stopped from desktop");
+		expect(abortMock).toHaveBeenCalledWith(
+			expect.objectContaining({ message: "Stopped from desktop" }),
+		);
+		expect(onSubAgentControlReleased).not.toHaveBeenCalled();
+
+		resolveRun?.({
+			text: "done",
+			iterations: 1,
+			finishReason: "completed",
+			usage: { inputTokens: 1, outputTokens: 1 },
+		});
+		await running;
+		expect(onSubAgentControlReleased).toHaveBeenCalledWith(handle);
 	});
 
 	it("propagates sub-agent errors and still reports onSubAgentEnd", async () => {

@@ -121,8 +121,10 @@ import {
 	invokeBackendOptionalValue,
 } from "./local/session-service-invoker";
 import {
+	controlLiveSubAgent,
 	createSessionSpawnTool,
 	createSessionSubAgentLifecycleCallbacks,
+	type SubAgentControlTracker,
 	type SubAgentStartTracker,
 } from "./local/spawn-tool";
 import { loadUserFileContent } from "./local/user-files";
@@ -285,6 +287,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 		SessionAccumulatedUsage
 	>();
 	private readonly subAgentStarts: SubAgentStartTracker = new Map();
+	private readonly subAgentControls: SubAgentControlTracker = new Map();
 	private readonly pendingPromptsController: PendingPromptsController;
 	private readonly eventBridge: AgentEventBridge;
 	private readonly sessionVersioning = new SessionVersioningService();
@@ -555,6 +558,7 @@ export class LocalRuntimeHost implements RuntimeHost {
 		const subAgentDeps = {
 			getSession: (sid: string) => this.sessions.get(sid),
 			subAgentStarts: this.subAgentStarts,
+			subAgentControls: this.subAgentControls,
 			onAgentEvent: (
 				rootSessionId: string,
 				config: CoreSessionConfig,
@@ -1207,12 +1211,29 @@ export class LocalRuntimeHost implements RuntimeHost {
 			throw new SessionNotFoundError(sessionId);
 		}
 		const runtime = session.runtime.teamRuntime;
-		if (!runtime) {
-			throw new Error(`Session ${sessionId} has no active team runtime`);
-		}
 		const agentId = input.agentId.trim();
-		if (!agentId || runtime.getMemberRole(agentId) !== "teammate") {
-			throw new Error(`Teammate "${agentId || input.agentId}" was not found`);
+		if (!agentId) {
+			throw new Error("An agentId is required");
+		}
+		if (runtime?.getMemberRole(agentId) !== "teammate") {
+			const subAgentStatus = controlLiveSubAgent(
+				this.subAgentControls,
+				sessionId,
+				{ ...input, agentId },
+			);
+			if (subAgentStatus) {
+				return {
+					action: input.action,
+					agentId,
+					status: subAgentStatus,
+					runIds: [agentId],
+				};
+			}
+		}
+		if (!runtime || runtime.getMemberRole(agentId) !== "teammate") {
+			throw new Error(
+				`Agent "${agentId}" was not found or is no longer running`,
+			);
 		}
 		switch (input.action) {
 			case "stop": {

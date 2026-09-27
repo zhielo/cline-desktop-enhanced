@@ -130,8 +130,12 @@ Primary files:
   the latest failed, cancelled, or interrupted task with conversation
   continuity.
 - Control requests are validated at the sidecar, Hub, root-session, and
-  teammate boundaries. Generic synchronous `spawn_agent` children remain
-  observable but do not display unsupported controls.
+  child-agent boundaries. Running synchronous `spawn_agent` and configured-agent
+  children register host-owned control handles, expose Stop and Guide without
+  aborting the lead, consume one-shot steering messages inside their own loop,
+  and remove the handle atomically when the child settles. Retry remains limited
+  to durable team runs; completed synchronous tool calls must be spawned again by
+  the lead rather than replayed outside the parent tool contract.
 
 Primary files:
 

@@ -89,6 +89,27 @@ describe("useSessionAgents", () => {
 		expect(current.agents.map((agent) => agent.agentId)).toEqual(["one"]);
 	});
 
+	it("keeps writer ownership and overlap metadata from the sidecar", async () => {
+		invokeMock.mockResolvedValue([
+			{
+				...agentRow("a", "writer"),
+				worktreePath: "/home/test/.cline/worktrees/abc/repo",
+				runId: "run_00002",
+				changedFiles: ["src/shared.ts", "src/writer.ts"],
+				overlapsWithRunIds: ["run_00001"],
+				overlapFiles: ["src/shared.ts"],
+			},
+		]);
+		await render({ sessionId: "a" });
+		expect(current.agents[0]).toMatchObject({
+			worktreePath: "/home/test/.cline/worktrees/abc/repo",
+			runId: "run_00002",
+			changedFiles: ["src/shared.ts", "src/writer.ts"],
+			overlapsWithRunIds: ["run_00001"],
+			overlapFiles: ["src/shared.ts"],
+		});
+	});
+
 	it("reads the roster even when the header is showing no agents", async () => {
 		// Regression: the read used to be gated on the header tally, which is
 		// derived from the newest messages only. A session whose spawn calls had
