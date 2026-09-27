@@ -98,6 +98,8 @@ Parent issue: #26
 
 Use the existing duration, time-to-first-output, output-chunk, output-volume, and direct-versus-shell telemetry to establish a baseline. Add a feature-flagged, serialized, restartable prewarmed PowerShell worker only if measurements show shell startup dominates. On failure, fall back to the existing executor. Never route direct argv commands through the worker.
 
+Implementation status: Windows now persists a bounded local baseline of numeric timing/output measurements only and exposes a deterministic decision report. The gate requires at least 20 successful direct and 50 successful shell samples with output, a median shell first-output delay at least 150 ms above direct execution, and shell startup consuming at least 60% of median shell duration. Until the report is `eligible`, the worker is not implemented or enabled and existing execution remains unchanged.
+
 ## Phase 7 — Scoped computer use
 
 Parent issue: #27

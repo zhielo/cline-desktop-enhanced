@@ -308,6 +308,14 @@ const requiredMarkers: Array<{
 		markers: ["Unrestricted shell", "acknowledge_risk: true", "screenChanged"],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/executors/command-latency-baseline.ts",
+		markers: [
+			"MIN_SHELL_BASELINE_SAMPLES",
+			"MIN_SHELL_STARTUP_RATIO",
+			"evaluatePowerShellWorkerEligibility",
+		],
+	},
+	{
 		path: "docs/CODEX_LIKE_COMMAND_EXECUTION.md",
 		markers: [
 			"Structured direct execution",

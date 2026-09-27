@@ -45,6 +45,7 @@ import {
 	fetchClineRecommendedModels,
 	getCoreBuiltinToolCatalog,
 	getLocalProviderModels,
+	getPowerShellWorkerBaselineDecision,
 	getProviderAuthHandler,
 	identifyAccount,
 	listHookConfigFiles,
@@ -55,6 +56,7 @@ import {
 	persistClineAccountTelemetryIdentity,
 	probeMcpServerConnection,
 	RemoteEnvironmentService,
+	readCommandLatencyBaseline,
 	readGlobalSettings,
 	resolveClineAccountTelemetryIdentity,
 	resolveMcpServerRegistration,
@@ -2567,6 +2569,16 @@ export async function handleCommand(
 			sessionId,
 		);
 		return reply.payload;
+	}
+
+	if (command === "get_command_latency_baseline") {
+		const snapshot = readCommandLatencyBaseline();
+		return {
+			snapshot,
+			decision: getPowerShellWorkerBaselineDecision(),
+			workerEnabled: false,
+			note: "The prewarmed PowerShell worker remains disabled until the evidence gate reports eligible and the separate worker feature flag is implemented.",
+		};
 	}
 
 	// ── Process context ───────────────────────────────────────────────
