@@ -5,12 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountView } from "./account-view";
 
-const { invoke, openExternalUrl } = vi.hoisted(() => ({
+const { invoke, openExternalUrl, subscribe } = vi.hoisted(() => ({
 	invoke: vi.fn(),
 	openExternalUrl: vi.fn(),
+	subscribe: vi.fn(() => () => undefined),
 }));
 vi.mock("@/lib/desktop-client", () => ({
-	desktopClient: { invoke },
+	desktopClient: { invoke, subscribe },
 	openExternalUrl,
 }));
 
@@ -21,6 +22,7 @@ beforeEach(() => {
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 	invoke.mockReset();
 	openExternalUrl.mockReset();
+	subscribe.mockClear();
 	container = document.createElement("div");
 	document.body.appendChild(container);
 	root = createRoot(container);

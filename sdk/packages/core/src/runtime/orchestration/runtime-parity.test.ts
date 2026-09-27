@@ -49,10 +49,14 @@ function legacyBuildRuntimeEnvironment(
 function normalizeParityToolNames(toolNames: string[]): string[] {
 	// Skills are discovered from user/workspace config and can appear in tests
 	// depending on the machine state. MCP tools may also be configured outside
-	// the test workspace. They are intentionally excluded from strict legacy
+	// the test workspace. process_session is an additive host capability with no
+	// legacy equivalent. They are intentionally excluded from strict legacy
 	// parity checks.
 	return toolNames.filter(
-		(toolName) => toolName !== "skills" && !toolName.includes("__"),
+		(toolName) =>
+			toolName !== "skills" &&
+			toolName !== "process_session" &&
+			!toolName.includes("__"),
 	);
 }
 

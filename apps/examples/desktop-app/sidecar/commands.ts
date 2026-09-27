@@ -45,6 +45,7 @@ import {
 	fetchClineRecommendedModels,
 	getCoreBuiltinToolCatalog,
 	getLocalProviderModels,
+	getPowerShellWorkerBaselineDecision,
 	getProviderAuthHandler,
 	identifyAccount,
 	listHookConfigFiles,
@@ -55,6 +56,7 @@ import {
 	persistClineAccountTelemetryIdentity,
 	probeMcpServerConnection,
 	RemoteEnvironmentService,
+	readCommandLatencyBaseline,
 	readGlobalSettings,
 	resolveClineAccountTelemetryIdentity,
 	resolveMcpServerRegistration,
@@ -2537,6 +2539,46 @@ export async function handleCommand(
 			sessionId,
 			typeof args?.limit === "number" ? args.limit : 200,
 		);
+	}
+	if (command === "control_session_agent") {
+		const sessionId = String(args?.sessionId ?? "").trim();
+		const agentId = String(args?.agentId ?? "").trim();
+		const action = String(args?.action ?? "").trim();
+		if (
+			!sessionId ||
+			!agentId ||
+			!["stop", "steer", "retry"].includes(action)
+		) {
+			throw new Error("sessionId, agentId, and a valid action are required");
+		}
+		const binding = await getCommandSessionBinding(ctx, sessionId, args);
+		if (binding?.kind === "ssh") {
+			throw new Error(
+				"Remote session agent controls are not available through the SSH runtime yet.",
+			);
+		}
+		const runtime = getCommandRuntimeBinding(ctx, args);
+		const reply = await runtime.hubClient.command(
+			"team.agent_control",
+			{
+				sessionId,
+				agentId,
+				action,
+				...(typeof args?.message === "string" ? { message: args.message } : {}),
+			},
+			sessionId,
+		);
+		return reply.payload;
+	}
+
+	if (command === "get_command_latency_baseline") {
+		const snapshot = readCommandLatencyBaseline();
+		return {
+			snapshot,
+			decision: getPowerShellWorkerBaselineDecision(),
+			workerEnabled: false,
+			note: "The prewarmed PowerShell worker remains disabled until the evidence gate reports eligible and the separate worker feature flag is implemented.",
+		};
 	}
 
 	// ── Process context ───────────────────────────────────────────────

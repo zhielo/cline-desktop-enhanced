@@ -16,6 +16,7 @@ import type {
 	SessionWorkspaceConfig,
 } from "@cline/shared";
 import type { ToolRoutingRule } from "../extensions/tools/model-tool-routing";
+import type { PermissionProfile } from "../extensions/tools/permission-profile";
 import type { TeamEvent } from "../extensions/tools/team";
 import type { ProviderConfig } from "./provider-settings";
 
@@ -287,6 +288,11 @@ export interface CoreSessionConfig
 		| Promise<ConsecutiveMistakeLimitDecision>
 		| ConsecutiveMistakeLimitDecision;
 	toolRoutingRules?: ToolRoutingRule[];
+	/**
+	 * Optional host-enforced tool capability profile. Omit to preserve the
+	 * existing mode/tool-policy behavior. This guard is not an OS sandbox.
+	 */
+	permissionProfile?: PermissionProfile;
 	/**
 	 * Optional skill allowlist for the `skills` tool. When provided, only these
 	 * skills are surfaced in tool metadata and invocable by name.

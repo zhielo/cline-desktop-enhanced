@@ -5,7 +5,6 @@
  */
 
 export * as Llms from "@cline/llms";
-export { toClineCoreStartInput } from "./cline-core/start-input";
 export {
 	buildClineClientHeaders,
 	ClineFreeModelLimitError,
@@ -205,6 +204,7 @@ export type {
 	OcaTokenResolution,
 } from "./auth/types";
 export { ClineCore } from "./ClineCore";
+export { toClineCoreStartInput } from "./cline-core/start-input";
 export type {
 	ClineAutomationEventIngressResult,
 	ClineAutomationEventLog,
@@ -950,15 +950,15 @@ export {
 	type CreateBuiltinToolsOptions,
 	type CreateDefaultToolsOptions,
 	computePatchChanges,
-	createApplyPatchExecutor,
 	createAndroidDeviceExecutor,
+	createAndroidDeviceTool,
+	createApplyPatchExecutor,
 	createBuiltinTools,
 	createDefaultExecutors,
 	createDefaultShellExecutor,
 	createDefaultTools,
 	createDefaultToolsWithPreset,
 	createEditorExecutor,
-	createAndroidDeviceTool,
 	createReverseEngineeringExecutor,
 	createReverseEngineeringTool,
 	createShellExecutor,
@@ -969,9 +969,6 @@ export {
 	DefaultToolNames,
 	type DefaultToolsConfig,
 	type EditFileInput,
-	type ReverseEngineeringExecutor,
-	type ReverseEngineeringInput,
-	ReverseEngineeringInputSchema,
 	type EditorExecutor,
 	type EditorExecutorOptions,
 	getCoreAcpToolNames,
@@ -984,6 +981,9 @@ export {
 	PATCH_MARKERS,
 	PatchActionType,
 	type PatchFileChange,
+	type ReverseEngineeringExecutor,
+	type ReverseEngineeringInput,
+	ReverseEngineeringInputSchema,
 	resolveCoreSelectedToolIds,
 	resolveToolClientType,
 	type ShellExecutor,
@@ -999,6 +999,15 @@ export {
 	ToolPresets,
 	truncateCommandOutput,
 } from "./extensions/tools";
+export {
+	type CommandLatencyBaselineDecision,
+	type CommandLatencyBaselineSnapshot,
+	type CommandLatencyObservation,
+	evaluatePowerShellWorkerEligibility,
+	getPowerShellWorkerBaselineDecision,
+	readCommandLatencyBaseline,
+	recordWindowsCommandLatencyObservation,
+} from "./extensions/tools/executors/command-latency-baseline";
 export * from "./remote/remote-environments";
 export { ensureLoginShellPath } from "./remote/shell-path";
 export { isClineAccountFeatureEnabled } from "./services/feature-flags/cline-account-feature-flags";

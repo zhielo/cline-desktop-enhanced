@@ -3,14 +3,18 @@
 import { SessionStatus } from "@cline/ui";
 import {
 	AlertCircle,
+	AlertTriangle,
 	Bot,
 	Check,
 	ChevronRight,
 	Clock3,
 	CornerUpLeft,
 	Loader2,
+	MessageSquare,
 	MoreHorizontal,
 	Plus,
+	RotateCcw,
+	Square,
 	Trash2,
 } from "lucide-react";
 import { type CSSProperties, memo, useEffect, useMemo, useState } from "react";
@@ -57,6 +61,12 @@ type AgentHeaderProps = {
 	agentsError?: string | null;
 	onAgentsOpenChange?: (open: boolean) => void;
 	onOpenAgentSession?: (agentSessionId: string) => void | Promise<void>;
+	onControlAgent?: (
+		agentId: string,
+		action: "stop" | "steer" | "retry",
+		message?: string,
+	) => Promise<void>;
+	pendingControlAgentId?: string | null;
 	/** Set when the open session is itself a child agent run. */
 	parentSession?: { sessionId: string; title?: string };
 	onOpenParentSession?: (parentSessionId: string) => void | Promise<void>;
@@ -81,6 +91,8 @@ function AgentHeaderImpl({
 	agentsError = null,
 	onAgentsOpenChange,
 	onOpenAgentSession,
+	onControlAgent,
+	pendingControlAgentId,
 	parentSession,
 	onOpenParentSession,
 }: AgentHeaderProps) {
@@ -228,8 +240,10 @@ function AgentHeaderImpl({
 						agents={agents}
 						error={agentsError}
 						loading={agentsLoading}
+						onControlAgent={onControlAgent}
 						onOpenAgentSession={onOpenAgentSession}
 						onOpenChange={onAgentsOpenChange}
+						pendingControlAgentId={pendingControlAgentId}
 					/>
 					{additions !== 0 && (
 						<Button
@@ -335,6 +349,8 @@ function AgentActivityStatus({
 	error = null,
 	onOpenChange,
 	onOpenAgentSession,
+	onControlAgent,
+	pendingControlAgentId,
 }: {
 	activity?: SessionAgentActivity;
 	agents?: SessionAgentEntry[];
@@ -342,6 +358,8 @@ function AgentActivityStatus({
 	error?: string | null;
 	onOpenChange?: (open: boolean) => void;
 	onOpenAgentSession?: (agentSessionId: string) => void | Promise<void>;
+	onControlAgent?: AgentHeaderProps["onControlAgent"];
+	pendingControlAgentId?: string | null;
 }) {
 	// Controlled so selecting an agent can dismiss the popover as the session view
 	// takes over; an uncontrolled one would linger over the newly opened session.
@@ -414,10 +432,12 @@ function AgentActivityStatus({
 					agents={agents ?? []}
 					error={error}
 					loading={loading}
+					onControlAgent={onControlAgent}
 					onSelect={(agentSessionId) => {
 						handleOpenChange(false);
 						void onOpenAgentSession?.(agentSessionId);
 					}}
+					pendingControlAgentId={pendingControlAgentId}
 				/>
 			</PopoverContent>
 		</Popover>
@@ -430,12 +450,16 @@ function AgentRoster({
 	loading,
 	error,
 	onSelect,
+	onControlAgent,
+	pendingControlAgentId,
 }: {
 	activity: SessionAgentActivity;
 	agents: SessionAgentEntry[];
 	loading: boolean;
 	error: string | null;
 	onSelect: (agentSessionId: string) => void;
+	onControlAgent?: AgentHeaderProps["onControlAgent"];
+	pendingControlAgentId?: string | null;
 }) {
 	if (loading && agents.length === 0) {
 		return (
@@ -474,7 +498,9 @@ function AgentRoster({
 						<AgentRosterRow
 							agent={agent}
 							key={agent.sessionId}
+							onControlAgent={onControlAgent}
 							onSelect={() => onSelect(agent.sessionId)}
+							pending={pendingControlAgentId === agent.agentId}
 						/>
 					))}
 				</ul>
@@ -518,20 +544,50 @@ const AGENT_STATE_CLASS: Record<SessionAgentRunState, string> = {
 function AgentRosterRow({
 	agent,
 	onSelect,
+	onControlAgent,
+	pending,
 }: {
 	agent: SessionAgentEntry;
 	onSelect: () => void;
+	onControlAgent?: AgentHeaderProps["onControlAgent"];
+	pending: boolean;
 }) {
+	const [guidanceOpen, setGuidanceOpen] = useState(false);
+	const [guidance, setGuidance] = useState("");
+	const [controlError, setControlError] = useState<string | null>(null);
 	const state = agentEntryState(agent.status);
 	const StateIcon = AGENT_STATE_ICON[state];
 	const isRunning = state === "running";
 	const task = agent.prompt?.trim();
 	const lastAction = agent.lastAction?.trim();
+	const canControl =
+		Boolean(onControlAgent) &&
+		(agent.kind === "teamtask" || (agent.kind === "subagent" && isRunning));
+	const overlapFiles = agent.overlapFiles ?? [];
+
+	const control = async (
+		action: "stop" | "steer" | "retry",
+		message?: string,
+	) => {
+		if (!onControlAgent) return;
+		setControlError(null);
+		try {
+			await onControlAgent(agent.agentId, action, message);
+			if (action === "steer") {
+				setGuidance("");
+				setGuidanceOpen(false);
+			}
+		} catch (error) {
+			setControlError(
+				error instanceof Error ? error.message : "Agent control failed.",
+			);
+		}
+	};
 
 	return (
-		<li>
+		<li className="px-3 py-2">
 			<button
-				className="flex w-full min-w-0 items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-hover"
+				className="flex w-full min-w-0 items-start gap-2 rounded text-left transition-colors hover:bg-surface-hover"
 				onClick={onSelect}
 				title="Open this agent's session"
 				type="button"
@@ -556,6 +612,14 @@ function AgentRosterRow({
 								{agent.teamName ? `team ${agent.teamName}` : "team"}
 							</span>
 						) : null}
+						{agent.worktreePath ? (
+							<span
+								className="shrink-0 rounded bg-secondary px-1 text-[10px] uppercase tracking-wide text-foreground"
+								title={agent.worktreePath}
+							>
+								isolated writer
+							</span>
+						) : null}
 						<span
 							className={cn("min-w-0 truncate", !lastAction && "italic")}
 							title={lastAction || undefined}
@@ -572,6 +636,117 @@ function AgentRosterRow({
 					className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60"
 				/>
 			</button>
+			{overlapFiles.length > 0 ? (
+				<div className="mt-2 ml-5 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-[11px]">
+					<div className="flex items-start gap-1.5 text-destructive">
+						<AlertTriangle
+							aria-hidden="true"
+							className="mt-0.5 size-3 shrink-0"
+						/>
+						<div className="min-w-0 flex-1">
+							<div className="font-medium">
+								Handoff blocked by overlapping edits
+							</div>
+							<div className="mt-0.5 break-words text-muted-foreground">
+								{overlapFiles.slice(0, 3).join(", ")}
+								{overlapFiles.length > 3
+									? ` and ${overlapFiles.length - 3} more`
+									: ""}
+							</div>
+						</div>
+					</div>
+					<Button
+						aria-label={`Review overlap for ${task || agent.agentId}`}
+						className="mt-2"
+						onClick={onSelect}
+						size="sm"
+						type="button"
+						variant="outline"
+					>
+						Open worktree to resolve
+					</Button>
+				</div>
+			) : null}
+			{canControl ? (
+				<div className="mt-2 ml-5">
+					<div className="flex items-center gap-1.5">
+						{isRunning ? (
+							<>
+								<Button
+									aria-label={`Guide ${task || agent.agentId}`}
+									disabled={pending}
+									onClick={() => setGuidanceOpen((value) => !value)}
+									size="sm"
+									type="button"
+									variant="outline"
+								>
+									<MessageSquare className="size-3" />
+									Guide
+								</Button>
+								<Button
+									aria-label={`Stop ${task || agent.agentId}`}
+									disabled={pending}
+									onClick={() => void control("stop")}
+									size="sm"
+									type="button"
+									variant="outline"
+								>
+									{pending ? (
+										<Loader2 className="size-3 animate-spin" />
+									) : (
+										<Square className="size-3" />
+									)}
+									Stop
+								</Button>
+							</>
+						) : state === "failed" || state === "cancelled" ? (
+							<Button
+								aria-label={`Retry ${task || agent.agentId}`}
+								disabled={pending}
+								onClick={() => void control("retry")}
+								size="sm"
+								type="button"
+								variant="outline"
+							>
+								{pending ? (
+									<Loader2 className="size-3 animate-spin" />
+								) : (
+									<RotateCcw className="size-3" />
+								)}
+								Retry
+							</Button>
+						) : null}
+					</div>
+					{guidanceOpen && isRunning ? (
+						<form
+							className="mt-2 flex gap-1.5"
+							onSubmit={(event) => {
+								event.preventDefault();
+								const message = guidance.trim();
+								if (message) void control("steer", message);
+							}}
+						>
+							<Input
+								aria-label={`Guidance for ${task || agent.agentId}`}
+								disabled={pending}
+								onChange={(event) => setGuidance(event.target.value)}
+								placeholder="Adjust this agent's direction..."
+								value={guidance}
+							/>
+							<Button
+								disabled={pending || !guidance.trim()}
+								size="sm"
+								type="submit"
+							>
+								Send
+							</Button>
+						</form>
+					) : null}
+					{controlError ? (
+						<p className="mt-1 text-[11px] text-destructive">{controlError}</p>
+					) : null}
+				</div>
+			) : null}
 		</li>
 	);
 }

@@ -432,6 +432,22 @@ describe("UnifiedSessionPersistenceService", () => {
 				"java-haiku-agent",
 				"Write a haiku about Java",
 			);
+			await service.onTeamRunSettled(rootSessionId, {
+				id: "run_00002",
+				agentId: "java-haiku-agent",
+				status: "completed",
+				message: "Write a haiku about Java",
+				priority: 0,
+				retryCount: 0,
+				maxRetries: 0,
+				startedAt: new Date("2026-04-10T19:00:01.000Z"),
+				endedAt: new Date("2026-04-10T19:00:02.000Z"),
+				worktreePath: "/tmp/.cline/worktrees/writer/java",
+				changedFiles: ["src/shared.ts", "src/java.ts"],
+				overlapsWithRunIds: ["run_00001"],
+				overlapFiles: ["src/shared.ts"],
+			});
+
 			await service.onTeamTaskEnd(
 				rootSessionId,
 				"java-haiku-agent",
@@ -483,6 +499,14 @@ describe("UnifiedSessionPersistenceService", () => {
 			const row = childSessions.find(
 				(item) => item.sessionId === teammateSessionId,
 			);
+			expect(row?.metadata?.teamRun).toEqual({
+				runId: "run_00002",
+				status: "completed",
+				worktreePath: "/tmp/.cline/worktrees/writer/java",
+				changedFiles: ["src/shared.ts", "src/java.ts"],
+				overlapsWithRunIds: ["run_00001"],
+				overlapFiles: ["src/shared.ts"],
+			});
 			expect(row?.messagesPath).toBeTruthy();
 			const path = row?.messagesPath as string;
 			const payload = JSON.parse(readFileSync(path, "utf8")) as {

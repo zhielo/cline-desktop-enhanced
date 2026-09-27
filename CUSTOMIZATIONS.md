@@ -49,6 +49,7 @@ Primary files:
 - Canonical Windows paths are used for temporary Git worktrees; short-path aliases, slash direction, and case differences do not break cleanup or tests.
 - Worktree deletion resolves the repository root, removes the worktree, removes a canonical-path fallback when Git alias matching fails, prunes stale metadata, and independently deletes `refs/heads/cline/<id>`.
 - Managed task worktrees persist their identity, source revision/repository, base branch, generated branch, and retention decision. The chat exposes Apply to Local, Create Branch, Open PR, Keep, and explicitly confirmed Discard actions after checking both checkouts for dirty or conflicting state.
+- Parallel writing teammates can request an `isolated-writer` workspace. Core creates a handoff-compatible managed Git worktree, routes that teammate's built-in tools and workspace prompt to it, persists ownership across restart recovery, records changed files on async runs, and flags cross-agent path overlaps before handoff. Settled overlap evidence is persisted on the writer child session; the desktop roster blocks handoff visibly, lists conflicting paths, and opens that writer's worktree/session for review and resolution.
 - Apply to Local accepts committed work only and aborts a conflicting cherry-pick; Keep prevents session deletion from cleaning the worktree; cleanup remains idempotent and never deletes renamed/user-created branches.
 - Sidecar stores are closed during tests and logging fixtures work across platforms.
 - Desktop, example VS Code, and repository-root Vitest configurations are native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` configs must not be restored.
@@ -81,9 +82,11 @@ Primary files:
 
 - Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event. The implemented behavior contract is recorded in `docs/CODEX_LIKE_COMMAND_EXECUTION.md`.
 - The SDK exposes a host-scoped `process_session` tool backed by `ProcessSessionManager`, with direct argv start, stable process IDs, owner isolation, cursor-based reads, writable stdin, terminal resize, portable process-tree signals, explicit close, bounded head/tail output, global/per-owner limits, and completed-session expiry. Pipe execution remains the default; `interactive: true` attaches Bun's native Unix PTY or Windows ConPTY boundary and records terminal dimensions. Act and Full Access modes enable it; Plan mode disables it so it cannot bypass the read-only command guard. Existing `run_commands` behavior remains unchanged.
+- Active process sessions persist only owner, PID, kernel start token, working directory, and terminal metadata. After an unexpected host restart, exact start-token revalidation restores conservative status/signal control without fabricating lost stdin, terminal, or output handles. PID-only recovery and identity mismatches fail closed.
 - The unsigned Windows installer uses Bun 1.3.14 for native ConPTY while the repository's default Bun 1.3.13 remains sufficient for Unix PTY support. The installer workflow compiles and executes a real ConPTY input/resize smoke test before packaging, covering the embedded runtime used by the installed sidecar.
 - Agent-started SDK processes withhold credential-bearing inherited and override environment variables unless the host explicitly grants an exact name. Known and pattern-detected secrets are redacted before streamed output, final results, errors, detached logs, or process-session buffers retain them. The policy and its remaining security boundary are documented in `docs/PROCESS_ENVIRONMENT_SECURITY.md`.
 - Codex-grade process sessions, durable task state, worktree handoff, additive permission profiles, parallel orchestration, telemetry-gated PowerShell optimization, and optional scoped computer use must follow the phased contract in `docs/CODEX_PARITY_ROADMAP.md` and GitHub issue #20.
+- Windows `run_commands` records a local, privacy-safe rolling baseline containing only execution mode, duration, time-to-first-output, output volume, success, and timestamp. It stores no command, arguments, cwd, environment, output, or identity. The prewarmed PowerShell worker remains disabled until at least 20 direct and 50 shell samples show both a 150 ms startup disadvantage and a 60% shell-startup share; a diagnostic command reports `collecting`, `not_recommended`, or `eligible` without enabling optimization.
 
 Primary files:
 
@@ -97,6 +100,26 @@ Primary files:
 - `docs/CODEX_LIKE_COMMAND_EXECUTION.md`
 - `docs/PROCESS_ENVIRONMENT_SECURITY.md`
 - `docs/CODEX_PARITY_ROADMAP.md`
+
+### Additive permission profiles
+
+- Local sessions may opt into host-enforced `read-only`, `workspace`,
+  `workspace-network`, `full-access`, or custom capability profiles.
+- Enforcement runs before approval and tool execution and is inherited by
+  delegated agents.
+- Restricted profiles fail closed for unclassified plugin/MCP tools and keep
+  network, external-device/debugger, process-session, command, and file-write
+  capabilities independently controllable.
+- Omitting the profile preserves the existing Full Access desktop behavior.
+- Capability profiles are not described as an operating-system sandbox; native
+  filesystem and network containment remains separate follow-up work.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/permission-profile.ts`
+- `sdk/packages/core/src/extensions/tools/permission-profile.test.ts`
+- `sdk/packages/core/src/runtime/orchestration/runtime-builder.ts`
+- `docs/PERMISSION_PROFILES.md`
 
 ### Durable task execution
 
@@ -118,6 +141,32 @@ Primary files:
 - `apps/examples/desktop-app/webview/lib/task-report.ts`
 - `docs/DURABLE_TASK_EXECUTION.md`
 - `docs/CODEX_PARITY_ROADMAP.md`
+
+### Parallel-agent desktop controls
+
+- Persisted subagent and team-task children appear in the parent session's agent
+  roster with status, assigned task, latest activity, model, and transcript.
+- Team-task rows expose host-controlled Stop, Guide, and Retry actions. These
+  target one teammate without aborting the lead session.
+- Guide uses the existing team mailbox and live steering boundary; Retry queues
+  the latest failed, cancelled, or interrupted task with conversation
+  continuity.
+- Control requests are validated at the sidecar, Hub, root-session, and
+  child-agent boundaries. Running synchronous `spawn_agent` and configured-agent
+  children register host-owned control handles, expose Stop and Guide without
+  aborting the lead, consume one-shot steering messages inside their own loop,
+  and remove the handle atomically when the child settles. Retry remains limited
+  to durable team runs; completed synchronous tool calls must be spawned again by
+  the lead rather than replayed outside the parent tool contract.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/team/multi-agent.ts`
+- `sdk/packages/core/src/runtime/host/local-runtime-host.ts`
+- `sdk/packages/core/src/hub/server/hub-server-transport.ts`
+- `apps/examples/desktop-app/sidecar/commands.ts`
+- `apps/examples/desktop-app/webview/hooks/use-session-agents.ts`
+- `apps/examples/desktop-app/webview/components/agent-header.tsx`
 
 ### Specialized tools
 

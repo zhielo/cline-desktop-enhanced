@@ -67,6 +67,8 @@ export interface TeamMemberSnapshot {
 	role: "lead" | "teammate";
 	description?: string;
 	status: "idle" | "running" | "stopped";
+	/** Isolated managed worktree assigned to a writing teammate. */
+	worktreePath?: string;
 }
 
 export interface TeammateLifecycleSpec {
@@ -76,6 +78,7 @@ export interface TeammateLifecycleSpec {
 	runtimeAgentId?: string;
 	conversationId?: string;
 	parentAgentId?: string | null;
+	worktreePath?: string;
 }
 
 export type TeamRunStatus =
@@ -111,6 +114,10 @@ export interface TeamRunRecord {
 	lastProgressAt?: Date;
 	lastProgressMessage?: string;
 	currentActivity?: string;
+	worktreePath?: string;
+	changedFiles?: string[];
+	overlapsWithRunIds?: string[];
+	overlapFiles?: string[];
 	result?: unknown;
 	error?: string;
 }

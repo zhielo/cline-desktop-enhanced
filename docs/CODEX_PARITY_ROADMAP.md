@@ -18,7 +18,7 @@ Parent issue: #21
 
 Evolve command execution from spawn-and-collect into a host-scoped process service while retaining one-shot `run_commands` compatibility.
 
-Implementation status: `ProcessSessionManager` is exposed through the additive `process_session` tool in Act and Full Access modes. It provides direct argv start, stable IDs, owner-scoped lifecycle access, cursor reads, stdin, signals, terminal resize, explicit close, bounded head/tail output, resource limits, and expiry while preserving one-shot `run_commands`. Pipe execution remains the default; explicit interactive sessions use Bun's maintained Unix PTY/Windows ConPTY boundary and report their terminal dimensions. Plan mode deliberately disables the tool so it cannot bypass the read-only command guard. Conservative restart recovery with kernel start-token revalidation remains follow-up work under #21.
+Implementation status: complete. `ProcessSessionManager` is exposed through the additive `process_session` tool in Act and Full Access modes. It provides direct argv start, stable IDs, owner-scoped lifecycle access, cursor reads, stdin, signals, terminal resize, explicit close, bounded head/tail output, resource limits, and expiry while preserving one-shot `run_commands`. Pipe execution remains the default; explicit interactive sessions use Bun's maintained Unix PTY/Windows ConPTY boundary and report their terminal dimensions. Plan mode deliberately disables the tool so it cannot bypass the read-only command guard. Active process identity is durably recorded without command arguments, environment, or output. After a host restart, recovery requires an exact kernel start-token match rather than PID identity alone; restored sessions expose status and signals while explicitly refusing unavailable stdin/resize operations and continuously revalidate identity until exit.
 
 Required operations:
 
@@ -78,7 +78,7 @@ Required lifecycle:
 
 Parent issue: #24
 
-Implementation status: SDK command and process-session execution now has a host-enforced environment-secret foundation. Sensitive inherited and override variables are withheld unless the host grants an exact name, and retained output is sanitized before entering UI, result, detached-log, or session buffers. Filesystem, network, MCP, and complete profile enforcement remain follow-up work under #24.
+Implementation status: foundation implemented. SDK command and process-session execution has a host-enforced environment-secret foundation. Sensitive inherited and override variables are withheld unless the host grants an exact name, and retained output is sanitized before entering UI, result, detached-log, or session buffers. Optional `read-only`, `workspace`, `workspace-network`, `full-access`, and custom capability profiles now run at the shared `beforeTool` boundary and propagate to delegated agents. Restricted profiles fail closed for unclassified plugin/MCP tools, separate built-in network and external-device capabilities, and reuse the command guard for read-only shell calls. These profiles are not claimed as an OS sandbox; native filesystem and network containment remains follow-up work under #24.
 
 Add read-only, workspace, workspace plus network policy, Full Access, and custom named profiles. Keep approval UX separate from technical enforcement.
 
@@ -88,6 +88,8 @@ Enforcement should cover filesystem roots, command execution, network enablement
 
 Parent issue: #25
 
+Implementation status: desktop control surface implemented for team-task agents. The existing team runtime provides bounded parallel runs, persisted parent/child sessions, status/activity tracking, result aggregation, cancellation, mailbox steering, retries, and concurrency caps. The desktop agent roster exposes Open, Stop, Guide, and Retry actions without aborting the lead session. Host and Hub commands validate the owning root session and teammate identity before acting. Team leads can now spawn an `isolated-writer`: Core creates a managed Git worktree, routes that teammate's tools and workspace prompt to it, persists the assignment, inventories changed files for async runs, and records cross-agent path overlaps before handoff. Generic `spawn_agent` and configured-agent children now register independent host-owned handles for their synchronous lifetime, so the desktop roster can Stop or Guide one running child without aborting the lead; handles are ownership-scoped and removed when the child settles. Retry remains intentionally limited to durable team runs because replaying a completed synchronous tool call outside its parent would violate the parent tool contract. The desktop roster also persists and consolidates overlap evidence, marks the writer handoff blocked, lists conflicting paths, and routes directly to the writer worktree/session for resolution.
+
 Expose parent/child task threads, active operation, status, worktree owner, model, stop/steer/retry controls, concurrency caps, and consolidated results. Default parallel delegation to read-heavy work. Give every parallel writer an isolated worktree and detect overlapping edits before handoff.
 
 ## Phase 6 — Windows command-latency optimization
@@ -95,6 +97,8 @@ Expose parent/child task threads, active operation, status, worktree owner, mode
 Parent issue: #26
 
 Use the existing duration, time-to-first-output, output-chunk, output-volume, and direct-versus-shell telemetry to establish a baseline. Add a feature-flagged, serialized, restartable prewarmed PowerShell worker only if measurements show shell startup dominates. On failure, fall back to the existing executor. Never route direct argv commands through the worker.
+
+Implementation status: Windows now persists a bounded local baseline of numeric timing/output measurements only and exposes a deterministic decision report. The gate requires at least 20 successful direct and 50 successful shell samples with output, a median shell first-output delay at least 150 ms above direct execution, and shell startup consuming at least 60% of median shell duration. Until the report is `eligible`, the worker is not implemented or enabled and existing execution remains unchanged.
 
 ## Phase 7 — Scoped computer use
 

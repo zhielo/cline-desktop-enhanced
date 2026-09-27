@@ -44,6 +44,7 @@ import type {
 	SessionUsageRuntimeService,
 	StartSessionInput,
 	StartSessionResult,
+	TeamAgentControlRuntimeService,
 } from "./runtime/host/runtime-host";
 import {
 	FeatureFlagsService,
@@ -678,4 +679,18 @@ export class ClineCore {
 			const service = this.host as RuntimeHostServiceExtensions;
 			return service.updateSessionConnection?.(...args) ?? Promise.resolve();
 		};
+	/**
+	 * Control work owned by one teammate without aborting the lead session.
+	 */
+	controlTeamAgent: TeamAgentControlRuntimeService["controlTeamAgent"] = (
+		...args
+	) => {
+		const service = this.host as RuntimeHostServiceExtensions;
+		if (!service.controlTeamAgent) {
+			return Promise.reject(
+				new Error("Team agent control is not available on this runtime host."),
+			);
+		}
+		return service.controlTeamAgent(...args);
+	};
 }

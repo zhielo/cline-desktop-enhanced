@@ -122,6 +122,22 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/team/spawn-agent-tool.ts",
+		markers: [
+			"SubAgentControlHandle",
+			"onSubAgentControlReady",
+			"consumePendingUserMessage",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/team/writer-worktree.ts",
+		markers: [
+			"createWriterWorktree",
+			"listWriterWorktreeChanges",
+			"ownerAgentId",
+		],
+	},
+	{
 		path: "apps/examples/desktop-app/webview/components/views/chat/worktree-handoff-bar.tsx",
 		markers: [
 			"Apply to Local",
@@ -130,6 +146,22 @@ const requiredMarkers: Array<{
 			"Keep",
 			"Discard worktree",
 		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/agent-header.tsx",
+		markers: [
+			"onControlAgent",
+			'"stop"',
+			'"steer"',
+			'"retry"',
+			"Guidance for",
+			"Handoff blocked by overlapping edits",
+			"Open worktree to resolve",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/team/multi-agent.ts",
+		markers: ["cancelAgentWork", "pendingSteerMessage", "maxConcurrentRuns"],
 	},
 	{
 		path: "apps/examples/desktop-app/sidecar/chat-session.ts",
@@ -198,6 +230,26 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/permission-profile.ts",
+		markers: [
+			"createPermissionProfileExtension",
+			'"read-only"',
+			'"workspace-network"',
+			'"full-access"',
+			"unclassified plugin or MCP tool",
+			"not an operating-system sandbox",
+		],
+	},
+	{
+		path: "docs/PERMISSION_PROFILES.md",
+		markers: [
+			"beforeTool",
+			"delegated agents",
+			"not an operating-system sandbox",
+			"no-release policy",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
 		markers: [
 			"ProcessSessionManager",
@@ -210,6 +262,10 @@ const requiredMarkers: Array<{
 			"highestDroppedCursor",
 			"process.kill(-pid",
 			"taskkill.exe",
+			"initializeRecovery",
+			"processStartToken",
+			"recoveredAfterRestart",
+			"prior output and stdin are unavailable",
 		],
 	},
 	{
@@ -276,6 +332,14 @@ const requiredMarkers: Array<{
 		markers: ["Unrestricted shell", "acknowledge_risk: true", "screenChanged"],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/executors/command-latency-baseline.ts",
+		markers: [
+			"MIN_SHELL_BASELINE_SAMPLES",
+			"MIN_SHELL_STARTUP_RATIO",
+			"evaluatePowerShellWorkerEligibility",
+		],
+	},
+	{
 		path: "docs/CODEX_LIKE_COMMAND_EXECUTION.md",
 		markers: [
 			"Structured direct execution",
@@ -293,6 +357,7 @@ const requiredMarkers: Array<{
 			"Worktree-first isolation and handoff",
 			"Additive permission profiles",
 			"Parallel agent orchestration",
+			"isolated-writer",
 			"prewarmed PowerShell worker",
 			"Scoped computer use",
 			"atomically persists a versioned task-state artifact",
