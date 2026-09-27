@@ -770,7 +770,7 @@ function GeneralSettingsContent({
 	const [webSearchSaving, setWebSearchSaving] = useState(false);
 	const [webSearchError, setWebSearchError] = useState<string | null>(null);
 	const [permissionProfile, setPermissionProfile] =
-		useState<PermissionProfileName>("workspace-network");
+		useState<PermissionProfileName>("full-access");
 	const [permissionProfileLoading, setPermissionProfileLoading] =
 		useState(true);
 	const [permissionProfileSaving, setPermissionProfileSaving] = useState(false);
@@ -864,7 +864,7 @@ function GeneralSettingsContent({
 					setTelemetryOptOut(settings.telemetryOptOut);
 					setAutoUpdateEnabled(settings.autoUpdateEnabled);
 					setPermissionProfile(
-						settings.permissionProfile ?? "workspace-network",
+						settings.permissionProfile ?? "full-access",
 					);
 					setWebSearchEnabled(settings.tools?.web_search?.enabled === true);
 				} catch (error) {
@@ -1026,7 +1026,7 @@ function GeneralSettingsContent({
 				"set_permission_profile",
 				{ permission_profile: nextValue },
 			);
-			setPermissionProfile(settings.permissionProfile ?? "workspace-network");
+			setPermissionProfile(settings.permissionProfile ?? "full-access");
 		} catch (error) {
 			setPermissionProfile(previousValue);
 			setPermissionProfileError(

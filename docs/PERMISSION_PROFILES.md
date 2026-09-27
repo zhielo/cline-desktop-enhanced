@@ -22,9 +22,11 @@ UX. A profile can deny a tool even when it would otherwise be auto-approved.
 
 The desktop General settings page persists one of the four built-in profiles
 for new local sessions. When no preference exists, the sidecar applies
-`workspace-network`; changing the setting affects new sessions and cannot be
-silently weakened by omitting the field from a webview request. SDK hosts that
-omit `permissionProfile` retain their existing host-selected behavior.
+`full-access`, matching the desktop composer's existing Full Access/Yolo
+contract. Restricted profiles are explicit choices; changing the setting
+affects new sessions and cannot be silently weakened by omitting the field from
+a webview request. SDK hosts that omit `permissionProfile` retain their existing
+host-selected behavior.
 
 ## Security boundary
 
