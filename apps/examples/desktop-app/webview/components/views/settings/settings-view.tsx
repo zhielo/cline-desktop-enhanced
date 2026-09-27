@@ -11,6 +11,13 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { isBetaVersion, productNameForVersion } from "@/lib/app-channel";
@@ -91,7 +98,24 @@ export {
 type GlobalSettingsResponse = {
 	telemetryOptOut: boolean;
 	autoUpdateEnabled: boolean;
+	permissionProfile?:
+		| "read-only"
+		| "workspace"
+		| "workspace-network"
+		| "full-access";
 	tools?: Partial<Record<"web_search", { enabled: boolean }>>;
+};
+
+type PermissionProfileName = GlobalSettingsResponse["permissionProfile"];
+
+const PERMISSION_PROFILE_DESCRIPTIONS: Record<PermissionProfileName, string> = {
+	"read-only": "Inspect code and coordinate agents without changing files.",
+	workspace:
+		"Read, edit, and run commands in the workspace without network tools.",
+	"workspace-network":
+		"Workspace access plus web and network tools. Recommended for most tasks.",
+	"full-access":
+		"Allow external, plugin, MCP, device, and unclassified tools. Use only when needed.",
 };
 
 const PROVIDER_CATALOG_CACHE_TTL_MS = 60_000;
@@ -745,6 +769,14 @@ function GeneralSettingsContent({
 	const [webSearchLoading, setWebSearchLoading] = useState(true);
 	const [webSearchSaving, setWebSearchSaving] = useState(false);
 	const [webSearchError, setWebSearchError] = useState<string | null>(null);
+	const [permissionProfile, setPermissionProfile] =
+		useState<PermissionProfileName>("workspace-network");
+	const [permissionProfileLoading, setPermissionProfileLoading] =
+		useState(true);
+	const [permissionProfileSaving, setPermissionProfileSaving] = useState(false);
+	const [permissionProfileError, setPermissionProfileError] = useState<
+		string | null
+	>(null);
 	// Connected providers that offer native web search; null until the
 	// catalog loads. The toggle silently does nothing with other providers,
 	// so the row spells out whether it will actually take effect.
@@ -817,6 +849,8 @@ function GeneralSettingsContent({
 		setAutoUpdateError(null);
 		setWebSearchLoading(true);
 		setWebSearchError(null);
+		setPermissionProfileLoading(true);
+		setPermissionProfileError(null);
 		setCloudSessionsLoading(true);
 		setCloudSessionsError(null);
 		setCustomAiInstructionsLoading(true);
@@ -829,16 +863,21 @@ function GeneralSettingsContent({
 					);
 					setTelemetryOptOut(settings.telemetryOptOut);
 					setAutoUpdateEnabled(settings.autoUpdateEnabled);
+					setPermissionProfile(
+						settings.permissionProfile ?? "workspace-network",
+					);
 					setWebSearchEnabled(settings.tools?.web_search?.enabled === true);
 				} catch (error) {
 					const message =
 						error instanceof Error ? error.message : String(error);
 					setTelemetryError(message);
 					setAutoUpdateError(message);
+					setPermissionProfileError(message);
 					setWebSearchError(message);
 				} finally {
 					setTelemetryLoading(false);
 					setAutoUpdateLoading(false);
+					setPermissionProfileLoading(false);
 					setWebSearchLoading(false);
 				}
 			})(),
@@ -974,6 +1013,27 @@ function GeneralSettingsContent({
 			setWebSearchError(message);
 		} finally {
 			setWebSearchSaving(false);
+		}
+	};
+
+	const updatePermissionProfile = async (nextValue: PermissionProfileName) => {
+		const previousValue = permissionProfile;
+		setPermissionProfile(nextValue);
+		setPermissionProfileSaving(true);
+		setPermissionProfileError(null);
+		try {
+			const settings = await desktopClient.invoke<GlobalSettingsResponse>(
+				"set_permission_profile",
+				{ permission_profile: nextValue },
+			);
+			setPermissionProfile(settings.permissionProfile ?? "workspace-network");
+		} catch (error) {
+			setPermissionProfile(previousValue);
+			setPermissionProfileError(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setPermissionProfileSaving(false);
 		}
 	};
 
@@ -1219,6 +1279,48 @@ function GeneralSettingsContent({
 							</button>
 						))}
 					</div>
+				</div>
+				<div className="flex py-4 items-center justify-between gap-5 border-b max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:py-4">
+					<div className="flex flex-col gap-1">
+						<p className="text-base font-semibold text-foreground">
+							Agent permissions
+						</p>
+						<p className="text-sm text-muted-foreground">
+							Choose the host-enforced capability boundary for new local
+							sessions. This supplements approval prompts but is not an
+							operating-system sandbox.
+						</p>
+						<p className="text-xs text-muted-foreground">
+							{PERMISSION_PROFILE_DESCRIPTIONS[permissionProfile]}
+						</p>
+						{permissionProfileError ? (
+							<p className="mt-2 text-xs text-destructive" role="alert">
+								Failed to update agent permissions: {permissionProfileError}
+							</p>
+						) : null}
+					</div>
+					<Select
+						disabled={permissionProfileLoading || permissionProfileSaving}
+						onValueChange={(value) =>
+							void updatePermissionProfile(value as PermissionProfileName)
+						}
+						value={permissionProfile}
+					>
+						<SelectTrigger
+							aria-label="Agent permissions"
+							className="w-56 shrink-0 max-[720px]:w-full"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="read-only">Read only</SelectItem>
+							<SelectItem value="workspace">Workspace</SelectItem>
+							<SelectItem value="workspace-network">
+								Workspace + network
+							</SelectItem>
+							<SelectItem value="full-access">Full access</SelectItem>
+						</SelectContent>
+					</Select>
 				</div>
 				<div className="flex py-4 items-center justify-between gap-5 border-b max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:py-4">
 					<div className="flex flex-col gap-1">

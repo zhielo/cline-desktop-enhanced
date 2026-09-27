@@ -58,6 +58,17 @@ const GlobalPlanActModeSchema = z.enum(["plan", "act"]);
 
 export type GlobalPlanActMode = z.infer<typeof GlobalPlanActModeSchema>;
 
+const GlobalPermissionProfileSchema = z.enum([
+	"read-only",
+	"workspace",
+	"workspace-network",
+	"full-access",
+]);
+
+export type GlobalPermissionProfile = z.infer<
+	typeof GlobalPermissionProfileSchema
+>;
+
 export const GlobalSettingsSchema = z
 	.object({
 		telemetryOptOut: z.boolean().default(false).catch(false),
@@ -66,6 +77,8 @@ export const GlobalSettingsSchema = z
 		compactionEnabled: z.boolean().optional().catch(undefined),
 		planActMode: GlobalPlanActModeSchema.optional().catch(undefined),
 		toolAutoApprove: z.boolean().optional().catch(undefined),
+		permissionProfile:
+			GlobalPermissionProfileSchema.optional().catch(undefined),
 		tuiTheme: z.string().optional().catch(undefined),
 		disabledTools: GlobalSettingsStringListSchema.optional(),
 		tools: ModelToolSettingsSchema,
@@ -81,6 +94,7 @@ export const GlobalSettingsSchema = z
 			compactionEnabled?: boolean;
 			planActMode?: GlobalPlanActMode;
 			toolAutoApprove?: boolean;
+			permissionProfile?: GlobalPermissionProfile;
 			tuiTheme?: string;
 			disabledTools?: string[];
 			tools?: ModelToolSettings;
@@ -101,6 +115,9 @@ export const GlobalSettingsSchema = z
 		}
 		if (settings.toolAutoApprove !== undefined) {
 			normalized.toolAutoApprove = settings.toolAutoApprove;
+		}
+		if (settings.permissionProfile) {
+			normalized.permissionProfile = settings.permissionProfile;
 		}
 		if (settings.tuiTheme?.trim()) {
 			normalized.tuiTheme = settings.tuiTheme.trim();
@@ -331,6 +348,12 @@ export function setTuiThemeGlobally(tuiTheme: string): void {
 
 export function setToolAutoApproveGlobally(toolAutoApprove: boolean): void {
 	writeGlobalSettings({ ...readGlobalSettings(), toolAutoApprove });
+}
+
+export function setPermissionProfileGlobally(
+	permissionProfile: GlobalPermissionProfile,
+): void {
+	writeGlobalSettings({ ...readGlobalSettings(), permissionProfile });
 }
 
 export function resolveDisabledToolNames(

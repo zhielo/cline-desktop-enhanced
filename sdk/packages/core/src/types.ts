@@ -137,6 +137,7 @@ export {
 export type {
 	GlobalCompactionMode,
 	GlobalCompactionStrategy,
+	GlobalPermissionProfile,
 	GlobalPlanActMode,
 	GlobalSettings,
 } from "./services/global-settings";
@@ -167,6 +168,7 @@ export {
 	setDisabledPlugin,
 	setDisabledTools,
 	setModelToolEnabledGlobally,
+	setPermissionProfileGlobally,
 	setPlanActModeGlobally,
 	setTelemetryOptOutGlobally,
 	setToolAutoApproveGlobally,

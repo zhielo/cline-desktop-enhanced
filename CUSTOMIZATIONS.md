@@ -103,14 +103,17 @@ Primary files:
 
 ### Additive permission profiles
 
-- Local sessions may opt into host-enforced `read-only`, `workspace`,
-  `workspace-network`, `full-access`, or custom capability profiles.
+- General settings expose host-enforced `read-only`, `workspace`,
+  `workspace-network`, and `full-access` profiles for new local sessions.
+  `workspace-network` is the safe default when no preference has been stored;
+  callers may still supply custom capability profiles through the SDK.
 - Enforcement runs before approval and tool execution and is inherited by
   delegated agents.
 - Restricted profiles fail closed for unclassified plugin/MCP tools and keep
   network, external-device/debugger, process-session, command, and file-write
   capabilities independently controllable.
-- Omitting the profile preserves the existing Full Access desktop behavior.
+- The preference is persisted in global settings and resolved by the sidecar,
+  so a webview client cannot silently weaken it while starting a session.
 - Capability profiles are not described as an operating-system sandbox; native
   filesystem and network containment remains separate follow-up work.
 
@@ -119,6 +122,9 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/permission-profile.ts`
 - `sdk/packages/core/src/extensions/tools/permission-profile.test.ts`
 - `sdk/packages/core/src/runtime/orchestration/runtime-builder.ts`
+- `sdk/packages/core/src/services/global-settings.ts`
+- `apps/examples/desktop-app/sidecar/chat-session.ts`
+- `apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx`
 - `docs/PERMISSION_PROFILES.md`
 
 ### Durable task execution
