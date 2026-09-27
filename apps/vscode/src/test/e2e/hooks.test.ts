@@ -9,7 +9,11 @@ import { E2ETestHelper, e2e } from "./utils/helpers"
 // the per-prompt hook spawn (a cold PowerShell start on Windows).
 const hooksE2e = e2e.extend({
 	workspaceDir: async ({}, use) => {
-		await use(path.join(E2ETestHelper.E2E_TESTS_DIR, "fixtures", "workspace-hooks"))
+		const workspaceDir = path.join(E2ETestHelper.E2E_TESTS_DIR, "fixtures", "workspace-hooks")
+		if (process.platform !== "win32") {
+			await fs.chmod(path.join(workspaceDir, ".clinerules", "hooks", "UserPromptSubmit"), 0o755)
+		}
+		await use(workspaceDir)
 	},
 })
 
