@@ -648,7 +648,10 @@ function buildCoreSessionConfig(
 			config.permissionProfile ??
 			config.permission_profile ??
 			readGlobalSettings().permissionProfile ??
-			"workspace-network",
+			// The desktop composer advertises the long-standing Yolo preset as
+			// Full Access. Keep an unset preference aligned with that contract;
+			// restricted profiles remain available as an explicit choice.
+			"full-access",
 		...(thinking !== undefined ? { thinking } : {}),
 		...(reasoningEffort ? { reasoningEffort } : {}),
 		...(thinkingBudgetTokens !== undefined ? { thinkingBudgetTokens } : {}),

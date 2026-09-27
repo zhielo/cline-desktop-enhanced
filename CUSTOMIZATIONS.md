@@ -105,8 +105,10 @@ Primary files:
 
 - General settings expose host-enforced `read-only`, `workspace`,
   `workspace-network`, and `full-access` profiles for new local sessions.
-  `workspace-network` is the safe default when no preference has been stored;
-  callers may still supply custom capability profiles through the SDK.
+  `full-access` is the desktop default when no preference has been stored,
+  keeping the enforced boundary aligned with the existing Full Access/Yolo
+  composer contract; restricted profiles remain explicit choices, and callers
+  may still supply custom capability profiles through the SDK.
 - Enforcement runs before approval and tool execution and is inherited by
   delegated agents.
 - Restricted profiles fail closed for unclassified plugin/MCP tools and keep
