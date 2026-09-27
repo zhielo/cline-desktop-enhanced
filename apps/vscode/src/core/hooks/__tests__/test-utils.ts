@@ -607,7 +607,7 @@ export async function loadFixture(fixtureName: string, destDir: string): Promise
 
 			// Set executable permission (not needed on Windows)
 			const stats = await fs.stat(sourceFile)
-			await fs.chmod(destFile, stats.mode)
+			await fs.chmod(destFile, stats.mode | 0o111)
 		}
 	}
 }
