@@ -78,7 +78,7 @@ Required lifecycle:
 
 Parent issue: #24
 
-Implementation status: SDK command and process-session execution now has a host-enforced environment-secret foundation. Sensitive inherited and override variables are withheld unless the host grants an exact name, and retained output is sanitized before entering UI, result, detached-log, or session buffers. Filesystem, network, MCP, and complete profile enforcement remain follow-up work under #24.
+Implementation status: foundation implemented. SDK command and process-session execution has a host-enforced environment-secret foundation. Sensitive inherited and override variables are withheld unless the host grants an exact name, and retained output is sanitized before entering UI, result, detached-log, or session buffers. Optional `read-only`, `workspace`, `workspace-network`, `full-access`, and custom capability profiles now run at the shared `beforeTool` boundary and propagate to delegated agents. Restricted profiles fail closed for unclassified plugin/MCP tools, separate built-in network and external-device capabilities, and reuse the command guard for read-only shell calls. These profiles are not claimed as an OS sandbox; native filesystem and network containment remains follow-up work under #24.
 
 Add read-only, workspace, workspace plus network policy, Full Access, and custom named profiles. Keep approval UX separate from technical enforcement.
 

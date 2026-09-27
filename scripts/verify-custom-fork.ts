@@ -198,6 +198,26 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/permission-profile.ts",
+		markers: [
+			"createPermissionProfileExtension",
+			'"read-only"',
+			'"workspace-network"',
+			'"full-access"',
+			"unclassified plugin or MCP tool",
+			"not an operating-system sandbox",
+		],
+	},
+	{
+		path: "docs/PERMISSION_PROFILES.md",
+		markers: [
+			"beforeTool",
+			"delegated agents",
+			"not an operating-system sandbox",
+			"no-release policy",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
 		markers: [
 			"ProcessSessionManager",

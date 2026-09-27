@@ -98,6 +98,26 @@ Primary files:
 - `docs/PROCESS_ENVIRONMENT_SECURITY.md`
 - `docs/CODEX_PARITY_ROADMAP.md`
 
+### Additive permission profiles
+
+- Local sessions may opt into host-enforced `read-only`, `workspace`,
+  `workspace-network`, `full-access`, or custom capability profiles.
+- Enforcement runs before approval and tool execution and is inherited by
+  delegated agents.
+- Restricted profiles fail closed for unclassified plugin/MCP tools and keep
+  network, external-device/debugger, process-session, command, and file-write
+  capabilities independently controllable.
+- Omitting the profile preserves the existing Full Access desktop behavior.
+- Capability profiles are not described as an operating-system sandbox; native
+  filesystem and network containment remains separate follow-up work.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/permission-profile.ts`
+- `sdk/packages/core/src/extensions/tools/permission-profile.test.ts`
+- `sdk/packages/core/src/runtime/orchestration/runtime-builder.ts`
+- `docs/PERMISSION_PROFILES.md`
+
 ### Durable task execution
 
 - Plan-tool updates are normalized by a host-side durable task state machine rather than trusted as presentation-only data. It enforces stable step identity, one active step, valid task transitions, terminal-state protection, and a repair/verification gate before work can advance past a failed or blocked step.
