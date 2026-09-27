@@ -314,7 +314,7 @@ describe("ProcessSessionManager", () => {
 			const started = await manager.start({
 				ownerSessionId: OWNER,
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 1000)"],
+				args: ["-e", "setTimeout(() => {}, 30_000)"],
 				cwd: process.cwd(),
 			});
 			expect(() => manager.resize(OWNER, started.processId, 100, 40)).toThrow(
@@ -404,7 +404,7 @@ describe("ProcessSessionManager", () => {
 			const started = await manager.start({
 				ownerSessionId: OWNER,
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 1000)"],
+				args: ["-e", "setTimeout(() => {}, 30_000)"],
 				cwd: process.cwd(),
 			});
 			expect(manager.list("different-owner")).toEqual([]);
@@ -426,14 +426,14 @@ describe("ProcessSessionManager", () => {
 			await manager.start({
 				ownerSessionId: OWNER,
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 1000)"],
+				args: ["-e", "setTimeout(() => {}, 30_000)"],
 				cwd: process.cwd(),
 			});
 			await expect(
 				manager.start({
 					ownerSessionId: OWNER,
 					executable: process.execPath,
-					args: ["-e", "setTimeout(() => {}, 1000)"],
+					args: ["-e", "setTimeout(() => {}, 30_000)"],
 					cwd: process.cwd(),
 				}),
 			).rejects.toThrow("limit reached for owner");
