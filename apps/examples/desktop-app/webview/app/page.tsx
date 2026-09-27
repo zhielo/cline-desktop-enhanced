@@ -2238,6 +2238,8 @@ function ChatThreadPane({
 		agents,
 		loading: agentsLoading,
 		error: agentsError,
+		controlAgent,
+		pendingControlAgentId,
 	} = useSessionAgents({
 		environmentId,
 		sessionId: isCloudSession ? null : displayedSessionId,
@@ -2428,8 +2430,10 @@ function ChatThreadPane({
 								agentsError={agentsError}
 								agentsLoading={agentsLoading}
 								onAgentsOpenChange={setAgentPanelOpen}
+								onControlAgent={controlAgent}
 								onOpenAgentSession={onOpenAgentSession}
 								onOpenParentSession={onOpenAgentSession}
+								pendingControlAgentId={pendingControlAgentId}
 								parentSession={hideDeletedSessionUi ? undefined : parentSession}
 								canEditTitle={Boolean(activeSessionForTitle)}
 								canDeleteSession={Boolean(activeSessionToDelete)}

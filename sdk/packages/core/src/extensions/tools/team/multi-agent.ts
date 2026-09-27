@@ -1400,6 +1400,28 @@ export class AgentTeamsRuntime {
 		}
 	}
 
+	cancelAgentWork(agentId: string, reason = "cancelled_by_user"): string[] {
+		const member = this.members.get(agentId);
+		if (!member || member.role !== "teammate") {
+			throw new Error(`Teammate "${agentId}" was not found`);
+		}
+		const cancelledRunIds: string[] = [];
+		for (const run of this.runs.values()) {
+			if (
+				run.agentId === agentId &&
+				(run.status === "queued" || run.status === "running")
+			) {
+				cancelledRunIds.push(this.cancelRun(run.id, reason).id);
+			}
+		}
+		if (member.agent && member.runningCount > 0 && !member.abortRequested) {
+			member.abortRequested = true;
+			member.abortReason = reason;
+			member.agent.abort(new Error(reason));
+		}
+		return cancelledRunIds;
+	}
+
 	cancelRun(runId: string, reason?: string): TeamRunRecord {
 		const run = this.runs.get(runId);
 		if (!run) {

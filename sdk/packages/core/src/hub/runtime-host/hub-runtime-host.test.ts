@@ -1618,6 +1618,43 @@ describe("HubRuntimeHost", () => {
 		);
 	});
 
+	it("routes targeted teammate controls through the owning Hub session", async () => {
+		commandMock.mockResolvedValue({
+			ok: true,
+			payload: {
+				action: "steer",
+				agentId: "reviewer",
+				status: "steered",
+				runIds: ["run_00001"],
+			},
+		});
+
+		const { HubRuntimeHost } = await import("./hub-runtime-host");
+		const host = new HubRuntimeHost({ url: "ws://127.0.0.1:25463/hub" });
+		await expect(
+			host.controlTeamAgent("sess-1", {
+				action: "steer",
+				agentId: "reviewer",
+				message: "Focus on race conditions",
+			}),
+		).resolves.toEqual({
+			action: "steer",
+			agentId: "reviewer",
+			status: "steered",
+			runIds: ["run_00001"],
+		});
+		expect(commandMock).toHaveBeenCalledWith(
+			"team.agent_control",
+			{
+				sessionId: "sess-1",
+				action: "steer",
+				agentId: "reviewer",
+				message: "Focus on race conditions",
+			},
+			"sess-1",
+		);
+	});
+
 	it("reads messages through the hub instead of dereferencing client-local artifact paths", async () => {
 		const messages = [
 			{

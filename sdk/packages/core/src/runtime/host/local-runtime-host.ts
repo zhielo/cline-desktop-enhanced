@@ -140,6 +140,8 @@ import type {
 	SessionUsageSummary,
 	StartSessionInput,
 	StartSessionResult,
+	TeamAgentControlInput,
+	TeamAgentControlResult,
 } from "./runtime-host";
 import { SessionNotFoundError } from "./runtime-host";
 import {
@@ -1193,6 +1195,71 @@ export class LocalRuntimeHost implements RuntimeHost {
 				notifyTeamRunWaiters(session);
 			}
 			session.agent.abort(reason);
+		}
+	}
+
+	async controlTeamAgent(
+		sessionId: string,
+		input: TeamAgentControlInput,
+	): Promise<TeamAgentControlResult> {
+		const session = this.sessions.get(sessionId);
+		if (!session) {
+			throw new SessionNotFoundError(sessionId);
+		}
+		const runtime = session.runtime.teamRuntime;
+		if (!runtime) {
+			throw new Error(`Session ${sessionId} has no active team runtime`);
+		}
+		const agentId = input.agentId.trim();
+		if (!agentId || runtime.getMemberRole(agentId) !== "teammate") {
+			throw new Error(`Teammate "${agentId || input.agentId}" was not found`);
+		}
+		switch (input.action) {
+			case "stop": {
+				const runIds = runtime.cancelAgentWork(
+					agentId,
+					input.message?.trim() || "cancelled_from_desktop",
+				);
+				return { action: input.action, agentId, status: "cancelled", runIds };
+			}
+			case "steer": {
+				const message = input.message?.trim();
+				if (!message) {
+					throw new Error("A steering message is required");
+				}
+				runtime.sendMessage("lead", agentId, "Guidance from desktop", message);
+				const runIds = runtime
+					.listRuns({ agentId, includeCompleted: false })
+					.map((run) => run.id);
+				return { action: input.action, agentId, status: "steered", runIds };
+			}
+			case "retry": {
+				const previous = runtime
+					.listRuns({ agentId, includeCompleted: true })
+					.reverse()
+					.find((run) =>
+						["failed", "cancelled", "interrupted"].includes(run.status),
+					);
+				if (!previous) {
+					throw new Error(`No failed or cancelled run exists for ${agentId}`);
+				}
+				const retry = runtime.startTeammateRun(
+					agentId,
+					input.message?.trim() || previous.message,
+					{
+						taskId: previous.taskId,
+						continueConversation: true,
+						priority: previous.priority,
+						maxRetries: previous.maxRetries,
+					},
+				);
+				return {
+					action: input.action,
+					agentId,
+					status: "queued",
+					runIds: [retry.id],
+				};
+			}
 		}
 	}
 

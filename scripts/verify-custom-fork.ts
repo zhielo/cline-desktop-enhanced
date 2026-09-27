@@ -132,6 +132,14 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "apps/examples/desktop-app/webview/components/agent-header.tsx",
+		markers: ["onControlAgent", '"stop"', '"steer"', '"retry"', "Guidance for"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/team/multi-agent.ts",
+		markers: ["cancelAgentWork", "pendingSteerMessage", "maxConcurrentRuns"],
+	},
+	{
 		path: "apps/examples/desktop-app/sidecar/chat-session.ts",
 		markers: ["mergeDesktopAiInstructions", "taskToolStepIds"],
 	},

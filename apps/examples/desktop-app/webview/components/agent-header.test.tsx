@@ -384,6 +384,99 @@ describe("AgentHeader agent roster popover", () => {
 		const panel = await openPanel();
 		expect(panel?.textContent).toContain("Waiting for the first agent");
 	});
+
+	it("stops a running team agent without stopping the parent session", async () => {
+		const onControlAgent = vi.fn(async () => {});
+		await renderHeader({ onControlAgent });
+		const panel = await openPanel();
+		await act(async () => {
+			panel
+				?.querySelector<HTMLButtonElement>(
+					'button[aria-label^="Stop Port the migration"]',
+				)
+				?.click();
+		});
+		expect(onControlAgent).toHaveBeenCalledWith(
+			"agent_1784837162352_mmz797",
+			"stop",
+			undefined,
+		);
+	});
+
+	it("sends guidance to a running team agent", async () => {
+		const onControlAgent = vi.fn(async () => {});
+		await renderHeader({ onControlAgent });
+		const panel = await openPanel();
+		await act(async () => {
+			panel
+				?.querySelector<HTMLButtonElement>(
+					'button[aria-label^="Guide Port the migration"]',
+				)
+				?.click();
+		});
+		const input = panel?.querySelector<HTMLInputElement>(
+			'input[aria-label^="Guidance for Port the migration"]',
+		);
+		await act(async () => {
+			if (!input) return;
+			const setter = Object.getOwnPropertyDescriptor(
+				HTMLInputElement.prototype,
+				"value",
+			)?.set;
+			setter?.call(input, "Focus on the migration tests");
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+		await act(async () => {
+			input?.form?.dispatchEvent(
+				new Event("submit", { bubbles: true, cancelable: true }),
+			);
+		});
+		expect(onControlAgent).toHaveBeenCalledWith(
+			"agent_1784837162352_mmz797",
+			"steer",
+			"Focus on the migration tests",
+		);
+	});
+
+	it("retries a failed team agent but does not expose controls for subagents", async () => {
+		const onControlAgent = vi.fn(async () => {});
+		await renderHeader({
+			agentActivity: {
+				total: 2,
+				running: 0,
+				completed: 1,
+				failed: 1,
+				cancelled: 0,
+				unresolved: 0,
+			},
+			agents: [
+				AGENTS[0],
+				{
+					...AGENTS[1],
+					status: "failed",
+				},
+			],
+			onControlAgent,
+		});
+		const panel = await openPanel();
+		expect(
+			panel?.querySelector(
+				'button[aria-label^="Retry Review the diff for regressions"]',
+			),
+		).toBeNull();
+		await act(async () => {
+			panel
+				?.querySelector<HTMLButtonElement>(
+					'button[aria-label^="Retry Port the migration"]',
+				)
+				?.click();
+		});
+		expect(onControlAgent).toHaveBeenCalledWith(
+			"agent_1784837162352_mmz797",
+			"retry",
+			undefined,
+		);
+	});
 });
 
 describe("AgentHeader subagent session badge", () => {

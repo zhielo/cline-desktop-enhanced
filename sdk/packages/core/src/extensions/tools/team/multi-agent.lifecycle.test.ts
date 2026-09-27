@@ -1006,3 +1006,45 @@ describe("AgentTeamsRuntime run failure reporting", () => {
 		);
 	});
 });
+
+describe("AgentTeamsRuntime targeted desktop control", () => {
+	it("cancels one teammate's active runs without stopping other teammates", async () => {
+		let rejectActive: ((error: Error) => void) | undefined;
+		const activeAbort = vi.fn(() => {
+			rejectActive?.(new DOMException("desktop stop", "AbortError"));
+		});
+		const idleAbort = vi.fn();
+		mockNextSessionRuntime({
+			abort: activeAbort,
+			run: vi.fn(
+				() =>
+					new Promise((_, reject) => {
+						rejectActive = reject;
+					}),
+			),
+		});
+		mockNextSessionRuntime({ abort: idleAbort });
+
+		const runtime = new AgentTeamsRuntime({
+			teamName: "desktop-control",
+			maxConcurrentRuns: 2,
+		});
+		spawnTestTeammate(runtime, "active");
+		spawnTestTeammate(runtime, "idle");
+		const run = runtime.startTeammateRun("active", "Investigate the failure");
+		await vi.waitFor(() => {
+			expect(runtime.getRun(run.id)?.status).toBe("running");
+		});
+
+		expect(runtime.cancelAgentWork("active", "cancelled_from_desktop")).toEqual(
+			[run.id],
+		);
+		expect(runtime.getRun(run.id)).toMatchObject({
+			status: "cancelled",
+			error: "cancelled_from_desktop",
+		});
+		expect(activeAbort).toHaveBeenCalledTimes(1);
+		expect(idleAbort).not.toHaveBeenCalled();
+		expect(runtime.getTeammateIds()).toEqual(["active", "idle"]);
+	});
+});
