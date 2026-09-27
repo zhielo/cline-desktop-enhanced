@@ -25,6 +25,7 @@ import type {
 	CommandExecutionRuntimeService,
 	PendingPromptsRuntimeService,
 	RuntimeHost,
+	TeamAgentControlRuntimeService,
 } from "../../runtime/host/runtime-host";
 import { SqliteSessionStore } from "../../services/storage/sqlite-session-store";
 import { ensureAgentSchedulesWorkspace } from "../../services/workspace/agent-schedules-workspace";
@@ -101,9 +102,9 @@ import {
 	handleSessionRemovePendingPrompt,
 	handleSessionRestore,
 	handleSessionSearch,
+	handleSessionSteerFirstPendingPrompt,
 	handleSessionUpdate,
 	handleSessionUpdateConnection,
-	handleSessionSteerFirstPendingPrompt,
 	handleSessionUpdatePendingPrompt,
 } from "./handlers/session-handlers";
 import { HubEventLogStore } from "./hub-event-log";
@@ -260,7 +261,11 @@ export class HubServerTransport implements NativeHubTransport {
 	private readonly sessionSearch: SessionHistorySearchService;
 	private readonly cronService?: CronService;
 	private readonly sessionHost: RuntimeHost &
-		Partial<PendingPromptsRuntimeService & CommandExecutionRuntimeService>;
+		Partial<
+			PendingPromptsRuntimeService &
+				CommandExecutionRuntimeService &
+				TeamAgentControlRuntimeService
+		>;
 	private readonly hubId = createSessionId("hub_");
 	private readonly ctx: HubTransportContext;
 	/** Durable event log; created on start(), absent in never-started tests. */
@@ -857,6 +862,34 @@ export class HubServerTransport implements NativeHubTransport {
 				return await handleSessionDelete(this.ctx, envelope);
 			case "session.hook":
 				return await handleSessionHook(this.ctx, envelope);
+			case "team.agent_control": {
+				if (!this.sessionHost.controlTeamAgent) {
+					throw new Error("Team agent control is unavailable");
+				}
+				const sessionId = String(
+					envelope.payload?.sessionId ?? envelope.sessionId ?? "",
+				).trim();
+				const agentId = String(envelope.payload?.agentId ?? "").trim();
+				const action = String(envelope.payload?.action ?? "");
+				if (
+					!sessionId ||
+					!agentId ||
+					!["stop", "steer", "retry"].includes(action)
+				) {
+					throw new Error(
+						"sessionId, agentId, and a valid action are required",
+					);
+				}
+				const result = await this.sessionHost.controlTeamAgent(sessionId, {
+					action: action as "stop" | "steer" | "retry",
+					agentId,
+					message:
+						typeof envelope.payload?.message === "string"
+							? envelope.payload.message
+							: undefined,
+				});
+				return okReply(envelope, { ...result });
+			}
 			case "run.start":
 			case "session.send_input":
 				return await handleSessionInput(this.ctx, envelope);

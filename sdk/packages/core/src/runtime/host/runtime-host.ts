@@ -336,6 +336,28 @@ export interface CommandExecutionRuntimeService {
 	proceedWhileRunning(sessionId: string, toolCallId?: string): Promise<number>;
 }
 
+export type TeamAgentControlAction = "stop" | "steer" | "retry";
+
+export interface TeamAgentControlInput {
+	action: TeamAgentControlAction;
+	agentId: string;
+	message?: string;
+}
+
+export interface TeamAgentControlResult {
+	action: TeamAgentControlAction;
+	agentId: string;
+	status: "cancelled" | "steered" | "queued";
+	runIds: string[];
+}
+
+export interface TeamAgentControlRuntimeService {
+	controlTeamAgent(
+		sessionId: string,
+		input: TeamAgentControlInput,
+	): Promise<TeamAgentControlResult>;
+}
+
 export interface RuntimeHostSubscribeOptions {
 	sessionId?: string;
 }

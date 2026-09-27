@@ -43,6 +43,8 @@ import type {
 	SessionUsageSummary,
 	StartSessionInput,
 	StartSessionResult,
+	TeamAgentControlInput,
+	TeamAgentControlResult,
 } from "../../runtime/host/runtime-host";
 import { isSessionNotFoundError } from "../../runtime/host/runtime-host";
 import { RuntimeHostEventBus } from "../../runtime/host/runtime-host-support";
@@ -1285,6 +1287,18 @@ export class HubRuntimeHost implements RuntimeHost {
 			{ sessionId, reason: messageFromUnknown(reason) },
 			sessionId,
 		);
+	}
+
+	async controlTeamAgent(
+		sessionId: string,
+		input: TeamAgentControlInput,
+	): Promise<TeamAgentControlResult> {
+		const reply = await this.client.command(
+			"team.agent_control",
+			{ sessionId, ...input },
+			sessionId,
+		);
+		return reply.payload as unknown as TeamAgentControlResult;
 	}
 
 	async proceedWhileRunning(

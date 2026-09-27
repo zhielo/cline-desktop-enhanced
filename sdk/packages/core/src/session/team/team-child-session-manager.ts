@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import type * as LlmsProviders from "@cline/llms";
-import type { AgentResult } from "@cline/shared";
+import type { AgentResult, TeamRunRecord } from "@cline/shared";
 import { resolveRootSessionId } from "@cline/shared";
 import { ensureHookLogDir } from "@cline/shared/storage";
 import { z } from "zod";
@@ -45,6 +45,10 @@ export class TeamChildSessionManager {
 		string,
 		string
 	>();
+	private readonly lastSettledTeamTaskSessionByAgent = new Map<
+		string,
+		string
+	>();
 
 	constructor(
 		private readonly adapter: SessionPersistenceAdapter,
@@ -83,6 +87,7 @@ export class TeamChildSessionManager {
 			prompt: string;
 			startedAt: string;
 			messagesPath: string;
+			workspacePath?: string;
 		},
 	): SessionRow {
 		const rootHistoryOrigin = readSessionHistoryOriginMetadata(root.metadata);
@@ -98,8 +103,8 @@ export class TeamChildSessionManager {
 			interactive: false,
 			provider: root.provider,
 			model: root.model,
-			cwd: root.cwd,
-			workspaceRoot: root.workspaceRoot,
+			cwd: opts.workspacePath ?? root.cwd,
+			workspaceRoot: opts.workspacePath ?? root.workspaceRoot,
 			teamName: root.teamName ?? null,
 			enableTools: root.enableTools,
 			enableSpawn: root.enableSpawn,
@@ -277,6 +282,7 @@ export class TeamChildSessionManager {
 		rootSessionId: string,
 		agentId: string,
 		message: string,
+		worktreePath?: string,
 	): Promise<void> {
 		const root = await this.adapter.getSession(rootSessionId);
 		if (!root) return;
@@ -295,6 +301,7 @@ export class TeamChildSessionManager {
 			prompt: message || `Team task for ${agentId}`,
 			startedAt,
 			messagesPath,
+			workspacePath: worktreePath,
 		});
 		await this.adapter.upsertSession(row);
 		this.manifestStore.initializeMessagesFile(row, messagesPath, startedAt);
@@ -331,8 +338,54 @@ export class TeamChildSessionManager {
 			);
 		}
 		await this.applySubagentStatusBySessionId(sessionId, status);
+		this.lastSettledTeamTaskSessionByAgent.set(key, sessionId);
 		this.teamTaskLastHeartbeatBySession.delete(sessionId);
 		this.teamTaskLastProgressLineBySession.delete(sessionId);
+	}
+
+	async onTeamRunSettled(
+		rootSessionId: string,
+		run: TeamRunRecord,
+	): Promise<void> {
+		const key = this.teamTaskQueueKey(rootSessionId, run.agentId);
+		let sessionId = this.lastSettledTeamTaskSessionByAgent.get(key);
+		if (!sessionId) {
+			// The host persists synchronous team events asynchronously. A
+			// run_completed callback can race the preceding task_end callback,
+			// so use the child created by task_start rather than dropping the
+			// overlap evidence.
+			const candidates = await this.adapter.listSessions({
+				limit: 2000,
+				parentSessionId: rootSessionId,
+			});
+			sessionId = candidates
+				.filter((candidate) => candidate.agentId === run.agentId)
+				.sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]?.sessionId;
+		}
+		if (!sessionId) return;
+		const row = await this.adapter.getSession(sessionId);
+		if (
+			!row ||
+			row.parentSessionId !== rootSessionId ||
+			row.agentId !== run.agentId
+		) {
+			return;
+		}
+		await this.adapter.updateSession({
+			sessionId,
+			metadata: {
+				...(row.metadata ?? {}),
+				teamRun: {
+					runId: run.id,
+					status: run.status,
+					worktreePath: run.worktreePath,
+					changedFiles: run.changedFiles ?? [],
+					overlapsWithRunIds: run.overlapsWithRunIds ?? [],
+					overlapFiles: run.overlapFiles ?? [],
+				},
+			},
+			expectedStatusLock: row.statusLock,
+		});
 	}
 
 	async onTeamTaskProgress(

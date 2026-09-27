@@ -6,6 +6,7 @@ import {
 	ToolPresets,
 } from "../../../extensions/tools";
 import type {
+	SubAgentControlHandle,
 	SubAgentEndContext,
 	SubAgentStartContext,
 } from "../../../extensions/tools/team";
@@ -24,9 +25,43 @@ export type SubAgentStartTracker = Map<
 	{ startedAt: number; rootSessionId: string }
 >;
 
+export type SubAgentControlTracker = Map<
+	string,
+	{ rootSessionId: string; handle: SubAgentControlHandle }
+>;
+
+export function controlLiveSubAgent(
+	controls: SubAgentControlTracker,
+	rootSessionId: string,
+	input: {
+		agentId: string;
+		action: "stop" | "steer" | "retry";
+		message?: string;
+	},
+): "cancelled" | "steered" | undefined {
+	const entry = controls.get(input.agentId);
+	if (!entry || entry.rootSessionId !== rootSessionId) return undefined;
+	if (input.action === "retry") {
+		throw new Error(
+			"Synchronous subagents cannot be retried independently; start a new subagent run.",
+		);
+	}
+	if (input.action === "stop") {
+		entry.handle.abort(input.message?.trim() || "cancelled_from_desktop");
+		return "cancelled";
+	}
+	const message = input.message?.trim();
+	if (!message) {
+		throw new Error("A steering message is required");
+	}
+	entry.handle.steer(message);
+	return "steered";
+}
+
 export interface SpawnToolDeps {
 	getSession(sessionId: string): ActiveSession | undefined;
 	subAgentStarts: SubAgentStartTracker;
+	subAgentControls?: SubAgentControlTracker;
 	onAgentEvent(
 		rootSessionId: string,
 		config: CoreSessionConfig,
@@ -39,6 +74,8 @@ export interface SessionSubAgentLifecycleCallbacks {
 	onSubAgentEvent: (event: AgentEvent) => void;
 	onSubAgentStart: (context: SubAgentStartContext) => void;
 	onSubAgentEnd: (context: SubAgentEndContext) => void;
+	onSubAgentControlReady: (handle: SubAgentControlHandle) => void;
+	onSubAgentControlReleased: (handle: SubAgentControlHandle) => void;
 }
 
 export function createSessionSubAgentLifecycleCallbacks(
@@ -114,6 +151,18 @@ export function createSessionSubAgentLifecycleCallbacks(
 				rootSessionId,
 				context,
 			);
+		},
+		onSubAgentControlReady: (handle) => {
+			deps.subAgentControls?.set(handle.subAgentId, {
+				rootSessionId,
+				handle,
+			});
+		},
+		onSubAgentControlReleased: (handle) => {
+			const current = deps.subAgentControls?.get(handle.subAgentId);
+			if (current?.handle === handle) {
+				deps.subAgentControls?.delete(handle.subAgentId);
+			}
 		},
 	};
 }

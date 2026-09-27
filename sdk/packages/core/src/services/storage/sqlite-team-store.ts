@@ -74,6 +74,9 @@ function parseTeammatesJson(raw: string): TeamTeammateSpec[] {
 		) {
 			spec.maxIterations = Math.max(1, Math.floor(rec.maxIterations));
 		}
+		if (typeof rec.worktreePath === "string" && rec.worktreePath.trim()) {
+			spec.worktreePath = rec.worktreePath.trim();
+		}
 		out.push(spec);
 	}
 	return out;

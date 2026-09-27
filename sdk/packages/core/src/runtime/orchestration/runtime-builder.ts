@@ -28,6 +28,7 @@ import {
 } from "../../extensions/mcp";
 import {
 	createBuiltinTools,
+	createPermissionProfileExtension,
 	DEFAULT_MODEL_TOOL_ROUTING_RULES,
 	type RunCommandExecutionController,
 	resolveToolPresetName,
@@ -47,6 +48,7 @@ import {
 import type { ConfiguredAgentConfig } from "../../extensions/tools/team/configured-agent-config";
 import { loadConfiguredAgentConfigs } from "../../extensions/tools/team/configured-agent-config";
 import { createConfiguredAgentTools } from "../../extensions/tools/team/configured-agent-tool";
+import { listWriterWorktreeChanges } from "../../extensions/tools/team/writer-worktree";
 import {
 	filterDisabledTools,
 	isModelToolEnabledGlobally,
@@ -572,9 +574,14 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 						telemetry: telemetry ?? config.telemetry,
 					})
 				: undefined;
+		const permissionProfileGuard =
+			config.permissionProfile && normalized.enableTools
+				? createPermissionProfileExtension(config.permissionProfile)
+				: undefined;
 		const injectedExtensions = [
 			userInstructionPlugin,
 			planModeCommandGuard,
+			permissionProfileGuard,
 		].filter((extension) => extension !== undefined);
 		const runtimeExtensions =
 			injectedExtensions.length > 0
@@ -688,6 +695,8 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 							onSubAgentEvent: input.onSubAgentEvent,
 							onSubAgentStart: input.onSubAgentStart,
 							onSubAgentEnd: input.onSubAgentEnd,
+							onSubAgentControlReady: input.onSubAgentControlReady,
+							onSubAgentControlReleased: input.onSubAgentControlReleased,
 						}),
 						effectiveToolPolicies,
 					),
@@ -717,6 +726,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 					leadAgentId: config.sessionId || "lead",
 					missionLogIntervalSteps: normalized.missionLogIntervalSteps,
 					missionLogIntervalMs: normalized.missionLogIntervalMs,
+					inspectWriterChanges: listWriterWorktreeChanges,
 					onTeamEvent: (event: TeamEvent) => {
 						onTeamEvent(event);
 						if (teamRuntime && teamStore) {
@@ -729,6 +739,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 									rolePrompt: event.teammate.rolePrompt,
 									modelId: event.teammate.modelId,
 									maxIterations: event.teammate.maxIterations,
+									worktreePath: event.teammate.worktreePath,
 								};
 								teammateSpecs.set(spec.agentId, spec);
 							}
@@ -772,9 +783,9 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 						leadAgentInstance?.addTools(teamTools);
 					},
 					createBaseTools: normalized.enableTools
-						? () =>
+						? (workspacePath) =>
 								createBuiltinToolsList(
-									config.cwd,
+									workspacePath ?? config.cwd,
 									config.providerId,
 									normalized.mode,
 									config.modelId,

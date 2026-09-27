@@ -77,6 +77,7 @@ import {
 	type DelegatedAgentRuntimeConfig,
 } from "./delegated-agent";
 import type { AgentTeamsRuntime } from "./multi-agent";
+import { createWriterWorktree } from "./writer-worktree";
 
 function truncateText(value: string, maxLength: number): string {
 	const normalized = value.replace(/\s+/g, " ").trim();
@@ -138,6 +139,10 @@ function summarizeRun(run: TeamRunRecord): TeamRunToolSummary {
 		lastProgressAt: dateToIso(run.lastProgressAt),
 		lastProgressMessage: run.lastProgressMessage,
 		currentActivity: run.currentActivity,
+		worktreePath: run.worktreePath,
+		changedFiles: run.changedFiles,
+		overlapsWithRunIds: run.overlapsWithRunIds,
+		overlapFiles: run.overlapFiles,
 		error: run.error,
 		resultSummary: summarizeRunResult(run),
 	};
@@ -167,7 +172,7 @@ export interface CreateAgentTeamsToolsOptions {
 	runtime: AgentTeamsRuntime;
 	requesterId: string;
 	teammateConfigProvider: DelegatedAgentConfigProvider;
-	createBaseTools?: () => AgentTool[];
+	createBaseTools?: (workspacePath?: string) => AgentTool[];
 	allowSpawn?: boolean;
 	includeSpawnTool?: boolean;
 	includeManagementTools?: boolean;
@@ -177,7 +182,7 @@ export interface CreateAgentTeamsToolsOptions {
 export interface BootstrapAgentTeamsOptions {
 	runtime: AgentTeamsRuntime;
 	teammateConfigProvider: DelegatedAgentConfigProvider;
-	createBaseTools?: () => AgentTool[];
+	createBaseTools?: (workspacePath?: string) => AgentTool[];
 	leadAgentId?: string;
 	restoredTeammates?: TeamTeammateSpec[];
 	restoredFromPersistence?: boolean;
@@ -221,7 +226,7 @@ function spawnTeamTeammate(
 ): void {
 	const teammateTools: AgentTool[] = [];
 	if (options.createBaseTools) {
-		teammateTools.push(...options.createBaseTools());
+		teammateTools.push(...options.createBaseTools(options.spec.worktreePath));
 	}
 	teammateTools.push(
 		...createAgentTeamsTools({
@@ -238,6 +243,7 @@ function spawnTeamTeammate(
 	);
 	options.runtime.spawnTeammate({
 		agentId: options.spec.agentId,
+		worktreePath: options.spec.worktreePath,
 		config: buildDelegatedAgentConfig({
 			kind: "teammate",
 			prompt: options.spec.rolePrompt,
@@ -245,7 +251,9 @@ function spawnTeamTeammate(
 			configProvider: options.teammateConfigProvider,
 			tools: teammateTools,
 			maxIterations: options.spec.maxIterations,
-			cwd: options.teammateConfigProvider.getRuntimeConfig().cwd,
+			cwd:
+				options.spec.worktreePath ??
+				options.teammateConfigProvider.getRuntimeConfig().cwd,
 		}),
 	});
 }
@@ -301,7 +309,8 @@ export function createAgentTeamsTools(
 		tools.push(
 			createTool<TeamSpawnTeammateInput, { agentId: string; status: string }>({
 				name: "team_spawn_teammate",
-				description: "Spawn a teammate with a required agentId and rolePrompt.",
+				description:
+					"Spawn a teammate. Use workspaceMode=isolated-writer for any agent that may edit files; shared mode is intended for read-heavy delegation.",
 				inputSchema: zodToJsonSchema(TeamSpawnTeammateInputSchema),
 				execute: async (input) => {
 					const validatedInput = validateWithZod(
@@ -314,9 +323,18 @@ export function createAgentTeamsTools(
 					if (!allowSpawn) {
 						throw new Error("Spawning teammates is disabled in this context.");
 					}
+					const worktree =
+						validatedInput.workspaceMode === "isolated-writer"
+							? await createWriterWorktree(
+									options.teammateConfigProvider.getRuntimeConfig().cwd ??
+										process.cwd(),
+									validatedInput.agentId,
+								)
+							: undefined;
 					const spec: TeamTeammateSpec = {
 						agentId: validatedInput.agentId,
 						rolePrompt: validatedInput.rolePrompt,
+						worktreePath: worktree?.path,
 					};
 					spawnTeamTeammate({
 						runtime: options.runtime,
@@ -338,6 +356,7 @@ export function createAgentTeamsTools(
 					return validateWithZod(TeamSimpleAgentStatusToolResultSchema, {
 						agentId: validatedInput.agentId,
 						status: "spawned",
+						worktreePath: worktree?.path,
 					});
 				},
 			}) as AgentTool,

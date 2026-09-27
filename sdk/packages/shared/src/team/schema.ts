@@ -43,6 +43,7 @@ const TeamMemberSnapshotSchema = z.object({
 	role: z.enum(["lead", "teammate"]),
 	description: z.string().optional(),
 	status: z.enum(["idle", "running", "stopped"]),
+	worktreePath: z.string().optional(),
 });
 
 export const TeamTeammateSpecSchema = z.object({
@@ -50,6 +51,7 @@ export const TeamTeammateSpecSchema = z.object({
 	rolePrompt: z.string(),
 	modelId: z.string().optional(),
 	maxIterations: z.number().optional(),
+	worktreePath: z.string().optional(),
 });
 
 function nullableOptional<T extends z.ZodTypeAny>(schema: T) {
@@ -66,6 +68,11 @@ export const TeamSpawnTeammateInputSchema = z
 			.string()
 			.min(1)
 			.describe("System prompt describing teammate role"),
+		workspaceMode: nullableOptional(
+			z.enum(["shared", "isolated-writer"]),
+		).describe(
+			"Use isolated-writer for any teammate that may edit files. It creates a managed Git worktree and routes that teammate's tools there.",
+		),
 	})
 	.strict();
 
@@ -368,6 +375,10 @@ export const TeamRunToolSummarySchema = z.object({
 	lastProgressAt: IsoTimestampSchema.optional(),
 	lastProgressMessage: z.string().optional(),
 	currentActivity: z.string().optional(),
+	worktreePath: z.string().optional(),
+	changedFiles: z.array(z.string()).optional(),
+	overlapsWithRunIds: z.array(z.string()).optional(),
+	overlapFiles: z.array(z.string()).optional(),
 	error: z.string().optional(),
 	resultSummary: TeamRunResultSummarySchema.optional(),
 });
@@ -404,6 +415,7 @@ export const TeamCreateOutcomeToolResultSchema = z.object({
 export const TeamSimpleAgentStatusToolResultSchema = z.object({
 	agentId: z.string(),
 	status: z.string(),
+	worktreePath: z.string().optional(),
 });
 
 export const TeamCancelRunToolResultSchema = z.object({
