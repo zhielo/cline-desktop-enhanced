@@ -23,6 +23,7 @@ import type {
 import type {
 	AgentTeamsRuntime,
 	DelegatedAgentConfigProvider,
+	SubAgentControlHandle,
 	SubAgentEndContext,
 	SubAgentStartContext,
 	TeamEvent,
@@ -71,6 +72,8 @@ export interface RuntimeBuilderInput {
 	onSubAgentEvent?: (event: AgentEvent) => void;
 	onSubAgentStart?: (context: SubAgentStartContext) => void | Promise<void>;
 	onSubAgentEnd?: (context: SubAgentEndContext) => void | Promise<void>;
+	onSubAgentControlReady?: (handle: SubAgentControlHandle) => void;
+	onSubAgentControlReleased?: (handle: SubAgentControlHandle) => void;
 	createSpawnTool?: () => AgentTool;
 	onTeamRestored?: () => void;
 	userInstructionService?: UserInstructionConfigService;

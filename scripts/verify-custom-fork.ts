@@ -122,6 +122,14 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/team/spawn-agent-tool.ts",
+		markers: [
+			"SubAgentControlHandle",
+			"onSubAgentControlReady",
+			"consumePendingUserMessage",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/team/writer-worktree.ts",
 		markers: [
 			"createWriterWorktree",

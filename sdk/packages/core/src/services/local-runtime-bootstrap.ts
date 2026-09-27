@@ -32,6 +32,7 @@ import type {
 	PluginInitializationWarning,
 } from "../extensions/plugin/plugin-load-report";
 import type {
+	SubAgentControlHandle,
 	SubAgentEndContext,
 	SubAgentStartContext,
 	TeamEvent,
@@ -291,6 +292,8 @@ export interface PrepareLocalRuntimeBootstrapOptions {
 		onSubAgentEvent?: (event: AgentEvent) => void;
 		onSubAgentStart?: (context: SubAgentStartContext) => void | Promise<void>;
 		onSubAgentEnd?: (context: SubAgentEndContext) => void | Promise<void>;
+		onSubAgentControlReady?: (handle: SubAgentControlHandle) => void;
+		onSubAgentControlReleased?: (handle: SubAgentControlHandle) => void;
 	};
 	createSpawnTool: () => AgentTool;
 	readSessionMetadata: () => Promise<Record<string, unknown> | undefined>;
@@ -604,6 +607,10 @@ export async function prepareLocalRuntimeBootstrap(
 			onSubAgentEvent: subAgentLifecycleCallbacks?.onSubAgentEvent,
 			onSubAgentStart: subAgentLifecycleCallbacks?.onSubAgentStart,
 			onSubAgentEnd: subAgentLifecycleCallbacks?.onSubAgentEnd,
+			onSubAgentControlReady:
+				subAgentLifecycleCallbacks?.onSubAgentControlReady,
+			onSubAgentControlReleased:
+				subAgentLifecycleCallbacks?.onSubAgentControlReleased,
 			userInstructionService: userInstructionService,
 			pluginSkillDirectories,
 			agentPluginSkills: loadedAgentPluginPackages?.skills,

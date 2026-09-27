@@ -449,6 +449,32 @@ describe("AgentHeader agent roster popover", () => {
 		);
 	});
 
+	it("stops a running synchronous subagent without stopping the parent", async () => {
+		const onControlAgent = vi.fn(async () => {});
+		await renderHeader({
+			agents: [{ ...AGENTS[0], status: "running" }],
+			onControlAgent,
+		});
+		const panel = await openPanel();
+		expect(
+			panel?.querySelector(
+				'button[aria-label^="Guide Review the diff for regressions"]',
+			),
+		).not.toBeNull();
+		await act(async () => {
+			panel
+				?.querySelector<HTMLButtonElement>(
+					'button[aria-label^="Stop Review the diff for regressions"]',
+				)
+				?.click();
+		});
+		expect(onControlAgent).toHaveBeenCalledWith(
+			"agent_1784837087669_01o5io",
+			"stop",
+			undefined,
+		);
+	});
+
 	it("sends guidance to a running team agent", async () => {
 		const onControlAgent = vi.fn(async () => {});
 		await renderHeader({ onControlAgent });
