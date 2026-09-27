@@ -318,6 +318,11 @@ export type SessionAgentEntry = {
 	teamName?: string;
 	provider?: string;
 	model?: string;
+	worktreePath?: string;
+	runId?: string;
+	changedFiles?: string[];
+	overlapsWithRunIds?: string[];
+	overlapFiles?: string[];
 	startedAt: string;
 	endedAt?: string;
 	hasMessages: boolean;

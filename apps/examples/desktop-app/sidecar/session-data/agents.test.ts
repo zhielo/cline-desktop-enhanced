@@ -13,6 +13,9 @@ type StoreRecord = {
 	teamName?: string;
 	provider: string;
 	model: string;
+	cwd?: string;
+	workspaceRoot?: string;
+	metadata?: Record<string, unknown>;
 	startedAt: string;
 	endedAt?: string | null;
 	messagesPath?: string;
@@ -154,6 +157,55 @@ describe("listSessionAgents", () => {
 			["empty", false],
 			["missing", false],
 		]);
+	});
+
+	it("exposes a managed worktree only for isolated writer children", () => {
+		records.set(
+			"root1__teamtask__writer__x1",
+			record({
+				sessionId: "root1__teamtask__writer__x1",
+				agentId: "writer",
+				workspaceRoot: "/home/test/.cline/worktrees/abc123/repo",
+			}),
+		);
+		records.set(
+			"root1__reader",
+			record({
+				sessionId: "root1__reader",
+				agentId: "reader",
+				workspaceRoot: "/home/test/repo",
+				startedAt: "2026-07-27T00:01:00.000Z",
+			}),
+		);
+		const agents = listSessionAgents(ROOT);
+		expect(agents[0]?.worktreePath).toBe(
+			"/home/test/.cline/worktrees/abc123/repo",
+		);
+		expect(agents[1]?.worktreePath).toBeUndefined();
+	});
+
+	it("exposes persisted overlap details for writer review", () => {
+		records.set(
+			"root1__teamtask__writer__x1",
+			record({
+				sessionId: "root1__teamtask__writer__x1",
+				agentId: "writer",
+				metadata: {
+					teamRun: {
+						runId: "run_00002",
+						changedFiles: ["src/shared.ts", "src/b.ts"],
+						overlapsWithRunIds: ["run_00001"],
+						overlapFiles: ["src/shared.ts"],
+					},
+				},
+			}),
+		);
+		expect(listSessionAgents(ROOT)[0]).toMatchObject({
+			runId: "run_00002",
+			changedFiles: ["src/shared.ts", "src/b.ts"],
+			overlapsWithRunIds: ["run_00001"],
+			overlapFiles: ["src/shared.ts"],
+		});
 	});
 
 	it("preserves the persisted status", () => {

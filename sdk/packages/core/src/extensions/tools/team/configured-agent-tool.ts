@@ -17,6 +17,7 @@ import {
 } from "./delegated-agent";
 import type {
 	SpawnAgentOutput,
+	SubAgentControlHandle,
 	SubAgentEndContext,
 	SubAgentStartContext,
 } from "./spawn-agent-tool";
@@ -47,6 +48,8 @@ export interface ConfiguredAgentToolConfig {
 	hookErrorMode?: HookErrorMode;
 	onSubAgentStart?: (context: SubAgentStartContext) => void | Promise<void>;
 	onSubAgentEnd?: (context: SubAgentEndContext) => void | Promise<void>;
+	onSubAgentControlReady?: (handle: SubAgentControlHandle) => void;
+	onSubAgentControlReleased?: (handle: SubAgentControlHandle) => void;
 }
 
 function sanitizeAgentName(name: string): string {
@@ -153,6 +156,7 @@ export function createConfiguredAgentTools(
 				description: `Use the "${config.name}" subagent: ${config.description}`,
 				inputSchema: zodToJsonSchema(ConfiguredAgentInputSchema),
 				execute: async (input, context) => {
+					let pendingSteerMessage: string | undefined;
 					const baseRuntimeConfig = options.configProvider.getRuntimeConfig();
 					const configProvider = createDelegatedAgentConfigProvider(
 						buildAgentRuntimeConfig(baseRuntimeConfig, config),
@@ -172,6 +176,11 @@ export function createConfiguredAgentTools(
 						abortSignal: context.signal,
 						onEvent: options.onSubAgentEvent,
 						hookErrorMode: options.hookErrorMode,
+						consumePendingUserMessage: () => {
+							const message = pendingSteerMessage;
+							pendingSteerMessage = undefined;
+							return message;
+						},
 					});
 					const subAgentId = subAgent.getAgentId();
 					const conversationId = subAgent.getConversationId();
@@ -180,6 +189,21 @@ export function createConfiguredAgentTools(
 						systemPrompt: config.systemPrompt,
 						task: input.prompt,
 					};
+					const controlHandle: SubAgentControlHandle = {
+						subAgentId,
+						abort: (reason) =>
+							subAgent.abort(
+								new Error(reason?.trim() || "subagent_cancelled_by_user"),
+							),
+						steer: (message) => {
+							const trimmed = message.trim();
+							if (!trimmed) {
+								throw new Error("A steering message is required");
+							}
+							pendingSteerMessage = trimmed;
+						},
+					};
+					options.onSubAgentControlReady?.(controlHandle);
 
 					if (options.onSubAgentStart) {
 						try {
@@ -236,6 +260,8 @@ export function createConfiguredAgentTools(
 							}
 						}
 						throw error;
+					} finally {
+						options.onSubAgentControlReleased?.(controlHandle);
 					}
 				},
 				timeoutMs: 300000,

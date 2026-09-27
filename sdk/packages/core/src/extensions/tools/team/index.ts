@@ -19,6 +19,7 @@ export {
 } from "./projections";
 export * from "./runtime";
 export type {
+	SubAgentControlHandle,
 	SubAgentEndContext,
 	SubAgentStartContext,
 } from "./spawn-agent-tool";

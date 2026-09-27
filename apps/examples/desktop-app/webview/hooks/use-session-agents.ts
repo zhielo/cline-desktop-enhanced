@@ -30,6 +30,14 @@ const EMPTY_ROSTER: RosterState = {
 /** Stable identity so consumers memoizing on `agents` do not churn. */
 const NO_AGENTS: SessionAgentEntry[] = [];
 
+function parseStringArray(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const items = value.filter(
+		(item): item is string => typeof item === "string" && item.length > 0,
+	);
+	return items.length > 0 ? items : undefined;
+}
+
 function parseAgentEntries(value: unknown): SessionAgentEntry[] {
 	if (!Array.isArray(value)) {
 		return [];
@@ -63,6 +71,14 @@ function parseAgentEntries(value: unknown): SessionAgentEntry[] {
 			provider:
 				typeof record.provider === "string" ? record.provider : undefined,
 			model: typeof record.model === "string" ? record.model : undefined,
+			worktreePath:
+				typeof record.worktreePath === "string"
+					? record.worktreePath
+					: undefined,
+			runId: typeof record.runId === "string" ? record.runId : undefined,
+			changedFiles: parseStringArray(record.changedFiles),
+			overlapsWithRunIds: parseStringArray(record.overlapsWithRunIds),
+			overlapFiles: parseStringArray(record.overlapFiles),
 			startedAt: typeof record.startedAt === "string" ? record.startedAt : "",
 			endedAt: typeof record.endedAt === "string" ? record.endedAt : undefined,
 			hasMessages: record.hasMessages === true,
@@ -95,6 +111,9 @@ export function useSessionAgents({
 	panelOpen?: boolean;
 }) {
 	const [roster, setRoster] = useState<RosterState>(EMPTY_ROSTER);
+	const [pendingControlAgentId, setPendingControlAgentId] = useState<
+		string | null
+	>(null);
 	// Only the newest read may write. Comparing session ids is not enough: two
 	// reads for the *same* session can overlap — a poll tick alongside an
 	// on-open or turn-finished read, and `list_session_agents` opens one
@@ -224,5 +243,38 @@ export function useSessionAgents({
 		};
 	}, [hasRunningAgents, refresh, sessionActive, sessionId]);
 
-	return { agents, loading, error, refresh };
+	const controlAgent = useCallback(
+		async (
+			agentId: string,
+			action: "stop" | "steer" | "retry",
+			message?: string,
+		) => {
+			if (!sessionId) {
+				throw new Error("No active parent session");
+			}
+			setPendingControlAgentId(agentId);
+			try {
+				await desktopClient.invoke("control_session_agent", {
+					environmentId,
+					sessionId,
+					agentId,
+					action,
+					...(message ? { message } : {}),
+				});
+				await refresh(sessionId, { quiet: true });
+			} finally {
+				setPendingControlAgentId(null);
+			}
+		},
+		[environmentId, refresh, sessionId],
+	);
+
+	return {
+		agents,
+		loading,
+		error,
+		refresh,
+		controlAgent,
+		pendingControlAgentId,
+	};
 }

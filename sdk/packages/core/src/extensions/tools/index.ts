@@ -67,6 +67,14 @@ export {
 	resolveToolRoutingConfig,
 	type ToolRoutingRule,
 } from "./model-tool-routing";
+export {
+	type CustomPermissionProfile,
+	createPermissionProfileExtension,
+	PERMISSION_PROFILE_EXTENSION_NAME,
+	type PermissionProfile,
+	type PermissionProfileName,
+	resolvePermissionProfile,
+} from "./permission-profile";
 // Presets
 export {
 	createDefaultToolsWithPreset,

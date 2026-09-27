@@ -1006,3 +1006,86 @@ describe("AgentTeamsRuntime run failure reporting", () => {
 		);
 	});
 });
+
+describe("AgentTeamsRuntime targeted desktop control", () => {
+	it("cancels one teammate's active runs without stopping other teammates", async () => {
+		let rejectActive: ((error: Error) => void) | undefined;
+		const activeAbort = vi.fn(() => {
+			rejectActive?.(new DOMException("desktop stop", "AbortError"));
+		});
+		const idleAbort = vi.fn();
+		mockNextSessionRuntime({
+			abort: activeAbort,
+			run: vi.fn(
+				() =>
+					new Promise((_, reject) => {
+						rejectActive = reject;
+					}),
+			),
+		});
+		mockNextSessionRuntime({ abort: idleAbort });
+
+		const runtime = new AgentTeamsRuntime({
+			teamName: "desktop-control",
+			maxConcurrentRuns: 2,
+		});
+		spawnTestTeammate(runtime, "active");
+		spawnTestTeammate(runtime, "idle");
+		const run = runtime.startTeammateRun("active", "Investigate the failure");
+		await vi.waitFor(() => {
+			expect(runtime.getRun(run.id)?.status).toBe("running");
+		});
+
+		expect(runtime.cancelAgentWork("active", "cancelled_from_desktop")).toEqual(
+			[run.id],
+		);
+		expect(runtime.getRun(run.id)).toMatchObject({
+			status: "cancelled",
+			error: "cancelled_from_desktop",
+		});
+		expect(activeAbort).toHaveBeenCalledTimes(1);
+		expect(idleAbort).not.toHaveBeenCalled();
+		expect(runtime.getTeammateIds()).toEqual(["active", "idle"]);
+	});
+});
+
+describe("AgentTeamsRuntime writer overlap detection", () => {
+	it("records overlapping changed files across isolated writing teammates", async () => {
+		const completedResult = {
+			...createAbortedResult(),
+			text: "completed",
+			finishReason: "end_turn" as const,
+		};
+		const inspectWriterChanges = vi.fn(async (worktreePath: string) =>
+			worktreePath.endsWith("writer-a")
+				? ["src/shared.ts", "src/a.ts"]
+				: ["src/shared.ts", "src/b.ts"],
+		);
+		const runtime = new AgentTeamsRuntime({
+			teamName: "test-team",
+			maxConcurrentRuns: 1,
+			inspectWriterChanges,
+		});
+		for (const agentId of ["writer-a", "writer-b"]) {
+			mockNextSessionRuntime({ run: vi.fn(async () => completedResult) });
+			runtime.spawnTeammate({
+				agentId,
+				worktreePath: `/worktrees/${agentId}`,
+				config: {
+					providerId: "anthropic",
+					modelId: "claude-sonnet-4-5-20250929",
+					systemPrompt: `Writer ${agentId}`,
+					tools: [],
+				},
+			});
+		}
+
+		const first = runtime.startTeammateRun("writer-a", "edit a");
+		expect((await runtime.awaitRun(first.id)).overlapFiles).toEqual([]);
+		const second = runtime.startTeammateRun("writer-b", "edit b");
+		const settled = await runtime.awaitRun(second.id);
+		expect(settled.changedFiles).toEqual(["src/shared.ts", "src/b.ts"]);
+		expect(settled.overlapsWithRunIds).toEqual([first.id]);
+		expect(settled.overlapFiles).toEqual(["src/shared.ts"]);
+	});
+});
