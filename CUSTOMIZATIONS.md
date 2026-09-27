@@ -85,6 +85,7 @@ Primary files:
 - The unsigned Windows installer uses Bun 1.3.14 for native ConPTY while the repository's default Bun 1.3.13 remains sufficient for Unix PTY support. The installer workflow compiles and executes a real ConPTY input/resize smoke test before packaging, covering the embedded runtime used by the installed sidecar.
 - Agent-started SDK processes withhold credential-bearing inherited and override environment variables unless the host explicitly grants an exact name. Known and pattern-detected secrets are redacted before streamed output, final results, errors, detached logs, or process-session buffers retain them. The policy and its remaining security boundary are documented in `docs/PROCESS_ENVIRONMENT_SECURITY.md`.
 - Codex-grade process sessions, durable task state, worktree handoff, additive permission profiles, parallel orchestration, telemetry-gated PowerShell optimization, and optional scoped computer use must follow the phased contract in `docs/CODEX_PARITY_ROADMAP.md` and GitHub issue #20.
+- Windows `run_commands` records a local, privacy-safe rolling baseline containing only execution mode, duration, time-to-first-output, output volume, success, and timestamp. It stores no command, arguments, cwd, environment, output, or identity. The prewarmed PowerShell worker remains disabled until at least 20 direct and 50 shell samples show both a 150 ms startup disadvantage and a 60% shell-startup share; a diagnostic command reports `collecting`, `not_recommended`, or `eligible` without enabling optimization.
 
 Primary files:
 

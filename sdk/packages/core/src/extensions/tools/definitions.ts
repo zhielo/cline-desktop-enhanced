@@ -18,6 +18,7 @@ import {
 } from "@cline/shared";
 import { captureRunCommandsTimeout } from "../../services/telemetry/core-events";
 import { CommandExitError } from "./executors/bash";
+import { recordWindowsCommandLatencyObservation } from "./executors/command-latency-baseline";
 import {
 	MAX_COMMAND_OUTPUT_CHARS,
 	MAX_READ_LINES,
@@ -276,8 +277,25 @@ async function executeShellCommands(
 				const query = formatRunCommandQueryPreview(command);
 				let emittedCommandMetadata = false;
 				let recordedFirstOutput = false;
+				let timeToFirstOutputMs: number | undefined;
 				let outputChunkCount = 0;
 				let outputChars = 0;
+				const recordCompletion = (success: boolean) => {
+					const durationMs = Date.now() - startedAt;
+					recordRunCommandsCompletionMetrics(
+						telemetry,
+						{ durationMs, outputChunkCount, outputChars },
+						{ executionMode, success, timeoutSource },
+					);
+					recordWindowsCommandLatencyObservation({
+						executionMode,
+						durationMs,
+						timeToFirstOutputMs,
+						outputChunkCount,
+						outputChars,
+						success,
+					});
+				};
 				const commandContext: AgentToolContext = context.emitUpdate
 					? {
 							...context,
@@ -292,9 +310,10 @@ async function executeShellCommands(
 									outputChars += chunk.length;
 									if (!recordedFirstOutput) {
 										recordedFirstOutput = true;
+										timeToFirstOutputMs = Date.now() - startedAt;
 										recordRunCommandsFirstOutput(
 											telemetry,
-											Date.now() - startedAt,
+											timeToFirstOutputMs,
 											{ executionMode, timeoutSource },
 										);
 									}
@@ -314,30 +333,14 @@ async function executeShellCommands(
 						timeoutMs,
 						`Command timed out after ${timeoutMs}ms`,
 					);
-					recordRunCommandsCompletionMetrics(
-						telemetry,
-						{
-							durationMs: Date.now() - startedAt,
-							outputChunkCount,
-							outputChars,
-						},
-						{ executionMode, success: true, timeoutSource },
-					);
+					recordCompletion(true);
 					return {
 						query,
 						result: output,
 						success: true,
 					};
 				} catch (error) {
-					recordRunCommandsCompletionMetrics(
-						telemetry,
-						{
-							durationMs: Date.now() - startedAt,
-							outputChunkCount,
-							outputChars,
-						},
-						{ executionMode, success: false, timeoutSource },
-					);
+					recordCompletion(false);
 					if (error instanceof TimeoutError) {
 						captureRunCommandsTimeoutFromContext(telemetry, context, {
 							effectiveTimeoutMs: error.timeoutMs,
