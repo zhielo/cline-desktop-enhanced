@@ -65,6 +65,8 @@ export {
 	type ProcessSessionOutputChunk,
 	type ProcessSessionOutputStream,
 	type ProcessSessionReadResult,
+	type ProcessSessionRecoveryRecord,
+	type ProcessSessionRecoveryResult,
 	type ProcessSessionSignal,
 	type ProcessSessionSnapshot,
 	type ProcessSessionStartOptions,

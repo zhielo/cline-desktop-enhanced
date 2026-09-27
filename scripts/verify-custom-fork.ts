@@ -210,6 +210,10 @@ const requiredMarkers: Array<{
 			"highestDroppedCursor",
 			"process.kill(-pid",
 			"taskkill.exe",
+			"initializeRecovery",
+			"processStartToken",
+			"recoveredAfterRestart",
+			"prior output and stdin are unavailable",
 		],
 	},
 	{
