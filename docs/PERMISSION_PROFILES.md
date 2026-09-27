@@ -20,6 +20,12 @@ tool surface merely by being spawned.
 Permission profiles are technical enforcement and remain separate from approval
 UX. A profile can deny a tool even when it would otherwise be auto-approved.
 
+The desktop General settings page persists one of the four built-in profiles
+for new local sessions. When no preference exists, the sidecar applies
+`workspace-network`; changing the setting affects new sessions and cannot be
+silently weakened by omitting the field from a webview request. SDK hosts that
+omit `permissionProfile` retain their existing host-selected behavior.
+
 ## Security boundary
 
 These are capability profiles, not an operating-system sandbox. They constrain
@@ -29,5 +35,5 @@ permissions of the Cline process. Native filesystem and network isolation must
 be added by the host when containment against arbitrary shell behavior is
 required.
 
-Omitting `permissionProfile` preserves current behavior. The unsigned private
-Windows installer workflow and no-release policy are unchanged.
+The unsigned private Windows installer workflow and no-release policy are
+unchanged.

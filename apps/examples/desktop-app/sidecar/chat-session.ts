@@ -645,7 +645,10 @@ function buildCoreSessionConfig(
 			config.apiTimeoutMs ?? config.api_timeout_ms ?? 10 * 60 * 1000,
 		enableTools: config.enableTools ?? config.enable_tools ?? true,
 		permissionProfile:
-			config.permissionProfile ?? config.permission_profile ?? undefined,
+			config.permissionProfile ??
+			config.permission_profile ??
+			readGlobalSettings().permissionProfile ??
+			"workspace-network",
 		...(thinking !== undefined ? { thinking } : {}),
 		...(reasoningEffort ? { reasoningEffort } : {}),
 		...(thinkingBudgetTokens !== undefined ? { thinkingBudgetTokens } : {}),

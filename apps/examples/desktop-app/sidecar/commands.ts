@@ -72,6 +72,7 @@ import {
 	setAutoUpdateEnabledGlobally,
 	setMcpServerDisabled,
 	setModelToolEnabledGlobally,
+	setPermissionProfileGlobally,
 	setTelemetryOptOutGlobally,
 	transcribeConfiguredVoiceInput,
 	updateLocalProvider,
@@ -3638,6 +3639,21 @@ export async function handleCommand(
 			throw new Error("auto_update_enabled must be a boolean");
 		}
 		setAutoUpdateEnabledGlobally(args.auto_update_enabled);
+		return readGlobalSettings();
+	}
+	if (command === "set_permission_profile") {
+		const permissionProfile = args?.permission_profile;
+		if (
+			permissionProfile !== "read-only" &&
+			permissionProfile !== "workspace" &&
+			permissionProfile !== "workspace-network" &&
+			permissionProfile !== "full-access"
+		) {
+			throw new Error(
+				"permission_profile must be read-only, workspace, workspace-network, or full-access",
+			);
+		}
+		setPermissionProfileGlobally(permissionProfile);
 		return readGlobalSettings();
 	}
 	if (command === "get_desktop_settings") {

@@ -20,6 +20,7 @@ import {
 	setDisabledPlugin,
 	setDisabledTools,
 	setModelToolEnabledGlobally,
+	setPermissionProfileGlobally,
 	setPlanActModeGlobally,
 	setTelemetryOptOutGlobally,
 	setToolAutoApproveGlobally,
@@ -336,6 +337,27 @@ describe("global-settings", () => {
 			expect(readToolAutoApproveGlobally()).toBe(false);
 			setToolAutoApproveGlobally(true);
 			expect(readToolAutoApproveGlobally()).toBe(true);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("persists a host-enforced permission profile", async () => {
+		const root = await mkdtemp(join(tmpdir(), "core-global-settings-"));
+		try {
+			const settingsPath = join(root, "global-settings.json");
+			process.env.CLINE_GLOBAL_SETTINGS_PATH = settingsPath;
+
+			expect(readGlobalSettings().permissionProfile).toBeUndefined();
+			setPermissionProfileGlobally("read-only");
+			expect(readGlobalSettings().permissionProfile).toBe("read-only");
+			setPermissionProfileGlobally("workspace-network");
+			expect(readGlobalSettings().permissionProfile).toBe("workspace-network");
+			expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual({
+				autoUpdateEnabled: true,
+				permissionProfile: "workspace-network",
+				telemetryOptOut: false,
+			});
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

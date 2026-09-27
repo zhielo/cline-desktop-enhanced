@@ -21,6 +21,9 @@ export const ChatSessionConfigSchema = z.object({
 	reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
 	enableTools: z.boolean(),
 	autoApproveTools: z.boolean().optional(),
+	permissionProfile: z
+		.enum(["read-only", "workspace", "workspace-network", "full-access"])
+		.optional(),
 	missionStepInterval: z.number().int().positive().optional(),
 	missionTimeIntervalMs: z.number().int().positive().optional(),
 });
