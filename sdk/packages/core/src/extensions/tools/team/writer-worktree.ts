@@ -1,11 +1,28 @@
-import { execFile as execFileCallback } from "node:child_process";
+import type { ExecFileOptionsWithStringEncoding } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { promisify } from "node:util";
 import { resolveClineDir } from "@cline/shared/storage";
 
-const execFile = promisify(execFileCallback);
+async function execFile(
+	file: string,
+	args: string[],
+	options: ExecFileOptionsWithStringEncoding,
+): Promise<{ stdout: string; stderr: string }> {
+	// Load child_process only when a worktree operation actually runs. Several
+	// tool-factory tests intentionally provide a minimal spawn-only module mock;
+	// eager access to execFile made importing the built-in tool registry fail.
+	const { execFile: execFileCallback } = await import("node:child_process");
+	return await new Promise((resolve, reject) => {
+		execFileCallback(file, args, options, (error, stdout, stderr) => {
+			if (error) {
+				reject(error);
+				return;
+			}
+			resolve({ stdout, stderr });
+		});
+	});
+}
 
 export interface WriterWorktreeMetadata {
 	version: 1;
