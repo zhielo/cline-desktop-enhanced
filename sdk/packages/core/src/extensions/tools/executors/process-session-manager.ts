@@ -4,6 +4,14 @@ import {
 	spawn,
 } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import {
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { dirname } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
 	type ProcessStartTokenProbeResult,
@@ -20,6 +28,7 @@ export const DEFAULT_MAX_PROCESS_SESSIONS = 64;
 export const DEFAULT_MAX_PROCESS_SESSIONS_PER_OWNER = 8;
 export const DEFAULT_PROCESS_OUTPUT_BYTES = 1024 * 1024;
 export const DEFAULT_COMPLETED_PROCESS_RETENTION_MS = 60 * 60 * 1_000;
+export const DEFAULT_RECOVERED_PROCESS_POLL_MS = 2_000;
 
 export type ProcessSessionState =
 	| "starting"
@@ -63,6 +72,30 @@ export interface ProcessSessionSnapshot {
 	terminalRows?: number;
 	latestCursor: number;
 	droppedOutputBytes: number;
+	/** True when the host reattached control after losing its ChildProcess handle. */
+	recoveredAfterRestart?: boolean;
+}
+
+export interface ProcessSessionRecoveryRecord {
+	version: 1;
+	processId: string;
+	ownerSessionId: string;
+	toolCallId?: string;
+	pid: number;
+	processStartToken: string;
+	cwd: string;
+	startedAtMs: number;
+	interactive: boolean;
+	terminalColumns?: number;
+	terminalRows?: number;
+}
+
+export interface ProcessSessionRecoveryResult {
+	recovered: ProcessSessionSnapshot[];
+	rejected: Array<{
+		processId: string;
+		reason: "invalid" | "missing" | "identity_mismatch" | "probe_unavailable";
+	}>;
 }
 
 export interface ProcessSessionOutputChunk {
@@ -84,6 +117,12 @@ export interface ProcessSessionManagerOptions {
 	maxSessionsPerOwner?: number;
 	maxOutputBytes?: number;
 	completedRetentionMs?: number;
+	/**
+	 * Optional durable recovery ledger. Only PID identity and ownership metadata
+	 * are persisted; command arguments, environment, and output are excluded.
+	 */
+	recoveryFilePath?: string;
+	recoveredProcessPollMs?: number;
 	/**
 	 * Whether sessions inherit non-sensitive variables from the host.
 	 * @default true
@@ -171,6 +210,8 @@ interface ManagedProcessSession {
 	stderrRedactor: StreamingSecretRedactor;
 	secretValues: string[];
 	cleanupTimer?: NodeJS.Timeout;
+	recoveryTimer?: NodeJS.Timeout;
+	recovered: boolean;
 	cancelRequested: boolean;
 	settled: boolean;
 }
@@ -376,6 +417,8 @@ export class ProcessSessionManager {
 	private readonly maxSessionsPerOwner: number;
 	private readonly maxOutputBytes: number;
 	private readonly completedRetentionMs: number;
+	private readonly recoveryFilePath?: string;
+	private readonly recoveredProcessPollMs: number;
 	private readonly inheritEnvironment: boolean;
 	private readonly allowedSensitiveEnvironmentVariables: string[];
 	private readonly processStartTokenProbe: NonNullable<
@@ -385,6 +428,7 @@ export class ProcessSessionManager {
 		ProcessSessionManagerOptions["spawnProcess"]
 	>;
 	private readonly spawnTerminalProcess: ProcessSessionTerminalSpawner;
+	private recoveryInitialization?: Promise<ProcessSessionRecoveryResult>;
 
 	constructor(options: ProcessSessionManagerOptions = {}) {
 		this.maxSessions = positiveInteger(
@@ -404,6 +448,12 @@ export class ProcessSessionManager {
 			options.completedRetentionMs,
 			DEFAULT_COMPLETED_PROCESS_RETENTION_MS,
 			0,
+		);
+		this.recoveryFilePath = options.recoveryFilePath;
+		this.recoveredProcessPollMs = positiveInteger(
+			options.recoveredProcessPollMs,
+			DEFAULT_RECOVERED_PROCESS_POLL_MS,
+			10,
 		);
 		this.inheritEnvironment = options.inheritEnvironment !== false;
 		this.allowedSensitiveEnvironmentVariables = [
@@ -516,6 +566,7 @@ export class ProcessSessionManager {
 			stdoutRedactor,
 			stderrRedactor,
 			secretValues: preparedEnvironment.secretValues,
+			recovered: false,
 			cancelRequested: false,
 			settled: false,
 		};
@@ -548,6 +599,7 @@ export class ProcessSessionManager {
 				const identity = await this.processStartTokenProbe(pid);
 				if (identity.status === "found") {
 					managed.snapshot.processStartToken = identity.token;
+					this.persistRecoveryRecords();
 				}
 			} catch {
 				// Identity metadata is best effort while the live ChildProcess object
@@ -555,6 +607,49 @@ export class ProcessSessionManager {
 			}
 		}
 		return this.copySnapshot(managed);
+	}
+
+	/**
+	 * Revalidate and restore processes from the durable recovery ledger.
+	 *
+	 * Recovery is deliberately conservative: a record is restored only when
+	 * the kernel-reported start token exactly matches. PID-only recovery is
+	 * rejected, and prior stdin/stdout handles are never fabricated.
+	 */
+	initializeRecovery(): Promise<ProcessSessionRecoveryResult> {
+		this.recoveryInitialization ??= this.restoreRecoveryRecords(
+			this.readRecoveryRecords(),
+		);
+		return this.recoveryInitialization;
+	}
+
+	exportRecoveryRecords(): ProcessSessionRecoveryRecord[] {
+		return [...this.sessions.values()]
+			.filter(
+				(session) =>
+					!session.settled &&
+					session.snapshot.pid !== null &&
+					Boolean(session.snapshot.processStartToken),
+			)
+			.map((session) => ({
+				version: 1,
+				processId: session.snapshot.processId,
+				ownerSessionId: session.snapshot.ownerSessionId,
+				...(session.snapshot.toolCallId
+					? { toolCallId: session.snapshot.toolCallId }
+					: {}),
+				pid: session.snapshot.pid as number,
+				processStartToken: session.snapshot.processStartToken as string,
+				cwd: session.snapshot.cwd,
+				startedAtMs: session.snapshot.startedAtMs,
+				interactive: session.snapshot.interactive,
+				...(session.snapshot.terminalColumns
+					? { terminalColumns: session.snapshot.terminalColumns }
+					: {}),
+				...(session.snapshot.terminalRows
+					? { terminalRows: session.snapshot.terminalRows }
+					: {}),
+			}));
 	}
 
 	list(ownerSessionId: string): ProcessSessionSnapshot[] {
@@ -590,6 +685,11 @@ export class ProcessSessionManager {
 		input: string,
 	): Promise<void> {
 		const session = this.requireActive(ownerSessionId, processId);
+		if (session.recovered) {
+			throw new Error(
+				`Process session ${processId} was recovered after restart; stdin is unavailable`,
+			);
+		}
 		if (session.terminalProcess) {
 			session.terminalProcess.terminal.write(input);
 			return;
@@ -614,6 +714,11 @@ export class ProcessSessionManager {
 		rows: number,
 	): ProcessSessionSnapshot {
 		const session = this.requireActive(ownerSessionId, processId);
+		if (session.recovered) {
+			throw new Error(
+				`Process session ${processId} was recovered after restart; terminal resize is unavailable`,
+			);
+		}
 		if (!session.terminalProcess) {
 			throw new Error(`Process session ${processId} is not interactive`);
 		}
@@ -632,6 +737,18 @@ export class ProcessSessionManager {
 	): Promise<void> {
 		const session = this.requireActive(ownerSessionId, processId);
 		if (signal === "interrupt") {
+			if (session.recovered) {
+				await this.assertRecoveredIdentity(session);
+				const pid = session.snapshot.pid;
+				if (!pid || process.platform === "win32") {
+					throw new Error(
+						`Recovered process session ${processId} cannot receive interrupt on this platform; use terminate or kill`,
+					);
+				}
+				session.cancelRequested = true;
+				process.kill(-pid, "SIGINT");
+				return;
+			}
 			if (session.terminalProcess) {
 				session.terminalProcess.terminal.write("\u0003");
 				if (process.platform !== "win32" && session.snapshot.pid) {
@@ -662,7 +779,10 @@ export class ProcessSessionManager {
 			throw new Error(`Process session ${processId} is still active`);
 		}
 		if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
-		return this.sessions.delete(processId);
+		if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
+		const deleted = this.sessions.delete(processId);
+		if (deleted) this.persistRecoveryRecords();
+		return deleted;
 	}
 
 	async dispose(): Promise<void> {
@@ -677,8 +797,10 @@ export class ProcessSessionManager {
 		);
 		for (const session of this.sessions.values()) {
 			if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
+			if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
 		}
 		this.sessions.clear();
+		this.persistRecoveryRecords();
 	}
 
 	private bindLifecycle(session: ManagedProcessSession): void {
@@ -790,8 +912,11 @@ export class ProcessSessionManager {
 		}
 		session.cleanupTimer = setTimeout(() => {
 			this.sessions.delete(session.snapshot.processId);
+			this.persistRecoveryRecords();
 		}, this.completedRetentionMs);
 		session.cleanupTimer.unref();
+		if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
+		this.persistRecoveryRecords();
 	}
 
 	private assertCapacity(ownerSessionId: string): void {
@@ -856,6 +981,7 @@ export class ProcessSessionManager {
 	): Promise<void> {
 		const pid = session.snapshot.pid;
 		if (!pid) return;
+		if (session.recovered) await this.assertRecoveredIdentity(session);
 		const killDirect = (): boolean => {
 			if (session.child) return session.child.kill(signal);
 			if (session.terminalProcess) {
@@ -897,5 +1023,189 @@ export class ProcessSessionManager {
 			});
 			killer.once("close", finish);
 		});
+	}
+
+	private readRecoveryRecords(): ProcessSessionRecoveryRecord[] {
+		if (!this.recoveryFilePath) return [];
+		try {
+			const parsed = JSON.parse(
+				readFileSync(this.recoveryFilePath, "utf8"),
+			) as unknown;
+			return Array.isArray(parsed)
+				? (parsed as ProcessSessionRecoveryRecord[])
+				: [];
+		} catch {
+			return [];
+		}
+	}
+
+	private persistRecoveryRecords(): void {
+		if (!this.recoveryFilePath) return;
+		const records = this.exportRecoveryRecords();
+		const filePath = this.recoveryFilePath;
+		try {
+			if (records.length === 0) {
+				rmSync(filePath, { force: true });
+				return;
+			}
+			mkdirSync(dirname(filePath), { recursive: true });
+			const tempPath = `${filePath}.${process.pid}.tmp`;
+			writeFileSync(tempPath, `${JSON.stringify(records, null, 2)}\n`, {
+				encoding: "utf8",
+				mode: 0o600,
+			});
+			renameSync(tempPath, filePath);
+		} catch {
+			// Recovery persistence is best effort and must not break execution.
+		}
+	}
+
+	private isValidRecoveryRecord(record: ProcessSessionRecoveryRecord): boolean {
+		return (
+			record?.version === 1 &&
+			typeof record.processId === "string" &&
+			record.processId.length > 0 &&
+			typeof record.ownerSessionId === "string" &&
+			record.ownerSessionId.length > 0 &&
+			Number.isSafeInteger(record.pid) &&
+			record.pid > 0 &&
+			typeof record.processStartToken === "string" &&
+			record.processStartToken.length > 0 &&
+			typeof record.cwd === "string" &&
+			Number.isFinite(record.startedAtMs)
+		);
+	}
+
+	private async restoreRecoveryRecords(
+		records: ProcessSessionRecoveryRecord[],
+	): Promise<ProcessSessionRecoveryResult> {
+		const recovered: ProcessSessionSnapshot[] = [];
+		const rejected: ProcessSessionRecoveryResult["rejected"] = [];
+		for (const record of records) {
+			if (!this.isValidRecoveryRecord(record)) {
+				rejected.push({
+					processId:
+						typeof record?.processId === "string"
+							? record.processId
+							: "<invalid>",
+					reason: "invalid",
+				});
+				continue;
+			}
+			let identity: ProcessStartTokenProbeResult;
+			try {
+				identity = await this.processStartTokenProbe(record.pid);
+			} catch {
+				identity = { status: "unavailable" };
+			}
+			if (identity.status !== "found") {
+				rejected.push({
+					processId: record.processId,
+					reason:
+						identity.status === "missing" ? "missing" : "probe_unavailable",
+				});
+				continue;
+			}
+			if (identity.token !== record.processStartToken) {
+				rejected.push({
+					processId: record.processId,
+					reason: "identity_mismatch",
+				});
+				continue;
+			}
+			if (this.sessions.has(record.processId)) continue;
+			this.assertCapacity(record.ownerSessionId);
+			const output = new BoundedProcessOutput(this.maxOutputBytes);
+			output.append(
+				"stderr",
+				"[Process recovered after host restart; prior output and stdin are unavailable.]\n",
+			);
+			const managed: ManagedProcessSession = {
+				snapshot: {
+					processId: record.processId,
+					ownerSessionId: record.ownerSessionId,
+					...(record.toolCallId ? { toolCallId: record.toolCallId } : {}),
+					state: "running",
+					pid: record.pid,
+					processStartToken: record.processStartToken,
+					executable: "<recovered after restart>",
+					args: [],
+					cwd: record.cwd,
+					startedAtMs: record.startedAtMs,
+					interactive: record.interactive,
+					...(record.terminalColumns
+						? { terminalColumns: record.terminalColumns }
+						: {}),
+					...(record.terminalRows ? { terminalRows: record.terminalRows } : {}),
+					latestCursor: output.cursor,
+					droppedOutputBytes: output.omittedBytes,
+					recoveredAfterRestart: true,
+				},
+				output,
+				stdoutDecoder: new StringDecoder("utf8"),
+				stderrDecoder: new StringDecoder("utf8"),
+				stdoutRedactor: createStreamingSecretRedactor([]),
+				stderrRedactor: createStreamingSecretRedactor([]),
+				secretValues: [],
+				recovered: true,
+				cancelRequested: false,
+				settled: false,
+			};
+			this.sessions.set(record.processId, managed);
+			this.scheduleRecoveredIdentityCheck(managed);
+			recovered.push(this.copySnapshot(managed));
+		}
+		this.persistRecoveryRecords();
+		return { recovered, rejected };
+	}
+
+	private scheduleRecoveredIdentityCheck(session: ManagedProcessSession): void {
+		session.recoveryTimer = setTimeout(() => {
+			void this.checkRecoveredIdentity(session);
+		}, this.recoveredProcessPollMs);
+		session.recoveryTimer.unref();
+	}
+
+	private async checkRecoveredIdentity(
+		session: ManagedProcessSession,
+	): Promise<void> {
+		if (session.settled || !session.recovered) return;
+		const pid = session.snapshot.pid;
+		if (!pid) {
+			this.complete(session, "exited", null, null);
+			return;
+		}
+		let identity: ProcessStartTokenProbeResult;
+		try {
+			identity = await this.processStartTokenProbe(pid);
+		} catch {
+			identity = { status: "unavailable" };
+		}
+		if (
+			identity.status === "missing" ||
+			(identity.status === "found" &&
+				identity.token !== session.snapshot.processStartToken)
+		) {
+			this.complete(session, "exited", null, null);
+			return;
+		}
+		this.scheduleRecoveredIdentityCheck(session);
+	}
+
+	private async assertRecoveredIdentity(
+		session: ManagedProcessSession,
+	): Promise<void> {
+		const pid = session.snapshot.pid;
+		const expected = session.snapshot.processStartToken;
+		if (!pid || !expected) {
+			throw new Error("Recovered process identity is incomplete");
+		}
+		const identity = await this.processStartTokenProbe(pid);
+		if (identity.status !== "found" || identity.token !== expected) {
+			this.complete(session, "exited", null, null);
+			throw new Error(
+				`Recovered process session ${session.snapshot.processId} no longer matches its kernel start token`,
+			);
+		}
 	}
 }

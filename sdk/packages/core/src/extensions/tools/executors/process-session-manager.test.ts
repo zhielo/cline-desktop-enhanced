@@ -1,6 +1,10 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	ProcessSessionManager,
+	type ProcessSessionRecoveryRecord,
 	type ProcessSessionSnapshot,
 	type ProcessSessionTerminalProcess,
 } from "./process-session-manager";
@@ -27,6 +31,156 @@ async function waitForCompletion(
 }
 
 describe("ProcessSessionManager", () => {
+	it("recovers only exact kernel identities and exposes conservative controls", async () => {
+		const root = mkdtempSync(join(tmpdir(), "cline-process-recovery-"));
+		const recoveryFilePath = join(root, "recovery.json");
+		const records: ProcessSessionRecoveryRecord[] = [
+			{
+				version: 1,
+				processId: "matching",
+				ownerSessionId: OWNER,
+				pid: 11111,
+				processStartToken: "token-a",
+				cwd: root,
+				startedAtMs: 100,
+				interactive: false,
+			},
+			{
+				version: 1,
+				processId: "reused-pid",
+				ownerSessionId: OWNER,
+				pid: 22222,
+				processStartToken: "old-token",
+				cwd: root,
+				startedAtMs: 200,
+				interactive: false,
+			},
+			{
+				version: 1,
+				processId: "missing",
+				ownerSessionId: OWNER,
+				pid: 33333,
+				processStartToken: "token-c",
+				cwd: root,
+				startedAtMs: 300,
+				interactive: false,
+			},
+		];
+		writeFileSync(recoveryFilePath, JSON.stringify(records));
+		const manager = new ProcessSessionManager({
+			recoveryFilePath,
+			processStartTokenProbe: async (pid) => {
+				if (pid === 11111) return { status: "found", token: "token-a" };
+				if (pid === 22222) return { status: "found", token: "new-token" };
+				return { status: "missing" };
+			},
+		});
+		try {
+			const result = await manager.initializeRecovery();
+			expect(result.recovered.map((item) => item.processId)).toEqual([
+				"matching",
+			]);
+			expect(result.rejected).toEqual([
+				{ processId: "reused-pid", reason: "identity_mismatch" },
+				{ processId: "missing", reason: "missing" },
+			]);
+			expect(manager.get(OWNER, "matching")).toMatchObject({
+				state: "running",
+				pid: 11111,
+				processStartToken: "token-a",
+				recoveredAfterRestart: true,
+				executable: "<recovered after restart>",
+				args: [],
+			});
+			expect(
+				manager
+					.read(OWNER, "matching")
+					.chunks.map((chunk) => chunk.text)
+					.join(""),
+			).toContain("prior output and stdin are unavailable");
+			await expect(
+				manager.writeStdin(OWNER, "matching", "input"),
+			).rejects.toThrow("stdin is unavailable");
+			expect(() => manager.resize(OWNER, "matching", 100, 40)).toThrow(
+				"terminal resize is unavailable",
+			);
+			expect(JSON.parse(readFileSync(recoveryFilePath, "utf8"))).toHaveLength(
+				1,
+			);
+		} finally {
+			await manager.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("persists no executable, argv, environment, or output in recovery records", async () => {
+		const root = mkdtempSync(join(tmpdir(), "cline-process-recovery-"));
+		const recoveryFilePath = join(root, "recovery.json");
+		const manager = new ProcessSessionManager({
+			recoveryFilePath,
+			processStartTokenProbe: async () => ({
+				status: "found",
+				token: "stable-token",
+			}),
+		});
+		try {
+			const started = await manager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", "setTimeout(() => {}, 1000)", "secret-argument"],
+				cwd: root,
+				env: { SAFE_FLAG: "private-environment-value" },
+			});
+			const persisted = readFileSync(recoveryFilePath, "utf8");
+			expect(persisted).toContain(started.processId);
+			expect(persisted).toContain("stable-token");
+			expect(persisted).not.toContain(process.execPath);
+			expect(persisted).not.toContain("secret-argument");
+			expect(persisted).not.toContain("private-environment-value");
+		} finally {
+			await manager.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("revalidates recovered identity immediately before signalling", async () => {
+		const root = mkdtempSync(join(tmpdir(), "cline-process-recovery-"));
+		const recoveryFilePath = join(root, "recovery.json");
+		writeFileSync(
+			recoveryFilePath,
+			JSON.stringify([
+				{
+					version: 1,
+					processId: "identity-changed",
+					ownerSessionId: OWNER,
+					pid: 44444,
+					processStartToken: "original",
+					cwd: root,
+					startedAtMs: 100,
+					interactive: false,
+				} satisfies ProcessSessionRecoveryRecord,
+			]),
+		);
+		let probes = 0;
+		const manager = new ProcessSessionManager({
+			recoveryFilePath,
+			processStartTokenProbe: async () => ({
+				status: "found",
+				token: probes++ === 0 ? "original" : "replacement",
+			}),
+		});
+		try {
+			await manager.initializeRecovery();
+			await expect(
+				manager.signal(OWNER, "identity-changed", "terminate"),
+			).rejects.toThrow("no longer matches its kernel start token");
+			expect(manager.get(OWNER, "identity-changed")?.state).toBe("exited");
+		} finally {
+			await manager.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	it("starts a process with a stable ID and exposes cursor-based output", async () => {
 		const manager = new ProcessSessionManager();
 		try {

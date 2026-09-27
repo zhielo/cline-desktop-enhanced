@@ -4,7 +4,7 @@
  * Factory functions for creating the default tools.
  */
 
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
 	type AgentTool,
 	type AgentToolContext,
@@ -16,6 +16,7 @@ import {
 	validateWithZod,
 	zodToJsonSchema,
 } from "@cline/shared";
+import { resolveClineDataDir } from "@cline/shared/storage";
 import { captureRunCommandsTimeout } from "../../services/telemetry/core-events";
 import { CommandExitError } from "./executors/bash";
 import {
@@ -716,7 +717,13 @@ export function createShellTool(
 let defaultProcessSessionManager: ProcessSessionManager | undefined;
 
 function getDefaultProcessSessionManager(): ProcessSessionManager {
-	defaultProcessSessionManager ??= new ProcessSessionManager();
+	defaultProcessSessionManager ??= new ProcessSessionManager({
+		recoveryFilePath: join(
+			resolveClineDataDir(),
+			"process-sessions",
+			"recovery.json",
+		),
+	});
 	return defaultProcessSessionManager;
 }
 
@@ -751,8 +758,9 @@ export function createProcessSessionTool(
 		maxRetries: 0,
 		executionMode: "sequential",
 		execute: async (input, context) => {
-			const validated = validateWithZod(ProcessSessionInputSchema, input);
 			const ownerSessionId = requireProcessSessionOwner(context);
+			await manager.initializeRecovery?.();
+			const validated = validateWithZod(ProcessSessionInputSchema, input);
 			switch (validated.action) {
 				case "start": {
 					const cwd = validated.cwd
