@@ -13,6 +13,8 @@ type StoreRecord = {
 	teamName?: string;
 	provider: string;
 	model: string;
+	cwd?: string;
+	workspaceRoot?: string;
 	startedAt: string;
 	endedAt?: string | null;
 	messagesPath?: string;
@@ -154,6 +156,31 @@ describe("listSessionAgents", () => {
 			["empty", false],
 			["missing", false],
 		]);
+	});
+
+	it("exposes a managed worktree only for isolated writer children", () => {
+		records.set(
+			"root1__teamtask__writer__x1",
+			record({
+				sessionId: "root1__teamtask__writer__x1",
+				agentId: "writer",
+				workspaceRoot: "/home/test/.cline/worktrees/abc123/repo",
+			}),
+		);
+		records.set(
+			"root1__reader",
+			record({
+				sessionId: "root1__reader",
+				agentId: "reader",
+				workspaceRoot: "/home/test/repo",
+				startedAt: "2026-07-27T00:01:00.000Z",
+			}),
+		);
+		const agents = listSessionAgents(ROOT);
+		expect(agents[0]?.worktreePath).toBe(
+			"/home/test/.cline/worktrees/abc123/repo",
+		);
+		expect(agents[1]?.worktreePath).toBeUndefined();
 	});
 
 	it("preserves the persisted status", () => {

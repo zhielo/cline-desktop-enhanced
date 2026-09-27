@@ -318,6 +318,7 @@ export type SessionAgentEntry = {
 	teamName?: string;
 	provider?: string;
 	model?: string;
+	worktreePath?: string;
 	startedAt: string;
 	endedAt?: string;
 	hasMessages: boolean;

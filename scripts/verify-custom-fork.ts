@@ -122,6 +122,14 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/extensions/tools/team/writer-worktree.ts",
+		markers: [
+			"createWriterWorktree",
+			"listWriterWorktreeChanges",
+			"ownerAgentId",
+		],
+	},
+	{
 		path: "apps/examples/desktop-app/webview/components/views/chat/worktree-handoff-bar.tsx",
 		markers: [
 			"Apply to Local",
@@ -301,6 +309,7 @@ const requiredMarkers: Array<{
 			"Worktree-first isolation and handoff",
 			"Additive permission profiles",
 			"Parallel agent orchestration",
+			"isolated-writer",
 			"prewarmed PowerShell worker",
 			"Scoped computer use",
 			"atomically persists a versioned task-state artifact",
