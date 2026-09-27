@@ -403,6 +403,34 @@ describe("AgentHeader agent roster popover", () => {
 		);
 	});
 
+	it("blocks handoff and opens the writer session when edits overlap", async () => {
+		const onOpenAgentSession = vi.fn();
+		await renderHeader({
+			agents: [
+				{
+					...AGENTS[1],
+					status: "completed",
+					overlapFiles: ["src/shared.ts", "src/config.ts"],
+					overlapsWithRunIds: ["run_00001"],
+				},
+			],
+			onOpenAgentSession,
+		});
+		const panel = await openPanel();
+		expect(panel?.textContent).toContain(
+			"Handoff blocked by overlapping edits",
+		);
+		expect(panel?.textContent).toContain("src/shared.ts, src/config.ts");
+		await act(async () => {
+			panel
+				?.querySelector<HTMLButtonElement>(
+					'button[aria-label^="Review overlap for Port the migration"]',
+				)
+				?.click();
+		});
+		expect(onOpenAgentSession).toHaveBeenCalledWith(AGENTS[1].sessionId);
+	});
+
 	it("stops a running team agent without stopping the parent session", async () => {
 		const onControlAgent = vi.fn(async () => {});
 		await renderHeader({ onControlAgent });

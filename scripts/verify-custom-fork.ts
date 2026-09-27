@@ -141,7 +141,15 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/webview/components/agent-header.tsx",
-		markers: ["onControlAgent", '"stop"', '"steer"', '"retry"', "Guidance for"],
+		markers: [
+			"onControlAgent",
+			'"stop"',
+			'"steer"',
+			'"retry"',
+			"Guidance for",
+			"Handoff blocked by overlapping edits",
+			"Open worktree to resolve",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/team/multi-agent.ts",

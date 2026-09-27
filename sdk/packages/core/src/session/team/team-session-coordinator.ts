@@ -57,6 +57,12 @@ export async function dispatchTeamEventToBackend(
 	invokeOptional: (method: string, ...args: unknown[]) => Promise<void>,
 ): Promise<void> {
 	switch (event.type) {
+		case "run_completed":
+		case "run_failed":
+		case "run_cancelled":
+		case "run_interrupted":
+			await invokeOptional("onTeamRunSettled", rootSessionId, event.run);
+			break;
 		case "run_progress":
 			await invokeOptional(
 				"onTeamTaskProgress",

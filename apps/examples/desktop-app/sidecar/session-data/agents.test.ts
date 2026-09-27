@@ -15,6 +15,7 @@ type StoreRecord = {
 	model: string;
 	cwd?: string;
 	workspaceRoot?: string;
+	metadata?: Record<string, unknown>;
 	startedAt: string;
 	endedAt?: string | null;
 	messagesPath?: string;
@@ -181,6 +182,30 @@ describe("listSessionAgents", () => {
 			"/home/test/.cline/worktrees/abc123/repo",
 		);
 		expect(agents[1]?.worktreePath).toBeUndefined();
+	});
+
+	it("exposes persisted overlap details for writer review", () => {
+		records.set(
+			"root1__teamtask__writer__x1",
+			record({
+				sessionId: "root1__teamtask__writer__x1",
+				agentId: "writer",
+				metadata: {
+					teamRun: {
+						runId: "run_00002",
+						changedFiles: ["src/shared.ts", "src/b.ts"],
+						overlapsWithRunIds: ["run_00001"],
+						overlapFiles: ["src/shared.ts"],
+					},
+				},
+			}),
+		);
+		expect(listSessionAgents(ROOT)[0]).toMatchObject({
+			runId: "run_00002",
+			changedFiles: ["src/shared.ts", "src/b.ts"],
+			overlapsWithRunIds: ["run_00001"],
+			overlapFiles: ["src/shared.ts"],
+		});
 	});
 
 	it("preserves the persisted status", () => {

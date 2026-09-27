@@ -3,6 +3,7 @@
 import { SessionStatus } from "@cline/ui";
 import {
 	AlertCircle,
+	AlertTriangle,
 	Bot,
 	Check,
 	ChevronRight,
@@ -560,6 +561,7 @@ function AgentRosterRow({
 	const task = agent.prompt?.trim();
 	const lastAction = agent.lastAction?.trim();
 	const canControl = agent.kind === "teamtask" && Boolean(onControlAgent);
+	const overlapFiles = agent.overlapFiles ?? [];
 
 	const control = async (
 		action: "stop" | "steer" | "retry",
@@ -632,6 +634,37 @@ function AgentRosterRow({
 					className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60"
 				/>
 			</button>
+			{overlapFiles.length > 0 ? (
+				<div className="mt-2 ml-5 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-[11px]">
+					<div className="flex items-start gap-1.5 text-destructive">
+						<AlertTriangle
+							aria-hidden="true"
+							className="mt-0.5 size-3 shrink-0"
+						/>
+						<div className="min-w-0 flex-1">
+							<div className="font-medium">
+								Handoff blocked by overlapping edits
+							</div>
+							<div className="mt-0.5 break-words text-muted-foreground">
+								{overlapFiles.slice(0, 3).join(", ")}
+								{overlapFiles.length > 3
+									? ` and ${overlapFiles.length - 3} more`
+									: ""}
+							</div>
+						</div>
+					</div>
+					<Button
+						aria-label={`Review overlap for ${task || agent.agentId}`}
+						className="mt-2"
+						onClick={onSelect}
+						size="sm"
+						type="button"
+						variant="outline"
+					>
+						Open worktree to resolve
+					</Button>
+				</div>
+			) : null}
 			{canControl ? (
 				<div className="mt-2 ml-5">
 					<div className="flex items-center gap-1.5">
