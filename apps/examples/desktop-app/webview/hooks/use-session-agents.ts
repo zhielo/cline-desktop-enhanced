@@ -95,6 +95,9 @@ export function useSessionAgents({
 	panelOpen?: boolean;
 }) {
 	const [roster, setRoster] = useState<RosterState>(EMPTY_ROSTER);
+	const [pendingControlAgentId, setPendingControlAgentId] = useState<
+		string | null
+	>(null);
 	// Only the newest read may write. Comparing session ids is not enough: two
 	// reads for the *same* session can overlap — a poll tick alongside an
 	// on-open or turn-finished read, and `list_session_agents` opens one
@@ -224,5 +227,38 @@ export function useSessionAgents({
 		};
 	}, [hasRunningAgents, refresh, sessionActive, sessionId]);
 
-	return { agents, loading, error, refresh };
+	const controlAgent = useCallback(
+		async (
+			agentId: string,
+			action: "stop" | "steer" | "retry",
+			message?: string,
+		) => {
+			if (!sessionId) {
+				throw new Error("No active parent session");
+			}
+			setPendingControlAgentId(agentId);
+			try {
+				await desktopClient.invoke("control_session_agent", {
+					environmentId,
+					sessionId,
+					agentId,
+					action,
+					...(message ? { message } : {}),
+				});
+				await refresh(sessionId, { quiet: true });
+			} finally {
+				setPendingControlAgentId(null);
+			}
+		},
+		[environmentId, refresh, sessionId],
+	);
+
+	return {
+		agents,
+		loading,
+		error,
+		refresh,
+		controlAgent,
+		pendingControlAgentId,
+	};
 }

@@ -548,6 +548,7 @@ export type HubCommandName =
 	| "session.remove_pending_prompt"
 	| "session.fork"
 	| "session.hook"
+	| "team.agent_control"
 	| "run.start"
 	| "session.send_input"
 	| "run.enqueue"

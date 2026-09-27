@@ -88,6 +88,8 @@ Enforcement should cover filesystem roots, command execution, network enablement
 
 Parent issue: #25
 
+Implementation status: desktop control surface implemented for team-task agents. The existing team runtime already provides bounded parallel runs, persisted parent/child sessions, status/activity tracking, result aggregation, cancellation, mailbox steering, retries, and concurrency caps. The desktop agent roster now exposes Open, Stop, Guide, and Retry actions without aborting the lead session. Host and Hub commands validate the owning root session and teammate identity before acting. Generic `spawn_agent` children remain observable/openable but are not individually controllable because their current synchronous tool-call lifetime has no independent host control handle. Writer worktree assignment and overlapping-edit detection remain follow-up work under #25.
+
 Expose parent/child task threads, active operation, status, worktree owner, model, stop/steer/retry controls, concurrency caps, and consolidated results. Default parallel delegation to read-heavy work. Give every parallel writer an isolated worktree and detect overlapping edits before handoff.
 
 ## Phase 6 — Windows command-latency optimization

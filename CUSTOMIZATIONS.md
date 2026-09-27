@@ -119,6 +119,28 @@ Primary files:
 - `docs/DURABLE_TASK_EXECUTION.md`
 - `docs/CODEX_PARITY_ROADMAP.md`
 
+### Parallel-agent desktop controls
+
+- Persisted subagent and team-task children appear in the parent session's agent
+  roster with status, assigned task, latest activity, model, and transcript.
+- Team-task rows expose host-controlled Stop, Guide, and Retry actions. These
+  target one teammate without aborting the lead session.
+- Guide uses the existing team mailbox and live steering boundary; Retry queues
+  the latest failed, cancelled, or interrupted task with conversation
+  continuity.
+- Control requests are validated at the sidecar, Hub, root-session, and
+  teammate boundaries. Generic synchronous `spawn_agent` children remain
+  observable but do not display unsupported controls.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/team/multi-agent.ts`
+- `sdk/packages/core/src/runtime/host/local-runtime-host.ts`
+- `sdk/packages/core/src/hub/server/hub-server-transport.ts`
+- `apps/examples/desktop-app/sidecar/commands.ts`
+- `apps/examples/desktop-app/webview/hooks/use-session-agents.ts`
+- `apps/examples/desktop-app/webview/components/agent-header.tsx`
+
 ### Specialized tools
 
 - Android automation includes device selection, screen metadata, UI hierarchy, validated touch/swipe/key/text actions, foreground-package guards, and before/after screenshot evidence.
