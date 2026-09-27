@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 import type * as LlmsProviders from "@cline/llms";
-import type { AgentResult, BasicLogger } from "@cline/shared";
+import type { AgentResult, BasicLogger, TeamRunRecord } from "@cline/shared";
 import { nanoid } from "nanoid";
 import type {
 	SubAgentEndContext,
@@ -400,6 +400,10 @@ export class UnifiedSessionPersistenceService {
 			result,
 			messages,
 		);
+	}
+
+	onTeamRunSettled(rootSessionId: string, run: TeamRunRecord): Promise<void> {
+		return this.teamChildren.onTeamRunSettled(rootSessionId, run);
 	}
 
 	onTeamTaskProgress(

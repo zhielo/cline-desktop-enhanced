@@ -25,6 +25,10 @@ export type SessionAgentRecord = {
 	model?: string;
 	/** Managed worktree assigned to an isolated writing teammate. */
 	worktreePath?: string;
+	runId?: string;
+	changedFiles?: string[];
+	overlapsWithRunIds?: string[];
+	overlapFiles?: string[];
 	startedAt: string;
 	endedAt?: string;
 	/** Whether a transcript exists to open yet. */
@@ -94,6 +98,30 @@ function managedWorktreePath(value: string | undefined): string | undefined {
 	return /(?:^|[\\/])worktrees[\\/][^\\/]+[\\/][^\\/]+$/.test(path)
 		? path
 		: undefined;
+}
+
+function stringArray(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const out = value.filter(
+		(entry): entry is string => typeof entry === "string" && entry.length > 0,
+	);
+	return out.length > 0 ? out : undefined;
+}
+
+function teamRunMetadata(metadata: unknown): {
+	runId?: string;
+	changedFiles?: string[];
+	overlapsWithRunIds?: string[];
+	overlapFiles?: string[];
+} {
+	const run = asRecord(asRecord(metadata)?.teamRun);
+	if (!run) return {};
+	return {
+		runId: typeof run.runId === "string" ? run.runId : undefined,
+		changedFiles: stringArray(run.changedFiles),
+		overlapsWithRunIds: stringArray(run.overlapsWithRunIds),
+		overlapFiles: stringArray(run.overlapFiles),
+	};
 }
 
 function truncate(value: string, limit = LAST_ACTION_LIMIT): string {
@@ -174,6 +202,7 @@ export function listSessionAgents(
 		}
 		const messagesPath = resolveChildMessagesPath(record);
 		const messages = messagesPath ? readMessagesFile(messagesPath) : null;
+		const runMetadata = teamRunMetadata(record.metadata);
 		out.push({
 			sessionId: record.sessionId,
 			agentId,
@@ -188,6 +217,7 @@ export function listSessionAgents(
 			provider: record.provider || undefined,
 			model: record.model || undefined,
 			worktreePath: managedWorktreePath(record.workspaceRoot || record.cwd),
+			...runMetadata,
 			startedAt: record.startedAt,
 			endedAt: record.endedAt ?? undefined,
 			hasMessages: Boolean(messages && messages.length > 0),
