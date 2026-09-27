@@ -374,8 +374,14 @@ export class UnifiedSessionPersistenceService {
 		rootSessionId: string,
 		agentId: string,
 		message: string,
+		worktreePath?: string,
 	): Promise<void> {
-		return this.teamChildren.onTeamTaskStart(rootSessionId, agentId, message);
+		return this.teamChildren.onTeamTaskStart(
+			rootSessionId,
+			agentId,
+			message,
+			worktreePath,
+		);
 	}
 
 	onTeamTaskEnd(

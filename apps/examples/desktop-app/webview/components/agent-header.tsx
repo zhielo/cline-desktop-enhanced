@@ -608,6 +608,14 @@ function AgentRosterRow({
 								{agent.teamName ? `team ${agent.teamName}` : "team"}
 							</span>
 						) : null}
+						{agent.worktreePath ? (
+							<span
+								className="shrink-0 rounded bg-secondary px-1 text-[10px] uppercase tracking-wide text-foreground"
+								title={agent.worktreePath}
+							>
+								isolated writer
+							</span>
+						) : null}
 						<span
 							className={cn("min-w-0 truncate", !lastAction && "italic")}
 							title={lastAction || undefined}

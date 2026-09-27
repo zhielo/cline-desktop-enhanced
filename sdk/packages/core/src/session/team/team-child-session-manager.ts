@@ -83,6 +83,7 @@ export class TeamChildSessionManager {
 			prompt: string;
 			startedAt: string;
 			messagesPath: string;
+			workspacePath?: string;
 		},
 	): SessionRow {
 		const rootHistoryOrigin = readSessionHistoryOriginMetadata(root.metadata);
@@ -98,8 +99,8 @@ export class TeamChildSessionManager {
 			interactive: false,
 			provider: root.provider,
 			model: root.model,
-			cwd: root.cwd,
-			workspaceRoot: root.workspaceRoot,
+			cwd: opts.workspacePath ?? root.cwd,
+			workspaceRoot: opts.workspacePath ?? root.workspaceRoot,
 			teamName: root.teamName ?? null,
 			enableTools: root.enableTools,
 			enableSpawn: root.enableSpawn,
@@ -277,6 +278,7 @@ export class TeamChildSessionManager {
 		rootSessionId: string,
 		agentId: string,
 		message: string,
+		worktreePath?: string,
 	): Promise<void> {
 		const root = await this.adapter.getSession(rootSessionId);
 		if (!root) return;
@@ -295,6 +297,7 @@ export class TeamChildSessionManager {
 			prompt: message || `Team task for ${agentId}`,
 			startedAt,
 			messagesPath,
+			workspacePath: worktreePath,
 		});
 		await this.adapter.upsertSession(row);
 		this.manifestStore.initializeMessagesFile(row, messagesPath, startedAt);

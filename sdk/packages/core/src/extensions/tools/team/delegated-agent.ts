@@ -121,10 +121,13 @@ export function buildDelegatedAgentConfig(
 	options: BuildDelegatedAgentConfigOptions,
 ): AgentConfig & { role?: string } {
 	const runtimeConfig = options.configProvider.getRuntimeConfig();
+	const effectiveRuntimeConfig = options.cwd
+		? { ...runtimeConfig, cwd: options.cwd }
+		: runtimeConfig;
 	const systemPrompt =
 		options.kind === "teammate"
-			? buildTeammateSystemPrompt(options.prompt, runtimeConfig)
-			: buildSubAgentSystemPrompt(options.prompt, runtimeConfig);
+			? buildTeammateSystemPrompt(options.prompt, effectiveRuntimeConfig)
+			: buildSubAgentSystemPrompt(options.prompt, effectiveRuntimeConfig);
 
 	return {
 		...options.configProvider.getConnectionConfig(),

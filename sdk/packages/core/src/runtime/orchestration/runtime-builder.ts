@@ -47,6 +47,7 @@ import {
 import type { ConfiguredAgentConfig } from "../../extensions/tools/team/configured-agent-config";
 import { loadConfiguredAgentConfigs } from "../../extensions/tools/team/configured-agent-config";
 import { createConfiguredAgentTools } from "../../extensions/tools/team/configured-agent-tool";
+import { listWriterWorktreeChanges } from "../../extensions/tools/team/writer-worktree";
 import {
 	filterDisabledTools,
 	isModelToolEnabledGlobally,
@@ -717,6 +718,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 					leadAgentId: config.sessionId || "lead",
 					missionLogIntervalSteps: normalized.missionLogIntervalSteps,
 					missionLogIntervalMs: normalized.missionLogIntervalMs,
+					inspectWriterChanges: listWriterWorktreeChanges,
 					onTeamEvent: (event: TeamEvent) => {
 						onTeamEvent(event);
 						if (teamRuntime && teamStore) {
@@ -729,6 +731,7 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 									rolePrompt: event.teammate.rolePrompt,
 									modelId: event.teammate.modelId,
 									maxIterations: event.teammate.maxIterations,
+									worktreePath: event.teammate.worktreePath,
 								};
 								teammateSpecs.set(spec.agentId, spec);
 							}
@@ -772,9 +775,9 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 						leadAgentInstance?.addTools(teamTools);
 					},
 					createBaseTools: normalized.enableTools
-						? () =>
+						? (workspacePath) =>
 								createBuiltinToolsList(
-									config.cwd,
+									workspacePath ?? config.cwd,
 									config.providerId,
 									normalized.mode,
 									config.modelId,

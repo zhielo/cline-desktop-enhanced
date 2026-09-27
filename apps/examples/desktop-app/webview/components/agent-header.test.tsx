@@ -385,6 +385,24 @@ describe("AgentHeader agent roster popover", () => {
 		expect(panel?.textContent).toContain("Waiting for the first agent");
 	});
 
+	it("labels a team agent that owns an isolated writer worktree", async () => {
+		await renderHeader({
+			agents: [
+				{
+					...AGENTS[1],
+					worktreePath: "/home/test/.cline/worktrees/abc123/repo",
+				},
+			],
+		});
+		const panel = await openPanel();
+		const badge = [...(panel?.querySelectorAll("span") ?? [])].find(
+			(element) => element.textContent === "isolated writer",
+		);
+		expect(badge?.getAttribute("title")).toBe(
+			"/home/test/.cline/worktrees/abc123/repo",
+		);
+	});
+
 	it("stops a running team agent without stopping the parent session", async () => {
 		const onControlAgent = vi.fn(async () => {});
 		await renderHeader({ onControlAgent });

@@ -85,7 +85,12 @@ export interface TaskResult {
 type TeamTaskEndStatus = "completed" | "failed" | "cancelled";
 
 export type TeamEvent =
-	| { type: TeamMessageType.TaskStart; agentId: string; message: string }
+	| {
+			type: TeamMessageType.TaskStart;
+			agentId: string;
+			message: string;
+			worktreePath?: string;
+	  }
 	| {
 			type: TeamMessageType.TaskEnd;
 			agentId: string;
@@ -133,12 +138,14 @@ export interface AgentTeamsRuntimeOptions {
 	missionLogIntervalSteps?: number;
 	missionLogIntervalMs?: number;
 	maxConcurrentRuns?: number;
+	inspectWriterChanges?: (worktreePath: string) => Promise<string[]>;
 	onTeamEvent?: (event: TeamEvent) => void;
 }
 
 export interface SpawnTeammateOptions {
 	agentId: string;
 	config: TeamMemberConfig;
+	worktreePath?: string;
 }
 
 function isAbortLikeError(error: unknown): boolean {
@@ -558,6 +565,9 @@ export class AgentTeamsRuntime {
 	private readonly missionLogIntervalSteps: number;
 	private readonly missionLogIntervalMs: number;
 	private readonly maxConcurrentRuns: number;
+	private readonly inspectWriterChanges?: (
+		worktreePath: string,
+	) => Promise<string[]>;
 
 	constructor(options: AgentTeamsRuntimeOptions) {
 		this.teamName = options.teamName;
@@ -572,6 +582,7 @@ export class AgentTeamsRuntime {
 			options.missionLogIntervalMs ?? 120000,
 		);
 		this.maxConcurrentRuns = Math.max(1, options.maxConcurrentRuns ?? 2);
+		this.inspectWriterChanges = options.inspectWriterChanges;
 		const leadAgentId = options.leadAgentId ?? "lead";
 		this.members.set(leadAgentId, {
 			agentId: leadAgentId,
@@ -597,6 +608,10 @@ export class AgentTeamsRuntime {
 
 	getMemberIds(): string[] {
 		return Array.from(this.members.keys());
+	}
+
+	getMemberWorktreePath(agentId: string): string | undefined {
+		return this.members.get(agentId)?.worktreePath;
 	}
 
 	getTeammateIds(): string[] {
@@ -699,6 +714,7 @@ export class AgentTeamsRuntime {
 				role: member.role,
 				description: member.description,
 				status: member.status,
+				worktreePath: member.worktreePath,
 			})),
 			taskCounts,
 			unreadMessages: this.mailbox.filter((message) => !message.readAt).length,
@@ -722,6 +738,7 @@ export class AgentTeamsRuntime {
 				role: member.role,
 				description: member.description,
 				status: member.status,
+				worktreePath: member.worktreePath,
 			})),
 			tasks: Array.from(this.tasks.values()).map((task) => ({ ...task })),
 			mailbox: this.mailbox.map((message) => ({ ...message })),
@@ -794,6 +811,7 @@ export class AgentTeamsRuntime {
 				role: "teammate",
 				description: member.description,
 				status: "stopped",
+				worktreePath: member.worktreePath,
 				agent: undefined,
 				runningCount: 0,
 				lastMissionStep: this.missionStepCounter,
@@ -850,7 +868,11 @@ export class AgentTeamsRuntime {
 		return !!member && member.role === "teammate" && !!member.agent;
 	}
 
-	spawnTeammate({ agentId, config }: SpawnTeammateOptions): TeamMemberSnapshot {
+	spawnTeammate({
+		agentId,
+		config,
+		worktreePath,
+	}: SpawnTeammateOptions): TeamMemberSnapshot {
 		const existing = this.members.get(agentId);
 		if (existing && existing.role !== "teammate") {
 			throw new Error(
@@ -891,6 +913,7 @@ export class AgentTeamsRuntime {
 			role: "teammate",
 			description: config.role,
 			status: "idle",
+			worktreePath,
 			agent,
 			runningCount: 0,
 			lastMissionStep: 0,
@@ -908,6 +931,7 @@ export class AgentTeamsRuntime {
 				runtimeAgentId: agent.getAgentId(),
 				conversationId: agent.getConversationId(),
 				parentAgentId: null,
+				worktreePath,
 			},
 		});
 		return {
@@ -915,6 +939,7 @@ export class AgentTeamsRuntime {
 			role: teammate.role,
 			description: teammate.description,
 			status: teammate.status,
+			worktreePath: teammate.worktreePath,
 		};
 	}
 
@@ -1044,7 +1069,12 @@ export class AgentTeamsRuntime {
 		member.abortReason = undefined;
 		member.runningCount++;
 		member.status = "running";
-		this.emitEvent({ type: TeamMessageType.TaskStart, agentId, message });
+		this.emitEvent({
+			type: TeamMessageType.TaskStart,
+			agentId,
+			message,
+			worktreePath: member.worktreePath,
+		});
 
 		try {
 			const unreadMail = this.listMailbox(agentId, {
@@ -1137,6 +1167,7 @@ export class AgentTeamsRuntime {
 			lastProgressAt: new Date(),
 			lastProgressMessage: "queued",
 			currentActivity: "queued",
+			worktreePath: this.members.get(agentId)?.worktreePath,
 		};
 		this.runs.set(runId, record);
 		this.runQueue.push(runId);
@@ -1265,6 +1296,30 @@ export class AgentTeamsRuntime {
 			// maxRetries allows) instead of masquerading as completed.
 			if (result.finishReason === "error") {
 				throw new Error(result.text || "Teammate run failed");
+			}
+			if (run.worktreePath && this.inspectWriterChanges) {
+				const changedFiles = await this.inspectWriterChanges(run.worktreePath);
+				run.changedFiles = changedFiles;
+				const changedSet = new Set(changedFiles);
+				const overlappingRuns = Array.from(this.runs.values()).filter(
+					(candidate) =>
+						candidate.id !== run.id &&
+						candidate.agentId !== run.agentId &&
+						candidate.status === "completed" &&
+						candidate.changedFiles?.some((path) => changedSet.has(path)),
+				);
+				run.overlapsWithRunIds = overlappingRuns.map(
+					(candidate) => candidate.id,
+				);
+				run.overlapFiles = [
+					...new Set(
+						overlappingRuns.flatMap((candidate) =>
+							(candidate.changedFiles ?? []).filter((path) =>
+								changedSet.has(path),
+							),
+						),
+					),
+				].sort();
 			}
 			run.status = "completed";
 			run.result = result;
