@@ -104,13 +104,15 @@ $form.Add_Shown({
       [
         "-NoLogo",
         "-NoProfile",
+        "-WindowStyle",
+        "Hidden",
         "-ExecutionPolicy",
         "Bypass",
         "-STA",
         "-File",
         script,
       ],
-      { stdio: ["ignore", "ignore", "pipe"], windowsHide: false },
+      { stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
     );
     fixture.stderr?.setEncoding("utf8").on("data", (chunk) => {
       if (fixtureStderr.length < 16_000) fixtureStderr += chunk;
