@@ -57,6 +57,7 @@ const requiredMarkers: Array<{
 			"CLINE_TEST_SIDECAR_BIN",
 			"scripts/desktop-startup.test.ts",
 			"Record installer smoke-test result",
+			"Run required desktop sidecar regression suite",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
 			'bun-version: "1.3.14"',
@@ -297,6 +298,8 @@ const requiredMarkers: Array<{
 		markers: [
 			"Custom AI instructions",
 			"set_custom_ai_instructions",
+			"Agent permission capability matrix",
+			"Full interaction",
 			"Scoped computer use",
 			"set_computer_use_settings",
 		],
