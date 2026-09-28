@@ -98,6 +98,10 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "sdk/packages/core/src/hub/daemon/index.ts",
+		markers: ["HUB_STARTUP_TIMEOUT_MS = 30_000"],
+	},
+	{
 		path: "vitest.config.mts",
 		markers: [
 			"vitest/config",
