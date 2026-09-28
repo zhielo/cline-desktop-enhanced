@@ -49,6 +49,25 @@ async function click(target: HTMLElement) {
 	});
 }
 
+async function waitFor(
+	assertion: () => void | Promise<void>,
+): Promise<void> {
+	const deadline = Date.now() + 1_000;
+	let lastError: unknown;
+	do {
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		});
+		try {
+			await assertion();
+			return;
+		} catch (error) {
+			lastError = error;
+		}
+	} while (Date.now() < deadline);
+	throw lastError;
+}
+
 function mockIntersectionObserver() {
 	const observer: {
 		callback?: (entries: IntersectionObserverEntry[]) => void;
@@ -66,7 +85,7 @@ function mockIntersectionObserver() {
 	return observer;
 }
 
-function renderControls(
+async function renderControls(
 	overrides: Partial<ComponentProps<typeof WelcomeWorkspaceControls>> = {},
 ) {
 	const props: ComponentProps<typeof WelcomeWorkspaceControls> = {
@@ -111,18 +130,22 @@ function renderControls(
 		onSwitchGitBranch: vi.fn(async () => true),
 		...overrides,
 	};
-	act(() => root.render(<WelcomeWorkspaceControls {...props} />));
+	await act(async () => {
+		root.render(<WelcomeWorkspaceControls {...props} />);
+		await Promise.resolve();
+		await Promise.resolve();
+	});
 	return props;
 }
 
 describe("WelcomeWorkspaceControls cloud mode", () => {
-	it("does not duplicate the environment menu with Local/Cloud tabs", () => {
-		renderControls();
+	it("does not duplicate the environment menu with Local/Cloud tabs", async () => {
+		await renderControls();
 		expect(container.querySelector("fieldset")).toBeNull();
 	});
 
-	it("hides the Local/Cloud selector when the feature flag is off", () => {
-		renderControls({ cloudEnabled: false });
+	it("hides the Local/Cloud selector when the feature flag is off", async () => {
+		await renderControls({ cloudEnabled: false });
 		const buttons = [...container.querySelectorAll("button")].map(
 			(candidate) => candidate.textContent ?? "",
 		);
@@ -131,7 +154,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 	});
 
 	it("requires sign in before choosing a cloud repository", async () => {
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			signedIn: false,
 		});
@@ -144,7 +167,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 	it("selects a connected GitHub repository and its default branch", async () => {
 		const onRepoUrlChange = vi.fn();
 		const onCloudBranchChange = vi.fn();
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			workIn: "worktree",
 			onWorkInChange: vi.fn(),
@@ -167,7 +190,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 
 	it("loads and selects a branch for the connected repository", async () => {
 		const onCloudBranchChange = vi.fn();
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			onCloudBranchChange,
 		});
@@ -177,7 +200,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			await Promise.resolve();
 		});
 		await click(button("cline/cline"));
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "main",
@@ -196,7 +219,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 	});
 
 	it("enables branches for a restored cloud repository", async () => {
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "main",
@@ -217,14 +240,14 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			branches: ["feature/only"],
 			nextToken: "",
 		}));
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "main",
 			onCloudBranchChange,
 			onListCloudBranches,
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42),
 		);
 		expect(onCloudBranchChange).toHaveBeenCalledWith("feature/only");
@@ -246,41 +269,41 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 						: { available: true, branches: ["feature/keep"], nextToken: "" }
 					: { available: true, branches: ["main"], nextToken: "2" },
 		);
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: selectedBranch,
 			onCloudBranchChange,
 			onListCloudBranches,
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42),
 		);
 		expect(onCloudBranchChange).not.toHaveBeenCalled();
 		await click(button(selectedBranch));
-		await vi.waitFor(() => expect(observer.callback).toBeDefined());
+		await waitFor(() => expect(observer.callback).toBeDefined());
 		await act(async () =>
 			observer.callback?.([
 				{ isIntersecting: true } as IntersectionObserverEntry,
 			]),
 		);
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42, {
 				cursor: "2",
 				query: undefined,
 			}),
 		);
 		if (!unavailable)
-			await vi.waitFor(() =>
+			await waitFor(() =>
 				expect(
 					container.querySelector('[aria-label="Cloud branch"]')?.textContent,
 				).toContain("feature/keep"),
 			);
 		if (unavailable) {
-			await vi.waitFor(() => expect(container.textContent).toContain("Retry"));
+			await waitFor(() => expect(container.textContent).toContain("Retry"));
 			expect(onCloudBranchChange).not.toHaveBeenCalled();
 		} else if (shouldFallback) {
-			await vi.waitFor(() =>
+			await waitFor(() =>
 				expect(onCloudBranchChange).toHaveBeenCalledWith("main"),
 			);
 		} else {
@@ -292,7 +315,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 		const observer = mockIntersectionObserver();
 		let releasePage: (() => void) | undefined;
 		const onCloudBranchChange = vi.fn();
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "deleted",
@@ -344,7 +367,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 		expect(releasePage).toBeDefined();
 		await click(button("cline/cline"));
 		await click(button("cline/other"));
-		renderControls({
+		await renderControls({
 			...props,
 			repoUrl: "https://github.com/cline/other",
 			cloudBranch: "develop",
@@ -367,14 +390,14 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 					? { available: true, branches: ["feature/result"], nextToken: "" }
 					: { available: true, branches: ["main"], nextToken: "" },
 		);
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "main",
 			onCloudBranchChange,
 			onListCloudBranches,
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42),
 		);
 		await click(button("main"));
@@ -389,12 +412,12 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			setter?.call(search, "feature");
 			search?.dispatchEvent(new Event("input", { bubbles: true }));
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42, {
 				query: "feature",
 			}),
 		);
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(container.textContent).toContain("feature/result"),
 		);
 		expect(onCloudBranchChange).not.toHaveBeenCalled();
@@ -416,38 +439,38 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 						})
 					: { available: true, branches: ["old/first"], nextToken: "2" },
 		);
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "old/first",
 			onListCloudBranches,
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42),
 		);
 		await click(button("old/first"));
-		await vi.waitFor(() => expect(observer.callback).toBeDefined());
+		await waitFor(() => expect(observer.callback).toBeDefined());
 		await act(async () =>
 			observer.callback?.([
 				{ isIntersecting: true } as IntersectionObserverEntry,
 			]),
 		);
-		await vi.waitFor(() => expect(releaseStalePage).toBeDefined());
+		await waitFor(() => expect(releaseStalePage).toBeDefined());
 
 		const refreshedList = vi.fn(async () => ({
 			available: true,
 			branches: ["new/first"],
 			nextToken: "2",
 		}));
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "old/first",
 			onListCloudBranches: refreshedList,
 		});
-		await vi.waitFor(() => expect(refreshedList).toHaveBeenCalled());
+		await waitFor(() => expect(refreshedList).toHaveBeenCalled());
 		await act(async () => releaseStalePage?.());
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(container.textContent).toContain("new/first"),
 		);
 		expect(container.textContent).not.toContain("stale/page");
@@ -495,7 +518,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 				return { available: true, branches: ["main"], nextToken: "2" };
 			},
 		);
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			onListCloudBranches,
 		});
@@ -505,24 +528,24 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			await Promise.resolve();
 		});
 		await click(button("cline/cline"));
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "main",
 			onListCloudRepositories: props.onListCloudRepositories,
 			onListCloudBranches,
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42),
 		);
 		await click(button("main"));
-		await vi.waitFor(() => expect(observer.callback).toBeDefined());
+		await waitFor(() => expect(observer.callback).toBeDefined());
 		await act(async () => {
 			observer.callback?.([
 				{ isIntersecting: true } as IntersectionObserverEntry,
 			]);
 		});
-		await vi.waitFor(() => expect(releaseHungPage).toBeDefined());
+		await waitFor(() => expect(releaseHungPage).toBeDefined());
 
 		const search = container.querySelector<HTMLInputElement>(
 			'input[placeholder="Search branches…"]',
@@ -536,7 +559,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			valueSetter?.call(search, "feature");
 			search?.dispatchEvent(new Event("input", { bubbles: true }));
 		});
-		await vi.waitFor(() =>
+		await waitFor(() =>
 			expect(onListCloudBranches).toHaveBeenCalledWith(42, {
 				query: "feature",
 			}),
@@ -560,14 +583,14 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			valueSetter?.call(search, "");
 			search?.dispatchEvent(new Event("input", { bubbles: true }));
 		});
-		await vi.waitFor(() => expect(observer.callback).toBeDefined());
+		await waitFor(() => expect(observer.callback).toBeDefined());
 		await act(async () => {
 			observer.callback?.([
 				{ isIntersecting: true } as IntersectionObserverEntry,
 			]);
 		});
-		await vi.waitFor(() => expect(cursorFetches).toBe(2));
-		await vi.waitFor(() =>
+		await waitFor(() => expect(cursorFetches).toBe(2));
+		await waitFor(() =>
 			expect(container.textContent).toContain("feature/cloud"),
 		);
 	});
@@ -578,7 +601,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			available: false,
 			branches: [],
 		}));
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			onCloudBranchChange,
 			onListCloudBranches,
@@ -589,7 +612,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			await Promise.resolve();
 		});
 		await click(button("cline/cline"));
-		renderControls({
+		await renderControls({
 			executionTarget: "cloud",
 			repoUrl: "https://github.com/cline/cline",
 			cloudBranch: "main",
@@ -598,7 +621,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 			onListCloudBranches,
 		});
 		await act(async () => {
-			await vi.waitFor(() => {
+			await waitFor(() => {
 				expect(onListCloudBranches).toHaveBeenCalledWith(42);
 				expect(container.textContent).toContain("main (default)");
 			});
@@ -613,7 +636,7 @@ describe("WelcomeWorkspaceControls cloud mode", () => {
 	});
 
 	it("links to GitHub setup when no integration is connected", async () => {
-		const props = renderControls({
+		const props = await renderControls({
 			executionTarget: "cloud",
 			onListCloudRepositories: vi.fn(async () => ({
 				connected: false,
@@ -709,7 +732,7 @@ describe("WelcomeWorkspaceControls manual path entry", () => {
 		// wipe the menu's typed path or a visible error while it is open.
 		const onSwitchWorkspace = vi.fn(async () => false);
 		const render = async () => {
-			renderControls({
+			await renderControls({
 				onRefreshWorkspaces: vi.fn(async () => undefined),
 				onSwitchWorkspace,
 				workspaceRoot: "/projects/project-1",
@@ -754,7 +777,7 @@ async function renderBranchChipControls(overrides: {
 	workIn?: WorkIn;
 	onWorkInChange?: (next: WorkIn) => void;
 }): Promise<void> {
-	renderControls({
+	await renderControls({
 		cloudEnabled: false,
 		currentBranch: overrides.currentBranch,
 		workIn: overrides.workIn,
@@ -798,7 +821,7 @@ describe("WelcomeWorkspaceControls branch chip", () => {
 		await renderBranchChipControls({ currentBranch: "no-git" });
 
 		await clickButton("recipes");
-		await vi.waitFor(() => {
+		await waitFor(() => {
 			expect(container.textContent).toContain("Open folder...");
 		});
 		expect(container.textContent).not.toContain("Add project");

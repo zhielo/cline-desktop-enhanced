@@ -9,7 +9,9 @@ export default defineConfig({
 	},
 	test: {
 		environment: "node",
-		setupFiles: ["./test/vitest-setup.ts"],
+		setupFiles: [
+			fileURLToPath(new URL("./test/vitest-setup.ts", import.meta.url)),
+		],
 		// First test in a file pays the @cline/core → llms module-graph import
 		// cost, which sits near the 5s default under CI contention.
 		testTimeout: 20_000,

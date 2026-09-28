@@ -119,7 +119,7 @@ const requiredMarkers: Array<{
 			"vitest/config",
 			"import.meta.url",
 			"defineConfig",
-			"./test/vitest-setup.ts",
+			'new URL("./test/vitest-setup.ts", import.meta.url)',
 		],
 	},
 	{
@@ -304,6 +304,21 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/examples/desktop-app/webview/app/page.tsx",
 		markers: ["Computer control active", "Stop and take over"],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/hooks/use-chat-session.ts",
+		markers: [
+			'process.env.NODE_ENV === "test"',
+			"shouldLogVerboseCoreLogs()",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/desktop-client.ts",
+		markers: ['process.env.NODE_ENV === "development"'],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/welcome-workspace-controls.test.tsx",
+		markers: ["async function renderControls", "await act(async () =>"],
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/image-attachments.test.ts",
