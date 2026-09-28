@@ -90,6 +90,13 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		headlessToolNames: ["process_session"],
 	},
 	{
+		id: "computer_use",
+		description:
+			"Control one explicitly allowlisted foreground desktop application with visible stop and takeover controls.",
+		headlessToolNames: ["computer_use"],
+		unavailableClientTypes: ["cli", "vscode"],
+	},
+	{
 		id: "editor",
 		description:
 			"Make controlled filesystem edits on text files with create, replace, and insert operations.",
@@ -146,6 +153,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 			| "enableSearch"
 			| "enableBash"
 			| "enableProcessSessions"
+			| "enableComputerUse"
 			| "enableWebFetch"
 			| "enableApplyPatch"
 			| "enableEditor"
@@ -162,6 +170,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
 	process_session: "enableProcessSessions",
+	computer_use: "enableComputerUse",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",
@@ -184,6 +193,7 @@ type ResolvedToolFlags = Pick<
 	| "enableSearch"
 	| "enableBash"
 	| "enableProcessSessions"
+	| "enableComputerUse"
 	| "enableWebFetch"
 	| "enableApplyPatch"
 	| "enableEditor"

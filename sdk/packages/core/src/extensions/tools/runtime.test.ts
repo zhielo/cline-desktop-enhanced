@@ -26,6 +26,24 @@ describe("builtin tool catalog", () => {
 		).toBe(false);
 	});
 
+	it("keeps computer use desktop-only and disabled in plan mode", () => {
+		expect(
+			getCoreBuiltinToolCatalog({ mode: "act" }).find(
+				(entry) => entry.id === "computer_use",
+			)?.defaultEnabled,
+		).toBe(true);
+		expect(
+			getCoreBuiltinToolCatalog({ mode: "plan" }).find(
+				(entry) => entry.id === "computer_use",
+			)?.defaultEnabled,
+		).toBe(false);
+		expect(
+			getCoreBuiltinToolCatalog({ mode: "act", clientType: "cli" }).some(
+				(entry) => entry.id === "computer_use",
+			),
+		).toBe(false);
+	});
+
 	it("includes the unified tasks tool outside yolo mode", () => {
 		for (const mode of ["act", "plan"] as const) {
 			const entry = getCoreBuiltinToolCatalog({ mode }).find(

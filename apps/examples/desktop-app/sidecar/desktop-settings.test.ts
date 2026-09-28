@@ -13,6 +13,7 @@ import {
 	readDesktopSettings,
 	resolveDesktopSettingsPath,
 	setCloudSessionsEnabled,
+	setComputerUseSettings,
 	setCustomAiInstructions,
 } from "./desktop-settings";
 
@@ -33,6 +34,8 @@ describe("desktop settings", () => {
 		expect(readDesktopSettings()).toEqual({
 			cloudSessionsEnabled: false,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 	});
 
@@ -40,10 +43,14 @@ describe("desktop settings", () => {
 		expect(setCloudSessionsEnabled(true)).toEqual({
 			cloudSessionsEnabled: true,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 		expect(readDesktopSettings()).toEqual({
 			cloudSessionsEnabled: true,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 		expect(resolveDesktopSettingsPath().endsWith("code-settings.json")).toBe(
 			true,
@@ -54,10 +61,14 @@ describe("desktop settings", () => {
 		expect(setCloudSessionsEnabled(false)).toEqual({
 			cloudSessionsEnabled: false,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 		expect(readDesktopSettings()).toEqual({
 			cloudSessionsEnabled: false,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 	});
 
@@ -67,6 +78,8 @@ describe("desktop settings", () => {
 		expect(readDesktopSettings()).toEqual({
 			cloudSessionsEnabled: false,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 		writeFileSync(
 			resolveDesktopSettingsPath(),
@@ -76,12 +89,16 @@ describe("desktop settings", () => {
 		expect(readDesktopSettings()).toEqual({
 			cloudSessionsEnabled: false,
 			customAiInstructions: "",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 	});
 	it("persists and merges custom AI instructions for every new local session", () => {
 		expect(setCustomAiInstructions("  Always run focused tests.  ")).toEqual({
 			cloudSessionsEnabled: false,
 			customAiInstructions: "Always run focused tests.",
+			computerUseEnabled: false,
+			computerUseAllowedApplications: [],
 		});
 		expect(readDesktopSettings().customAiInstructions).toBe(
 			"Always run focused tests.",
@@ -89,5 +106,31 @@ describe("desktop settings", () => {
 		expect(mergeDesktopAiInstructions("Keep this session concise.")).toBe(
 			"Always run focused tests.\n\nKeep this session concise.",
 		);
+	});
+
+	it("requires an explicit Windows executable allowlist before enabling computer use", () => {
+		expect(() =>
+			setComputerUseSettings({ enabled: true, allowedApplications: [] }),
+		).toThrow("at least one allowlisted application");
+		expect(
+			setComputerUseSettings({
+				enabled: true,
+				allowedApplications: [
+					"C:\\Program Files\\Example\\Example.exe",
+					"c:/Program Files/Example/Example.exe",
+				],
+			}),
+		).toMatchObject({
+			computerUseEnabled: true,
+			computerUseAllowedApplications: [
+				"C:\\Program Files\\Example\\Example.exe",
+			],
+		});
+		expect(() =>
+			setComputerUseSettings({
+				enabled: true,
+				allowedApplications: ["example.exe"],
+			}),
+		).toThrow("absolute Windows .exe paths");
 	});
 });

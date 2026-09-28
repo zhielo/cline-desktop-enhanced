@@ -26,6 +26,8 @@ import {
 	markQueuedAttachmentsSubmitted,
 	reconcileQueuedAttachments,
 } from "./attachments";
+import { DesktopComputerUseManager } from "./computer-use-manager";
+import { readDesktopSettings } from "./desktop-settings";
 import {
 	disposeDesktopFeatureFlagsService,
 	getDesktopFeatureFlagsService,
@@ -1330,6 +1332,12 @@ export function cancelSidecarMistakeQuestions(
 export function createSidecarRuntimeCapabilities(
 	ctx: SidecarContext,
 ): RuntimeCapabilities {
+	const owner = getSidecarContextOwner(ctx);
+	owner.computerUseManager ??= new DesktopComputerUseManager({
+		readSettings: readDesktopSettings,
+		onStateChanged: (items) =>
+			sendEvent(owner, "computer_use_state", { items }),
+	});
 	return {
 		toolExecutors: {
 			askQuestion: (question, options, context) =>
@@ -1342,6 +1350,9 @@ export function createSidecarRuntimeCapabilities(
 				verified
 					? "Task completion accepted."
 					: "Task completion recorded without verification.",
+			...(ctx.activeEnvironmentId === LOCAL_ENVIRONMENT_ID
+				? { computerUse: owner.computerUseManager.executor }
+				: {}),
 		},
 		requestToolApproval: (request) => requestSidecarToolApproval(ctx, request),
 	};

@@ -276,8 +276,54 @@ function toThreadTitle(options: { title?: string; prompt?: string }): string {
 	return "New session";
 }
 
+type ActiveComputerUseSession = {
+	computerSessionId: string;
+	ownerSessionId: string;
+	executable: string;
+	actionCount: number;
+};
+
 export default function Home() {
 	const [initialThreadId] = useState(makeThreadId);
+	const [computerUseSessions, setComputerUseSessions] = useState<
+		ActiveComputerUseSession[]
+	>([]);
+	const [takingOverComputer, setTakingOverComputer] = useState(false);
+	useEffect(() => {
+		let cancelled = false;
+		const apply = (payload: unknown) => {
+			if (cancelled || !payload || typeof payload !== "object") return;
+			const items = (payload as { items?: unknown }).items;
+			setComputerUseSessions(
+				Array.isArray(items) ? (items as ActiveComputerUseSession[]) : [],
+			);
+		};
+		void desktopClient
+			.invoke<{ items?: ActiveComputerUseSession[] }>("get_computer_use_state")
+			.then(apply)
+			.catch(() => {});
+		const unsubscribe = desktopClient.subscribe("computer_use_state", apply);
+		return () => {
+			cancelled = true;
+			unsubscribe();
+		};
+	}, []);
+
+	const takeOverComputer = useCallback(async () => {
+		setTakingOverComputer(true);
+		try {
+			await desktopClient.invoke("take_over_computer_use");
+			setComputerUseSessions([]);
+		} catch (error) {
+			toast({
+				title: "Unable to stop computer control",
+				description: error instanceof Error ? error.message : String(error),
+				variant: "destructive",
+			});
+		} finally {
+			setTakingOverComputer(false);
+		}
+	}, []);
 	const [appState, dispatchApp] = useReducer(
 		desktopAppReducer<SettingsSection>,
 		initialThreadId,
@@ -824,6 +870,27 @@ export default function Home() {
 						inert={showOnboarding ? true : undefined}
 						style={showOnboarding ? { visibility: "hidden" } : undefined}
 					>
+						{computerUseSessions.length > 0 ? (
+							<div
+								aria-live="assertive"
+								className="fixed inset-x-0 top-0 z-[100] flex min-h-10 items-center justify-center gap-3 border-b border-amber-500/40 bg-amber-100 px-4 py-2 text-sm text-amber-950 shadow-sm dark:bg-amber-950 dark:text-amber-100"
+							>
+								<span className="font-semibold">Computer control active</span>
+								<span className="max-w-[45vw] truncate">
+									{computerUseSessions.length === 1
+										? computerUseSessions[0]?.executable
+										: `${computerUseSessions.length} allowlisted applications`}
+								</span>
+								<button
+									className="rounded-md border border-amber-700/40 bg-background px-2 py-1 font-medium text-foreground hover:bg-muted disabled:opacity-50"
+									disabled={takingOverComputer}
+									onClick={() => void takeOverComputer()}
+									type="button"
+								>
+									{takingOverComputer ? "Stopping…" : "Stop and take over"}
+								</button>
+							</div>
+						) : null}
 						<Sidebar
 							className="border-r border-sidebar-border"
 							collapsible="icon"

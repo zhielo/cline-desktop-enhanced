@@ -104,7 +104,7 @@ Implementation status: Windows now persists a bounded local baseline of numeric 
 
 Parent issue: #27
 
-Evaluate generic computer use only after process sessions, task state, worktrees, permissions, and parallel orchestration are stable. Require explicit app allowlists, visible stop/takeover controls, screenshot/context boundaries, and denial of administrator/security-prompt approval. Prefer MCP/plugins and structured tools whenever available.
+Implementation status: Windows-only scoped computer use is implemented as an explicit opt-in for new Full Access sessions. The host enforces exact executable allowlists, foreground executable revalidation, owner-scoped sessions, bounded accessibility/screenshot observations, protected/password-surface denial, action/runtime/evidence limits, and a visible Stop and Take Over control. Accessibility selectors are preferred over coordinates, and structured tools/MCP remain the required first choice. See `docs/SCOPED_COMPUTER_USE.md`. Native OS sandboxing, macOS/Linux adapters, and broader deterministic fixture coverage remain follow-up work.
 
 ## Delivery order
 

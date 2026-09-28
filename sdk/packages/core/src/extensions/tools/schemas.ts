@@ -648,6 +648,100 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 
 export type ProcessSessionInput = z.infer<typeof ProcessSessionInputSchema>;
 
+const ComputerUseSessionIdSchema = z
+	.string()
+	.uuid()
+	.describe("Computer-control session ID returned by start");
+
+const ComputerUseSelectorSchema = z
+	.object({
+		automation_id: z.string().max(512).optional(),
+		name: z.string().max(512).optional(),
+		control_type: z.string().max(128).optional(),
+	})
+	.refine(
+		(value) => Boolean(value.automation_id || value.name || value.control_type),
+		"at least one selector field is required",
+	);
+
+/**
+ * Host-scoped desktop computer control. The host is responsible for enforcing
+ * executable allowlists, foreground ownership, protected-surface denial,
+ * bounded evidence retention, and visible stop/takeover controls.
+ */
+export const ComputerUseInputSchema = z.discriminatedUnion("action", [
+	z.object({
+		action: z.literal("start"),
+		executable: z
+			.string()
+			.min(1)
+			.max(2048)
+			.describe("Exact absolute executable path configured by the user"),
+		acknowledge_risk: z
+			.literal(true)
+			.describe("Required acknowledgement for interactive desktop control"),
+	}),
+	z.object({ action: z.literal("list") }),
+	z.object({
+		action: z.literal("observe"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		include_screenshot: z.boolean().optional().default(true),
+	}),
+	z.object({
+		action: z.literal("click"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		selector: ComputerUseSelectorSchema.optional(),
+		x: z.coerce.number().int().optional(),
+		y: z.coerce.number().int().optional(),
+		button: z.enum(["left", "right"]).optional().default("left"),
+	}),
+	z.object({
+		action: z.literal("type"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		selector: ComputerUseSelectorSchema.optional(),
+		text: z.string().max(4000),
+	}),
+	z.object({
+		action: z.literal("key"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		key: z.enum([
+			"ENTER",
+			"TAB",
+			"ESCAPE",
+			"SPACE",
+			"BACKSPACE",
+			"DELETE",
+			"UP",
+			"DOWN",
+			"LEFT",
+			"RIGHT",
+			"HOME",
+			"END",
+			"PAGEUP",
+			"PAGEDOWN",
+		]),
+	}),
+	z.object({
+		action: z.literal("scroll"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		delta: z.coerce.number().int().min(-1200).max(1200),
+		x: z.coerce.number().int().optional(),
+		y: z.coerce.number().int().optional(),
+	}),
+	z.object({
+		action: z.literal("wait"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		selector: ComputerUseSelectorSchema.optional(),
+		timeout_ms: z.coerce.number().int().min(100).max(15_000).optional(),
+	}),
+	z.object({
+		action: z.literal("stop"),
+		computer_session_id: ComputerUseSessionIdSchema,
+	}),
+]);
+
+export type ComputerUseInput = z.infer<typeof ComputerUseInputSchema>;
+
 /**
  * Web fetch request parameters
  */

@@ -731,6 +731,12 @@ function GeneralSettingsContent({
 	>(null);
 	const [customAiInstructionsSaved, setCustomAiInstructionsSaved] =
 		useState(false);
+	const [computerUseEnabled, setComputerUseEnabled] = useState(false);
+	const [computerUseApplications, setComputerUseApplications] = useState("");
+	const [computerUseLoading, setComputerUseLoading] = useState(true);
+	const [computerUseSaving, setComputerUseSaving] = useState(false);
+	const [computerUseError, setComputerUseError] = useState<string | null>(null);
+	const [computerUseSaved, setComputerUseSaved] = useState(false);
 	const [telemetryOptOut, setTelemetryOptOut] = useState(false);
 	const [telemetryLoading, setTelemetryLoading] = useState(true);
 	const [telemetrySaving, setTelemetrySaving] = useState(false);
@@ -855,6 +861,8 @@ function GeneralSettingsContent({
 		setCloudSessionsError(null);
 		setCustomAiInstructionsLoading(true);
 		setCustomAiInstructionsError(null);
+		setComputerUseLoading(true);
+		setComputerUseError(null);
 		await Promise.all([
 			(async () => {
 				try {
@@ -863,9 +871,7 @@ function GeneralSettingsContent({
 					);
 					setTelemetryOptOut(settings.telemetryOptOut);
 					setAutoUpdateEnabled(settings.autoUpdateEnabled);
-					setPermissionProfile(
-						settings.permissionProfile ?? "full-access",
-					);
+					setPermissionProfile(settings.permissionProfile ?? "full-access");
 					setWebSearchEnabled(settings.tools?.web_search?.enabled === true);
 				} catch (error) {
 					const message =
@@ -886,6 +892,8 @@ function GeneralSettingsContent({
 					const desktopSettings = await desktopClient.invoke<{
 						cloudSessionsEnabled: boolean;
 						customAiInstructions?: string;
+						computerUseEnabled?: boolean;
+						computerUseAllowedApplications?: string[];
 					}>("get_desktop_settings");
 					setCloudSessionsEnabled(
 						Boolean(desktopSettings.cloudSessionsEnabled),
@@ -893,14 +901,20 @@ function GeneralSettingsContent({
 					const instructions = desktopSettings.customAiInstructions ?? "";
 					setCustomAiInstructions(instructions);
 					setSavedCustomAiInstructions(instructions);
+					setComputerUseEnabled(desktopSettings.computerUseEnabled === true);
+					setComputerUseApplications(
+						(desktopSettings.computerUseAllowedApplications ?? []).join("\n"),
+					);
 				} catch (error) {
 					const message =
 						error instanceof Error ? error.message : String(error);
 					setCloudSessionsError(message);
 					setCustomAiInstructionsError(message);
+					setComputerUseError(message);
 				} finally {
 					setCloudSessionsLoading(false);
 					setCustomAiInstructionsLoading(false);
+					setComputerUseLoading(false);
 				}
 			})(),
 			refreshCloudSessionsEffective(),
@@ -933,6 +947,36 @@ function GeneralSettingsContent({
 			);
 		} finally {
 			setCustomAiInstructionsSaving(false);
+		}
+	};
+
+	const saveComputerUseSettings = async () => {
+		setComputerUseSaving(true);
+		setComputerUseError(null);
+		setComputerUseSaved(false);
+		try {
+			const allowedApplications = computerUseApplications
+				.split(/\r?\n/)
+				.map((value) => value.trim())
+				.filter(Boolean);
+			const settings = await desktopClient.invoke<{
+				computerUseEnabled: boolean;
+				computerUseAllowedApplications: string[];
+			}>("set_computer_use_settings", {
+				computer_use_enabled: computerUseEnabled,
+				computer_use_allowed_applications: allowedApplications,
+			});
+			setComputerUseEnabled(settings.computerUseEnabled);
+			setComputerUseApplications(
+				settings.computerUseAllowedApplications.join("\n"),
+			);
+			setComputerUseSaved(true);
+		} catch (error) {
+			setComputerUseError(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setComputerUseSaving(false);
 		}
 	};
 
@@ -1202,6 +1246,68 @@ function GeneralSettingsContent({
 						>
 							{fontSize}px
 						</output>
+					</div>
+				</div>
+				<div className="border-b py-4">
+					<div className="flex items-center justify-between gap-5 max-[720px]:flex-col max-[720px]:items-stretch">
+						<div className="flex flex-col gap-1">
+							<p className="text-base font-semibold text-foreground">
+								Scoped computer use
+							</p>
+							<p className="text-sm text-muted-foreground">
+								Allow new Full Access sessions to control only the foreground
+								Windows applications listed below. Structured tools remain
+								preferred. UAC, password fields, and non-allowlisted apps are
+								blocked.
+							</p>
+						</div>
+						<Switch
+							aria-label="Scoped computer use"
+							checked={computerUseEnabled}
+							disabled={computerUseLoading || computerUseSaving}
+							onCheckedChange={(checked) => {
+								setComputerUseEnabled(checked);
+								setComputerUseSaved(false);
+							}}
+						/>
+					</div>
+					<Textarea
+						aria-label="Computer-use application allowlist"
+						className="mt-3 min-h-24 resize-y font-mono text-sm"
+						disabled={computerUseLoading || computerUseSaving}
+						onChange={(event) => {
+							setComputerUseApplications(event.target.value);
+							setComputerUseSaved(false);
+						}}
+						placeholder={
+							"C:\\\\Program Files\\\\Example\\\\Example.exe\\nC:\\\\Windows\\\\System32\\\\notepad.exe"
+						}
+						value={computerUseApplications}
+					/>
+					<div className="mt-2 flex min-h-8 items-center justify-between gap-3">
+						<div className="text-xs">
+							{computerUseError ? (
+								<p className="text-destructive" role="alert">
+									Failed to save computer-use settings: {computerUseError}
+								</p>
+							) : computerUseSaved ? (
+								<output className="text-emerald-600 dark:text-emerald-400">
+									Saved. The host gate updates immediately.
+								</output>
+							) : (
+								<p className="text-muted-foreground">
+									One exact absolute .exe path per line, up to 32 applications.
+								</p>
+							)}
+						</div>
+						<Button
+							disabled={computerUseLoading || computerUseSaving}
+							onClick={() => void saveComputerUseSettings()}
+							size="sm"
+							type="button"
+						>
+							{computerUseSaving ? "Saving…" : "Save computer use"}
+						</Button>
 					</div>
 				</div>
 				<div className="flex py-4 items-center justify-between gap-5 border-b max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:py-4">

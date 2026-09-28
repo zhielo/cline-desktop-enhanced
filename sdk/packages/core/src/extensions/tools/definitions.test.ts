@@ -3,6 +3,7 @@ import type { AgentToolContext, ITelemetryService } from "@cline/shared";
 import { describe, expect, it, vi } from "vitest";
 import {
 	buildRunCommandsDescription,
+	createComputerUseTool,
 	createDefaultTools,
 	createEditorTool,
 	createProcessSessionTool,
@@ -96,6 +97,24 @@ describe("process_session tool", () => {
 		await expect(
 			tool.execute({ action: "list" }, { agentId: "agent-1", iteration: 1 }),
 		).rejects.toThrow("host-provided sessionId");
+	});
+});
+
+describe("computer_use tool", () => {
+	it("validates input and forwards the host session context", async () => {
+		const executor = vi.fn(async () => "ok");
+		const tool = createComputerUseTool(executor);
+		await expect(
+			tool.execute(
+				{
+					action: "start",
+					executable: "C:\\Program Files\\Example\\Example.exe",
+					acknowledge_risk: true,
+				},
+				{ sessionId: "session-1", agentId: "agent-1", iteration: 1 },
+			),
+		).resolves.toBe("ok");
+		expect(executor).toHaveBeenCalledOnce();
 	});
 });
 
