@@ -219,6 +219,27 @@ Primary files:
 - `apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx`
 - `docs/SCOPED_COMPUTER_USE.md`
 
+### Objective Codex-parity benchmark
+
+- A versioned weighted task corpus covers coding, execution, durable/parallel
+  orchestration, Generic Computer Use, restricted-profile escape attempts, and
+  background automation.
+- Candidate and reference runs must use the same corpus and a documented
+  comparable environment before the tool reports a relative percentage.
+- Missing scenarios reduce coverage and score rather than being silently
+  omitted. Without a reference run, the report deliberately provides readiness
+  only and does not fabricate a Codex percentage.
+- Results retain only numeric scores, durations, intervention counts, and
+  optional aggregate token/cost units—never prompts, output, paths, secrets,
+  screenshots, typed text, or identity.
+
+Primary files:
+
+- `evals/parity/corpus.v1.json`
+- `evals/parity/codex-parity.ts`
+- `evals/parity/codex-parity.test.ts`
+- `evals/parity/README.md`
+
 ## Required validation
 
 Before an installer build, preserve and run the checks encoded by `.github/workflows/build-custom-windows-installer.yml`:
