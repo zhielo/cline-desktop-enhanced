@@ -74,15 +74,18 @@ $form.StartPosition = 'CenterScreen'
 $form.TopMost = $true
 $inputBox = New-Object System.Windows.Forms.TextBox
 $inputBox.Name = 'inputBox'
+$inputBox.AccessibleName = 'Fixture input'
 $inputBox.Location = New-Object System.Drawing.Point(30,35)
 $inputBox.Size = New-Object System.Drawing.Size(450,30)
 $passwordBox = New-Object System.Windows.Forms.TextBox
 $passwordBox.Name = 'passwordBox'
+$passwordBox.AccessibleName = 'Fixture password'
 $passwordBox.Location = New-Object System.Drawing.Point(30,90)
 $passwordBox.Size = New-Object System.Drawing.Size(450,30)
 $passwordBox.UseSystemPasswordChar = $true
 $commit = New-Object System.Windows.Forms.Button
 $commit.Name = 'commitButton'
+$commit.AccessibleName = 'Fixture commit'
 $commit.Text = 'Commit deterministic value'
 $commit.Location = New-Object System.Drawing.Point(30,145)
 $commit.Size = New-Object System.Drawing.Size(220,36)
@@ -155,16 +158,16 @@ $form.Add_Shown({
         },
         context,
       ),
-    ) as { elements: Array<{ automationId: string }> };
+    ) as { elements: Array<{ name: string }> };
     expect(
-      observed.elements.some((item) => item.automationId === "inputBox"),
+      observed.elements.some((item) => item.name === "Fixture input"),
     ).toBe(true);
 
     await manager.executor(
       {
         action: "type",
         computer_session_id: computerSessionId,
-        selector: { automation_id: "inputBox" },
+        selector: { name: "Fixture input" },
         text: "deterministic-value",
       },
       context,
@@ -173,7 +176,7 @@ $form.Add_Shown({
       {
         action: "click",
         computer_session_id: computerSessionId,
-        selector: { automation_id: "commitButton" },
+        selector: { name: "Fixture commit" },
         button: "left",
       },
       context,
@@ -186,7 +189,7 @@ $form.Add_Shown({
         {
           action: "type",
           computer_session_id: computerSessionId,
-          selector: { automation_id: "passwordBox" },
+          selector: { name: "Fixture password" },
           text: "must-not-be-stored",
         },
         context,
