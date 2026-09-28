@@ -103,7 +103,6 @@ import {
 } from "./attachment-uploads";
 import { resolveDesktopTelemetryUser } from "./client-context";
 import { resolveFreshClineAuthToken } from "./cline-auth";
-import { readComputerUseMetrics } from "./computer-use-metrics";
 import {
 	getCloudSessionManager,
 	resetCloudSessionManager,
@@ -121,6 +120,7 @@ import {
 	listComposioToolkits,
 	parseComposioToolkitSlug,
 } from "./composio";
+import { readComputerUseMetrics } from "./computer-use-metrics";
 import {
 	connectorChannelsPayload,
 	startConnectorChannel,
@@ -3695,6 +3695,17 @@ export async function handleCommand(
 	}
 	if (command === "get_computer_use_state") {
 		return { items: ctx.computerUseManager?.list() ?? [] };
+	}
+	if (command === "browser_command_result") {
+		const requestId =
+			typeof args?.request_id === "string" ? args.request_id.trim() : "";
+		if (!requestId) throw new Error("browser request_id is required");
+		const error = typeof args?.error === "string" ? args.error : undefined;
+		return {
+			resolved:
+				ctx.browserManager?.resolveRequest(requestId, args?.result, error) ??
+				false,
+		};
 	}
 	if (command === "get_computer_use_metrics") {
 		return await readComputerUseMetrics();

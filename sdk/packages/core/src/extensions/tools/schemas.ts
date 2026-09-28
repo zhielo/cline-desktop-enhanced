@@ -648,6 +648,98 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 
 export type ProcessSessionInput = z.infer<typeof ProcessSessionInputSchema>;
 
+const BrowserSessionIdSchema = z
+	.string()
+	.uuid()
+	.describe("Built-in browser session ID returned by start");
+
+const BrowserTargetSchema = z
+	.object({
+		role: z.string().min(1).max(128).optional(),
+		name: z.string().min(1).max(512).optional(),
+		text: z.string().min(1).max(512).optional(),
+		test_id: z.string().min(1).max(512).optional(),
+		css: z.string().min(1).max(1024).optional(),
+	})
+	.refine(
+		(value) =>
+			Boolean(
+				value.role || value.name || value.text || value.test_id || value.css,
+			),
+		"at least one browser target field is required",
+	);
+
+/** Lightweight structured control for the isolated browser embedded by the host. */
+export const BrowserInputSchema = z.discriminatedUnion("action", [
+	z.object({
+		action: z.literal("start"),
+		url: z.string().url().max(4096).optional(),
+	}),
+	z.object({ action: z.literal("list") }),
+	z.object({
+		action: z.literal("navigate"),
+		browser_session_id: BrowserSessionIdSchema,
+		url: z.string().url().max(4096),
+	}),
+	z.object({
+		action: z.enum(["back", "forward", "reload"]),
+		browser_session_id: BrowserSessionIdSchema,
+	}),
+	z.object({
+		action: z.literal("inspect"),
+		browser_session_id: BrowserSessionIdSchema,
+		max_nodes: z.coerce.number().int().min(1).max(300).optional().default(120),
+	}),
+	z.object({
+		action: z.literal("click"),
+		browser_session_id: BrowserSessionIdSchema,
+		target: BrowserTargetSchema,
+		confirm_consequential: z.boolean().optional().default(false),
+	}),
+	z.object({
+		action: z.literal("type"),
+		browser_session_id: BrowserSessionIdSchema,
+		target: BrowserTargetSchema,
+		text: z.string().max(20_000),
+		clear: z.boolean().optional().default(true),
+	}),
+	z.object({
+		action: z.literal("select"),
+		browser_session_id: BrowserSessionIdSchema,
+		target: BrowserTargetSchema,
+		values: z.array(z.string().max(1024)).min(1).max(50),
+	}),
+	z.object({
+		action: z.literal("check"),
+		browser_session_id: BrowserSessionIdSchema,
+		target: BrowserTargetSchema,
+		checked: z.boolean(),
+	}),
+	z.object({
+		action: z.literal("wait"),
+		browser_session_id: BrowserSessionIdSchema,
+		target: BrowserTargetSchema,
+		state: z.enum(["exists", "gone"]).optional().default("exists"),
+		timeout_ms: z.coerce
+			.number()
+			.int()
+			.min(100)
+			.max(30_000)
+			.optional()
+			.default(5_000),
+	}),
+	z.object({
+		action: z.literal("screenshot"),
+		browser_session_id: BrowserSessionIdSchema,
+	}),
+	z.object({
+		action: z.literal("stop"),
+		browser_session_id: BrowserSessionIdSchema,
+	}),
+]);
+
+export type BrowserInput = z.infer<typeof BrowserInputSchema>;
+
 const ComputerUseSessionIdSchema = z
 	.string()
 	.uuid()

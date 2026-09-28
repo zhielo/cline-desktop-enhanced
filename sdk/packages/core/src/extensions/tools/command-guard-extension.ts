@@ -42,6 +42,24 @@ export function createPlanModeCommandGuardExtension(
 	const beforeTool = (
 		context: AgentBeforeToolContext,
 	): AgentBeforeToolResult | undefined => {
+		if (context.tool.name === DefaultToolNames.BROWSER) {
+			const action =
+				typeof context.input === "object" && context.input !== null
+					? (context.input as { action?: unknown }).action
+					: undefined;
+			if (
+				action === "click" ||
+				action === "type" ||
+				action === "select" ||
+				action === "check"
+			) {
+				return {
+					skip: true,
+					reason: `Browser action "${String(action)}" is not allowed in Plan mode because it can change remote state.`,
+				};
+			}
+			return undefined;
+		}
 		if (context.tool.name !== DefaultToolNames.RUN_COMMANDS) {
 			return undefined;
 		}

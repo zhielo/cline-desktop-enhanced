@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod built_in_browser;
 #[cfg(target_os = "macos")]
 mod macos_notification;
 
@@ -1446,6 +1447,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_desktop_backend_endpoint,
+            built_in_browser::built_in_browser_start,
+            built_in_browser::built_in_browser_cdp,
+            built_in_browser::built_in_browser_stop,
             pick_workspace_directory,
             open_mcp_settings_file,
             get_update_status,

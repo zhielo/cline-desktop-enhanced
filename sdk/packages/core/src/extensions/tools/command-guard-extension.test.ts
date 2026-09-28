@@ -113,6 +113,22 @@ describe("plan-mode command-guard extension", () => {
 		expect(result).toBeUndefined();
 	});
 
+	it("allows browser inspection but blocks browser mutation", async () => {
+		const extension = createPlanModeCommandGuardExtension();
+		expect(
+			await runBeforeTool(
+				extension,
+				makeContext("browser", { action: "inspect" }),
+			),
+		).toBeUndefined();
+		const blocked = await runBeforeTool(
+			extension,
+			makeContext("browser", { action: "click" }),
+		);
+		expect(blocked?.skip).toBe(true);
+		expect(blocked?.reason).toContain("Plan mode");
+	});
+
 	it("guards structured command input", async () => {
 		const extension = createPlanModeCommandGuardExtension();
 		const result = await runBeforeTool(

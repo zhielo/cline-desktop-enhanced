@@ -14,6 +14,7 @@ import type { ProcessSessionManager } from "./executors/process-session-manager"
 import type {
 	AndroidDeviceInput,
 	ApplyPatchInput,
+	BrowserInput,
 	ComputerUseInput,
 	EditFileInput,
 	LiveDebuggerInput,
@@ -213,6 +214,12 @@ export type VerifySubmitExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 
+/** Host-provided structured control of an isolated built-in browser. */
+export type BrowserExecutor = (
+	input: BrowserInput,
+	context: AgentToolContext,
+) => Promise<string>;
+
 /** Host-provided, app-scoped desktop automation implementation. */
 export type ComputerUseExecutor = (
 	input: ComputerUseInput,
@@ -235,6 +242,8 @@ export interface ToolExecutors {
 	androidDevice?: AndroidDeviceExecutor;
 	/** Explicitly enabled, app-scoped desktop computer control */
 	computerUse?: ComputerUseExecutor;
+	/** Structured built-in browser control */
+	browser?: BrowserExecutor;
 	/** Shell command execution implementation */
 	bash?: ShellExecutor;
 	/** Web content fetching implementation */
@@ -267,6 +276,7 @@ export type DefaultToolName =
 	| "run_commands"
 	| "process_session"
 	| "computer_use"
+	| "browser"
 	| "fetch_web_content"
 	| "apply_patch"
 	| "editor"
@@ -328,6 +338,9 @@ export interface DefaultToolsConfig {
 	 * @default false
 	 */
 	enableComputerUse?: boolean;
+
+	/** Enable the host-provided built-in browser tool. @default true */
+	enableBrowser?: boolean;
 
 	/**
 	 * Host-scoped process manager. Reuse one instance across runtime rebuilds so

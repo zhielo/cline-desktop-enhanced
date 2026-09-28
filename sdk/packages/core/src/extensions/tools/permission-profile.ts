@@ -81,6 +81,7 @@ const EXTERNAL_TOOLS = new Set([
 	"reverse_engineer",
 ]);
 const COMPUTER_TOOLS = new Set(["computer_use"]);
+const BROWSER_TOOLS = new Set(["browser"]);
 
 function builtInProfile(
 	profile: PermissionProfileName,
@@ -172,6 +173,7 @@ function isKnownTool(toolName: string): boolean {
 		NETWORK_TOOLS.has(toolName) ||
 		EXTERNAL_TOOLS.has(toolName) ||
 		COMPUTER_TOOLS.has(toolName) ||
+		BROWSER_TOOLS.has(toolName) ||
 		isCoordinationTool(toolName)
 	);
 }
@@ -208,6 +210,37 @@ function evaluateTool(
 		return undefined;
 	}
 
+	if (
+		!explicitlyAllowed &&
+		BROWSER_TOOLS.has(toolName) &&
+		!profile.allowNetwork
+	) {
+		return blockedReason(
+			profile.name,
+			"built-in browser network access is disabled.",
+		);
+	}
+	if (
+		!explicitlyAllowed &&
+		BROWSER_TOOLS.has(toolName) &&
+		profile.name !== "full-access"
+	) {
+		const action =
+			typeof context.input === "object" && context.input !== null
+				? (context.input as { action?: unknown }).action
+				: undefined;
+		if (
+			action === "click" ||
+			action === "type" ||
+			action === "select" ||
+			action === "check"
+		) {
+			return blockedReason(
+				profile.name,
+				"state-changing browser actions require the full-access profile.",
+			);
+		}
+	}
 	if (
 		!explicitlyAllowed &&
 		COMPUTER_TOOLS.has(toolName) &&

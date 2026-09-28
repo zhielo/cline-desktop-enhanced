@@ -12,9 +12,37 @@ const requiredMarkers: Array<{
 			"Windows reliability",
 			"Command execution performance",
 			"Scoped Windows computer use",
+			"Lightweight built-in browser",
 			"Objective Codex-parity benchmark",
 			"Required validation",
 			"vitest.config.mts",
+		],
+	},
+	{
+		path: "docs/BUILT_IN_BROWSER.md",
+		markers: [
+			"structured `browser` tool",
+			"WebView2 runtime",
+			"Password fields are rejected",
+			"not an operating-system sandbox",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/browser-manager.ts",
+		markers: [
+			"DesktopBrowserManager",
+			"MAX_SESSIONS = 8",
+			"MAX_SESSION_AGE_MS",
+			"Child agents cannot start",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/src-tauri/src/built_in_browser.rs",
+		markers: [
+			"built_in_browser_start",
+			"built_in_browser_cdp",
+			"CallDevToolsProtocolMethod",
+			"accepts only http and https URLs",
 		],
 	},
 	{
