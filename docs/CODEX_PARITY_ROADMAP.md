@@ -119,3 +119,11 @@ Implementation status: Windows-only scoped computer use is implemented as an exp
 9. Optional scoped computer use.
 
 Each phase lands through a focused pull request. Merge only after its stated checks pass or remaining failures are proven unchanged from the current `main` baseline.
+
+## Measurement contract
+
+`evals/parity/corpus.v1.json` defines the versioned cross-product task corpus.
+`evals/parity/codex-parity.ts` reports candidate readiness and coverage, and
+computes a Codex-relative percentage only when a reference run uses that same
+corpus in a documented comparable environment. Missing tasks score zero.
+Feature presence and subjective estimates are not benchmark results.

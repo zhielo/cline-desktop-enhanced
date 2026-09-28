@@ -12,6 +12,7 @@ const requiredMarkers: Array<{
 			"Windows reliability",
 			"Command execution performance",
 			"Scoped Windows computer use",
+			"Objective Codex-parity benchmark",
 			"Required validation",
 			"vitest.config.mts",
 		],
@@ -31,6 +32,34 @@ const requiredMarkers: Array<{
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
 			'bun-version: "1.3.14"',
+		],
+	},
+	{
+		path: "evals/parity/codex-parity.ts",
+		markers: [
+			"evaluateParity",
+			"coveragePercent",
+			"weightedCandidateScore",
+			"weightedReferenceScore",
+			"parityPercent",
+			"Unknown parity scenario",
+		],
+	},
+	{
+		path: "evals/parity/corpus.v1.json",
+		markers: [
+			"repository-repair",
+			"generic-computer-use-form",
+			"restricted-profile-escape",
+			"background-automation-retry",
+		],
+	},
+	{
+		path: "evals/parity/README.md",
+		markers: [
+			"versioned task",
+			"comparable environment",
+			"deliberately omits a Codex-relative percentage",
 		],
 	},
 	{

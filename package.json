@@ -29,6 +29,7 @@
         "test:e2e:interactive": "bun -F @cline/cli test:e2e:interactive",
         "verify:routines": "zsh -lc 'cd sdk/packages/core && bunx vitest run src/cron/schedule-service.test.ts --config vitest.config.ts'",
         "verify:workos-device-auth": "bun sdk/scripts/verify-workos-device-auth.ts",
+        "benchmark:parity": "bun evals/parity/codex-parity.ts",
         "biome": "bunx --bun @biomejs/biome",
         "format": "bun biome format sdk/ apps/cli/ apps/cline-hub/ apps/examples/",
         "lint": "bun biome lint sdk/ apps/cli/ apps/cline-hub/ apps/examples/",
