@@ -52,7 +52,11 @@ export interface DetachedHubOptions extends HubEndpointOverrides {
 	manageConnectors?: boolean;
 }
 
-const HUB_STARTUP_TIMEOUT_MS = 8_000;
+// Cold Windows runners and first-installed launches can spend several seconds
+// initializing the embedded runtime before discovery is writable. Keep this
+// aligned with the desktop host readiness window so a healthy cold start is
+// not failed by an earlier internal deadline.
+const HUB_STARTUP_TIMEOUT_MS = 30_000;
 const HUB_STARTUP_POLL_MS = 200;
 const HUB_RETIRE_TIMEOUT_MS = 3_000;
 const HUB_RETIRE_POLL_MS = 100;

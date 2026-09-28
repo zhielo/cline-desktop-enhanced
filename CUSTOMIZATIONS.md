@@ -56,7 +56,7 @@ Primary files:
 - React image-attachment tests explicitly enable the React `act(...)` environment.
 - The custom installer validates type safety, sidecar behavior, task reports, focused customization tests, installer configuration, installation, startup, and unsigned binaries.
 - Installed-sidecar smoke validation executes the installed `code-sidecar.exe` against an isolated Hub, waits for its ready contract, and checks `/health`; it does not depend on a racy one-time Windows process-name/path snapshot while the sidecar transitions into its detached daemon.
-- The sidecar readiness gate uses the same 30-second cold-start window as the desktop host. Once an installer has been collected successfully, the workflow records the smoke outcome and uploads the private test artifact even when a later smoke assertion fails, while retaining the failed job conclusion.
+- The installed sidecar readiness gate and the detached Hub daemon both use the same 30-second cold-start window as the desktop host, preventing healthy first launches on slower Windows runners from failing an earlier internal timeout. Once an installer has been collected successfully, the workflow records the smoke outcome and uploads the private test artifact even when a later smoke assertion fails, while retaining the failed job conclusion.
 
 Primary files:
 
