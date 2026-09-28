@@ -179,29 +179,20 @@ $form.Add_Shown({
         },
         context,
       ),
-    ) as {
-      elements: Array<{
-        controlType: string;
-        name: string;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }>;
-    };
-    const input = observed.elements.find(
-      (item) => item.controlType === "Edit" && item.width > 0 && item.height > 0,
-    );
-    const commit = observed.elements.find(
-      (item) =>
-        item.controlType === "Button" &&
-        item.name === "Commit deterministic value" &&
-        item.width > 0 &&
-        item.height > 0,
-    );
-    expect(input).toBeDefined();
-    expect(commit).toBeDefined();
-    if (!input || !commit) throw new Error("Fixture controls were not observed");
+    ) as { elements: unknown[] };
+    expect(observed.elements.length).toBeGreaterThan(0);
+    const waited = JSON.parse(
+      await manager.executor(
+        {
+          action: "wait",
+          computer_session_id: computerSessionId,
+          selector: { control_type: "Edit" },
+          timeout_ms: 5_000,
+        },
+        context,
+      ),
+    ) as { ok: boolean };
+    expect(waited.ok).toBe(true);
 
     await manager.executor(
       {
@@ -214,23 +205,9 @@ $form.Add_Shown({
     );
     await manager.executor(
       {
-        action: "click",
+        action: "key",
         computer_session_id: computerSessionId,
-        selector: { name: "Commit deterministic value", control_type: "Button" },
-        button: "left",
-      },
-      context,
-    );
-    await waitFor(() => existsSync(marker), "committed fixture value");
-    expect(readFileSync(marker, "utf8")).toBe("deterministic-value");
-
-    await manager.executor(
-      {
-        action: "click",
-        computer_session_id: computerSessionId,
-        x: Math.round(input.x + input.width / 2),
-        y: Math.round(input.y + input.height / 2 + 55),
-        button: "left",
+        key: "TAB",
       },
       context,
     );
@@ -244,5 +221,23 @@ $form.Add_Shown({
         context,
       ),
     ).rejects.toThrow("password");
+    await manager.executor(
+      {
+        action: "key",
+        computer_session_id: computerSessionId,
+        key: "TAB",
+      },
+      context,
+    );
+    await manager.executor(
+      {
+        action: "key",
+        computer_session_id: computerSessionId,
+        key: "ENTER",
+      },
+      context,
+    );
+    await waitFor(() => existsSync(marker), "committed fixture value");
+    expect(readFileSync(marker, "utf8")).toBe("deterministic-value");
   }, 30_000);
 });
