@@ -664,6 +664,12 @@ const ComputerUseSelectorSchema = z
 		"at least one selector field is required",
 	);
 
+const ComputerUseVerificationSchema = z.object({
+	selector: ComputerUseSelectorSchema,
+	state: z.enum(["exists", "gone"]).optional().default("exists"),
+	timeout_ms: z.coerce.number().int().min(100).max(15_000).optional(),
+});
+
 /**
  * Host-scoped desktop computer control. The host is responsible for enforcing
  * executable allowlists, foreground ownership, protected-surface denial,
@@ -716,12 +722,14 @@ export const ComputerUseInputSchema = z.discriminatedUnion("action", [
 		x: z.coerce.number().int().optional(),
 		y: z.coerce.number().int().optional(),
 		button: z.enum(["left", "right"]).optional().default("left"),
+		verify: ComputerUseVerificationSchema.optional(),
 	}),
 	z.object({
 		action: z.literal("type"),
 		computer_session_id: ComputerUseSessionIdSchema,
 		selector: ComputerUseSelectorSchema.optional(),
 		text: z.string().max(4000),
+		verify: ComputerUseVerificationSchema.optional(),
 	}),
 	z.object({
 		action: z.literal("key"),
@@ -742,6 +750,7 @@ export const ComputerUseInputSchema = z.discriminatedUnion("action", [
 			"PAGEUP",
 			"PAGEDOWN",
 		]),
+		verify: ComputerUseVerificationSchema.optional(),
 	}),
 	z.object({
 		action: z.literal("scroll"),
@@ -749,6 +758,7 @@ export const ComputerUseInputSchema = z.discriminatedUnion("action", [
 		delta: z.coerce.number().int().min(-1200).max(1200),
 		x: z.coerce.number().int().optional(),
 		y: z.coerce.number().int().optional(),
+		verify: ComputerUseVerificationSchema.optional(),
 	}),
 	z.object({
 		action: z.literal("wait"),

@@ -137,6 +137,31 @@ describe("computer_use tool", () => {
 			expect.anything(),
 		);
 	});
+
+	it("normalizes post-action verification defaults", async () => {
+		const executor = vi.fn(async () => "ok");
+		const tool = createComputerUseTool(executor);
+		await tool.execute(
+			{
+				action: "key",
+				computer_session_id: "11111111-1111-4111-8111-111111111111",
+				key: "ENTER",
+				verify: {
+					selector: { name: "Completed" },
+				},
+			} as never,
+			{ sessionId: "session-1", agentId: "agent-1", iteration: 1 },
+		);
+		expect(executor).toHaveBeenCalledWith(
+			expect.objectContaining({
+				verify: {
+					selector: { name: "Completed" },
+					state: "exists",
+				},
+			}),
+			expect.anything(),
+		);
+	});
 });
 
 describe("default skills tool", () => {

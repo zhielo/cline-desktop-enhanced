@@ -207,6 +207,11 @@ $form.Add_Shown({
         computer_session_id: computerSessionId,
         selector: { control_type: "Edit" },
         text: "deterministic-value",
+        verify: {
+          selector: { control_type: "Button" },
+          state: "exists",
+          timeout_ms: 5_000,
+        },
       },
       context,
     );

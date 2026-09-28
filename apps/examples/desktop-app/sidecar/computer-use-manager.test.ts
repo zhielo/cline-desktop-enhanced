@@ -266,4 +266,114 @@ describe("DesktopComputerUseManager", () => {
 		expect(serialized).not.toContain(EXECUTABLE);
 		expect(serialized).not.toContain("safe-button");
 	});
+
+	it("verifies post-action UI state against the same process instance", async () => {
+		const runner = vi.fn(async (payload: Record<string, unknown>) => {
+			if (payload.action === "inspect_process")
+				return { pid: 42, foreground: true };
+			if (payload.action === "wait")
+				return { ok: true, expected: "gone", pid: 42 };
+			return { ok: true, pid: 42 };
+		});
+		const manager = new DesktopComputerUseManager({
+			platform: "win32",
+			readSettings: () => settings(),
+			runPowerShell: runner,
+		});
+		const started = JSON.parse(
+			await manager.executor(
+				{ action: "start", executable: EXECUTABLE, acknowledge_risk: true },
+				context,
+			),
+		) as { computerSessionId: string };
+		const result = JSON.parse(
+			await manager.executor(
+				{
+					action: "key",
+					computer_session_id: started.computerSessionId,
+					key: "ENTER",
+					verify: {
+						selector: { automation_id: "progress-dialog" },
+						state: "gone",
+						timeout_ms: 2_000,
+					},
+				},
+				context,
+			),
+		) as { verification: { ok: boolean; state: string } };
+
+		expect(result.verification).toEqual({ ok: true, state: "gone" });
+		expect(runner).toHaveBeenLastCalledWith(
+			{
+				action: "wait",
+				expectedPath: EXECUTABLE,
+				expectedPid: 42,
+				selector: { automation_id: "progress-dialog" },
+				timeoutMs: 2_000,
+				expectGone: true,
+			},
+			undefined,
+		);
+	});
+
+	it("fails closed on unverifiable actions and malformed coordinates", async () => {
+		const runner = vi.fn(async (payload: Record<string, unknown>) => {
+			if (payload.action === "inspect_process")
+				return { pid: 42, foreground: true };
+			if (payload.action === "wait") return { ok: false, pid: 42 };
+			return { ok: true, pid: 42 };
+		});
+		const manager = new DesktopComputerUseManager({
+			platform: "win32",
+			readSettings: () => settings(),
+			runPowerShell: runner,
+		});
+		const started = JSON.parse(
+			await manager.executor(
+				{ action: "start", executable: EXECUTABLE, acknowledge_risk: true },
+				context,
+			),
+		) as { computerSessionId: string };
+
+		await expect(
+			manager.executor(
+				{
+					action: "click",
+					computer_session_id: started.computerSessionId,
+					x: 100,
+					button: "left",
+				},
+				context,
+			),
+		).rejects.toThrow("both x and y");
+		await expect(
+			manager.executor(
+				{
+					action: "scroll",
+					computer_session_id: started.computerSessionId,
+					delta: -120,
+					x: 100,
+				},
+				context,
+			),
+		).rejects.toThrow("both x and y");
+		await expect(
+			manager.executor(
+				{
+					action: "type",
+					computer_session_id: started.computerSessionId,
+					selector: { control_type: "Edit" },
+					text: "safe",
+					verify: {
+						selector: { name: "Saved" },
+						state: "exists",
+					},
+				},
+				context,
+			),
+		).rejects.toThrow("Post-action verification failed");
+
+		const metrics = await readComputerUseMetrics();
+		expect(metrics.failures).toBe(1);
+	});
 });
