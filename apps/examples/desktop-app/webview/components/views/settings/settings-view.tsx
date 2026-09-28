@@ -109,14 +109,48 @@ type GlobalSettingsResponse = {
 type PermissionProfileName = GlobalSettingsResponse["permissionProfile"];
 
 const PERMISSION_PROFILE_DESCRIPTIONS: Record<PermissionProfileName, string> = {
-	"read-only": "Inspect code and coordinate agents without changing files.",
+	"read-only": "Inspect code and coordinate agents without changing files or using network tools.",
 	workspace:
-		"Read, edit, and run commands in the workspace without network tools.",
+		"Read, edit, and run commands in the workspace without web or network tools.",
 	"workspace-network":
-		"Workspace access plus web and network tools. Recommended for most tasks.",
+		"Workspace access plus web search, web fetch, and read-only browser navigation. Recommended for most tasks.",
 	"full-access":
-		"Allow external, plugin, MCP, device, and unclassified tools. Use only when needed.",
+		"Workspace, web, network, and interactive browser access plus computer, external, plugin, MCP, device, and unclassified tools.",
 };
+
+export const PERMISSION_PROFILE_CAPABILITIES = [
+	{
+		label: "Workspace writes",
+		values: [false, true, true, true],
+	},
+	{
+		label: "Commands and process sessions",
+		values: ["Read-only commands", true, true, true],
+	},
+	{
+		label: "Web search, fetch, and network",
+		values: [false, false, true, true],
+	},
+	{
+		label: "Built-in browser",
+		values: [false, false, "Navigate + inspect", "Full interaction"],
+	},
+	{
+		label: "Computer and device control",
+		values: [false, false, false, true],
+	},
+	{
+		label: "Plugin, MCP, and unclassified tools",
+		values: [false, false, false, true],
+	},
+] as const;
+
+const PERMISSION_PROFILE_COLUMNS = [
+	{ label: "Read only", value: "read-only" },
+	{ label: "Workspace", value: "workspace" },
+	{ label: "Workspace + network", value: "workspace-network" },
+	{ label: "Full access", value: "full-access" },
+] as const;
 
 const PROVIDER_CATALOG_CACHE_TTL_MS = 60_000;
 
@@ -1427,6 +1461,68 @@ function GeneralSettingsContent({
 							<SelectItem value="full-access">Full access</SelectItem>
 						</SelectContent>
 					</Select>
+				</div>
+				<div className="border-b py-4">
+					<div className="mb-3 flex items-baseline justify-between gap-3">
+						<p className="text-sm font-semibold text-foreground">
+							Permission capabilities
+						</p>
+						<p className="text-xs text-muted-foreground">
+							Changes apply to new local sessions.
+						</p>
+					</div>
+					<div className="overflow-x-auto rounded-md border">
+						<table
+							aria-label="Agent permission capability matrix"
+							className="w-full min-w-[760px] text-left text-xs"
+						>
+							<thead className="bg-muted/50 text-muted-foreground">
+								<tr>
+									<th className="px-3 py-2 font-medium" scope="col">
+										Capability
+									</th>
+									{PERMISSION_PROFILE_COLUMNS.map((profile) => (
+										<th
+											className={cn(
+												"px-3 py-2 font-medium",
+												permissionProfile === profile.value &&
+													"bg-primary/10 text-foreground",
+											)}
+											key={profile.value}
+											scope="col"
+										>
+											{profile.label}
+											{permissionProfile === profile.value ? " · Current" : ""}
+										</th>
+									))}
+								</tr>
+							</thead>
+							<tbody>
+								{PERMISSION_PROFILE_CAPABILITIES.map((capability) => (
+									<tr className="border-t" key={capability.label}>
+										<th className="px-3 py-2 font-medium" scope="row">
+											{capability.label}
+										</th>
+										{capability.values.map((value, index) => {
+											const profile = PERMISSION_PROFILE_COLUMNS[index];
+											return (
+												<td
+													className={cn(
+														"px-3 py-2 text-muted-foreground",
+														permissionProfile === profile?.value &&
+															"bg-primary/5 text-foreground",
+													)}
+													key={profile?.value}
+												>
+													{value === true ? "Allowed" : value === false ? "Blocked" : value}
+												</td>
+											);
+										})}
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
 				</div>
 				<div className="flex py-4 items-center justify-between gap-5 border-b max-[720px]:flex-col max-[720px]:items-stretch max-[720px]:py-4">
 					<div className="flex flex-col gap-1">

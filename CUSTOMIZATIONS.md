@@ -55,7 +55,7 @@ Primary files:
 - Desktop, example VS Code, and repository-root Vitest configurations are native ESM in `vitest.config.mts`; the legacy CommonJS-loaded `.ts` configs must not be restored.
 - React image-attachment tests explicitly enable the React `act(...)` environment.
 - Desktop Vitest installs a deterministic `ResizeObserver` test polyfill using a config-relative setup path, so both app-local and repository-root test invocations load it reliably. Expected error-path fixtures stay out of CI stderr unless verbose test logging is explicitly enabled, and asynchronous workspace-control effects are wrapped in React `act(...)` rather than suppressed.
-- The custom installer validates type safety, sidecar behavior, task reports, focused customization tests, installer configuration, installation, startup, and unsigned binaries.
+- The custom installer requires type safety, the full desktop sidecar regression suite, task reports, focused customization tests, and installer configuration to pass before NSIS packaging begins; it then validates installation, startup, and unsigned binaries.
 - Installed-sidecar smoke validation executes the installed `code-sidecar.exe` against an isolated Hub, waits for its ready contract, and checks `/health`; it does not depend on a racy one-time Windows process-name/path snapshot while the sidecar transitions into its detached daemon.
 - The installed sidecar readiness gate and the detached Hub daemon both use the same 30-second cold-start window as the desktop host, preventing healthy first launches on slower Windows runners from failing an earlier internal timeout. Once an installer has been collected successfully, the workflow records the smoke outcome and uploads the private test artifact even when a later smoke assertion fails, while retaining the failed job conclusion.
 
@@ -105,7 +105,9 @@ Primary files:
 ### Additive permission profiles
 
 - General settings expose host-enforced `read-only`, `workspace`,
-  `workspace-network`, and `full-access` profiles for new local sessions.
+  `workspace-network`, and `full-access` profiles for new local sessions, with
+  a complete capability matrix that explicitly shows web/network and browser
+  access for Full Access and the read-only browser boundary for Workspace + network.
   `full-access` is the desktop default when no preference has been stored,
   keeping the enforced boundary aligned with the existing Full Access/Yolo
   composer contract; restricted profiles remain explicit choices, and callers

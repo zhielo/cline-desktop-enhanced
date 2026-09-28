@@ -7,7 +7,7 @@ import {
 	APP_FONT_SIZE_STORAGE_KEY,
 	applyAppZoomAction,
 } from "@/lib/app-font-size";
-import { SettingsView } from "./settings-view";
+import { PERMISSION_PROFILE_CAPABILITIES, SettingsView } from "./settings-view";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@/lib/desktop-client", () => ({
@@ -52,6 +52,29 @@ beforeEach(() => {
 afterEach(async () => {
 	await act(async () => root.unmount());
 	container.remove();
+});
+
+describe("SettingsView permission capability matrix", () => {
+	it("shows Full Access as the superset that includes web and interactive browser tools", () => {
+		const byLabel = new Map(
+			PERMISSION_PROFILE_CAPABILITIES.map((item) => [item.label, item.values]),
+		);
+		expect(byLabel.get("Web search, fetch, and network")).toEqual([
+			false,
+			false,
+			true,
+			true,
+		]);
+		expect(byLabel.get("Built-in browser")).toEqual([
+			false,
+			false,
+			"Navigate + inspect",
+			"Full interaction",
+		]);
+		expect(byLabel.get("Plugin, MCP, and unclassified tools")?.at(-1)).toBe(
+			true,
+		);
+	});
 });
 
 describe("SettingsView font size", () => {

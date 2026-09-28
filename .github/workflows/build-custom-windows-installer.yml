@@ -99,8 +99,7 @@ jobs:
         working-directory: apps/examples/desktop-app
         run: bun run typecheck
 
-      - name: Run desktop sidecar regression suite (non-blocking)
-        continue-on-error: true
+      - name: Run required desktop sidecar regression suite
         working-directory: apps/examples/desktop-app
         run: bun run test:sidecar
 
