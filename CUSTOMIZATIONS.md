@@ -176,6 +176,30 @@ Primary files:
 - `apps/examples/desktop-app/webview/hooks/use-session-agents.ts`
 - `apps/examples/desktop-app/webview/components/agent-header.tsx`
 
+### Durable local automation retries
+
+- File-backed one-off, scheduled, and event-driven automations can opt into a
+  bounded retry policy with total attempts, initial backoff, and maximum
+  backoff.
+- Failed attempts remain immutable run-history entries. Each retry is a new
+  durable queued row linked to its failed predecessor, preserving provenance
+  across host restarts.
+- Retry scheduling and failure completion share one SQLite transaction, so a
+  crash cannot persist the failure while silently losing its retry.
+- Backoff is exponential, attempts are capped at 10, cancellation never
+  retries, and existing schedules default to one attempt.
+- Existing schedule, event filtering/debounce/dedupe/cooldown, cancellation,
+  history, report, and permission boundaries remain unchanged.
+
+Primary files:
+
+- `sdk/packages/shared/src/cron/cron-spec-types.ts`
+- `sdk/packages/core/src/cron/specs/cron-spec-parser.ts`
+- `sdk/packages/core/src/cron/store/cron-schema.ts`
+- `sdk/packages/core/src/cron/store/sqlite-cron-store.ts`
+- `sdk/packages/core/src/cron/runner/cron-runner.ts`
+- `docs/sdk/guides/scheduled-agents.mdx`
+
 ### Specialized tools
 
 - Android automation includes device selection, screen metadata, UI hierarchy, validated touch/swipe/key/text actions, foreground-package guards, and before/after screenshot evidence.

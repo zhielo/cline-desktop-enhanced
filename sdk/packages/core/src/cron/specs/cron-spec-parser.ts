@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
 	CronEventSpec,
 	CronOneOffSpec,
+	CronRetryPolicy,
 	CronScheduleSpec,
 	CronSpec,
 	CronSpecExtensionKind,
@@ -211,6 +212,50 @@ const EVENT_ONLY_FIELDS = [
 	"maxParallel",
 ] as const;
 const REMOVED_FIELDS = ["cwd"] as const;
+const MAX_RETRY_ATTEMPTS = 10;
+const MAX_RETRY_BACKOFF_SECONDS = 86_400;
+
+function normalizeRetryPolicy(value: unknown): CronRetryPolicy | undefined {
+	if (value === undefined) return undefined;
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new Error("retry must be a YAML mapping");
+	}
+	const retry = value as Record<string, unknown>;
+	const allowed = new Set([
+		"maxAttempts",
+		"backoffSeconds",
+		"maxBackoffSeconds",
+	]);
+	for (const key of Object.keys(retry)) {
+		if (!allowed.has(key)) throw new Error(`retry.${key} is not supported`);
+	}
+	const maxAttempts = asPositiveInt(retry.maxAttempts);
+	if (!maxAttempts || maxAttempts > MAX_RETRY_ATTEMPTS) {
+		throw new Error(
+			`retry.maxAttempts must be an integer from 1 to ${MAX_RETRY_ATTEMPTS}`,
+		);
+	}
+	const backoffSeconds = asNonNegativeInt(retry.backoffSeconds);
+	const maxBackoffSeconds = asNonNegativeInt(retry.maxBackoffSeconds);
+	if (
+		(backoffSeconds ?? 0) > MAX_RETRY_BACKOFF_SECONDS ||
+		(maxBackoffSeconds ?? 0) > MAX_RETRY_BACKOFF_SECONDS
+	) {
+		throw new Error(
+			`retry backoff values cannot exceed ${MAX_RETRY_BACKOFF_SECONDS} seconds`,
+		);
+	}
+	if (
+		maxBackoffSeconds !== undefined &&
+		backoffSeconds !== undefined &&
+		maxBackoffSeconds < backoffSeconds
+	) {
+		throw new Error(
+			"retry.maxBackoffSeconds must be greater than or equal to retry.backoffSeconds",
+		);
+	}
+	return { maxAttempts, backoffSeconds, maxBackoffSeconds };
+}
 
 export interface ParseCronSpecInput {
 	relativePath: string;
@@ -364,9 +409,11 @@ export function parseCronSpecFile(
 
 	let tools: string[] | undefined;
 	let extensions: CronSpecExtensionKind[] | undefined;
+	let retry: CronRetryPolicy | undefined;
 	try {
 		tools = normalizeToolList(frontmatterData.tools);
 		extensions = normalizeExtensions(frontmatterData.extensions);
+		retry = normalizeRetryPolicy(frontmatterData.retry);
 	} catch (err) {
 		return invalidWithHash(
 			externalId,
@@ -403,6 +450,7 @@ export function parseCronSpecFile(
 		modelSelection: normalizeModelSelection(frontmatterData.modelSelection),
 		maxIterations: asPositiveInt(frontmatterData.maxIterations),
 		timeoutSeconds: asPositiveInt(frontmatterData.timeoutSeconds),
+		retry,
 		tools,
 		notesDirectory: trimOrUndefined(frontmatterData.notesDirectory),
 		extensions,
