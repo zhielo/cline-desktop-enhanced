@@ -242,7 +242,7 @@ function webviewDebugLoggingEnabled(): boolean {
 		// Some embedded/privacy contexts deny localStorage access.
 	}
 	return (
-		process.env.NODE_ENV !== "production" ||
+		process.env.NODE_ENV === "development" ||
 		process.env.NEXT_PUBLIC_CLINE_DEBUG_LOGS === "1" ||
 		runtimeEnabled
 	);

@@ -537,6 +537,12 @@ function dispatchCoreLog(chunk: string): void {
 	if (level !== "error" && level !== "warn" && !shouldLogVerboseCoreLogs()) {
 		return;
 	}
+	// Tests inject error-level chunks to verify user-facing recovery. Keep those
+	// fixtures out of CI stderr unless verbose logging is explicitly enabled;
+	// runtime development and production error logging are unchanged.
+	if (process.env.NODE_ENV === "test" && !shouldLogVerboseCoreLogs()) {
+		return;
+	}
 	const message = parsed.message?.trim() || chunk;
 	(LOG_DISPATCH[level] ?? console.info)("[core]", message, parsed.metadata);
 }
