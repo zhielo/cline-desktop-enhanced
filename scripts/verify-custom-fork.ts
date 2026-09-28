@@ -115,7 +115,20 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/vitest.config.mts",
-		markers: ["vitest/config", "import.meta.url", "defineConfig"],
+		markers: [
+			"vitest/config",
+			"import.meta.url",
+			"defineConfig",
+			"./test/vitest-setup.ts",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/test/vitest-setup.ts",
+		markers: [
+			'"ResizeObserver" in globalThis',
+			"ResizeObserverStub",
+			"disconnect()",
+		],
 	},
 	{
 		path: "apps/examples/desktop-app/package.json",
