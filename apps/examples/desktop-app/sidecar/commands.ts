@@ -103,6 +103,7 @@ import {
 } from "./attachment-uploads";
 import { resolveDesktopTelemetryUser } from "./client-context";
 import { resolveFreshClineAuthToken } from "./cline-auth";
+import { readComputerUseMetrics } from "./computer-use-metrics";
 import {
 	getCloudSessionManager,
 	resetCloudSessionManager,
@@ -3694,6 +3695,9 @@ export async function handleCommand(
 	}
 	if (command === "get_computer_use_state") {
 		return { items: ctx.computerUseManager?.list() ?? [] };
+	}
+	if (command === "get_computer_use_metrics") {
+		return await readComputerUseMetrics();
 	}
 	if (command === "take_over_computer_use") {
 		const sessionId =

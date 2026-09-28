@@ -116,6 +116,27 @@ describe("computer_use tool", () => {
 		).resolves.toBe("ok");
 		expect(executor).toHaveBeenCalledOnce();
 	});
+
+	it("validates bounded agent delegation and supplies conservative defaults", async () => {
+		const executor = vi.fn(async () => "ok");
+		const tool = createComputerUseTool(executor);
+		await tool.execute(
+			{
+				action: "delegate",
+				computer_session_id: "11111111-1111-4111-8111-111111111111",
+				target_agent_id: "child-agent",
+			} as never,
+			{ sessionId: "session-1", agentId: "agent-1", iteration: 1 },
+		);
+		expect(executor).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "delegate",
+				duration_ms: 60_000,
+				max_actions: 20,
+			}),
+			expect.anything(),
+		);
+	});
 });
 
 describe("default skills tool", () => {
@@ -582,11 +603,9 @@ describe("run_commands tool description", () => {
 		expect(description).toContain("in Windows environment");
 	});
 
-	it.each([
-		"pwsh",
-		"pwsh.exe",
-		"C:\\Program Files\\PowerShell\\7\\PWSH.EXE",
-	])("names PowerShell and its redundant wrapper for %s", (shell) => {
+	it.each(["pwsh", "pwsh.exe", "C:\\Program Files\\PowerShell\\7\\PWSH.EXE"])(
+		"names PowerShell and its redundant wrapper for %s",
+		(shell) => {
 		const description = buildRunCommandsDescription(shell, true);
 		expect(description).toContain("PowerShell (pwsh.exe)");
 		expect(description).toContain("quote paths and arguments for pwsh.exe");
@@ -602,7 +621,8 @@ describe("run_commands tool description", () => {
 			"Only start another shell when you intentionally need a different shell or a separate process.",
 		);
 		expect(description).not.toContain("Windows PowerShell");
-	});
+		},
+	);
 
 	it("describes PowerShell on Unix without claiming a version or Windows host", () => {
 		const description = buildRunCommandsDescription("/usr/bin/pwsh", false);

@@ -683,6 +683,28 @@ export const ComputerUseInputSchema = z.discriminatedUnion("action", [
 	}),
 	z.object({ action: z.literal("list") }),
 	z.object({
+		action: z.literal("delegate"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		target_agent_id: z
+			.string()
+			.min(1)
+			.max(256)
+			.describe("Exact child-agent ID receiving the bounded lease"),
+		duration_ms: z.coerce
+			.number()
+			.int()
+			.min(1_000)
+			.max(5 * 60_000)
+			.optional()
+			.default(60_000),
+		max_actions: z.coerce.number().int().min(1).max(50).optional().default(20),
+	}),
+	z.object({
+		action: z.literal("revoke_delegation"),
+		computer_session_id: ComputerUseSessionIdSchema,
+		target_agent_id: z.string().min(1).max(256),
+	}),
+	z.object({
 		action: z.literal("observe"),
 		computer_session_id: ComputerUseSessionIdSchema,
 		include_screenshot: z.boolean().optional().default(true),

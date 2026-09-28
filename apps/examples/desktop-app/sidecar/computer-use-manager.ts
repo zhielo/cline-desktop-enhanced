@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { basename, join, normalize } from "node:path";
@@ -8,6 +8,7 @@ import type {
 	ComputerUseInput,
 } from "@cline/core";
 import { resolveClineDataDir } from "@cline/shared/storage";
+import { updateComputerUseMetrics } from "./computer-use-metrics";
 import type { DesktopSettings } from "./desktop-settings";
 
 const MAX_ACTIONS = 200;
@@ -18,16 +19,24 @@ const POWERSHELL_TIMEOUT_MS = 20_000;
 export type ComputerUseStateItem = {
 	computerSessionId: string;
 	ownerSessionId: string;
+	ownerAgentId: string;
 	executable: string;
 	processId: number;
 	status: "active" | "stopped";
 	createdAt: string;
 	actionCount: number;
+	delegatedAgentCount: number;
+};
+
+type ComputerUseLease = {
+	expiresAtMs: number;
+	remainingActions: number;
 };
 
 type SessionRecord = ComputerUseStateItem & {
 	createdAtMs: number;
 	screenshotPaths: string[];
+	leases: Map<string, ComputerUseLease>;
 };
 
 type PowerShellRunner = (
@@ -56,6 +65,10 @@ function requireOwner(context: AgentToolContext): string {
 		throw new Error("computer_use requires a host-provided sessionId");
 	}
 	return context.sessionId;
+}
+
+function isChildAgent(context: AgentToolContext): boolean {
+	return Boolean(context.snapshot?.parentAgentId);
 }
 
 const POWERSHELL_SCRIPT = String.raw`
@@ -220,8 +233,41 @@ async function runPowerShell(
 		);
 		let stdout = "";
 		let stderr = "";
-		const timeout = setTimeout(() => child.kill(), POWERSHELL_TIMEOUT_MS);
-		const abort = () => child.kill();
+		let settled = false;
+		const terminate = () => {
+			if (!child.pid || child.exitCode !== null || child.signalCode !== null)
+				return;
+			if (process.platform === "win32") {
+				spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+					stdio: "ignore",
+					windowsHide: true,
+					timeout: 5_000,
+				});
+			} else {
+				child.kill("SIGKILL");
+			}
+		};
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
+			signal?.removeEventListener("abort", abort);
+			callback();
+		};
+		const timeout = setTimeout(() => {
+			terminate();
+			finish(() =>
+				reject(
+					new Error(
+						`Computer action timed out after ${POWERSHELL_TIMEOUT_MS}ms`,
+					),
+				),
+			);
+		}, POWERSHELL_TIMEOUT_MS);
+		const abort = () => {
+			terminate();
+			finish(() => reject(new Error("Computer action cancelled")));
+		};
 		signal?.addEventListener("abort", abort, { once: true });
 		child.stdout.setEncoding("utf8").on("data", (chunk) => {
 			if (stdout.length < 2_000_000) stdout += chunk;
@@ -230,24 +276,22 @@ async function runPowerShell(
 			if (stderr.length < 32_000) stderr += chunk;
 		});
 		child.on("error", (error) => {
-			clearTimeout(timeout);
-			signal?.removeEventListener("abort", abort);
-			reject(error);
+			finish(() => reject(error));
 		});
 		child.on("close", (code) => {
-			clearTimeout(timeout);
-			signal?.removeEventListener("abort", abort);
-			if (signal?.aborted)
-				return reject(new Error("Computer action cancelled"));
-			if (code !== 0)
-				return reject(
-					new Error(stderr.trim() || `PowerShell exited with ${code}`),
-				);
-			try {
-				resolve(JSON.parse(stdout.trim()) as Record<string, unknown>);
-			} catch {
-				reject(new Error("Computer-control helper returned invalid JSON"));
-			}
+			finish(() => {
+				if (signal?.aborted)
+					return reject(new Error("Computer action cancelled"));
+				if (code !== 0)
+					return reject(
+						new Error(stderr.trim() || `PowerShell exited with ${code}`),
+					);
+				try {
+					resolve(JSON.parse(stdout.trim()) as Record<string, unknown>);
+				} catch {
+					reject(new Error("Computer-control helper returned invalid JSON"));
+				}
+			});
 		});
 		child.stdin.end(JSON.stringify(payload));
 	});
@@ -274,18 +318,38 @@ export class DesktopComputerUseManager {
 			.filter(
 				(item) => !ownerSessionId || item.ownerSessionId === ownerSessionId,
 			)
-			.map(
-				({ createdAtMs: _createdAtMs, screenshotPaths: _paths, ...item }) =>
-					item,
-			);
+			.map((item) => this.publicState(item));
 	}
 
 	async takeOver(ownerSessionId?: string): Promise<number> {
 		const matches = [...this.sessions.values()].filter(
 			(item) => !ownerSessionId || item.ownerSessionId === ownerSessionId,
 		);
-		for (const item of matches) await this.stop(item);
+		for (const item of matches) await this.stop(item, true);
 		return matches.length;
+	}
+
+	private publicState(session: SessionRecord): ComputerUseStateItem {
+		const {
+			createdAtMs: _createdAtMs,
+			screenshotPaths: _paths,
+			leases: _leases,
+			...item
+		} = session;
+		return { ...item, delegatedAgentCount: session.leases.size };
+	}
+
+	private listForContext(context: AgentToolContext): ComputerUseStateItem[] {
+		const ownerSessionId = requireOwner(context);
+		const now = this.now();
+		return [...this.sessions.values()]
+			.filter(
+				(item) =>
+					item.ownerSessionId === ownerSessionId &&
+					(item.ownerAgentId === context.agentId ||
+						(item.leases.get(context.agentId)?.expiresAtMs ?? 0) > now),
+			)
+			.map((item) => this.publicState(item));
 	}
 
 	private emit(): void {
@@ -294,16 +358,49 @@ export class DesktopComputerUseManager {
 
 	private expire(): void {
 		for (const session of this.sessions.values()) {
-			if (this.now() - session.createdAtMs > MAX_SESSION_AGE_MS)
+			const now = this.now();
+			for (const [agentId, lease] of session.leases) {
+				if (lease.expiresAtMs <= now || lease.remainingActions <= 0) {
+					session.leases.delete(agentId);
+				}
+			}
+			session.delegatedAgentCount = session.leases.size;
+			if (now - session.createdAtMs > MAX_SESSION_AGE_MS)
 				void this.stop(session);
 		}
 	}
 
-	private requireSession(id: string, owner: string): SessionRecord {
+	private requireSession(
+		id: string,
+		ownerSessionId: string,
+		agentId: string,
+		options: { ownerOnly?: boolean; consumeLease?: boolean } = {},
+	): SessionRecord {
 		this.expire();
 		const session = this.sessions.get(id);
-		if (!session || session.ownerSessionId !== owner) {
+		if (!session || session.ownerSessionId !== ownerSessionId) {
 			throw new Error("Unknown or unowned computer-control session");
+		}
+		if (session.ownerAgentId !== agentId) {
+			if (options.ownerOnly)
+				throw new Error("Only the owning agent can manage this session");
+			const lease = session.leases.get(agentId);
+			if (
+				!lease ||
+				lease.expiresAtMs <= this.now() ||
+				lease.remainingActions <= 0
+			) {
+				session.leases.delete(agentId);
+				session.delegatedAgentCount = session.leases.size;
+				throw new Error(
+					"Agent has no active computer-control lease for this session",
+				);
+			}
+			if (options.consumeLease) {
+				lease.remainingActions -= 1;
+				if (lease.remainingActions === 0) session.leases.delete(agentId);
+				session.delegatedAgentCount = session.leases.size;
+			}
 		}
 		if (session.actionCount >= MAX_ACTIONS) {
 			throw new Error(
@@ -313,7 +410,7 @@ export class DesktopComputerUseManager {
 		return session;
 	}
 
-	private async stop(session: SessionRecord): Promise<void> {
+	private async stop(session: SessionRecord, takeover = false): Promise<void> {
 		this.sessions.delete(session.computerSessionId);
 		session.status = "stopped";
 		await rm(
@@ -323,6 +420,11 @@ export class DesktopComputerUseManager {
 				force: true,
 			},
 		).catch(() => {});
+		await updateComputerUseMetrics({
+			sessionsCompleted: 1,
+			totalDurationMs: Math.max(0, this.now() - session.createdAtMs),
+			takeovers: takeover ? 1 : 0,
+		}).catch(() => {});
 		this.emit();
 	}
 
@@ -332,8 +434,13 @@ export class DesktopComputerUseManager {
 	): Promise<string> {
 		const owner = requireOwner(context);
 		if (input.action === "list")
-			return jsonResult({ sessions: this.list(owner) });
+			return jsonResult({ sessions: this.listForContext(context) });
 		if (input.action === "start") {
+			if (isChildAgent(context)) {
+				throw new Error(
+					"Child agents cannot start computer control; the owning agent must delegate a bounded lease",
+				);
+			}
 			if (this.platform !== "win32")
 				throw new Error("computer_use currently supports Windows only");
 			const settings = this.options.readSettings();
@@ -357,24 +464,72 @@ export class DesktopComputerUseManager {
 			const record: SessionRecord = {
 				computerSessionId,
 				ownerSessionId: owner,
+				ownerAgentId: context.agentId,
 				executable: allowed,
 				processId,
 				status: "active",
 				createdAt: new Date(createdAtMs).toISOString(),
 				createdAtMs,
 				actionCount: 0,
+				delegatedAgentCount: 0,
 				screenshotPaths: [],
+				leases: new Map(),
 			};
 			this.sessions.set(computerSessionId, record);
+			await updateComputerUseMetrics({ sessionsStarted: 1 }).catch(() => {});
 			this.emit();
 			return jsonResult({
-				...record,
-				createdAtMs: undefined,
-				screenshotPaths: undefined,
+				...this.publicState(record),
 				foreground: inspected.foreground === true,
 			});
 		}
-		const session = this.requireSession(input.computer_session_id, owner);
+		if (input.action === "delegate") {
+			const session = this.requireSession(
+				input.computer_session_id,
+				owner,
+				context.agentId,
+				{ ownerOnly: true },
+			);
+			if (input.target_agent_id === context.agentId)
+				throw new Error("The owning agent does not need a delegation lease");
+			session.leases.set(input.target_agent_id, {
+				expiresAtMs: this.now() + input.duration_ms,
+				remainingActions: input.max_actions,
+			});
+			session.delegatedAgentCount = session.leases.size;
+			this.emit();
+			return jsonResult({
+				computerSessionId: session.computerSessionId,
+				targetAgentId: input.target_agent_id,
+				expiresAt: new Date(this.now() + input.duration_ms).toISOString(),
+				remainingActions: input.max_actions,
+			});
+		}
+		if (input.action === "revoke_delegation") {
+			const session = this.requireSession(
+				input.computer_session_id,
+				owner,
+				context.agentId,
+				{ ownerOnly: true },
+			);
+			const revoked = session.leases.delete(input.target_agent_id);
+			session.delegatedAgentCount = session.leases.size;
+			this.emit();
+			return jsonResult({
+				computerSessionId: session.computerSessionId,
+				targetAgentId: input.target_agent_id,
+				revoked,
+			});
+		}
+		const session = this.requireSession(
+			input.computer_session_id,
+			owner,
+			context.agentId,
+			{
+				ownerOnly: input.action === "stop",
+				consumeLease: input.action !== "stop",
+			},
+		);
 		if (input.action === "stop") {
 			await this.stop(session);
 			return jsonResult({
@@ -415,7 +570,31 @@ export class DesktopComputerUseManager {
 			);
 		}
 		if (input.action === "wait") payload.timeoutMs = input.timeout_ms ?? 5_000;
-		const result = await this.runner(payload, context.signal);
+		let result: Record<string, unknown>;
+		try {
+			result = await this.runner(payload, context.signal);
+			await updateComputerUseMetrics({
+				actions: 1,
+				accessibilityActions: "selector" in input && input.selector ? 1 : 0,
+				coordinateActions:
+					(input.action === "click" && !input.selector) ||
+					input.action === "scroll"
+						? 1
+						: 0,
+			}).catch(() => {});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await updateComputerUseMetrics({
+				actions: 1,
+				failures: 1,
+				focusLossPauses: message.includes(
+					"Foreground application left the allowlisted executable",
+				)
+					? 1
+					: 0,
+			}).catch(() => {});
+			throw error;
+		}
 		if (typeof result.screenshotPath === "string") {
 			const screenshotPath = result.screenshotPath;
 			const bytes = await readFile(screenshotPath);

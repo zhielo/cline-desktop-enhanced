@@ -197,9 +197,11 @@ Primary files:
 ### Scoped Windows computer use
 
 - Desktop settings provide an explicit opt-in and exact absolute `.exe` allowlist. The host refuses every control-session start until enabled, and restricted permission profiles block the tool.
-- `computer_use` supports owner-scoped start/list/observe/click/type/key/scroll/wait/stop operations for one foreground allowlisted Windows application.
+- `computer_use` supports owner-agent-scoped start/list/observe/click/type/key/scroll/wait/stop operations for one foreground allowlisted Windows application. Child agents cannot start control; owners may issue and revoke leases bounded by exact agent ID, expiry, and action count.
 - Windows UI Automation selectors are preferred over coordinate fallback. Every action revalidates the foreground executable; password controls, protected Windows security processes, arbitrary key combinations, and clipboard typing are denied.
 - Sessions are bounded to 200 actions and 15 minutes. Screenshot evidence is stored under the private Cline data directory, capped at 10 images per session, and deleted on stop or takeover.
+- Local computer-use diagnostics persist aggregate counts and durations only; they exclude executable paths, titles, selectors, typed text, screenshots, and identities.
+- Windows installer testing force-terminates timed-out process trees instead of waiting forever, then runs a deterministic WinForms fixture through real UI Automation without changing the workflow or publishing a release.
 - The desktop displays a persistent Computer control active banner with a host-owned Stop and take over action.
 - Structured tools, MCP, browser protocols, and the specialized Android/reverse-engineering tools remain preferred.
 
@@ -209,6 +211,8 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/definitions.ts`
 - `sdk/packages/core/src/extensions/tools/permission-profile.ts`
 - `apps/examples/desktop-app/sidecar/computer-use-manager.ts`
+- `apps/examples/desktop-app/sidecar/computer-use-metrics.ts`
+- `apps/examples/desktop-app/scripts/computer-use-windows.test.ts`
 - `apps/examples/desktop-app/sidecar/desktop-settings.ts`
 - `apps/examples/desktop-app/webview/app/page.tsx`
 - `apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx`
