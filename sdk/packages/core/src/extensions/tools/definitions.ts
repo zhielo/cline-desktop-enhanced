@@ -49,6 +49,8 @@ import {
 	ApplyPatchInputUnionSchema,
 	type AskQuestionInput,
 	AskQuestionInputSchema,
+	type ComputerUseInput,
+	ComputerUseInputSchema,
 	type EditFileInput,
 	EditFileInputSchema,
 	type FetchWebContentInput,
@@ -77,6 +79,7 @@ import type {
 	AndroidDeviceExecutor,
 	ApplyPatchExecutor,
 	AskQuestionExecutor,
+	ComputerUseExecutor,
 	CreateDefaultToolsOptions,
 	DefaultToolsConfig,
 	EditorExecutor,
@@ -822,6 +825,26 @@ export function createProcessSessionTool(
 	});
 }
 
+/** Create the host-enforced, app-scoped desktop computer-control tool. */
+export function createComputerUseTool(
+	executor: ComputerUseExecutor,
+): AgentTool<ComputerUseInput, string> {
+	return createTool<ComputerUseInput, string>({
+		name: "computer_use",
+		description:
+			"Control one explicitly allowlisted foreground desktop application through a host-owned session. Prefer structured tools and MCP integrations whenever available. Start with the exact configured executable and acknowledge_risk=true, then observe before every action. Use accessibility selectors before coordinates. The host refuses protected/password surfaces, pauses when focus leaves the allowlisted app, bounds screenshots/actions/runtime, and exposes visible Stop/Take Over controls. This tool cannot approve UAC or other operating-system security prompts.",
+		inputSchema: zodToJsonSchema(ComputerUseInputSchema),
+		timeoutMs: 30_000,
+		retryable: false,
+		maxRetries: 0,
+		executionMode: "sequential",
+		execute: async (input, context) => {
+			const validated = validateWithZod(ComputerUseInputSchema, input);
+			return executor(validated, context);
+		},
+	});
+}
+
 /**
  * Create the fetch_web_content tool
  *
@@ -1198,6 +1221,7 @@ export function createDefaultTools(
 		enableAndroidDevice = true,
 		enableBash = true,
 		enableProcessSessions = false,
+		enableComputerUse = false,
 		enableWebFetch = true,
 		enableApplyPatch = false,
 		enableEditor = true,
@@ -1240,6 +1264,9 @@ export function createDefaultTools(
 				config,
 			),
 		);
+	}
+	if (enableComputerUse && executors.computerUse) {
+		tools.push(createComputerUseTool(executors.computerUse));
 	}
 
 	// Add fetch_web_content tool if enabled and executor provided

@@ -141,6 +141,7 @@ import {
 	MAX_CUSTOM_AI_INSTRUCTIONS_LENGTH,
 	readDesktopSettings,
 	setCloudSessionsEnabled,
+	setComputerUseSettings,
 	setCustomAiInstructions,
 } from "./desktop-settings";
 import {
@@ -3673,6 +3674,33 @@ export async function handleCommand(
 		const settings = setCustomAiInstructions(args.custom_ai_instructions);
 		broadcastEvent(ctx, "desktop_settings_changed", settings);
 		return settings;
+	}
+	if (command === "set_computer_use_settings") {
+		if (typeof args?.computer_use_enabled !== "boolean") {
+			throw new Error("computer_use_enabled must be a boolean");
+		}
+		if (!Array.isArray(args?.computer_use_allowed_applications)) {
+			throw new Error("computer_use_allowed_applications must be an array");
+		}
+		const settings = setComputerUseSettings({
+			enabled: args.computer_use_enabled,
+			allowedApplications: args.computer_use_allowed_applications,
+		});
+		broadcastEvent(ctx, "desktop_settings_changed", settings);
+		if (!settings.computerUseEnabled) {
+			await ctx.computerUseManager?.takeOver();
+		}
+		return settings;
+	}
+	if (command === "get_computer_use_state") {
+		return { items: ctx.computerUseManager?.list() ?? [] };
+	}
+	if (command === "take_over_computer_use") {
+		const sessionId =
+			typeof args?.session_id === "string" ? args.session_id.trim() : undefined;
+		return {
+			stopped: await ctx.computerUseManager?.takeOver(sessionId || undefined),
+		};
 	}
 	if (command === "set_cloud_sessions_enabled") {
 		if (typeof args?.cloud_sessions_enabled !== "boolean") {

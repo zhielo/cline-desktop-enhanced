@@ -31,6 +31,7 @@ export interface CustomPermissionProfile {
 	allowFileWrites: boolean;
 	allowCommands: boolean;
 	allowProcessSessions: boolean;
+	allowComputerUse?: boolean;
 	allowNetwork: boolean;
 	allowExternalTools: boolean;
 	allowUnknownTools: boolean;
@@ -45,6 +46,7 @@ interface ResolvedPermissionProfile {
 	allowFileWrites: boolean;
 	allowCommands: boolean;
 	allowProcessSessions: boolean;
+	allowComputerUse: boolean;
 	allowNetwork: boolean;
 	allowExternalTools: boolean;
 	allowUnknownTools: boolean;
@@ -78,6 +80,7 @@ const EXTERNAL_TOOLS = new Set([
 	"live_debugger",
 	"reverse_engineer",
 ]);
+const COMPUTER_TOOLS = new Set(["computer_use"]);
 
 function builtInProfile(
 	profile: PermissionProfileName,
@@ -89,6 +92,7 @@ function builtInProfile(
 				allowFileWrites: false,
 				allowCommands: true,
 				allowProcessSessions: false,
+				allowComputerUse: false,
 				allowNetwork: false,
 				allowExternalTools: false,
 				allowUnknownTools: false,
@@ -101,6 +105,7 @@ function builtInProfile(
 				allowFileWrites: true,
 				allowCommands: true,
 				allowProcessSessions: true,
+				allowComputerUse: false,
 				allowNetwork: false,
 				allowExternalTools: false,
 				allowUnknownTools: false,
@@ -113,6 +118,7 @@ function builtInProfile(
 				allowFileWrites: true,
 				allowCommands: true,
 				allowProcessSessions: true,
+				allowComputerUse: false,
 				allowNetwork: true,
 				allowExternalTools: false,
 				allowUnknownTools: false,
@@ -125,6 +131,7 @@ function builtInProfile(
 				allowFileWrites: true,
 				allowCommands: true,
 				allowProcessSessions: true,
+				allowComputerUse: true,
 				allowNetwork: true,
 				allowExternalTools: true,
 				allowUnknownTools: true,
@@ -145,6 +152,7 @@ export function resolvePermissionProfile(
 		allowFileWrites: profile.allowFileWrites,
 		allowCommands: profile.allowCommands,
 		allowProcessSessions: profile.allowProcessSessions,
+		allowComputerUse: profile.allowComputerUse === true,
 		allowNetwork: profile.allowNetwork,
 		allowExternalTools: profile.allowExternalTools,
 		allowUnknownTools: profile.allowUnknownTools,
@@ -163,6 +171,7 @@ function isKnownTool(toolName: string): boolean {
 		WORKSPACE_TOOLS.has(toolName) ||
 		NETWORK_TOOLS.has(toolName) ||
 		EXTERNAL_TOOLS.has(toolName) ||
+		COMPUTER_TOOLS.has(toolName) ||
 		isCoordinationTool(toolName)
 	);
 }
@@ -199,6 +208,16 @@ function evaluateTool(
 		return undefined;
 	}
 
+	if (
+		!explicitlyAllowed &&
+		COMPUTER_TOOLS.has(toolName) &&
+		!profile.allowComputerUse
+	) {
+		return blockedReason(
+			profile.name,
+			"desktop computer control is disabled for this profile.",
+		);
+	}
 	if (
 		!explicitlyAllowed &&
 		NETWORK_TOOLS.has(toolName) &&

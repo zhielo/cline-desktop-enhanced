@@ -194,6 +194,26 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/executors/live-debugger.ts`
 - `docs/LIVE_DEBUGGING.md`
 
+### Scoped Windows computer use
+
+- Desktop settings provide an explicit opt-in and exact absolute `.exe` allowlist. The host refuses every control-session start until enabled, and restricted permission profiles block the tool.
+- `computer_use` supports owner-scoped start/list/observe/click/type/key/scroll/wait/stop operations for one foreground allowlisted Windows application.
+- Windows UI Automation selectors are preferred over coordinate fallback. Every action revalidates the foreground executable; password controls, protected Windows security processes, arbitrary key combinations, and clipboard typing are denied.
+- Sessions are bounded to 200 actions and 15 minutes. Screenshot evidence is stored under the private Cline data directory, capped at 10 images per session, and deleted on stop or takeover.
+- The desktop displays a persistent Computer control active banner with a host-owned Stop and take over action.
+- Structured tools, MCP, browser protocols, and the specialized Android/reverse-engineering tools remain preferred.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/schemas.ts`
+- `sdk/packages/core/src/extensions/tools/definitions.ts`
+- `sdk/packages/core/src/extensions/tools/permission-profile.ts`
+- `apps/examples/desktop-app/sidecar/computer-use-manager.ts`
+- `apps/examples/desktop-app/sidecar/desktop-settings.ts`
+- `apps/examples/desktop-app/webview/app/page.tsx`
+- `apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx`
+- `docs/SCOPED_COMPUTER_USE.md`
+
 ## Required validation
 
 Before an installer build, preserve and run the checks encoded by `.github/workflows/build-custom-windows-installer.yml`:

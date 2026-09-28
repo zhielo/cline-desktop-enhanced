@@ -14,6 +14,7 @@ import type { ProcessSessionManager } from "./executors/process-session-manager"
 import type {
 	AndroidDeviceInput,
 	ApplyPatchInput,
+	ComputerUseInput,
 	EditFileInput,
 	LiveDebuggerInput,
 	ReadFileRequest,
@@ -212,6 +213,12 @@ export type VerifySubmitExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 
+/** Host-provided, app-scoped desktop automation implementation. */
+export type ComputerUseExecutor = (
+	input: ComputerUseInput,
+	context: AgentToolContext,
+) => Promise<string>;
+
 /**
  * Collection of all tool executors
  */
@@ -226,6 +233,8 @@ export interface ToolExecutors {
 	liveDebugger?: LiveDebuggerExecutor;
 	/** Supervised Android Debug Bridge workflows */
 	androidDevice?: AndroidDeviceExecutor;
+	/** Explicitly enabled, app-scoped desktop computer control */
+	computerUse?: ComputerUseExecutor;
 	/** Shell command execution implementation */
 	bash?: ShellExecutor;
 	/** Web content fetching implementation */
@@ -257,6 +266,7 @@ export type DefaultToolName =
 	| "android_device"
 	| "run_commands"
 	| "process_session"
+	| "computer_use"
 	| "fetch_web_content"
 	| "apply_patch"
 	| "editor"
@@ -311,6 +321,13 @@ export interface DefaultToolsConfig {
 	 * @default true in Act/YOLO presets; false in Plan mode
 	 */
 	enableProcessSessions?: boolean;
+
+	/**
+	 * Enable host-provided computer control. Hosts must keep this disabled until
+	 * the user explicitly opts in and configures an executable allowlist.
+	 * @default false
+	 */
+	enableComputerUse?: boolean;
 
 	/**
 	 * Host-scoped process manager. Reuse one instance across runtime rebuilds so

@@ -11,6 +11,7 @@ import type {
 } from "@cline/core";
 import type { MessageWithMetadata } from "@cline/llms";
 import type { UserContext } from "@cline/shared";
+import type { DesktopComputerUseManager } from "./computer-use-manager";
 import type { DurableTaskState } from "./task-state-machine";
 
 export const LOCAL_ENVIRONMENT_ID = "local";
@@ -164,6 +165,8 @@ export type SidecarContext = {
 	localWorkspaceRoot: string;
 	logger?: BasicLogger;
 	telemetry?: ITelemetryService;
+	/** Host-owned, explicitly enabled desktop computer-control sessions. */
+	computerUseManager?: DesktopComputerUseManager;
 	/** Analytics identity and explicit account state forwarded with each session. */
 	telemetryUser?: UserContext;
 	cloudSessionManager: {

@@ -58,6 +58,7 @@ describe("permission profile guard", () => {
 			await before("full-access", "third_party_write_tool"),
 		).toBeUndefined();
 		expect(await before("full-access", "android_device")).toBeUndefined();
+		expect(await before("full-access", "computer_use")).toBeUndefined();
 	});
 
 	it("allows read-only investigation and blocks writes", async () => {
@@ -76,6 +77,7 @@ describe("permission profile guard", () => {
 			)?.reason,
 		).toContain("output redirection");
 		expect((await before("read-only", "process_session"))?.skip).toBe(true);
+		expect((await before("read-only", "computer_use"))?.skip).toBe(true);
 	});
 
 	it("separates workspace and network-enabled profiles", async () => {
@@ -99,6 +101,7 @@ describe("permission profile guard", () => {
 			allowFileWrites: false,
 			allowCommands: false,
 			allowProcessSessions: false,
+			allowComputerUse: false,
 			allowNetwork: false,
 			allowExternalTools: false,
 			allowUnknownTools: false,

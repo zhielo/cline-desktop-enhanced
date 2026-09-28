@@ -11,6 +11,7 @@ const requiredMarkers: Array<{
 			"Permanent Custom AI Instructions",
 			"Windows reliability",
 			"Command execution performance",
+			"Scoped Windows computer use",
 			"Required validation",
 			"vitest.config.mts",
 		],
@@ -102,12 +103,29 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/sidecar/desktop-settings.ts",
-		markers: ["customAiInstructions", "mergeDesktopAiInstructions"],
+		markers: [
+			"customAiInstructions",
+			"mergeDesktopAiInstructions",
+			"computerUseEnabled",
+			"computerUseAllowedApplications",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/computer-use-manager.ts",
+		markers: [
+			"DesktopComputerUseManager",
+			"MAX_ACTIONS = 200",
+			"MAX_SESSION_AGE_MS",
+			"Password controls cannot be targeted",
+			"Foreground application left the allowlisted executable",
+		],
 	},
 	{
 		path: "apps/examples/desktop-app/sidecar/commands.ts",
 		markers: [
 			"set_custom_ai_instructions",
+			"set_computer_use_settings",
+			"take_over_computer_use",
 			"filesystemPathKey",
 			"rev-parse",
 			"worktree",
@@ -169,7 +187,16 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx",
-		markers: ["Custom AI instructions", "set_custom_ai_instructions"],
+		markers: [
+			"Custom AI instructions",
+			"set_custom_ai_instructions",
+			"Scoped computer use",
+			"set_computer_use_settings",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/app/page.tsx",
+		markers: ["Computer control active", "Stop and take over"],
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/image-attachments.test.ts",
@@ -237,6 +264,17 @@ const requiredMarkers: Array<{
 			'"workspace-network"',
 			'"full-access"',
 			"unclassified plugin or MCP tool",
+			"not an operating-system sandbox",
+			"desktop computer control is disabled",
+		],
+	},
+	{
+		path: "docs/SCOPED_COMPUTER_USE.md",
+		markers: [
+			"disabled by default",
+			"exact absolute Windows `.exe` paths",
+			"Stop and take over",
+			"Password controls",
 			"not an operating-system sandbox",
 		],
 	},

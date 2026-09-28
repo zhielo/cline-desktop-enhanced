@@ -89,6 +89,8 @@ export {
 } from "./extensions/config";
 export type {
 	BuiltinToolAvailabilityContext,
+	ComputerUseExecutor,
+	ComputerUseInput,
 	ToolCatalogEntry,
 	ToolClientType,
 } from "./extensions/tools";

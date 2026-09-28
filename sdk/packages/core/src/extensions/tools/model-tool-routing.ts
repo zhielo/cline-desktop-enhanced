@@ -42,6 +42,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableSearch"
 		| "enableBash"
 		| "enableProcessSessions"
+		| "enableComputerUse"
 		| "enableWebFetch"
 		| "enableApplyPatch"
 		| "enableEditor"
@@ -57,6 +58,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	search_codebase: "enableSearch",
 	run_commands: "enableBash",
 	process_session: "enableProcessSessions",
+	computer_use: "enableComputerUse",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",
