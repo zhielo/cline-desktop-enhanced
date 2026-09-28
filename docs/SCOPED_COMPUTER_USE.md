@@ -58,9 +58,11 @@ Focused tests cover opt-in and allowlist enforcement, owner/agent isolation,
 bounded delegation and revocation, takeover, privacy-safe metrics, settings
 validation, tool registration, and permission-profile denial. The existing
 Windows installer test command now also launches a deterministic WinForms
-fixture and verifies real UI Automation observation, safe text entry, button
-invocation, and password-control denial. Its workflow remains unchanged and
-artifact-only.
+fixture. On an interactive Windows desktop it verifies real UI Automation
+observation, safe text entry, button invocation, and password-control denial.
+Hosted runners that expose no interactive UI Automation tree still verify
+foreground process scoping and report the action portion as a capability skip
+instead of hanging. The workflow remains unchanged and artifact-only.
 
 Further native Windows validation should exercise DPI scaling, multiple
 monitors, modal dialogs, stale accessibility elements, focus theft, app
