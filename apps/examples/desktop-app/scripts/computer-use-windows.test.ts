@@ -179,16 +179,35 @@ $form.Add_Shown({
         },
         context,
       ),
-    ) as { elements: Array<{ name: string }> };
-    expect(
-      observed.elements.some((item) => item.name === "Fixture input"),
-    ).toBe(true);
+    ) as {
+      elements: Array<{
+        controlType: string;
+        name: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>;
+    };
+    const input = observed.elements.find(
+      (item) => item.controlType === "Edit" && item.width > 0 && item.height > 0,
+    );
+    const commit = observed.elements.find(
+      (item) =>
+        item.controlType === "Button" &&
+        item.name === "Commit deterministic value" &&
+        item.width > 0 &&
+        item.height > 0,
+    );
+    expect(input).toBeDefined();
+    expect(commit).toBeDefined();
+    if (!input || !commit) throw new Error("Fixture controls were not observed");
 
     await manager.executor(
       {
         action: "type",
         computer_session_id: computerSessionId,
-        selector: { name: "Fixture input" },
+        selector: { control_type: "Edit" },
         text: "deterministic-value",
       },
       context,
@@ -197,7 +216,7 @@ $form.Add_Shown({
       {
         action: "click",
         computer_session_id: computerSessionId,
-        selector: { name: "Fixture commit" },
+        selector: { name: "Commit deterministic value", control_type: "Button" },
         button: "left",
       },
       context,
@@ -205,12 +224,21 @@ $form.Add_Shown({
     await waitFor(() => existsSync(marker), "committed fixture value");
     expect(readFileSync(marker, "utf8")).toBe("deterministic-value");
 
+    await manager.executor(
+      {
+        action: "click",
+        computer_session_id: computerSessionId,
+        x: Math.round(input.x + input.width / 2),
+        y: Math.round(input.y + input.height / 2 + 55),
+        button: "left",
+      },
+      context,
+    );
     await expect(
       manager.executor(
         {
           action: "type",
           computer_session_id: computerSessionId,
-          selector: { name: "Fixture password" },
           text: "must-not-be-stored",
         },
         context,
