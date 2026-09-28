@@ -57,6 +57,7 @@ import { useSessionHistory } from "@/hooks/use-session-history";
 import { toast } from "@/hooks/use-toast";
 import { applyAppZoomAction, syncAppFontSize } from "@/lib/app-font-size";
 import { syncAppIcon } from "@/lib/app-icon";
+import { watchBuiltInBrowser } from "@/lib/built-in-browser";
 import type { ChatSessionConfig } from "@/lib/chat-schema";
 import { openPersonalGitHubInstallUrl } from "@/lib/cline-integrations";
 import { cloudRepositoryLabel } from "@/lib/cloud-repositories";
@@ -477,6 +478,7 @@ export default function Home() {
 
 	useEffect(() => watchDesktopTrayStatus(), []);
 	useEffect(() => watchDesktopNotifications(), []);
+	useEffect(() => watchBuiltInBrowser(), []);
 
 	const createThreadForEnvironment = useCallback((environmentId: string) => {
 		dispatchApp({

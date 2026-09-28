@@ -26,6 +26,7 @@ import {
 	markQueuedAttachmentsSubmitted,
 	reconcileQueuedAttachments,
 } from "./attachments";
+import { DesktopBrowserManager } from "./browser-manager";
 import { DesktopComputerUseManager } from "./computer-use-manager";
 import { readDesktopSettings } from "./desktop-settings";
 import {
@@ -1333,6 +1334,10 @@ export function createSidecarRuntimeCapabilities(
 	ctx: SidecarContext,
 ): RuntimeCapabilities {
 	const owner = getSidecarContextOwner(ctx);
+	owner.browserManager ??= new DesktopBrowserManager({
+		onRequest: (request) =>
+			sendEvent(owner, "browser_command_requested", request),
+	});
 	owner.computerUseManager ??= new DesktopComputerUseManager({
 		readSettings: readDesktopSettings,
 		onStateChanged: (items) =>
@@ -1351,7 +1356,10 @@ export function createSidecarRuntimeCapabilities(
 					? "Task completion accepted."
 					: "Task completion recorded without verification.",
 			...(ctx.activeEnvironmentId === LOCAL_ENVIRONMENT_ID
-				? { computerUse: owner.computerUseManager.executor }
+				? {
+						browser: owner.browserManager.executor,
+						computerUse: owner.computerUseManager.executor,
+					}
 				: {}),
 		},
 		requestToolApproval: (request) => requestSidecarToolApproval(ctx, request),

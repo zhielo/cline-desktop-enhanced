@@ -49,6 +49,8 @@ import {
 	ApplyPatchInputUnionSchema,
 	type AskQuestionInput,
 	AskQuestionInputSchema,
+	type BrowserInput,
+	BrowserInputSchema,
 	type ComputerUseInput,
 	ComputerUseInputSchema,
 	type EditFileInput,
@@ -79,6 +81,7 @@ import type {
 	AndroidDeviceExecutor,
 	ApplyPatchExecutor,
 	AskQuestionExecutor,
+	BrowserExecutor,
 	ComputerUseExecutor,
 	CreateDefaultToolsOptions,
 	DefaultToolsConfig,
@@ -845,6 +848,26 @@ export function createComputerUseTool(
 	});
 }
 
+/** Create the host-owned structured built-in browser tool. */
+export function createBrowserTool(
+	executor: BrowserExecutor,
+): AgentTool<BrowserInput, string> {
+	return createTool<BrowserInput, string>({
+		name: "browser",
+		description:
+			"Operate the isolated browser built into Cline Desktop. Prefer APIs, MCP, and fetch_web_content first. Inspect the page before interacting; prefer role/name/text/test_id targets over CSS. The host restricts domains, blocks password fields, bounds sessions and evidence, and requires confirm_consequential=true for sensitive-looking controls. Use computer_use only when structured browser actions cannot reach the control.",
+		inputSchema: zodToJsonSchema(BrowserInputSchema),
+		timeoutMs: 45_000,
+		retryable: false,
+		maxRetries: 0,
+		executionMode: "sequential",
+		execute: async (input, context) => {
+			const validated = validateWithZod(BrowserInputSchema, input);
+			return executor(validated, context);
+		},
+	});
+}
+
 /**
  * Create the fetch_web_content tool
  *
@@ -1222,6 +1245,7 @@ export function createDefaultTools(
 		enableBash = true,
 		enableProcessSessions = false,
 		enableComputerUse = false,
+		enableBrowser = true,
 		enableWebFetch = true,
 		enableApplyPatch = false,
 		enableEditor = true,
@@ -1267,6 +1291,9 @@ export function createDefaultTools(
 	}
 	if (enableComputerUse && executors.computerUse) {
 		tools.push(createComputerUseTool(executors.computerUse));
+	}
+	if (enableBrowser && executors.browser) {
+		tools.push(createBrowserTool(executors.browser));
 	}
 
 	// Add fetch_web_content tool if enabled and executor provided

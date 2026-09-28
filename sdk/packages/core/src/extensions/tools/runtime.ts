@@ -97,6 +97,13 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		unavailableClientTypes: ["cli", "vscode"],
 	},
 	{
+		id: "browser",
+		description:
+			"Inspect and interact with the isolated browser built into Cline Desktop.",
+		headlessToolNames: ["browser"],
+		unavailableClientTypes: ["cli", "vscode"],
+	},
+	{
 		id: "editor",
 		description:
 			"Make controlled filesystem edits on text files with create, replace, and insert operations.",
@@ -154,6 +161,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 			| "enableBash"
 			| "enableProcessSessions"
 			| "enableComputerUse"
+			| "enableBrowser"
 			| "enableWebFetch"
 			| "enableApplyPatch"
 			| "enableEditor"
@@ -171,6 +179,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 	run_commands: "enableBash",
 	process_session: "enableProcessSessions",
 	computer_use: "enableComputerUse",
+	browser: "enableBrowser",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",
@@ -194,6 +203,7 @@ type ResolvedToolFlags = Pick<
 	| "enableBash"
 	| "enableProcessSessions"
 	| "enableComputerUse"
+	| "enableBrowser"
 	| "enableWebFetch"
 	| "enableApplyPatch"
 	| "enableEditor"

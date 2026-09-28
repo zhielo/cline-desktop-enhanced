@@ -219,6 +219,37 @@ Primary files:
 - `apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx`
 - `docs/SCOPED_COMPUTER_USE.md`
 
+### Lightweight built-in browser
+
+- The Windows desktop exposes a structured `browser` tool backed by an
+  isolated Tauri WebView window and the installed WebView2 runtime. It does not
+  bundle a second Chromium distribution or launch the user's normal Edge
+  profile.
+- Browser sessions are owner-scoped, bounded to eight windows, expire after 30
+  minutes of inactivity, and reject child-agent session creation.
+- The browser supports navigation, visible interactive-element inspection,
+  semantic click/type/select/check actions, bounded waits, and screenshots.
+  Role, accessible name, text, and test ID are preferred over CSS.
+- Only HTTP(S) destinations are accepted. Password fields are denied, and
+  sensitive-looking submission, purchase, publication, deletion, acceptance,
+  and booking controls require explicit consequential-action confirmation.
+- Permission profiles classify the browser as a network capability.
+  Workspace + network permits navigation and inspection but not state-changing
+  actions; Full Access permits interaction.
+- APIs, MCP, and `fetch_web_content` remain preferred. Structured browser
+  control comes before screenshot interpretation and generic `computer_use`.
+- See `docs/BUILT_IN_BROWSER.md`.
+
+Primary files:
+
+- `sdk/packages/core/src/extensions/tools/schemas.ts`
+- `sdk/packages/core/src/extensions/tools/definitions.ts`
+- `sdk/packages/core/src/extensions/tools/permission-profile.ts`
+- `apps/examples/desktop-app/sidecar/browser-manager.ts`
+- `apps/examples/desktop-app/webview/lib/built-in-browser.ts`
+- `apps/examples/desktop-app/src-tauri/src/built_in_browser.rs`
+- `docs/BUILT_IN_BROWSER.md`
+
 ### Objective Codex-parity benchmark
 
 - A versioned weighted task corpus covers coding, execution, durable/parallel

@@ -11,6 +11,7 @@ import type {
 } from "@cline/core";
 import type { MessageWithMetadata } from "@cline/llms";
 import type { UserContext } from "@cline/shared";
+import type { DesktopBrowserManager } from "./browser-manager";
 import type { DesktopComputerUseManager } from "./computer-use-manager";
 import type { DurableTaskState } from "./task-state-machine";
 
@@ -167,6 +168,8 @@ export type SidecarContext = {
 	telemetry?: ITelemetryService;
 	/** Host-owned, explicitly enabled desktop computer-control sessions. */
 	computerUseManager?: DesktopComputerUseManager;
+	/** Host-owned structured sessions for the browser embedded in the app. */
+	browserManager?: DesktopBrowserManager;
 	/** Analytics identity and explicit account state forwarded with each session. */
 	telemetryUser?: UserContext;
 	cloudSessionManager: {

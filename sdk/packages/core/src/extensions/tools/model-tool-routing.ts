@@ -43,6 +43,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableBash"
 		| "enableProcessSessions"
 		| "enableComputerUse"
+		| "enableBrowser"
 		| "enableWebFetch"
 		| "enableApplyPatch"
 		| "enableEditor"
@@ -59,6 +60,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	run_commands: "enableBash",
 	process_session: "enableProcessSessions",
 	computer_use: "enableComputerUse",
+	browser: "enableBrowser",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",

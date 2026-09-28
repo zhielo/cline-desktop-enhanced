@@ -86,6 +86,16 @@ describe("permission profile guard", () => {
 		expect(
 			await before("workspace-network", "fetch_web_content"),
 		).toBeUndefined();
+		expect(
+			await before("workspace-network", "browser", { action: "inspect" }),
+		).toBeUndefined();
+		expect(
+			(await before("workspace-network", "browser", { action: "click" }))
+				?.reason,
+		).toContain("state-changing browser actions");
+		expect(
+			await before("full-access", "browser", { action: "click" }),
+		).toBeUndefined();
 	});
 
 	it("blocks unclassified MCP/plugin tools in restricted profiles", async () => {
