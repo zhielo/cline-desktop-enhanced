@@ -10,8 +10,10 @@ Starting control requires the model to provide the exact allowlisted executable 
 
 ## Supported operations
 
-- `start` and `stop` an owner-scoped control session;
-- `list` only sessions owned by the requesting agent session;
+- `start` and `stop` an owner-agent-scoped control session;
+- `list` only sessions owned by, or explicitly delegated to, the requesting agent;
+- `delegate` a short lease to one exact child-agent ID, with both an expiry and
+  a maximum action count, and `revoke_delegation` immediately;
 - `observe` the foreground allowlisted window, including a bounded accessibility tree and optional screenshot evidence;
 - `click` an accessibility selector, with coordinates as a fallback;
 - `type` through UI Automation `ValuePattern` only;
@@ -27,7 +29,15 @@ The model should observe before every action and prefer `automation_id`, accessi
 - Password controls, UAC/security processes, arbitrary key combinations, clipboard-based typing, and unbounded retries are rejected.
 - A session is limited to 200 actions and 15 minutes.
 - At most 10 screenshots are retained per session under the private Cline data directory; older captures and stopped-session captures are deleted.
-- Session ownership is enforced using the host-provided agent session ID.
+- Session ownership is enforced using both the host-provided session ID and
+  agent ID. Child agents cannot start control, delegate it onward, or stop the
+  owner's session. They can act only while an explicit owner-created lease
+  remains unexpired and has actions remaining.
+- Aggregate local diagnostics record only counts and durations: sessions,
+  completed sessions, actions, accessibility/coordinate actions, focus-loss
+  pauses, takeovers, failures, and total active duration. They never store
+  executable paths, window titles, selectors, typed text, screenshots, user
+  identity, or send telemetry externally.
 - Computer use is not an operating-system sandbox and cannot bypass Windows permissions, authentication, application authorization, or secure-desktop boundaries.
 
 ## Routing policy
@@ -44,6 +54,16 @@ Android, browser, Git, IDA, Ghidra, JADX, debugger, and filesystem work should c
 
 ## Validation
 
-Focused tests cover opt-in and allowlist enforcement, owner isolation, takeover, settings validation, tool registration, and permission-profile denial. Windows installer validation remains unchanged and artifact-only.
+Focused tests cover opt-in and allowlist enforcement, owner/agent isolation,
+bounded delegation and revocation, takeover, privacy-safe metrics, settings
+validation, tool registration, and permission-profile denial. The existing
+Windows installer test command now also launches a deterministic WinForms
+fixture. On an interactive Windows desktop it verifies real UI Automation
+observation, safe text entry, button invocation, and password-control denial.
+Hosted runners that expose no interactive UI Automation tree still verify
+foreground process scoping and report the action portion as a capability skip
+instead of hanging. The workflow remains unchanged and artifact-only.
 
-Further native Windows validation should exercise DPI scaling, multiple monitors, modal dialogs, stale accessibility elements, focus theft, app crashes, user takeover, and screenshot expiry against a deterministic fixture application.
+Further native Windows validation should exercise DPI scaling, multiple
+monitors, modal dialogs, stale accessibility elements, focus theft, app
+crashes, and screenshot expiry.

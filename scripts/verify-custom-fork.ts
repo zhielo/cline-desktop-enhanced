@@ -116,8 +116,38 @@ const requiredMarkers: Array<{
 			"DesktopComputerUseManager",
 			"MAX_ACTIONS = 200",
 			"MAX_SESSION_AGE_MS",
+			"Child agents cannot start computer control",
+			"target_agent_id",
+			"updateComputerUseMetrics",
 			"Password controls cannot be targeted",
 			"Foreground application left the allowlisted executable",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/computer-use-metrics.ts",
+		markers: [
+			"ComputerUseMetrics",
+			"accessibilityActions",
+			"coordinateActions",
+			"focusLossPauses",
+			"updateQueue",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/computer-use-windows.test.ts",
+		markers: [
+			"deterministic Windows computer-use fixture",
+			"commitButton",
+			"passwordBox",
+			"taskkill.exe",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/windows-installer.test.ts",
+		markers: [
+			"terminateProcessTree",
+			"taskkill.exe",
+			"Timed out after 90000ms",
 		],
 	},
 	{
@@ -275,6 +305,8 @@ const requiredMarkers: Array<{
 			"exact absolute Windows `.exe` paths",
 			"Stop and take over",
 			"Password controls",
+			"revoke_delegation",
+			"Aggregate local diagnostics",
 			"not an operating-system sandbox",
 		],
 	},

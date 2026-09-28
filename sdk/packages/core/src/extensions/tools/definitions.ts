@@ -832,7 +832,7 @@ export function createComputerUseTool(
 	return createTool<ComputerUseInput, string>({
 		name: "computer_use",
 		description:
-			"Control one explicitly allowlisted foreground desktop application through a host-owned session. Prefer structured tools and MCP integrations whenever available. Start with the exact configured executable and acknowledge_risk=true, then observe before every action. Use accessibility selectors before coordinates. The host refuses protected/password surfaces, pauses when focus leaves the allowlisted app, bounds screenshots/actions/runtime, and exposes visible Stop/Take Over controls. This tool cannot approve UAC or other operating-system security prompts.",
+			"Control one explicitly allowlisted foreground desktop application through a host-owned session. Prefer structured tools and MCP integrations whenever available. Start with the exact configured executable and acknowledge_risk=true, then observe before every action. Use accessibility selectors before coordinates. Child agents cannot start control; the owning agent may grant and revoke a short, action-bounded lease with delegate/revoke_delegation. The host refuses protected/password surfaces, pauses when focus leaves the allowlisted app, bounds screenshots/actions/runtime, and exposes visible Stop/Take Over controls. This tool cannot approve UAC or other operating-system security prompts.",
 		inputSchema: zodToJsonSchema(ComputerUseInputSchema),
 		timeoutMs: 30_000,
 		retryable: false,

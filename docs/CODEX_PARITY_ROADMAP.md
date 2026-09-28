@@ -104,7 +104,7 @@ Implementation status: Windows now persists a bounded local baseline of numeric 
 
 Parent issue: #27
 
-Implementation status: Windows-only scoped computer use is implemented as an explicit opt-in for new Full Access sessions. The host enforces exact executable allowlists, foreground executable revalidation, owner-scoped sessions, bounded accessibility/screenshot observations, protected/password-surface denial, action/runtime/evidence limits, and a visible Stop and Take Over control. Accessibility selectors are preferred over coordinates, and structured tools/MCP remain the required first choice. See `docs/SCOPED_COMPUTER_USE.md`. Native OS sandboxing, macOS/Linux adapters, and broader deterministic fixture coverage remain follow-up work.
+Implementation status: Windows-only scoped computer use is implemented as an explicit opt-in for new Full Access sessions. The host enforces exact executable allowlists, foreground executable revalidation, session-and-agent ownership, owner-issued child-agent leases with expiry/action budgets and revocation, bounded accessibility/screenshot observations, protected/password-surface denial, action/runtime/evidence limits, and a visible Stop and Take Over control. Local diagnostics persist aggregate counts and durations only. The unchanged installer workflow now runs a deterministic WinForms/UI Automation fixture after the native installer cleanup suite. Accessibility selectors are preferred over coordinates, and structured tools/MCP remain the required first choice. See `docs/SCOPED_COMPUTER_USE.md`. Native OS sandboxing, macOS/Linux adapters, and DPI/multi-monitor/modal fixture coverage remain follow-up work.
 
 ## Delivery order
 

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
 	copyFileSync,
 	existsSync,
@@ -52,6 +52,20 @@ async function waitFor(check: () => boolean): Promise<void> {
 	throw new Error("Timed out waiting for fixture process");
 }
 
+function terminateProcessTree(child: ChildProcess): void {
+	if (!child.pid || child.exitCode !== null || child.signalCode !== null)
+		return;
+	if (process.platform === "win32") {
+		spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+			stdio: "ignore",
+			windowsHide: true,
+			timeout: 10_000,
+		});
+		return;
+	}
+	child.kill("SIGKILL");
+}
+
 async function run(exe: string, args: string[]): Promise<number> {
 	const child = spawn(exe, args, {
 		cwd: root,
@@ -62,15 +76,27 @@ async function run(exe: string, args: string[]): Promise<number> {
 			(arg) => arg.startsWith("/D=") || arg.startsWith("_?="),
 		),
 	});
-	const timer = setTimeout(() => child.kill(), 90_000);
-	try {
-		return await new Promise<number>((resolve, reject) => {
-			child.once("error", reject);
-			child.once("exit", (code) => resolve(code ?? -1));
-		});
-	} finally {
-		clearTimeout(timer);
-	}
+	return await new Promise<number>((resolve, reject) => {
+		let settled = false;
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			callback();
+		};
+		const timer = setTimeout(() => {
+			terminateProcessTree(child);
+			finish(() =>
+				reject(
+					new Error(
+						`Timed out after 90000ms: ${path.basename(exe)} (pid ${child.pid ?? "unknown"})`,
+					),
+				),
+			);
+		}, 90_000);
+		child.once("error", (error) => finish(() => reject(error)));
+		child.once("exit", (code) => finish(() => resolve(code ?? -1)));
+	});
 }
 
 async function start(dir: string, name: string): Promise<ChildProcess> {
@@ -182,12 +208,13 @@ SectionEnd
 	}, 120_000);
 
 	afterAll(async () => {
-		for (const child of children) {
-			if (child.exitCode === null && child.signalCode === null) child.kill();
-		}
-		await waitFor(() =>
-			children.every((p) => p.exitCode !== null || p.signalCode !== null),
-		);
+		for (const child of children) terminateProcessTree(child);
+		await Promise.race([
+			waitFor(() =>
+				children.every((p) => p.exitCode !== null || p.signalCode !== null),
+			),
+			Bun.sleep(10_000),
+		]);
 		if (root)
 			rmSync(root, {
 				recursive: true,
