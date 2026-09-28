@@ -244,6 +244,22 @@ const requiredMarkers: Array<{
 		markers: ["cancelAgentWork", "pendingSteerMessage", "maxConcurrentRuns"],
 	},
 	{
+		path: "sdk/packages/shared/src/cron/cron-spec-types.ts",
+		markers: ["CronRetryPolicy", "maxAttempts", "maxBackoffSeconds"],
+	},
+	{
+		path: "sdk/packages/core/src/cron/store/cron-schema.ts",
+		markers: ["retry_attempt", "retry_of_run_id", "ensureColumn"],
+	},
+	{
+		path: "sdk/packages/core/src/cron/runner/cron-runner.ts",
+		markers: [
+			"nextAutomaticRetry",
+			"writeTransaction",
+			"cron.runner.retry.scheduled",
+		],
+	},
+	{
 		path: "apps/examples/desktop-app/sidecar/chat-session.ts",
 		markers: ["mergeDesktopAiInstructions", "taskToolStepIds"],
 	},

@@ -19,6 +19,18 @@ export interface CronSpecModelSelection {
 	modelId?: string;
 }
 
+export interface CronRetryPolicy {
+	/**
+	 * Total execution attempts, including the initial run. `1` disables
+	 * automatic retries.
+	 */
+	maxAttempts: number;
+	/** Delay before the first retry. Later retries use exponential backoff. */
+	backoffSeconds?: number;
+	/** Optional cap for exponential backoff. */
+	maxBackoffSeconds?: number;
+}
+
 export type CronSpecMode = "act" | "plan" | "yolo";
 export type CronSpecExtensionKind = "rules" | "skills" | "plugins";
 
@@ -33,6 +45,7 @@ export interface CronSpecCommonFields {
 	modelSelection?: CronSpecModelSelection;
 	maxIterations?: number;
 	timeoutSeconds?: number;
+	retry?: CronRetryPolicy;
 	tools?: string[];
 	notesDirectory?: string;
 	extensions?: CronSpecExtensionKind[];

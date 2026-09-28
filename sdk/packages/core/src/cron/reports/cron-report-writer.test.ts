@@ -21,6 +21,7 @@ function createReport(
 		triggerKind: "schedule",
 		status: data.error ? "failed" : "done",
 		attemptCount: 1,
+		retryAttempt: 0,
 		startedAt: timestamp,
 		completedAt: timestamp,
 		createdAt: timestamp,

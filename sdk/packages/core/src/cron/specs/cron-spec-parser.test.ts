@@ -132,6 +132,40 @@ describe("computeContentHash", () => {
 			});
 			expect(r.error).toMatch(/mode/);
 		});
+
+		it("parses a bounded automatic retry policy", () => {
+			const r = parseCronSpecFile({
+				relativePath: "x.md",
+				raw: `---
+workspaceRoot: /ws
+retry:
+  maxAttempts: 3
+  backoffSeconds: 5
+  maxBackoffSeconds: 30
+---
+body`,
+			});
+			expect(r.error).toBeUndefined();
+			expect(r.spec?.retry).toEqual({
+				maxAttempts: 3,
+				backoffSeconds: 5,
+				maxBackoffSeconds: 30,
+			});
+		});
+
+		it("rejects unsafe retry limits", () => {
+			const r = parseCronSpecFile({
+				relativePath: "x.md",
+				raw: `---
+workspaceRoot: /ws
+retry:
+  maxAttempts: 99
+---
+body`,
+			});
+			expect(r.error).toMatch(/maxAttempts/);
+			expect(r.spec).toBeUndefined();
+		});
 	});
 
 	describe("parseCronSpecFile: schedule", () => {
