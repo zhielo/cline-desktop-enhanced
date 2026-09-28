@@ -110,6 +110,9 @@ function AssertAllowedForeground {
   if (@('consent.exe','credentialuibroker.exe','lockapp.exe','logonui.exe') -contains ([IO.Path]::GetFileName($foreground.path).ToLowerInvariant())) {
     throw "Protected Windows security surfaces cannot be controlled"
   }
+  if ($payload.expectedPid -and $foreground.pid -ne [int]$payload.expectedPid) {
+    throw "Foreground application instance changed; computer control paused"
+  }
   return $foreground
 }
 function SelectorCondition {
@@ -139,6 +142,15 @@ function ClickAt([int]$x, [int]$y, [string]$button) {
   if ($button -eq 'right') { $down = 0x0008; $up = 0x0010 } else { $down = 0x0002; $up = 0x0004 }
   [ClineComputerUseNative]::mouse_event($down,0,0,0,[UIntPtr]::Zero)
   [ClineComputerUseNative]::mouse_event($up,0,0,0,[UIntPtr]::Zero)
+}
+function AssertPointInForeground($foreground, [int]$x, [int]$y) {
+  $rect = New-Object ClineComputerUseNative+RECT
+  if (-not [ClineComputerUseNative]::GetWindowRect($foreground.hwnd, [ref]$rect)) {
+    throw "Unable to validate foreground window bounds"
+  }
+  if ($x -lt $rect.Left -or $x -ge $rect.Right -or $y -lt $rect.Top -or $y -ge $rect.Bottom) {
+    throw "Coordinates are outside the allowlisted foreground window"
+  }
 }
 function KeyPress([string]$key) {
   $map = @{ ENTER=0x0D; TAB=0x09; ESCAPE=0x1B; SPACE=0x20; BACKSPACE=0x08; DELETE=0x2E; UP=0x26; DOWN=0x28; LEFT=0x25; RIGHT=0x27; HOME=0x24; END=0x23; PAGEUP=0x21; PAGEDOWN=0x22 }
@@ -191,6 +203,7 @@ switch ([string]$payload.action) {
       if ($target.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) { $pattern.Invoke() }
       else { $r=$target.Current.BoundingRectangle; ClickAt ([int]($r.X+$r.Width/2)) ([int]($r.Y+$r.Height/2)) ([string]$payload.button) }
     } else {
+      AssertPointInForeground $foreground ([int]$payload.x) ([int]$payload.y)
       ClickAt ([int]$payload.x) ([int]$payload.y) ([string]$payload.button)
     }
     @{ ok=$true; action='click'; pid=$foreground.pid } | ConvertTo-Json -Compress
@@ -207,14 +220,23 @@ switch ([string]$payload.action) {
   }
   'key' { KeyPress ([string]$payload.key); @{ ok=$true; action='key'; key=$payload.key; pid=$foreground.pid } | ConvertTo-Json -Compress }
   'scroll' {
-    if ($null -ne $payload.x -and $null -ne $payload.y) { [void][ClineComputerUseNative]::SetCursorPos([int]$payload.x,[int]$payload.y) }
+    if ($null -ne $payload.x -and $null -ne $payload.y) {
+      AssertPointInForeground $foreground ([int]$payload.x) ([int]$payload.y)
+      [void][ClineComputerUseNative]::SetCursorPos([int]$payload.x,[int]$payload.y)
+    }
     [ClineComputerUseNative]::mouse_event(0x0800,0,0,[uint32]([int]$payload.delta),[UIntPtr]::Zero)
     @{ ok=$true; action='scroll'; delta=[int]$payload.delta; pid=$foreground.pid } | ConvertTo-Json -Compress
   }
   'wait' {
     $deadline = [DateTime]::UtcNow.AddMilliseconds([int]$payload.timeoutMs)
-    do { $target = FindTarget $root; if ($target) { break }; Start-Sleep -Milliseconds 100 } while ([DateTime]::UtcNow -lt $deadline)
-    @{ ok=($null -ne $target); action='wait'; pid=$foreground.pid } | ConvertTo-Json -Compress
+    do {
+      $target = FindTarget $root
+      $matched = if ($payload.expectGone) { $null -eq $target } else { $null -ne $target }
+      if ($matched) { break }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    $expectedState = if ($payload.expectGone) { 'gone' } else { 'exists' }
+    @{ ok=$matched; action='wait'; expected=$expectedState; pid=$foreground.pid } | ConvertTo-Json -Compress
   }
   default { throw "Unsupported computer-use action" }
 }
@@ -557,6 +579,18 @@ export class DesktopComputerUseManager {
 			expectedPath: session.executable,
 			expectedPid: session.processId,
 		};
+		if (input.action === "click" && !input.selector) {
+			if (input.x === undefined || input.y === undefined)
+				throw new Error(
+					"Coordinate clicks require both x and y inside the foreground window",
+				);
+		}
+		if (
+			input.action === "scroll" &&
+			((input.x === undefined) !== (input.y === undefined))
+		) {
+			throw new Error("Scroll coordinates require both x and y or neither");
+		}
 		if (input.action === "observe" && input.include_screenshot !== false) {
 			const directory = join(
 				resolveClineDataDir(),
@@ -573,6 +607,28 @@ export class DesktopComputerUseManager {
 		let result: Record<string, unknown>;
 		try {
 			result = await this.runner(payload, context.signal);
+			if ("verify" in input && input.verify) {
+				const verification = await this.runner(
+					{
+						action: "wait",
+						expectedPath: session.executable,
+						expectedPid: session.processId,
+						selector: input.verify.selector,
+						timeoutMs: input.verify.timeout_ms ?? 5_000,
+						expectGone: input.verify.state === "gone",
+					},
+					context.signal,
+				);
+				if (verification.ok !== true) {
+					throw new Error(
+						`Post-action verification failed: expected target to be ${input.verify.state}`,
+					);
+				}
+				result.verification = {
+					ok: true,
+					state: input.verify.state,
+				};
+			}
 			await updateComputerUseMetrics({
 				actions: 1,
 				accessibilityActions: "selector" in input && input.selector ? 1 : 0,

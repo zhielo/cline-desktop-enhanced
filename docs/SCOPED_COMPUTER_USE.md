@@ -20,12 +20,20 @@ Starting control requires the model to provide the exact allowlisted executable 
 - send a small allowlist of navigation keys;
 - perform bounded wheel scrolling;
 - wait briefly for an accessibility selector.
+- attach a post-action `verify` condition to click, type, key, or scroll. The
+  condition can require a selector to appear or disappear within a bounded
+  timeout; an unmet condition fails the action instead of reporting false
+  success.
 
 The model should observe before every action and prefer `automation_id`, accessible name, and control type over screen coordinates.
 
 ## Safety boundary
 
 - Foreground executable identity is revalidated before every observation or action. Control pauses if focus leaves the allowlisted executable.
+- Every action is pinned to the exact process ID captured at session start, not
+  merely another process with the same executable path.
+- Coordinate clicks and positioned scrolling must provide a complete point
+  inside the current foreground window. Off-window coordinates are rejected.
 - Password controls, UAC/security processes, arbitrary key combinations, clipboard-based typing, and unbounded retries are rejected.
 - A session is limited to 200 actions and 15 minutes.
 - At most 10 screenshots are retained per session under the private Cline data directory; older captures and stopped-session captures are deleted.
