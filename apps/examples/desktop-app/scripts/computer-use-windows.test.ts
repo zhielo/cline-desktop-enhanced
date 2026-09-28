@@ -25,6 +25,7 @@ const powershell =
 let root = "";
 let marker = "";
 let fixture: ChildProcess | undefined;
+let fixtureStderr = "";
 let manager: DesktopComputerUseManager | undefined;
 let computerSessionId = "";
 
@@ -45,7 +46,7 @@ function terminateFixture(): void {
 }
 
 async function waitFor(check: () => boolean, label: string): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
     if (check()) return;
     await Bun.sleep(100);
   }
@@ -109,9 +110,29 @@ $form.Add_Shown({
         "-File",
         script,
       ],
-      { stdio: "ignore", windowsHide: false },
+      { stdio: ["ignore", "ignore", "pipe"], windowsHide: false },
     );
-    await waitFor(() => existsSync(ready), "fixture window");
+    fixture.stderr?.setEncoding("utf8").on("data", (chunk) => {
+      if (fixtureStderr.length < 16_000) fixtureStderr += chunk;
+    });
+    try {
+      await waitFor(
+        () =>
+          existsSync(ready) ||
+          fixture?.exitCode !== null ||
+          fixture?.signalCode !== null,
+        "fixture window",
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}${fixtureStderr.trim() ? `: ${fixtureStderr.trim()}` : ""}`,
+      );
+    }
+    if (!existsSync(ready)) {
+      throw new Error(
+        `Fixture exited before opening${fixtureStderr.trim() ? `: ${fixtureStderr.trim()}` : ""}`,
+      );
+    }
     await Bun.sleep(500);
 
     const settings: DesktopSettings = {
@@ -132,7 +153,7 @@ $form.Add_Shown({
     ) as { computerSessionId: string; foreground: boolean };
     expect(started.foreground).toBe(true);
     computerSessionId = started.computerSessionId;
-  }, 30_000);
+  }, 45_000);
 
   afterAll(async () => {
     if (manager && computerSessionId) {
