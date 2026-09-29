@@ -82,6 +82,7 @@ const EXTERNAL_TOOLS = new Set([
 ]);
 const COMPUTER_TOOLS = new Set(["computer_use"]);
 const BROWSER_TOOLS = new Set(["browser"]);
+const REPOSITORY_TOOLS = new Set(["repository"]);
 
 function builtInProfile(
 	profile: PermissionProfileName,
@@ -174,6 +175,7 @@ function isKnownTool(toolName: string): boolean {
 		EXTERNAL_TOOLS.has(toolName) ||
 		COMPUTER_TOOLS.has(toolName) ||
 		BROWSER_TOOLS.has(toolName) ||
+		REPOSITORY_TOOLS.has(toolName) ||
 		isCoordinationTool(toolName)
 	);
 }
@@ -238,6 +240,31 @@ function evaluateTool(
 			return blockedReason(
 				profile.name,
 				"state-changing browser actions require the full-access profile.",
+			);
+		}
+	}
+	if (!explicitlyAllowed && REPOSITORY_TOOLS.has(toolName)) {
+		const action =
+			typeof context.input === "object" && context.input !== null
+				? (context.input as { action?: unknown }).action
+				: undefined;
+		const writeActions = new Set(["create_branch", "switch_branch", "commit"]);
+		const networkActions = new Set(["fetch", "pull", "push", "github_status"]);
+		if (
+			typeof action === "string" &&
+			writeActions.has(action) &&
+			!profile.allowFileWrites
+		) {
+			return blockedReason(profile.name, "repository writes are disabled.");
+		}
+		if (
+			typeof action === "string" &&
+			networkActions.has(action) &&
+			!profile.allowNetwork
+		) {
+			return blockedReason(
+				profile.name,
+				"repository network access is disabled.",
 			);
 		}
 	}

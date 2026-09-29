@@ -116,12 +116,15 @@ jobs:
         run: |
           bunx vitest run \
             apps/examples/desktop-app/sidecar/browser-manager.test.ts \
+            apps/examples/desktop-app/sidecar/repository-tool.test.ts \
             --config apps/examples/desktop-app/vitest.config.mts
           bunx vitest run \
             sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
             sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts \
             sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
+            sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
             sdk/packages/core/src/extensions/tools/presets.test.ts \
+            sdk/packages/core/src/extensions/tools/runtime.test.ts \
             --config vitest.config.mts
           bun build sdk/packages/core/scripts/process-session-terminal-smoke.ts \
             --compile \

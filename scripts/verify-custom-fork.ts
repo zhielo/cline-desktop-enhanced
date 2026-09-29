@@ -58,9 +58,31 @@ const requiredMarkers: Array<{
 			"scripts/desktop-startup.test.ts",
 			"Record installer smoke-test result",
 			"Run required desktop sidecar regression suite",
+			"repository-tool.test.ts",
+			"permission-profile.test.ts",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
 			'bun-version: "1.3.14"',
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/repository-tool.ts",
+		markers: [
+			"createRepositoryExecutor",
+			"confirm_write=true",
+			"confirm_remote=true",
+			"--ff-only",
+			"--set-upstream",
+			"GH_PROMPT_DISABLED",
+		],
+	},
+	{
+		path: "docs/STRUCTURED_REPOSITORY_AND_DIAGNOSTICS.md",
+		markers: [
+			"Structured repository tool",
+			"Browser page diagnostics",
+			"Diagnostics center",
+			"does not create a GitHub Release",
 		],
 	},
 	{
@@ -300,6 +322,8 @@ const requiredMarkers: Array<{
 			"set_custom_ai_instructions",
 			"Agent permission capability matrix",
 			"Full interaction",
+			"DiagnosticsContent",
+			"Copy sanitized report",
 			"Scoped computer use",
 			"set_computer_use_settings",
 		],
@@ -310,10 +334,7 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/webview/hooks/use-chat-session.ts",
-		markers: [
-			'process.env.NODE_ENV === "test"',
-			"shouldLogVerboseCoreLogs()",
-		],
+		markers: ['process.env.NODE_ENV === "test"', "shouldLogVerboseCoreLogs()"],
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/desktop-client.ts",

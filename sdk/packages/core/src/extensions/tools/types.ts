@@ -19,6 +19,7 @@ import type {
 	EditFileInput,
 	LiveDebuggerInput,
 	ReadFileRequest,
+	RepositoryInput,
 	ReverseEngineeringInput,
 	StructuredCommandInput,
 } from "./schemas";
@@ -220,6 +221,12 @@ export type BrowserExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 
+/** Host-provided structured Git and GitHub operations for the active workspace. */
+export type RepositoryExecutor = (
+	input: RepositoryInput,
+	context: AgentToolContext,
+) => Promise<string>;
+
 /** Host-provided, app-scoped desktop automation implementation. */
 export type ComputerUseExecutor = (
 	input: ComputerUseInput,
@@ -244,6 +251,8 @@ export interface ToolExecutors {
 	computerUse?: ComputerUseExecutor;
 	/** Structured built-in browser control */
 	browser?: BrowserExecutor;
+	/** Structured Git and GitHub control for the active workspace */
+	repository?: RepositoryExecutor;
 	/** Shell command execution implementation */
 	bash?: ShellExecutor;
 	/** Web content fetching implementation */
@@ -277,6 +286,7 @@ export type DefaultToolName =
 	| "process_session"
 	| "computer_use"
 	| "browser"
+	| "repository"
 	| "fetch_web_content"
 	| "apply_patch"
 	| "editor"
@@ -341,6 +351,9 @@ export interface DefaultToolsConfig {
 
 	/** Enable the host-provided built-in browser tool. @default true */
 	enableBrowser?: boolean;
+
+	/** Enable the host-provided structured repository tool. @default true */
+	enableRepository?: boolean;
 
 	/**
 	 * Host-scoped process manager. Reuse one instance across runtime rebuilds so

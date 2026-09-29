@@ -233,3 +233,47 @@ describe("SettingsView custom AI instructions", () => {
 		);
 	});
 });
+
+describe("SettingsView diagnostics", () => {
+	it("renders a sanitized health report without paths, URLs, or browser content", async () => {
+		invoke.mockImplementation(async (command: string) => {
+			if (command === "get_process_context") {
+				return {
+					appVersion: "0.0.34",
+					platform: "win32",
+					activeEnvironmentId: "local",
+					runningSessionCount: 2,
+					hub: { status: "connected", url: "ws://secret-local-url" },
+					workspaceRoot: "C:/private/project",
+				};
+			}
+			if (command === "get_global_settings") {
+				return { permissionProfile: "full-access" };
+			}
+			if (command === "get_browser_state") {
+				return { sessions: [{ url: "https://private.example/account" }] };
+			}
+			if (command === "get_computer_use_state") return { items: [] };
+			if (command === "get_command_latency_baseline") {
+				return { decision: { status: "collecting" }, workerEnabled: false };
+			}
+			return {};
+		});
+
+		await act(async () => {
+			root.render(
+				<SettingsView onNavigateSection={vi.fn()} section="Diagnostics" />,
+			);
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		expect(container.textContent).toContain("Diagnostics");
+		expect(container.textContent).toContain("connected");
+		expect(container.textContent).toContain("Full access");
+		expect(container.textContent).toContain("Browser sessions1");
+		expect(container.textContent).not.toContain("private.example");
+		expect(container.textContent).not.toContain("C:/private/project");
+		expect(container.textContent).not.toContain("secret-local-url");
+	});
+});

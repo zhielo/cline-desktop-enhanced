@@ -65,6 +65,8 @@ import {
 	type ReadFilesInput,
 	ReadFilesInputSchema,
 	ReadFilesInputUnionSchema,
+	type RepositoryInput,
+	RepositoryInputSchema,
 	type ReverseEngineeringInput,
 	ReverseEngineeringInputSchema,
 	RunCommandsInputSchema,
@@ -88,6 +90,7 @@ import type {
 	EditorExecutor,
 	FileReadExecutor,
 	LiveDebuggerExecutor,
+	RepositoryExecutor,
 	ReverseEngineeringExecutor,
 	SearchExecutor,
 	ShellExecutor,
@@ -855,7 +858,7 @@ export function createBrowserTool(
 	return createTool<BrowserInput, string>({
 		name: "browser",
 		description:
-			"Operate the isolated browser built into Cline Desktop. Prefer APIs, MCP, and fetch_web_content first. Inspect the page before interacting; prefer role/name/text/test_id targets over CSS. The host restricts domains, blocks password fields, bounds sessions and evidence, and requires confirm_consequential=true for sensitive-looking controls. Use computer_use only when structured browser actions cannot reach the control.",
+			"Operate the isolated browser built into Cline Desktop. Prefer APIs, MCP, and fetch_web_content first. Use page_info for lightweight page diagnostics and inspect before interacting; prefer role/name/text/test_id targets over CSS. The host restricts domains, blocks password fields, bounds sessions and evidence, and requires confirm_consequential=true for sensitive-looking controls. Use computer_use only when structured browser actions cannot reach the control.",
 		inputSchema: zodToJsonSchema(BrowserInputSchema),
 		timeoutMs: 45_000,
 		retryable: false,
@@ -863,6 +866,26 @@ export function createBrowserTool(
 		executionMode: "sequential",
 		execute: async (input, context) => {
 			const validated = validateWithZod(BrowserInputSchema, input);
+			return executor(validated, context);
+		},
+	});
+}
+
+/** Create the workspace-scoped structured Git and GitHub tool. */
+export function createRepositoryTool(
+	executor: RepositoryExecutor,
+): AgentTool<RepositoryInput, string> {
+	return createTool<RepositoryInput, string>({
+		name: "repository",
+		description:
+			"Inspect and update the active Git repository with fixed-argument structured operations. Prefer status, diff, log, and branches before changes. Local branch and commit actions require confirm_write=true. Network operations never force-push and require confirm_remote=true. github_status uses the existing GitHub CLI credential store without exposing bearer tokens.",
+		inputSchema: zodToJsonSchema(RepositoryInputSchema),
+		timeoutMs: 70_000,
+		retryable: false,
+		maxRetries: 0,
+		executionMode: "sequential",
+		execute: async (input, context) => {
+			const validated = validateWithZod(RepositoryInputSchema, input);
 			return executor(validated, context);
 		},
 	});
@@ -1246,6 +1269,7 @@ export function createDefaultTools(
 		enableProcessSessions = false,
 		enableComputerUse = false,
 		enableBrowser = true,
+		enableRepository = true,
 		enableWebFetch = true,
 		enableApplyPatch = false,
 		enableEditor = true,
@@ -1294,6 +1318,9 @@ export function createDefaultTools(
 	}
 	if (enableBrowser && executors.browser) {
 		tools.push(createBrowserTool(executors.browser));
+	}
+	if (enableRepository && executors.repository) {
+		tools.push(createRepositoryTool(executors.repository));
 	}
 
 	// Add fetch_web_content tool if enabled and executor provided

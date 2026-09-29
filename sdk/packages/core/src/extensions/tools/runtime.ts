@@ -104,6 +104,13 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		unavailableClientTypes: ["cli", "vscode"],
 	},
 	{
+		id: "repository",
+		description:
+			"Use structured, confirmation-gated Git and GitHub operations in the active workspace.",
+		headlessToolNames: ["repository"],
+		unavailableClientTypes: ["cli", "vscode"],
+	},
+	{
 		id: "editor",
 		description:
 			"Make controlled filesystem edits on text files with create, replace, and insert operations.",
@@ -162,6 +169,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 			| "enableProcessSessions"
 			| "enableComputerUse"
 			| "enableBrowser"
+			| "enableRepository"
 			| "enableWebFetch"
 			| "enableApplyPatch"
 			| "enableEditor"
@@ -180,6 +188,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 	process_session: "enableProcessSessions",
 	computer_use: "enableComputerUse",
 	browser: "enableBrowser",
+	repository: "enableRepository",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",
@@ -204,6 +213,7 @@ type ResolvedToolFlags = Pick<
 	| "enableProcessSessions"
 	| "enableComputerUse"
 	| "enableBrowser"
+	| "enableRepository"
 	| "enableWebFetch"
 	| "enableApplyPatch"
 	| "enableEditor"

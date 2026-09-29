@@ -109,7 +109,8 @@ type GlobalSettingsResponse = {
 type PermissionProfileName = GlobalSettingsResponse["permissionProfile"];
 
 const PERMISSION_PROFILE_DESCRIPTIONS: Record<PermissionProfileName, string> = {
-	"read-only": "Inspect code and coordinate agents without changing files or using network tools.",
+	"read-only":
+		"Inspect code and coordinate agents without changing files or using network tools.",
 	workspace:
 		"Read, edit, and run commands in the workspace without web or network tools.",
 	"workspace-network":
@@ -130,6 +131,10 @@ export const PERMISSION_PROFILE_CAPABILITIES = [
 	{
 		label: "Web search, fetch, and network",
 		values: [false, false, true, true],
+	},
+	{
+		label: "Structured Git and GitHub",
+		values: ["Read only", "Local changes", "Local + remote", "Local + remote"],
 	},
 	{
 		label: "Built-in browser",
@@ -692,6 +697,8 @@ export function SettingsView({
 			<ImportContent />
 		) : activeNav === "Remote" ? (
 			<RemoteEnvironmentsContent />
+		) : activeNav === "Diagnostics" ? (
+			<DiagnosticsContent />
 		) : activeNav === "Account" ? (
 			<AccountView />
 		) : activeNav === "General" ? (
@@ -726,6 +733,168 @@ const ACCENT_OPTIONS: { id: HubAccent; label: string; swatch: string }[] = [
 	{ id: "espresso", label: "Espresso", swatch: "oklch(0.36 0.035 35)" },
 	{ id: "ember", label: "Ember", swatch: "oklch(0.6 0.19 33)" },
 ];
+
+type DiagnosticsReport = {
+	generatedAt: string;
+	appVersion: string | null;
+	platform: string | null;
+	hubStatus: string;
+	hubError: string | null;
+	activeEnvironmentId: string | null;
+	runningSessionCount: number;
+	permissionProfile: string;
+	browserSessionCount: number;
+	computerControlSessionCount: number;
+	powerShellWorkerDecision: string | null;
+	powerShellWorkerEnabled: boolean;
+};
+
+function DiagnosticsContent() {
+	const [report, setReport] = useState<DiagnosticsReport | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const [copied, setCopied] = useState(false);
+
+	const refresh = useCallback(async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			const [context, settings, browser, computer, latency] = await Promise.all(
+				[
+					desktopClient.invoke<Record<string, unknown>>("get_process_context"),
+					desktopClient.invoke<GlobalSettingsResponse>("get_global_settings"),
+					desktopClient.invoke<{ sessions?: unknown[] }>("get_browser_state"),
+					desktopClient.invoke<{ items?: unknown[] }>("get_computer_use_state"),
+					desktopClient.invoke<{
+						decision?: { status?: string };
+						workerEnabled?: boolean;
+					}>("get_command_latency_baseline"),
+				],
+			);
+			const hub = (context.hub ?? {}) as Record<string, unknown>;
+			setReport({
+				generatedAt: new Date().toISOString(),
+				appVersion:
+					typeof context.appVersion === "string" ? context.appVersion : null,
+				platform:
+					typeof context.platform === "string" ? context.platform : null,
+				hubStatus: typeof hub.status === "string" ? hub.status : "unknown",
+				hubError: typeof hub.error === "string" ? hub.error : null,
+				activeEnvironmentId:
+					typeof context.activeEnvironmentId === "string"
+						? context.activeEnvironmentId
+						: null,
+				runningSessionCount:
+					typeof context.runningSessionCount === "number"
+						? context.runningSessionCount
+						: 0,
+				permissionProfile:
+					PERMISSION_PROFILE_COLUMNS.find(
+						(profile) =>
+							profile.value === (settings.permissionProfile ?? "full-access"),
+					)?.label ?? "Full access",
+				browserSessionCount: browser.sessions?.length ?? 0,
+				computerControlSessionCount: computer.items?.length ?? 0,
+				powerShellWorkerDecision: latency.decision?.status ?? null,
+				powerShellWorkerEnabled: latency.workerEnabled === true,
+			});
+		} catch (nextError) {
+			setError(
+				nextError instanceof Error ? nextError.message : String(nextError),
+			);
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
+
+	const copyReport = async () => {
+		if (!report) return;
+		await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+		setCopied(true);
+		setTimeout(() => setCopied(false), 1_500);
+	};
+
+	const stopBrowsers = async () => {
+		await desktopClient.invoke("stop_all_browser_sessions");
+		await refresh();
+	};
+
+	return (
+		<PageFrame>
+			<PageHeader
+				description="Inspect local runtime health and safely stop stale browser sessions. Reports exclude prompts, typed browser content, credentials, URLs, and repository paths."
+				title="Diagnostics"
+			/>
+			<div className="flex flex-wrap gap-2">
+				<Button
+					disabled={loading}
+					onClick={() => void refresh()}
+					variant="outline"
+				>
+					{loading ? "Refreshing…" : "Refresh"}
+				</Button>
+				<Button
+					disabled={!report}
+					onClick={() => void copyReport()}
+					variant="outline"
+				>
+					{copied ? "Copied" : "Copy sanitized report"}
+				</Button>
+				<Button
+					disabled={!report?.browserSessionCount}
+					onClick={() => void stopBrowsers()}
+					variant="outline"
+				>
+					Stop browser sessions
+				</Button>
+			</div>
+			{error ? (
+				<p className="text-sm text-destructive" role="alert">
+					{error}
+				</p>
+			) : null}
+			{report ? (
+				<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+					{[
+						[
+							"Hub",
+							report.hubError
+								? `${report.hubStatus}: ${report.hubError}`
+								: report.hubStatus,
+						],
+						[
+							"App",
+							`${report.appVersion ?? "unknown"} · ${report.platform ?? "unknown"}`,
+						],
+						["Permissions", report.permissionProfile],
+						["Running sessions", String(report.runningSessionCount)],
+						["Browser sessions", String(report.browserSessionCount)],
+						["Computer control", String(report.computerControlSessionCount)],
+						[
+							"PowerShell optimization",
+							report.powerShellWorkerEnabled
+								? "enabled"
+								: (report.powerShellWorkerDecision ?? "collecting"),
+						],
+					].map(([label, value]) => (
+						<div className="rounded-lg border p-4" key={label}>
+							<p className="text-xs font-medium text-muted-foreground">
+								{label}
+							</p>
+							<p className="mt-1 break-words text-sm text-foreground">
+								{value}
+							</p>
+						</div>
+					))}
+				</div>
+			) : null}
+		</PageFrame>
+	);
+}
 
 function GeneralSettingsContent({
 	onOpenModelProviders,
@@ -1514,7 +1683,11 @@ function GeneralSettingsContent({
 													)}
 													key={profile?.value}
 												>
-													{value === true ? "Allowed" : value === false ? "Blocked" : value}
+													{value === true
+														? "Allowed"
+														: value === false
+															? "Blocked"
+															: value}
 												</td>
 											);
 										})}

@@ -13,6 +13,7 @@ const ALL_SETTINGS_SECTIONS = [
 	"Schedules",
 	"Import",
 	"Remote",
+	"Diagnostics",
 	"Account",
 ] as const;
 

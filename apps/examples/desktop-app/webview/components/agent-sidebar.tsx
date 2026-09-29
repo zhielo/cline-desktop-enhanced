@@ -24,6 +24,7 @@ import {
 	Search,
 	Settings,
 	SlidersHorizontal,
+	Stethoscope,
 	Store,
 	Trash2,
 } from "lucide-react";
@@ -152,6 +153,7 @@ const SETTINGS_SECTION_ICONS = {
 	Schedules: Clock3,
 	Import: Import,
 	Remote: Network,
+	Diagnostics: Stethoscope,
 	Account: CircleUserRound,
 	Customize: Blocks,
 	Marketplace: Store,

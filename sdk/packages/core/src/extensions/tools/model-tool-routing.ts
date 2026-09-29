@@ -44,6 +44,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableProcessSessions"
 		| "enableComputerUse"
 		| "enableBrowser"
+		| "enableRepository"
 		| "enableWebFetch"
 		| "enableApplyPatch"
 		| "enableEditor"
@@ -61,6 +62,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	process_session: "enableProcessSessions",
 	computer_use: "enableComputerUse",
 	browser: "enableBrowser",
+	repository: "enableRepository",
 	fetch_web_content: "enableWebFetch",
 	apply_patch: "enableApplyPatch",
 	editor: "enableEditor",
