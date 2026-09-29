@@ -1183,7 +1183,13 @@ export class HubRuntimeHost implements RuntimeHost {
 				timeoutMs: input.timeoutMs,
 			},
 			input.sessionId,
-			{ timeoutMs: null },
+			{
+				timeoutMs: null,
+				// A transport close can happen after the Hub accepted run.start.
+				// Replaying it risks executing the same user prompt twice; the
+				// desktop reconciles history and status before recovering.
+				retryOnTransport: false,
+			},
 		);
 		return reply.payload?.result as AgentResult | undefined;
 	}

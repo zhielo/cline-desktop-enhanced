@@ -440,9 +440,10 @@ describe("HubRuntimeHost", () => {
 				mode: "plan",
 				attachments: undefined,
 				delivery: "queue",
+				timeoutMs: undefined,
 			},
 			"sess-1",
-			{ timeoutMs: null },
+			{ timeoutMs: null, retryOnTransport: false },
 		);
 		expect(sent).toEqual(result);
 	});
@@ -1562,9 +1563,11 @@ describe("HubRuntimeHost", () => {
 					userImages: ["data:image/png;base64,aGVsbG8="],
 				},
 				delivery: undefined,
+				mode: undefined,
+				timeoutMs: undefined,
 			},
 			"sess-1",
-			{ timeoutMs: null },
+			{ timeoutMs: null, retryOnTransport: false },
 		);
 	});
 
@@ -1591,9 +1594,11 @@ describe("HubRuntimeHost", () => {
 					userFiles: [filePath],
 				},
 				delivery: undefined,
+				mode: undefined,
+				timeoutMs: undefined,
 			},
 			"sess-1",
-			{ timeoutMs: null },
+			{ timeoutMs: null, retryOnTransport: false },
 		);
 	});
 

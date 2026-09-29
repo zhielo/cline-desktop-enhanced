@@ -238,7 +238,29 @@ export class HubTransportError extends Error {
 export function isHubReconnectableTransportError(
 	error: unknown,
 ): error is HubTransportError {
-	return error instanceof HubTransportError;
+	if (error instanceof HubTransportError) {
+		return true;
+	}
+	if (!error || typeof error !== "object" || Array.isArray(error)) {
+		return false;
+	}
+	const candidate = error as {
+		name?: unknown;
+		code?: unknown;
+		message?: unknown;
+	};
+	const reconnectableCodes = new Set<HubTransportErrorCode>([
+		"hub_connect_timeout",
+		"hub_connect_failed",
+		"hub_connection_closed",
+		"hub_connection_not_open",
+	]);
+	return (
+		candidate.name === "HubTransportError" &&
+		typeof candidate.code === "string" &&
+		reconnectableCodes.has(candidate.code as HubTransportErrorCode) &&
+		typeof candidate.message === "string"
+	);
 }
 
 export class HubCommandError extends Error {
