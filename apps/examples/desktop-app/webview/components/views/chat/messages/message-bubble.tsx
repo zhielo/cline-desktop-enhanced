@@ -228,7 +228,12 @@ export const MessageBubble = memo(function MessageBubble({
 				"relative flex flex-col gap-2",
 				isUser && "mt-4 first:mt-0",
 				followsWorkingRows && "-mt-2",
+				isUser &&
+					"ml-auto max-w-[min(78%,48rem)] rounded-xl border border-border/70 bg-surface-2 px-3.5 py-2.5 shadow-xs",
+				isError &&
+					"rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2",
 			)}
+			data-message-role={message.role}
 			from={agentRole}
 		>
 			<MessageContent className="flex min-w-0 flex-col gap-2 wrap-break-word">

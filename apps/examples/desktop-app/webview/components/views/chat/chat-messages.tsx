@@ -8,7 +8,16 @@ import {
 	ConversationViewport,
 	useConversation,
 } from "@cline/ui/components/agent-chat";
-import { Loader2 } from "lucide-react";
+import {
+	Check,
+	Copy,
+	Loader2,
+	MessageSquareText,
+	TerminalSquare,
+	Wifi,
+	WifiOff,
+	Wrench,
+} from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	AlertDialog,
@@ -56,7 +65,10 @@ type ChatMessagesProps = {
 	sessionId: string | null;
 	status: ChatSessionStatus;
 	chatTransportState?:
-		"connecting" | "reconnecting" | "connected" | "unavailable";
+		| "connecting"
+		| "reconnecting"
+		| "connected"
+		| "unavailable";
 	isSessionSwitching?: boolean;
 	messages: ChatMessage[];
 	error: string | null;
@@ -102,6 +114,130 @@ type AskQuestionRequestItem = {
 		iteration?: number;
 	};
 };
+
+export function getSessionRunMetrics(messages: ChatMessage[]) {
+	let turns = 0;
+	let tools = 0;
+	for (const message of messages) {
+		if (message.role === "user" && !isSystemSteeringMessage(message)) {
+			turns += 1;
+		} else if (message.role === "tool") {
+			tools += 1;
+		}
+	}
+	return { turns, tools };
+}
+
+function sessionStatusLabel(status: ChatSessionStatus): string {
+	switch (status) {
+		case "starting":
+			return "Starting";
+		case "running":
+			return "Working";
+		case "stopping":
+			return "Stopping";
+		case "completed":
+			return "Completed";
+		case "cancelled":
+			return "Cancelled";
+		case "failed":
+		case "error":
+			return "Failed";
+		default:
+			return "Ready";
+	}
+}
+
+function SessionRunBar({
+	sessionId,
+	status,
+	transportState,
+	messages,
+}: {
+	sessionId: string | null;
+	status: ChatSessionStatus;
+	transportState: NonNullable<ChatMessagesProps["chatTransportState"]>;
+	messages: ChatMessage[];
+}) {
+	const [copied, setCopied] = useState(false);
+	const metrics = useMemo(() => getSessionRunMetrics(messages), [messages]);
+	const isActive =
+		status === "starting" || status === "running" || status === "stopping";
+	const connected = transportState === "connected";
+
+	const copySessionId = useCallback(async () => {
+		if (!sessionId) return;
+		try {
+			await navigator.clipboard.writeText(sessionId);
+			setCopied(true);
+			window.setTimeout(() => setCopied(false), 1_500);
+		} catch {
+			// The session id remains selectable in the button tooltip if the
+			// operating system clipboard is temporarily unavailable.
+		}
+	}, [sessionId]);
+
+	return (
+		<section
+			aria-label="Session run status"
+			className="sticky top-0 z-10 -mx-2 mb-3 flex min-h-9 items-center gap-3 border-b border-border/60 bg-background/92 px-2 text-[11px] text-muted-foreground backdrop-blur-md"
+		>
+			<div className="flex min-w-0 items-center gap-2 text-foreground">
+				<span
+					aria-hidden="true"
+					className={cn(
+						"size-1.5 shrink-0 rounded-full",
+						isActive
+							? "animate-pulse bg-emerald-500"
+							: status === "failed" || status === "error"
+								? "bg-destructive"
+								: "bg-muted-foreground/60",
+					)}
+				/>
+				<TerminalSquare className="size-3.5 shrink-0" />
+				<span className="font-medium">{sessionStatusLabel(status)}</span>
+			</div>
+			<span className="h-3 w-px bg-border" />
+			<span className="inline-flex items-center gap-1">
+				<MessageSquareText className="size-3" />
+				{metrics.turns} {metrics.turns === 1 ? "turn" : "turns"}
+			</span>
+			<span className="inline-flex items-center gap-1">
+				<Wrench className="size-3" />
+				{metrics.tools} {metrics.tools === 1 ? "tool" : "tools"}
+			</span>
+			<span
+				className={cn(
+					"ml-auto inline-flex items-center gap-1",
+					connected ? "text-emerald-600 dark:text-emerald-400" : "",
+				)}
+			>
+				{connected ? (
+					<Wifi className="size-3" />
+				) : (
+					<WifiOff className="size-3" />
+				)}
+				{connected ? "Connected" : "Reconnecting"}
+			</span>
+			{sessionId ? (
+				<button
+					aria-label="Copy session ID"
+					className="inline-flex max-w-36 items-center gap-1 rounded px-1.5 py-1 font-mono hover:bg-surface-hover hover:text-foreground"
+					onClick={() => void copySessionId()}
+					title={sessionId}
+					type="button"
+				>
+					{copied ? (
+						<Check className="size-3 text-emerald-500" />
+					) : (
+						<Copy className="size-3" />
+					)}
+					<span className="truncate">{sessionId}</span>
+				</button>
+			) : null}
+		</section>
+	);
+}
 
 function ChatMessagesImpl({
 	sessionId,
@@ -551,7 +687,7 @@ function ChatMessagesImpl({
 			>
 				<ConversationContent
 					className={cn(
-						"min-h-full w-full min-w-0",
+						"mx-auto min-h-full w-full min-w-0 max-w-[1040px]",
 						showIdleDetails ? "p-0" : "px-6",
 					)}
 				>
@@ -571,6 +707,12 @@ function ChatMessagesImpl({
 								{importedFromTool ? (
 									<ImportedSessionNotice tool={importedFromTool} />
 								) : null}
+								<SessionRunBar
+									messages={messages}
+									sessionId={sessionId}
+									status={status}
+									transportState={chatTransportState}
+								/>
 								{renderItems.map((item, itemIndex) => {
 									// Working rows — live (`run`) or folded (`work`) — render
 									// through one child renderer so a row keeps its exact look
