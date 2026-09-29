@@ -15,6 +15,27 @@
 	--window-title-bar-height: 3rem;
 }
 
+/*
+ * Low-glare desktop night palette. The shared dark theme intentionally starts
+ * close to black; the desktop shell benefits from a softer graphite ladder
+ * because users often keep terminal output and long agent runs open for hours.
+ * Keep adjacent surfaces distinct without using pure black or pure white.
+ */
+:root.dark {
+	--neutral-1: #1b1d22;
+	--neutral-2: #202329;
+	--neutral-3: #272a31;
+	--neutral-4: #30343c;
+	--neutral-5: #373c45;
+	--neutral-6: #414751;
+	--neutral-7: #505761;
+	--neutral-8: #68717c;
+	--neutral-9: #7d8691;
+	--neutral-10: #929aa4;
+	--neutral-11: #bcc1c8;
+	--neutral-12: #e3e6ea;
+}
+
 /* Desktop chat density follows the code-first rhythm of terminal agents:
  * a narrower reading column, compact controls, and crisp execution rails. */
 .cline-chat-tool,
@@ -86,6 +107,15 @@
 [data-message-role="user"] .cline-chat-message-content {
 	font-size: 0.875rem;
 	line-height: 1.45;
+}
+
+/* Command output remains visually separate without the high-contrast pure
+ * black slab that dominates the rest of the night interface. */
+.dark .cline-command-output {
+	border-color: #3b414a;
+	background-color: #25282f;
+	color: #d7dae0;
+	color-scheme: dark;
 }
 
 /* Mobile toasts start below the caption row so both close buttons remain reachable. */

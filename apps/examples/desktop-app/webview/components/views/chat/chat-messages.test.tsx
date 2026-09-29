@@ -1444,6 +1444,8 @@ describe("ChatMessages tool disclosures", () => {
 		const output = container.querySelector('[aria-label="Command output"]');
 		expect(output?.textContent).toContain("failed");
 		expect(output?.textContent).not.toContain("\u001b[31m");
+		expect(output?.classList.contains("cline-command-output")).toBe(true);
+		expect(output?.classList.contains("bg-black/90")).toBe(false);
 		expect(output?.querySelector("span")?.getAttribute("style")).toContain(
 			"color",
 		);
