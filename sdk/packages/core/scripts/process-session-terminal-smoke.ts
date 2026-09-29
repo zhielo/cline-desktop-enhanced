@@ -63,7 +63,7 @@ try {
 		executable: bunExecutable,
 		args: [
 			"-e",
-			'console.log("tty:" + process.stdin.isTTY + ":" + process.stdout.isTTY); process.stdin.resume(); process.stdin.once("data", chunk => { console.log("input:" + Buffer.from(chunk).toString().replace(/[\\r\\n]+/g, "")); process.exit(0); }); console.log("ready:input");',
+			'console.log("tty:" + process.stdin.isTTY + ":" + process.stdout.isTTY); process.stdin.resume(); process.stdin.once("data", chunk => { const input = Buffer.from(chunk).toString().replace(/[\\r\\n]+/g, ""); process.stdout.write("input:" + input + "\\n", () => process.exit(0)); }); console.log("ready:input");',
 		],
 		cwd: process.cwd(),
 		interactive: true,
@@ -81,6 +81,7 @@ try {
 	manager.resize(OWNER, started.processId, 100, 40);
 	await bunRuntime.sleep(100);
 	await manager.writeStdin(OWNER, started.processId, "ping\r");
+	await waitForOutput(started.processId, "input:ping");
 	await waitForCompletion(started.processId);
 	const output = manager
 		.read(OWNER, started.processId)
