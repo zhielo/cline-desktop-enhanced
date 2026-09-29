@@ -691,6 +691,10 @@ export const BrowserInputSchema = z.discriminatedUnion("action", [
 		max_nodes: z.coerce.number().int().min(1).max(300).optional().default(120),
 	}),
 	z.object({
+		action: z.literal("page_info"),
+		browser_session_id: BrowserSessionIdSchema,
+	}),
+	z.object({
 		action: z.literal("click"),
 		browser_session_id: BrowserSessionIdSchema,
 		target: BrowserTargetSchema,
@@ -739,6 +743,66 @@ export const BrowserInputSchema = z.discriminatedUnion("action", [
 ]);
 
 export type BrowserInput = z.infer<typeof BrowserInputSchema>;
+
+const RepositoryRemoteSchema = z
+	.string()
+	.min(1)
+	.max(64)
+	.optional()
+	.default("origin");
+
+/** Structured, workspace-scoped Git and GitHub operations. */
+export const RepositoryInputSchema = z.discriminatedUnion("action", [
+	z.object({ action: z.literal("status") }),
+	z.object({
+		action: z.literal("diff"),
+		staged: z.boolean().optional().default(false),
+		path: z.string().min(1).max(2048).optional(),
+	}),
+	z.object({
+		action: z.literal("log"),
+		limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+	}),
+	z.object({ action: z.literal("branches") }),
+	z.object({
+		action: z.literal("create_branch"),
+		name: z.string().min(1).max(200),
+		start_point: z.string().min(1).max(200).optional(),
+		confirm_write: z.literal(true),
+	}),
+	z.object({
+		action: z.literal("switch_branch"),
+		name: z.string().min(1).max(200),
+		confirm_write: z.literal(true),
+	}),
+	z.object({
+		action: z.literal("commit"),
+		message: z.string().trim().min(1).max(4000),
+		paths: z.array(z.string().min(1).max(2048)).max(200).optional(),
+		confirm_write: z.literal(true),
+	}),
+	z.object({
+		action: z.literal("fetch"),
+		remote: RepositoryRemoteSchema,
+		confirm_remote: z.literal(true),
+	}),
+	z.object({
+		action: z.literal("pull"),
+		remote: RepositoryRemoteSchema,
+		branch: z.string().min(1).max(200).optional(),
+		confirm_remote: z.literal(true),
+	}),
+	z.object({
+		action: z.literal("push"),
+		remote: RepositoryRemoteSchema,
+		branch: z.string().min(1).max(200).optional(),
+		set_upstream: z.boolean().optional().default(false),
+		confirm_remote: z.literal(true),
+	}),
+	z.object({ action: z.literal("github_status") }),
+]);
+
+export type RepositoryInput = z.infer<typeof RepositoryInputSchema>;
 
 const ComputerUseSessionIdSchema = z
 	.string()

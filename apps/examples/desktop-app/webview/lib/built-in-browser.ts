@@ -103,6 +103,29 @@ async function execute(request: BrowserRequest): Promise<unknown> {
 			return evaluate(id, "history.forward(); ({ok:true})");
 		case "reload":
 			return cdp(id, "Page.reload", {});
+		case "page_info":
+			return evaluate(
+				id,
+				`(() => {
+					const navigation = performance.getEntriesByType('navigation')[0];
+					return {
+						url: location.href,
+						origin: location.origin,
+						title: document.title,
+						readyState: document.readyState,
+						language: document.documentElement.lang || null,
+						frames: document.querySelectorAll('iframe').length,
+						forms: document.forms.length,
+						links: document.links.length,
+						resources: performance.getEntriesByType('resource').length,
+						loadDurationMs: navigation ? Math.round(navigation.duration) : null,
+						storage: {
+							localKeys: (() => { try { return localStorage.length; } catch { return null; } })(),
+							sessionKeys: (() => { try { return sessionStorage.length; } catch { return null; } })(),
+						},
+					};
+				})()`,
+			);
 		case "inspect":
 			return evaluate(
 				id,

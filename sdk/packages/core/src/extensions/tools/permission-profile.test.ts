@@ -98,6 +98,24 @@ describe("permission profile guard", () => {
 		).toBeUndefined();
 	});
 
+	it("separates repository reads, local writes, and network operations", async () => {
+		expect(
+			await before("read-only", "repository", { action: "status" }),
+		).toBeUndefined();
+		expect(
+			(await before("read-only", "repository", { action: "commit" }))?.reason,
+		).toContain("repository writes are disabled");
+		expect(
+			await before("workspace", "repository", { action: "commit" }),
+		).toBeUndefined();
+		expect(
+			(await before("workspace", "repository", { action: "push" }))?.reason,
+		).toContain("repository network access is disabled");
+		expect(
+			await before("workspace-network", "repository", { action: "push" }),
+		).toBeUndefined();
+	});
+
 	it("blocks unclassified MCP/plugin tools in restricted profiles", async () => {
 		const result = await before("workspace-network", "github_create_issue");
 		expect(result?.skip).toBe(true);

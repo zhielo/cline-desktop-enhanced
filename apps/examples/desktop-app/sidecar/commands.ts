@@ -3696,6 +3696,13 @@ export async function handleCommand(
 	if (command === "get_computer_use_state") {
 		return { items: ctx.computerUseManager?.list() ?? [] };
 	}
+	if (command === "get_browser_state") {
+		return { sessions: ctx.browserManager?.list() ?? [] };
+	}
+	if (command === "stop_all_browser_sessions") {
+		await ctx.browserManager?.stopAll();
+		return { stopped: true, sessions: [] };
+	}
 	if (command === "browser_command_result") {
 		const requestId =
 			typeof args?.request_id === "string" ? args.request_id.trim() : "";

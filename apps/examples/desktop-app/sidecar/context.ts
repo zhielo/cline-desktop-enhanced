@@ -34,6 +34,7 @@ import {
 	getDesktopFeatureFlagsService,
 } from "./feature-flags";
 import { sessionLogPath } from "./paths";
+import { createRepositoryExecutor } from "./repository-tool";
 import {
 	advanceDurableTaskState,
 	type DurableTaskRepair,
@@ -1359,6 +1360,7 @@ export function createSidecarRuntimeCapabilities(
 				? {
 						browser: owner.browserManager.executor,
 						computerUse: owner.computerUseManager.executor,
+						repository: createRepositoryExecutor(() => ctx.localWorkspaceRoot),
 					}
 				: {}),
 		},
