@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -37,7 +37,9 @@ describe("createRepositoryExecutor", () => {
 	it("returns bounded structured status and read operations", async () => {
 		const execute = createRepositoryExecutor(() => root);
 		const status = JSON.parse(await execute({ action: "status" }, context));
-		expect(status.root).toBe(root);
+		expect(status.root.replaceAll("\\", "/").toLowerCase()).toBe(
+			(await realpath(root)).replaceAll("\\", "/").toLowerCase(),
+		);
 		expect(status.status).toContain("##");
 		expect(await execute({ action: "log", limit: 5 }, context)).toContain(
 			"initial",
