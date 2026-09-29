@@ -296,6 +296,29 @@ describe("NodeHubClient", () => {
 			}
 		});
 
+		it("does not replay a non-idempotent command after a transport close", async () => {
+			vi.stubGlobal("WebSocket", MockWebSocket);
+			const client = new NodeHubClient({ url: "ws://127.0.0.1:25463/hub" });
+			await client.connect();
+
+			const command = client.command(
+				"session.send_input",
+				{ prompt: "run exactly once" },
+				"task",
+				{ retryOnTransport: false },
+			);
+			MockWebSocket.instances[0].emit("close", {
+				code: 1006,
+				reason: "Connection ended",
+			});
+
+			await expect(command).rejects.toMatchObject({
+				code: "hub_connection_closed",
+			});
+			expect(MockWebSocket.instances).toHaveLength(1);
+			await client.dispose();
+		});
+
 		it("unregisters before closing when disposed", async () => {
 			vi.stubGlobal("WebSocket", MockWebSocket);
 

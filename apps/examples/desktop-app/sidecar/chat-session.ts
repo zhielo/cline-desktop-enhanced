@@ -10,6 +10,7 @@ import {
 	createUserInstructionConfigService,
 	findCheckpointForRun,
 	getCoreBuiltinToolCatalog,
+	isHubReconnectableTransportError,
 	isSessionNotFoundError,
 	isSkillsToolAvailable,
 	ProviderSettingsManager,
@@ -40,6 +41,7 @@ import {
 	trackQueuedAttachments,
 } from "./attachments";
 import { createDesktopExtensionContext } from "./client-context";
+import { countPromptOccurrences } from "./cloud-session-snapshots";
 import {
 	getCloudSessionManager,
 	isCloudOuterSessionId,
@@ -96,12 +98,61 @@ const WORKSPACE_RESTORE_SEND_ERROR =
 	"Cannot send a prompt while the session workspace is being restored";
 const WORKSPACE_RESTORE_BUSY_ERROR =
 	"Wait for all turns in this workspace to finish before restoring it";
+const HUB_SEND_RECOVERY_TIMEOUT_MS = 12_000;
+const HUB_SEND_RECOVERY_RETRY_MS = 250;
 
 type WorkspacePathSource = {
 	cwd?: unknown;
 	workspaceRoot?: unknown;
 	workspace_root?: unknown;
 };
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function recoverAcceptedHubSend(
+	manager: ClineCore,
+	sessionId: string,
+	prompt: string,
+	occurrencesBeforeSend: number,
+): Promise<
+	| {
+			messages: MessageWithMetadata[];
+			status: string;
+	  }
+	| undefined
+> {
+	const deadline = Date.now() + HUB_SEND_RECOVERY_TIMEOUT_MS;
+	do {
+		try {
+			const [record, messages, pendingPrompts] = await Promise.all([
+				manager.get(sessionId),
+				manager.readMessages(sessionId),
+				manager.pendingPrompts.list({ sessionId }),
+			]);
+			if (
+				countPromptOccurrences(
+					messages,
+					pendingPrompts.map(mapPendingPrompt),
+					prompt,
+				) > occurrencesBeforeSend
+			) {
+				return {
+					messages,
+					status: record?.status ?? "running",
+				};
+			}
+		} catch {
+			// The Hub may still be reconnecting. Retry within the bounded window.
+		}
+		if (Date.now() >= deadline) break;
+		await delay(
+			Math.min(HUB_SEND_RECOVERY_RETRY_MS, Math.max(0, deadline - Date.now())),
+		);
+	} while (Date.now() < deadline);
+	return undefined;
+}
 
 function readWorkspacePath(
 	source: WorkspacePathSource | undefined,
@@ -1383,6 +1434,7 @@ async function handleSend(
 	const ownsBusyState = Boolean(
 		session && delivery !== "queue" && delivery !== "steer",
 	);
+	let recoveredBusyState = false;
 	if (session) {
 		if (ownsBusyState) {
 			session.prompt = prompt;
@@ -1486,6 +1538,25 @@ async function handleSend(
 			promptLength: prompt.length,
 			delivery,
 		});
+		let promptOccurrencesBeforeSend = countPromptOccurrences(
+			session?.messages ?? [],
+			session?.promptsInQueue ?? [],
+			runtimePrompt,
+		);
+		try {
+			const [messagesBeforeSend, promptsBeforeSend] = await Promise.all([
+				manager.readMessages(sessionId),
+				manager.pendingPrompts.list({ sessionId }),
+			]);
+			promptOccurrencesBeforeSend = countPromptOccurrences(
+				messagesBeforeSend,
+				promptsBeforeSend.map(mapPendingPrompt),
+				runtimePrompt,
+			);
+		} catch {
+			// Baseline reads improve duplicate detection but must never block a send.
+			// The live projection is the safe fallback when history is unavailable.
+		}
 		let result: Awaited<ReturnType<ClineCore["send"]>>;
 		try {
 			result = await manager.send({
@@ -1496,6 +1567,35 @@ async function handleSend(
 				userFiles,
 			});
 		} catch (error) {
+			if (isHubReconnectableTransportError(error)) {
+				const recovered = await recoverAcceptedHubSend(
+					manager,
+					sessionId,
+					runtimePrompt,
+					promptOccurrencesBeforeSend,
+				);
+				if (recovered) {
+					deleteMaterializedAttachments(sessionId, userFiles);
+					const recoveredStatus =
+						recovered.status === "pending" ? "running" : recovered.status;
+					if (session) {
+						session.messages = recovered.messages;
+						session.status = recoveredStatus;
+						session.busy = recoveredStatus === "running";
+						recoveredBusyState = session.busy;
+					}
+					sendEvent(ctx, "chat_session_status", {
+						sessionId,
+						status: recoveredStatus,
+					});
+					return {
+						sessionId,
+						ok: true,
+						recoveredAfterDisconnect: true,
+						status: recovered.status,
+					};
+				}
+			}
 			deleteMaterializedAttachments(sessionId, userFiles);
 			throw error;
 		}
@@ -1560,7 +1660,7 @@ async function handleSend(
 		};
 	} finally {
 		if (session) {
-			if (ownsBusyState) {
+			if (ownsBusyState && !recoveredBusyState) {
 				session.busy = false;
 			}
 			if (providerChanged) {
