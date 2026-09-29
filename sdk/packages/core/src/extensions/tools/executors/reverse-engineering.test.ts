@@ -311,6 +311,110 @@ describe("reverse-engineering archive inspection", () => {
 	});
 });
 
+describe("advanced forensic reports", () => {
+	it("writes resumable JSON and HTML reports with hashed evidence", async () => {
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-forensic-report-"),
+		);
+		temporaryDirectories.push(directory);
+		const target = path.join(directory, "sample.bin");
+		await fs.writeFile(
+			target,
+			Buffer.from(
+				"\u0000https://api.example.com\u0000debug_token\u0000",
+				"latin1",
+			),
+		);
+		const execute = createReverseEngineeringExecutor();
+		const jsonPath = path.join(directory, "report.json");
+		const first = JSON.parse(
+			await execute(
+				{
+					engine: "auto",
+					operation: "forensic_report",
+					target,
+					report_output_file: jsonPath,
+				},
+				{} as never,
+			),
+		);
+		expect(first.completedStages).toEqual(
+			expect.arrayContaining(["inspection", "strings"]),
+		);
+		expect(first.artifact.sha256).toMatch(/^[a-f0-9]{64}$/);
+		const report = JSON.parse(await fs.readFile(jsonPath, "utf8"));
+		expect(report.stringIndicators.categoryCounts).toMatchObject({
+			url: 1,
+			securityRelevant: 1,
+		});
+		const resumed = JSON.parse(
+			await execute(
+				{
+					engine: "auto",
+					operation: "forensic_report",
+					target,
+					report_output_file: jsonPath,
+				},
+				{} as never,
+			),
+		);
+		expect(resumed.resumed).toBe(true);
+		const htmlPath = path.join(directory, "report.html");
+		await execute(
+			{
+				engine: "auto",
+				operation: "forensic_report",
+				target,
+				report_format: "html",
+				report_output_file: htmlPath,
+			},
+			{} as never,
+		);
+		expect(await fs.readFile(htmlPath, "utf8")).toContain(
+			"Forensic analysis report",
+		);
+	});
+
+	it("combines APK structure, signature, and manifest security evidence", async () => {
+		if (process.platform === "win32") return;
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-apk-report-"),
+		);
+		temporaryDirectories.push(directory);
+		const bin = path.join(directory, "bin");
+		await executable(
+			bin,
+			"apksigner",
+			"printf 'Verified using v2 scheme (APK Signature Scheme v2): true\\nSigner #1 certificate SHA-256 digest: aa\\n'",
+		);
+		await executable(
+			bin,
+			"aapt2",
+			"printf 'E: manifest\\nA: android:name=\"android.permission.INTERNET\"\\nA: android:exported=true\\n'",
+		);
+		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+		const target = path.join(directory, "sample.apk");
+		await fs.writeFile(target, Buffer.from(ZIP_WITH_TRAVERSAL, "base64"));
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "apk_security_report",
+					target,
+				},
+				{} as never,
+			),
+		);
+		const report = JSON.parse(await fs.readFile(result.reportFile, "utf8"));
+		expect(report.apkSecurity.signature.verified).toBe(true);
+		expect(report.apkSecurity.signature.schemes.v2).toBe(true);
+		expect(report.apkSecurity.manifest.permissions).toContain(
+			"android.permission.INTERNET",
+		);
+		expect(report.apkSecurity.manifest.exportedSignals).toBe(1);
+	});
+});
+
 describe("reverse-engineering Smali reading", () => {
 	it("returns a complete method body including labels and instructions", async () => {
 		const directory = await fs.mkdtemp(

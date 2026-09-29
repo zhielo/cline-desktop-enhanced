@@ -113,6 +113,8 @@ export const ReverseEngineeringInputSchema = z.object({
 	operation: z.enum([
 		"discover",
 		"inspect",
+		"forensic_report",
+		"apk_security_report",
 		"compare_apks",
 		"verify_apk_signature",
 		"scan_strings",
@@ -150,6 +152,14 @@ export const ReverseEngineeringInputSchema = z.object({
 		.min(1)
 		.optional()
 		.describe("Absolute output file for assemble_smali or rebuild_apk"),
+	report_output_file: z
+		.string()
+		.min(1)
+		.optional()
+		.describe(
+			"Optional absolute destination for a JSON or HTML forensic report",
+		),
+	report_format: z.enum(["json", "html"]).default("json"),
 	acknowledge_external_output: z
 		.boolean()
 		.optional()
@@ -235,6 +245,7 @@ const SAFE_DEBUGGER_LOCATION_PATTERN =
 export const LiveDebuggerInputSchema = z.object({
 	operation: z.enum([
 		"discover",
+		"inspect_dump",
 		"launch",
 		"attach_snapshot",
 		"backtrace",
@@ -244,7 +255,7 @@ export const LiveDebuggerInputSchema = z.object({
 		"continue",
 		"step",
 	]),
-	debugger: z.enum(["auto", "gdb", "lldb"]).default("auto"),
+	debugger: z.enum(["auto", "gdb", "lldb", "cdb"]).default("auto"),
 	target_kind: z.enum(["local", "remote"]).default("local"),
 	target: z.string().min(1).optional(),
 	args: z.array(z.string().max(32_768)).max(256).optional(),
@@ -259,6 +270,17 @@ export const LiveDebuggerInputSchema = z.object({
 	length: z.number().int().min(1).max(4_096).optional(),
 	steps: z.number().int().min(1).max(100).optional(),
 	timeout_ms: z.number().int().positive().max(120_000).optional(),
+	symbol_path: z
+		.string()
+		.min(1)
+		.max(8_192)
+		.optional()
+		.describe("Debugger symbol path for static dump inspection"),
+	symbol_cache_directory: z
+		.string()
+		.min(1)
+		.optional()
+		.describe("Absolute bounded local symbol cache directory"),
 	acknowledge_risk: z.boolean().optional(),
 	confirm_execution_control: z
 		.boolean()
