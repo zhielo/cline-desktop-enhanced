@@ -364,7 +364,7 @@ function CommandOutputTerminal({
 			<div
 				aria-label="Command output"
 				aria-live="off"
-				className="max-h-64 overflow-auto rounded-md border border-border/70 bg-black/90 p-3 font-mono text-xs leading-relaxed text-zinc-100"
+				className="cline-command-output max-h-64 overflow-auto rounded-md border border-border/70 bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-100"
 				onScroll={(event) => {
 					const container = event.currentTarget;
 					shouldAutoScrollRef.current =
