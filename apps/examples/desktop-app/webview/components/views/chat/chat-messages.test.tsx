@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/lib/chat-schema";
 import { MAX_LIVE_COMMAND_OUTPUT_CHARS } from "@/lib/command-output";
-import { ChatMessages } from "./chat-messages";
+import { ChatMessages, getSessionRunMetrics } from "./chat-messages";
 
 // @pierre/diffs' custom element adopts constructable stylesheets, which jsdom
 // does not implement; without this the suite exits nonzero on an unhandled
@@ -51,6 +51,65 @@ async function renderMessages(
 		);
 	});
 }
+
+describe("ChatMessages session run bar", () => {
+	it("summarizes turns, tools, connection state, and session identity", async () => {
+		await renderMessages(
+			[
+				{
+					id: "user-1",
+					sessionId: "session-1",
+					role: "user",
+					content: "Inspect the project",
+					createdAt: 1,
+				},
+				{
+					id: "tool-1",
+					sessionId: "session-1",
+					role: "tool",
+					content: JSON.stringify({
+						toolName: "read_files",
+						input: {},
+						result: {},
+					}),
+					createdAt: 2,
+				},
+			],
+			{ status: "running" },
+		);
+
+		const runBar = container.querySelector('[aria-label="Session run status"]');
+		expect(runBar?.textContent).toContain("Working");
+		expect(runBar?.textContent).toContain("1 turn");
+		expect(runBar?.textContent).toContain("1 tool");
+		expect(runBar?.textContent).toContain("Connected");
+		expect(
+			container.querySelector('button[aria-label="Copy session ID"]'),
+		).not.toBeNull();
+	});
+
+	it("does not count runtime steering notes as user turns", () => {
+		expect(
+			getSessionRunMetrics([
+				{
+					id: "steer-1",
+					sessionId: "session-1",
+					role: "user",
+					content: "[SYSTEM] Continue",
+					createdAt: 1,
+					meta: { userRunSpan: 0 },
+				},
+				{
+					id: "user-1",
+					sessionId: "session-1",
+					role: "user",
+					content: "Continue",
+					createdAt: 2,
+				},
+			]),
+		).toEqual({ turns: 1, tools: 0 });
+	});
+});
 
 describe("ChatMessages error action", () => {
 	it("keeps the recovery action when the error is already in the transcript", async () => {

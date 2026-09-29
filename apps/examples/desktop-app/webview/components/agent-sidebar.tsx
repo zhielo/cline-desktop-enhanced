@@ -1568,9 +1568,9 @@ function ThreadItem({
 						<div className="group/row relative min-w-0">
 							<button
 								className={cn(
-									"group grid h-8 w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-md px-2 text-left text-sm font-normal",
+									"group relative grid h-8 w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-md px-2 text-left text-sm font-normal transition-colors",
 									isActive
-										? "bg-surface-hover text-sidebar-foreground"
+										? "bg-surface-hover text-sidebar-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
 										: "text-sidebar-foreground/80 group-hover/row:bg-surface-hover",
 								)}
 								disabled={pending}
@@ -1578,6 +1578,15 @@ function ThreadItem({
 								type="button"
 							>
 								<span className="flex max-w-full min-w-0 items-center gap-1.5 overflow-hidden">
+									{statusDotClass ? (
+										<span
+											aria-hidden="true"
+											className={cn(
+												"size-1.5 shrink-0 rounded-full",
+												statusDotClass,
+											)}
+										/>
+									) : null}
 									{thread.origin === "cloud" ? (
 										<Cloud
 											aria-label="Cloud session"
@@ -1595,12 +1604,6 @@ function ThreadItem({
 									</span>
 								</span>
 								<span className="flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground">
-									{statusDotClass ? (
-										<span
-											aria-hidden="true"
-											className={cn("size-1.5 rounded-full", statusDotClass)}
-										/>
-									) : null}
 									{thread.pinned ? (
 										<Pin aria-label="Pinned" className="size-3 fill-current" />
 									) : null}

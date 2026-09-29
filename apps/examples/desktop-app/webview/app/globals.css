@@ -15,6 +15,17 @@
 	--window-title-bar-height: 3rem;
 }
 
+/* Desktop chat density follows the code-first rhythm of terminal agents:
+ * a narrower reading column, compact controls, and crisp execution rails. */
+.cline-chat-tool,
+.cline-chat-work {
+	scroll-margin-top: 3.5rem;
+}
+
+[data-message-role="assistant"] {
+	scroll-margin-top: 3.5rem;
+}
+
 @variant max-md {
 	:root {
 		--window-title-bar-height: 1.75rem;
@@ -70,6 +81,11 @@
 	[data-slot="window-title-bar-content-host"] {
 		padding-right: 9rem;
 	}
+}
+
+[data-message-role="user"] .cline-chat-message-content {
+	font-size: 0.875rem;
+	line-height: 1.45;
 }
 
 /* Mobile toasts start below the caption row so both close buttons remain reachable. */

@@ -1191,7 +1191,7 @@ function ChatInputBarImpl({
 				"bg-card",
 				variant === "welcome"
 					? "overflow-visible rounded-xl border border-border/90 bg-surface-1/40 shadow-[0_24px_80px_-56px_color-mix(in_oklab,var(--primary)_72%,transparent)] backdrop-blur-md"
-					: "overflow-visible rounded-xl border border-border bg-surface-2 backdrop-blur-sm focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20",
+					: "overflow-visible rounded-lg border border-border/80 bg-background shadow-[0_10px_32px_-24px_rgba(0,0,0,0.65)] backdrop-blur-sm focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20",
 			)}
 		>
 			{/* Input area */}
@@ -1305,7 +1305,7 @@ function ChatInputBarImpl({
 							"flex items-end gap-2 rounded-lg border border-border bg-background px-3 py-2.5 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20",
 							variant === "welcome"
 								? "min-h-16 rounded-none border-0 bg-transparent px-0 py-0 focus-within:ring-0"
-								: "min-h-24 items-start rounded-none border-0 bg-transparent px-0 py-0 focus-within:border-transparent focus-within:ring-0",
+								: "min-h-16 items-start rounded-none border-0 bg-transparent px-0 py-0 focus-within:border-transparent focus-within:ring-0",
 						)}
 						onMouseDown={(event) => {
 							const target = event.target;
@@ -1599,7 +1599,7 @@ function ChatInputBarImpl({
 			</div>
 
 			{/* Composer settings */}
-			<div className="flex min-w-0 items-center justify-between gap-x-3 gap-y-2 rounded-b-xl border-t border-border bg-muted/20 px-2 py-2 text-sm text-muted-foreground">
+			<div className="flex min-w-0 items-center justify-between gap-x-3 gap-y-2 rounded-b-lg border-t border-border/70 bg-muted/10 px-2 py-1.5 text-sm text-muted-foreground">
 				<div className="flex min-w-0 flex-auto flex-wrap items-center gap-2 max-[560px]:flex-nowrap">
 					<button
 						aria-label={
@@ -1692,6 +1692,11 @@ function ChatInputBarImpl({
 				</div>
 
 				<div className="ml-auto flex min-w-0 items-center gap-2 max-[560px]:shrink-0">
+					{variant === "conversation" ? (
+						<span className="hidden whitespace-nowrap text-[10px] text-muted-foreground/70 lg:inline">
+							Enter send · Shift+Enter newline · Esc stop
+						</span>
+					) : null}
 					{variant === "conversation" ? (
 						<div className="flex min-w-0 items-center gap-0">
 							<div className="min-w-0 overflow-visible">
