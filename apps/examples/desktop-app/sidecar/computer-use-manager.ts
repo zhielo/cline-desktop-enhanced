@@ -14,7 +14,11 @@ import type { DesktopSettings } from "./desktop-settings";
 const MAX_ACTIONS = 200;
 const MAX_SESSION_AGE_MS = 15 * 60_000;
 const MAX_SCREENSHOTS = 10;
-const POWERSHELL_TIMEOUT_MS = 20_000;
+// UI Automation startup can exceed 20 seconds on a cold GitHub Windows
+// runner while .NET accessibility assemblies initialize. Keep the action
+// bounded, but leave enough room for the deterministic installer smoke test
+// and slower user machines instead of killing an otherwise healthy helper.
+const POWERSHELL_TIMEOUT_MS = 30_000;
 
 export type ComputerUseStateItem = {
 	computerSessionId: string;
@@ -587,7 +591,7 @@ export class DesktopComputerUseManager {
 		}
 		if (
 			input.action === "scroll" &&
-			((input.x === undefined) !== (input.y === undefined))
+			(input.x === undefined) !== (input.y === undefined)
 		) {
 			throw new Error("Scroll coordinates require both x and y or neither");
 		}
