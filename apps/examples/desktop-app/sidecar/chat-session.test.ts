@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { HubTransportError, SessionNotFoundError } from "@cline/core";
+import { SessionNotFoundError } from "@cline/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { materializeUserFiles } from "./attachments";
 import {
@@ -1172,13 +1172,12 @@ describe("first-send connection updates", () => {
 				{ role: "assistant", content: "first response" },
 				{ role: "user", content: "continue once" },
 			]);
-		send.mockRejectedValueOnce(
-			new HubTransportError(
-				"hub_connection_closed",
-				"Hub connection closed (code=1006, reason=Connection ended)",
-				{ closeCode: 1006, closeReason: "Connection ended" },
-			),
-		);
+		send.mockRejectedValueOnce({
+			name: "HubTransportError",
+			code: "hub_connection_closed",
+			message: "Hub connection closed (code=1006, reason=Connection ended)",
+			details: { closeCode: 1006, closeReason: "Connection ended" },
+		});
 
 		await expect(
 			handleChatSessionCommand(ctx, {

@@ -546,7 +546,22 @@ describe("NodeHubClient", () => {
 				new HubTransportError("hub_connection_closed", "closed"),
 			),
 		).toBe(true);
+		expect(
+			isHubReconnectableTransportError({
+				name: "HubTransportError",
+				code: "hub_connection_closed",
+				message: "Hub connection closed (code=1006, reason=Connection ended)",
+				details: { closeCode: 1006, closeReason: "Connection ended" },
+			}),
+		).toBe(true);
 		expect(isHubReconnectableTransportError(new Error("closed"))).toBe(false);
+		expect(
+			isHubReconnectableTransportError({
+				name: "HubTransportError",
+				code: "provider_failed",
+				message: "Provider request failed",
+			}),
+		).toBe(false);
 	});
 
 	it("rediscovers the local hub and retries commands after transport close", async () => {
