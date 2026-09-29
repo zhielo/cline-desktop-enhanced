@@ -115,6 +115,47 @@ describe("groupChatMessages", () => {
 		expect(items[0]).toEqual({ type: "tools", messages: [toolA] });
 		expect(items[2]).toEqual({ type: "tools", messages: [toolB] });
 	});
+
+	it("renders a duplicate consecutive run failure only once", () => {
+		const first = makeMessage({
+			id: "error-1",
+			role: "error",
+			content:
+				"The run failed: Hub connection closed (code=1006, reason=Connection ended)",
+		});
+		const duplicate = makeMessage({
+			id: "error-2",
+			role: "error",
+			content:
+				"  the run failed:  Hub connection closed (code=1006, reason=Connection ended)  ",
+		});
+
+		const items = groupChatMessages([first, duplicate]);
+
+		expect(items).toHaveLength(1);
+		expect(items[0]).toMatchObject({ type: "message", message: first });
+	});
+
+	it("preserves distinct failures and failures from different sessions", () => {
+		const first = makeMessage({
+			id: "error-1",
+			role: "error",
+			content: "The run failed: Connection ended",
+		});
+		const distinct = makeMessage({
+			id: "error-2",
+			role: "error",
+			content: "The run failed: Authentication expired",
+		});
+		const otherSession = makeMessage({
+			id: "error-3",
+			sessionId: "session-2",
+			role: "error",
+			content: "The run failed: Authentication expired",
+		});
+
+		expect(groupChatMessages([first, distinct, otherSession])).toHaveLength(3);
+	});
 });
 
 describe("collapseCompletedWork", () => {

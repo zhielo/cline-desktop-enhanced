@@ -1694,10 +1694,24 @@ async function handleForkUnlocked(
 			? readSessionMetadata(sourceSessionId)
 			: undefined);
 	const liveConfig = ctx.liveSessions.get(sourceSessionId)?.config;
+	const inheritedConversationId = [
+		sourceSession?.conversationId,
+		sourceMetadata?.conversationId,
+		liveConfig?.conversationId,
+	].find(
+		(value): value is string =>
+			typeof value === "string" && Boolean(value.trim()),
+	);
+	// Editing a submitted prompt replaces the active branch of one visible
+	// conversation. Keep a stable lineage id so history does not render every
+	// edit fork as another independent session. Older sessions without an
+	// explicit conversation id use their session id as the lineage root.
+	const conversationId = inheritedConversationId?.trim() || sourceSessionId;
 	const baseForkConfig: JsonRecord = {
 		...(liveConfig ?? {}),
 		...(request.config ?? {}),
 		sessionId: undefined,
+		conversationId,
 		environmentId: binding.environmentId,
 		provider:
 			sourceSession?.provider ||
@@ -1742,6 +1756,7 @@ async function handleForkUnlocked(
 			: trimMessagesBeforeUserRun(sourceMessages, forkBeforeRunCount);
 	const forkMetadata: JsonRecord = {
 		...(sourceMetadata ?? {}),
+		conversationId,
 		fork: {
 			forkedFromSessionId: sourceSessionId,
 			forkedAt: new Date().toISOString(),
@@ -1852,6 +1867,7 @@ async function handleForkUnlocked(
 	return {
 		sessionId: newSessionId,
 		forkedFromSessionId: sourceSessionId,
+		conversationId,
 	};
 }
 

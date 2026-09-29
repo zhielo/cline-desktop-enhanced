@@ -4032,6 +4032,7 @@ export function useChatSession(environmentId: string) {
 		}): Promise<{
 			newSessionId: string;
 			forkedFromSessionId: string;
+			conversationId?: string;
 			messages: ChatMessage[];
 		}> => {
 			const activeSessionId = activeSessionIdRef.current;
@@ -4049,6 +4050,7 @@ export function useChatSession(environmentId: string) {
 			})) as {
 				sessionId?: string;
 				forkedFromSessionId?: string;
+				conversationId?: string;
 			};
 			const newSessionId =
 				typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
@@ -4059,6 +4061,10 @@ export function useChatSession(environmentId: string) {
 				typeof payload.forkedFromSessionId === "string"
 					? payload.forkedFromSessionId
 					: activeSessionId;
+			const conversationId =
+				typeof payload.conversationId === "string"
+					? payload.conversationId.trim() || undefined
+					: undefined;
 			const nextMessages = Array.isArray(payload.messages)
 				? (payload.messages as ChatMessage[])
 				: await desktopClient.invoke<ChatMessage[]>("read_session_messages", {
@@ -4066,7 +4072,12 @@ export function useChatSession(environmentId: string) {
 						sessionId: newSessionId,
 						maxMessages: MAX_MESSAGES,
 					});
-			return { newSessionId, forkedFromSessionId, messages: nextMessages };
+			return {
+				newSessionId,
+				forkedFromSessionId,
+				conversationId,
+				messages: nextMessages,
+			};
 		},
 		[config, environmentId, postSession, status],
 	);

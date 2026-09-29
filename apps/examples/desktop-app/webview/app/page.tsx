@@ -1979,6 +1979,7 @@ function ChatThreadPane({
 			const cwd = config.cwd ?? workspaceRoot;
 			const forkedHistorySession: SessionHistoryItem = {
 				sessionId: result.newSessionId,
+				conversationId: result.conversationId,
 				environmentId: config.environmentId,
 				status: "completed",
 				provider: config.provider,

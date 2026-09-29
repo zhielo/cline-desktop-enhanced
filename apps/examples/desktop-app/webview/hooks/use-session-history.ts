@@ -185,7 +185,10 @@ export function dedupeSessionsByIdentity(
 ): SessionHistoryItem[] {
 	const seen = new Set<string>();
 	return sessions.filter((session) => {
-		const key = sessionKey(session);
+		const conversationId = session.conversationId?.trim();
+		const key = `${session.environmentId || LOCAL_WORKSPACE_ENVIRONMENT_ID}\u0000${
+			conversationId || session.sessionId
+		}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;

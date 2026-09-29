@@ -509,6 +509,7 @@ describe("session forks", () => {
 				{
 					get: vi.fn(async () => ({
 						sessionId: sourceSessionId,
+						conversationId: "conversation-root",
 						source: "desktop",
 						status: "completed",
 						provider: "cline",
@@ -557,6 +558,7 @@ describe("session forks", () => {
 				},
 				start: expect.objectContaining({
 					sessionMetadata: expect.objectContaining({
+						conversationId: "conversation-root",
 						fork: expect.objectContaining({
 							forkedFromSessionId: sourceSessionId,
 							beforeRunCount: 2,
@@ -570,6 +572,7 @@ describe("session forks", () => {
 		expect(result).toEqual({
 			sessionId: "edited-fork",
 			forkedFromSessionId: sourceSessionId,
+			conversationId: "conversation-root",
 		});
 		expect(ctx.liveSessions.get("edited-fork")?.messages).toEqual(
 			expectedMessages,
