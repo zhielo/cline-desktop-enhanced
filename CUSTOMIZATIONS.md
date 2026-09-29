@@ -187,6 +187,7 @@ Primary files:
 - Windows reverse-engineering discovery refreshes persisted tool environment variables and performs a bounded two-level search under `Documents`, `Program Files`, and `%LOCALAPPDATA%\Programs`; it does not scan arbitrary drive roots.
 - IDA Hex-Rays batch decompilation uses a generated bounded IDAPython script, verifies a non-empty pseudocode artifact, and never passes output paths through the incompatible `-Ohexrays:<path>:ALL` form.
 - A separate opt-in `live_debugger` tool provides explicitly acknowledged, bounded, one-shot GDB/LLDB launch and attach workflows with command-safe breakpoint and address validation; see `docs/LIVE_DEBUGGING.md`.
+- The forensic reliability boundary keeps reverse-engineering string filters literal by default, rejects unsafe or oversized opt-in regular expressions, requires acknowledgement for output outside managed cache/temporary roots, resolves future outputs through real parents to block symlink or reparse-point escapes, and records SHA-256 evidence for bounded generated artifacts. Live-debugger execution control requires a second confirmation, while Android package changes and log deletion have separate confirmations and Android text output uses the shared secret redactor. See `docs/FORENSIC_TOOL_RELIABILITY.md`.
 - APK comparison improvements.
 - Codex-compatible tool calls and binary attachment handling.
 
@@ -196,6 +197,7 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/executors/supervised-process.ts`
 - `sdk/packages/core/src/extensions/tools/executors/live-debugger.ts`
 - `docs/LIVE_DEBUGGING.md`
+- `docs/FORENSIC_TOOL_RELIABILITY.md`
 
 ### Scoped Windows computer use
 

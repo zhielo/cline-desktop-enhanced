@@ -39,7 +39,7 @@ case "$*" in
   *"shell dumpsys input"*) printf 'SurfaceOrientation: 0\\n' ;;
   *"shell uiautomator dump"*) printf 'dumped\\n' ;;
   *"exec-out cat /sdcard/window_dump.xml"*) printf '<hierarchy><node text="Hello"/></hierarchy>' ;;
-  *"logcat"*) printf 'E AndroidRuntime: FATAL EXCEPTION: main\\n' ;;
+  *"logcat"*) printf 'E AndroidRuntime: FATAL EXCEPTION: main token=super-secret-value\\n' ;;
   *"shell pm path"*) printf 'package:/data/app/example/base.apk\\n' ;;
   *"pull"*) for last in "$@"; do :; done; printf 'apk-bytes' > "$last"; printf 'pulled\\n' ;;
   *"exec-out screencap -p"*) printf '\\211PNG\\r\\n\\032\\npayload' ;;
@@ -83,6 +83,18 @@ describe("android device executor", () => {
 			"250",
 		]);
 		expect(logs.stdout).toContain("FATAL EXCEPTION");
+		expect(logs.stdout).toContain("token=[REDACTED]");
+		expect(logs.stdout).not.toContain("super-secret-value");
+		await expect(
+			execute(
+				{
+					operation: "logcat",
+					device_serial: "emulator-5554",
+					clear_logcat: true,
+				},
+				{} as never,
+			),
+		).rejects.toThrow("confirm_log_clear=true");
 	});
 
 	it("pulls an APK and writes a validated PNG screenshot atomically", async () => {
@@ -110,6 +122,7 @@ describe("android device executor", () => {
 		expect(pulled.succeeded).toBe(true);
 		expect(await fs.readFile(apk, "utf8")).toBe("apk-bytes");
 		expect(captured.succeeded).toBe(true);
+		expect(captured.sha256).toMatch(/^[a-f0-9]{64}$/);
 		expect((await fs.readFile(screenshot)).subarray(0, 8)).toEqual(
 			Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
 		);
@@ -152,5 +165,14 @@ describe("android device executor", () => {
 			),
 		);
 		expect(shell.args.at(-1)).toBe("<redacted>");
+		await expect(
+			execute(
+				{
+					operation: "uninstall",
+					package: "com.example.app",
+				},
+				{} as never,
+			),
+		).rejects.toThrow("confirm_package_change=true");
 	});
 });

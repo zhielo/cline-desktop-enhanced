@@ -150,6 +150,12 @@ export const ReverseEngineeringInputSchema = z.object({
 		.min(1)
 		.optional()
 		.describe("Absolute output file for assemble_smali or rebuild_apk"),
+	acknowledge_external_output: z
+		.boolean()
+		.optional()
+		.describe(
+			"Required when an output path is outside the managed reverse-engineering cache or operating-system temporary directory",
+		),
 	smali_api_level: z.number().int().min(1).max(100).optional(),
 	smali_class: z
 		.string()
@@ -168,6 +174,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	smali_query: z
 		.string()
 		.min(1)
+		.max(4_096)
 		.optional()
 		.describe(
 			"Literal text or regular expression to find across decoded Smali",
@@ -179,8 +186,15 @@ export const ReverseEngineeringInputSchema = z.object({
 	string_pattern: z
 		.string()
 		.min(1)
+		.max(4_096)
 		.optional()
-		.describe("Optional case-insensitive regular expression for scan_strings"),
+		.describe("Optional case-insensitive literal filter for scan_strings"),
+	string_pattern_regex: z
+		.boolean()
+		.optional()
+		.describe(
+			"Treat string_pattern as a bounded regular expression instead of literal text",
+		),
 	reuse_analysis: z
 		.boolean()
 		.optional()
@@ -246,6 +260,12 @@ export const LiveDebuggerInputSchema = z.object({
 	steps: z.number().int().min(1).max(100).optional(),
 	timeout_ms: z.number().int().positive().max(120_000).optional(),
 	acknowledge_risk: z.boolean().optional(),
+	confirm_execution_control: z
+		.boolean()
+		.optional()
+		.describe(
+			"Required for continue or step because these operations resume target execution",
+		),
 });
 
 /** Structured Android automation with explicitly acknowledged unrestricted shell access. */
@@ -316,6 +336,14 @@ export const AndroidDeviceInputSchema = z.object({
 	text: z.string().max(10_000).optional(),
 	shell_args: z.array(z.string().max(32_768)).min(1).max(256).optional(),
 	acknowledge_risk: z.boolean().optional(),
+	confirm_package_change: z
+		.boolean()
+		.optional()
+		.describe("Required for package installation or uninstallation"),
+	confirm_log_clear: z
+		.boolean()
+		.optional()
+		.describe("Required when clear_logcat is true"),
 	lines: z.number().int().min(1).max(5_000).optional(),
 	clear_logcat: z.boolean().optional(),
 	grant_permissions: z.boolean().optional(),

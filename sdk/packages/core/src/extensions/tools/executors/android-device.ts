@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AndroidDeviceExecutor } from "../types";
+import { redactSensitiveText } from "./process-environment-policy";
 
 const MAX_TEXT_BYTES = 200_000;
 const MAX_SCREENSHOT_BYTES = 32 * 1024 * 1024;
@@ -295,8 +296,8 @@ function textResult(
 			command,
 			args,
 			exitCode: result.exitCode,
-			stdout: result.stdout.toString("utf8"),
-			stderr: result.stderr,
+			stdout: redactSensitiveText(result.stdout.toString("utf8")),
+			stderr: redactSensitiveText(result.stderr),
 			timedOut: result.timedOut,
 			cancelled: result.cancelled,
 			durationMs: Date.now() - started,
@@ -419,6 +420,19 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 		let args: string[];
 		let screen: ScreenInfo | undefined;
 		let sensitive = false;
+		if (
+			["install", "uninstall"].includes(input.operation) &&
+			input.confirm_package_change !== true
+		) {
+			throw new Error(
+				"install and uninstall change device packages; set confirm_package_change=true after reviewing the target device and package.",
+			);
+		}
+		if (input.clear_logcat && input.confirm_log_clear !== true) {
+			throw new Error(
+				"clear_logcat deletes device log history; set confirm_log_clear=true after reviewing the request.",
+			);
+		}
 		switch (input.operation) {
 			case "package_info":
 				args = [
@@ -696,6 +710,10 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 						outputPath: output,
 						succeeded: result.exitCode === 0 && png,
 						bytes: result.stdout.length,
+						sha256:
+							result.exitCode === 0 && png
+								? createHash("sha256").update(result.stdout).digest("hex")
+								: undefined,
 						durationMs: Date.now() - started,
 					},
 					null,
