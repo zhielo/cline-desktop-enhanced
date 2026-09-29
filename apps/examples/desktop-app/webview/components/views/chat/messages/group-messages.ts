@@ -353,11 +353,30 @@ export function groupChatMessages(messages: ChatMessage[]): ChatRenderItem[] {
 	const items: ChatRenderItem[] = [];
 	let pendingReasoningMessages: ChatMessage[] = [];
 
+	const isDuplicateConsecutiveError = (message: ChatMessage) => {
+		if (message.role !== "error") return false;
+		const previous = items.at(-1);
+		if (
+			previous?.type !== "message" ||
+			previous.message.role !== "error" ||
+			previous.message.sessionId !== message.sessionId
+		) {
+			return false;
+		}
+		const normalize = (value: string) =>
+			value.trim().replace(/\s+/g, " ").toLowerCase();
+		return normalize(previous.message.content) === normalize(message.content);
+	};
+
 	const pushMessage = (
 		message: ChatMessage,
 		agentRole: AgentMessageRole,
 		reasoningMessages = hasMessageReasoning(message) ? [message] : [],
 	) => {
+		// A transport close can be reported by both the live command and the
+		// terminal event. Keep one visible failure while preserving distinct
+		// failures, turns, and sessions.
+		if (isDuplicateConsecutiveError(message)) return;
 		items.push({
 			type: "message",
 			agentRole,

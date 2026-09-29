@@ -45,6 +45,11 @@ export const PINNED_METADATA_KEY = "pinned";
 
 export interface SessionHistoryItem {
 	sessionId: string;
+	/**
+	 * Stable logical thread id. A reconnect or resumed run can receive a new
+	 * session id while remaining part of the same visible conversation.
+	 */
+	conversationId?: string;
 	origin?: "local" | "cloud";
 	repoUrl?: string;
 	source?: string;

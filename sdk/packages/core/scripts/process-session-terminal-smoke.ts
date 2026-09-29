@@ -31,6 +31,28 @@ async function waitForCompletion(processId: string): Promise<void> {
 	throw new Error("Interactive process did not complete");
 }
 
+async function waitForOutput(
+	processId: string,
+	expected: string,
+): Promise<void> {
+	const deadline = Date.now() + 10_000;
+	while (Date.now() < deadline) {
+		const output = manager
+			.read(OWNER, processId)
+			.chunks.map((chunk) => chunk.text)
+			.join("");
+		if (output.includes(expected)) return;
+		const state = manager.get(OWNER, processId)?.state;
+		if (state === "exited" || state === "failed" || state === "cancelled") {
+			throw new Error(
+				`Interactive process ended before ${expected}: ${JSON.stringify(output)}`,
+			);
+		}
+		await bunRuntime.sleep(10);
+	}
+	throw new Error(`Interactive process did not report ${expected}`);
+}
+
 try {
 	const bunExecutable = bunRuntime.which("bun");
 	if (!bunExecutable) {
@@ -41,7 +63,7 @@ try {
 		executable: bunExecutable,
 		args: [
 			"-e",
-			'console.log("tty:" + process.stdin.isTTY + ":" + process.stdout.isTTY); process.stdin.setRawMode?.(true); process.stdin.resume(); process.stdin.once("data", chunk => { console.log("input:" + Buffer.from(chunk).toString()); process.exit(0); });',
+			'console.log("tty:" + process.stdin.isTTY + ":" + process.stdout.isTTY); process.stdin.resume(); process.stdin.once("data", chunk => { console.log("input:" + Buffer.from(chunk).toString().replace(/[\\r\\n]+/g, "")); process.exit(0); }); console.log("ready:input");',
 		],
 		cwd: process.cwd(),
 		interactive: true,
@@ -55,8 +77,10 @@ try {
 	) {
 		throw new Error("Interactive terminal metadata is incorrect");
 	}
+	await waitForOutput(started.processId, "ready:input");
 	manager.resize(OWNER, started.processId, 100, 40);
-	await manager.writeStdin(OWNER, started.processId, "ping");
+	await bunRuntime.sleep(100);
+	await manager.writeStdin(OWNER, started.processId, "ping\r");
 	await waitForCompletion(started.processId);
 	const output = manager
 		.read(OWNER, started.processId)

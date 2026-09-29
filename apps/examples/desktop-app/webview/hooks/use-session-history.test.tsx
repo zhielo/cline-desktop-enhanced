@@ -72,6 +72,54 @@ it("deduplicates the same session identity but preserves different environments"
 	]);
 });
 
+it("shows one newest row for resumed sessions in the same conversation", () => {
+	const newest = {
+		...sessionRow("resume-2"),
+		conversationId: "conversation-1",
+		lastActivityAt: "2026-07-20T13:00:00.000Z",
+	};
+	const earlier = {
+		...sessionRow("resume-1"),
+		conversationId: "conversation-1",
+		lastActivityAt: "2026-07-20T12:00:00.000Z",
+	};
+
+	expect(dedupeSessionsByIdentity([newest, earlier])).toEqual([newest]);
+});
+
+it("replaces a legacy source row when its first edit fork uses the source id as lineage", () => {
+	const editedFork = {
+		...sessionRow("edited-fork"),
+		conversationId: "source-session",
+	};
+	const legacySource = sessionRow("source-session");
+
+	expect(dedupeSessionsByIdentity([editedFork, legacySource])).toEqual([
+		editedFork,
+	]);
+});
+
+it("preserves the same conversation from different environments", () => {
+	const local = {
+		...sessionRow("local-resume"),
+		conversationId: "conversation-1",
+	};
+	const remote = {
+		...sessionRow("remote-resume"),
+		conversationId: "conversation-1",
+		environmentId: "remote",
+	};
+
+	expect(dedupeSessionsByIdentity([local, remote])).toEqual([local, remote]);
+});
+
+it("preserves distinct sessions when no conversation identity is available", () => {
+	const first = sessionRow("session-1");
+	const second = sessionRow("session-2");
+
+	expect(dedupeSessionsByIdentity([first, second])).toEqual([first, second]);
+});
+
 let container: HTMLDivElement;
 let root: Root;
 let current: SessionHistoryHook;
