@@ -422,7 +422,13 @@ export class HubSessionClient {
 				timeoutSeconds: request.config.timeoutSeconds,
 			},
 			sessionId,
-			options,
+			{
+				...options,
+				// A dropped reply does not prove the prompt was rejected. Replaying
+				// it here can execute the same user turn twice; callers reconcile
+				// session history/status before deciding how to recover.
+				retryOnTransport: false,
+			},
 		);
 		return {
 			result: reply.payload?.result as ChatTurnResult | undefined,

@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { SessionNotFoundError } from "@cline/core";
+import { HubTransportError, SessionNotFoundError } from "@cline/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { materializeUserFiles } from "./attachments";
 import {
@@ -1112,6 +1112,7 @@ describe("first-send connection updates", () => {
 		const readSessionCompactionState = vi.fn(async () => undefined);
 		const stop = vi.fn(async () => undefined);
 		const sessionId = "session-connection-test";
+		const get = vi.fn(async () => ({ sessionId, status: "running" }));
 		const start = vi.fn(async (_input?: unknown) => ({ sessionId }));
 		const ctx = {
 			liveSessions: new Map([
@@ -1133,6 +1134,7 @@ describe("first-send connection updates", () => {
 			wsClients: new Set(),
 			...localRuntimeContext(
 				{
+					get,
 					readMessages,
 					readSessionCompactionState,
 					send,
@@ -1148,6 +1150,7 @@ describe("first-send connection updates", () => {
 		} as unknown as SidecarContext;
 		return {
 			ctx,
+			get,
 			readMessages,
 			send,
 			sessionId,
@@ -1156,6 +1159,45 @@ describe("first-send connection updates", () => {
 			updateSessionConnection,
 		};
 	}
+
+	it("recovers an accepted prompt after a 1006 Hub disconnect without resending", async () => {
+		const { ctx, get, readMessages, send, sessionId } = createContext();
+		readMessages
+			.mockResolvedValueOnce([
+				{ role: "user", content: "first prompt" },
+				{ role: "assistant", content: "first response" },
+			])
+			.mockResolvedValue([
+				{ role: "user", content: "first prompt" },
+				{ role: "assistant", content: "first response" },
+				{ role: "user", content: "continue once" },
+			]);
+		send.mockRejectedValueOnce(
+			new HubTransportError(
+				"hub_connection_closed",
+				"Hub connection closed (code=1006, reason=Connection ended)",
+				{ closeCode: 1006, closeReason: "Connection ended" },
+			),
+		);
+
+		await expect(
+			handleChatSessionCommand(ctx, {
+				action: "send",
+				sessionId,
+				prompt: "continue once",
+			}),
+		).resolves.toMatchObject({
+			ok: true,
+			recoveredAfterDisconnect: true,
+			status: "running",
+		});
+		expect(send).toHaveBeenCalledTimes(1);
+		expect(get).toHaveBeenCalledWith(sessionId);
+		expect(ctx.liveSessions.get(sessionId)).toMatchObject({
+			status: "running",
+			busy: true,
+		});
+	});
 
 	it("skips an identical update for a locally-created session", async () => {
 		const { ctx, send, sessionId, updateSessionConnection } = createContext();

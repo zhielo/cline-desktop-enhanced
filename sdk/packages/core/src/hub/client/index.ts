@@ -38,6 +38,12 @@ type HubCommandOptions = {
 	timeoutMs?: number | null;
 	/** Synchronous local guard, checked after connection before each dispatch. */
 	beforeDispatch?: () => void;
+	/**
+	 * Whether a command may be replayed after recovering a local Hub transport.
+	 * Disable this for non-idempotent commands whose reply can be lost after the
+	 * Hub accepted them.
+	 */
+	retryOnTransport?: boolean;
 };
 
 type SubscriptionEntry = {
@@ -668,7 +674,9 @@ export class NodeHubClient {
 	): Promise<HubReplyEnvelope> {
 		let attempt = 0;
 		const canRecoverTransport =
-			command !== "client.register" && command !== "client.unregister";
+			options?.retryOnTransport !== false &&
+			command !== "client.register" &&
+			command !== "client.unregister";
 		while (true) {
 			try {
 				return await this.commandOnce(command, payload, sessionId, options);
