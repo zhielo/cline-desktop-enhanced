@@ -120,6 +120,7 @@ jobs:
             --config apps/examples/desktop-app/vitest.config.mts
           bunx vitest run \
             sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
+            sdk/packages/core/src/extensions/tools/executors/live-debugger.test.ts \
             sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts \
             sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
             sdk/packages/core/src/extensions/tools/permission-profile.test.ts \

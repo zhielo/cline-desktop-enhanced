@@ -20,6 +20,9 @@ const MAX_LISTED_ENTRIES = 2_000;
 const MAX_EXTRACTED_ENTRIES = 25_000;
 const MAX_ENTRY_UNCOMPRESSED_BYTES = 512 * 1024 * 1024;
 const MAX_TOTAL_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024;
+const MAX_USER_REGEX_CHARS = 512;
+const MAX_ARTIFACT_HASH_BYTES = 256 * 1024 * 1024;
+const MAX_TOTAL_ARTIFACT_HASH_BYTES = 512 * 1024 * 1024;
 const inflateRawAsync = promisify(inflateRaw);
 
 type Engine = "ghidra" | "ida" | "jadx";
@@ -41,6 +44,78 @@ const ANALYSIS_SCHEMA_VERSION = 2;
 const GHIDRA_SCRIPT_VERSION = 2;
 const IDA_DECOMPILE_SCRIPT_VERSION = 1;
 const analysisLocks = new Map<string, Promise<void>>();
+
+type OutputScope = "managed" | "external-approved";
+
+function isWithin(root: string, candidate: string): boolean {
+	const relative = path.relative(root, candidate);
+	return (
+		relative === "" ||
+		(!relative.startsWith(`..${path.sep}`) &&
+			relative !== ".." &&
+			!path.isAbsolute(relative))
+	);
+}
+
+async function canonicalFuturePath(candidate: string): Promise<string> {
+	const absolute = path.resolve(candidate);
+	const missing: string[] = [];
+	let existing = absolute;
+	for (;;) {
+		try {
+			existing = await fs.realpath(existing);
+			break;
+		} catch {
+			const parent = path.dirname(existing);
+			if (parent === existing) return absolute;
+			missing.unshift(path.basename(existing));
+			existing = parent;
+		}
+	}
+	return path.join(existing, ...missing);
+}
+
+async function enforceOutputPath(
+	candidate: string,
+	acknowledgeExternal: boolean | undefined,
+): Promise<OutputScope> {
+	const canonical = await canonicalFuturePath(candidate);
+	const configuredRoot = process.env.CLINE_RE_OUTPUT_ROOT;
+	const managedRoots = [
+		analysisCacheRoot(),
+		os.tmpdir(),
+		...(configuredRoot ? [configuredRoot] : []),
+	];
+	for (const root of managedRoots) {
+		const canonicalRoot = await canonicalFuturePath(root);
+		if (isWithin(canonicalRoot, canonical)) return "managed";
+	}
+	if (acknowledgeExternal === true) return "external-approved";
+	throw new Error(
+		"Output path is outside the managed reverse-engineering cache or temporary directory; set acknowledge_external_output=true after reviewing the destination.",
+	);
+}
+
+function boundedUserRegex(pattern: string, label: string): RegExp {
+	if (pattern.length > MAX_USER_REGEX_CHARS) {
+		throw new Error(`${label} regular expression exceeds 512 characters`);
+	}
+	if (/\\[1-9]/.test(pattern)) {
+		throw new Error(`${label} regular expression cannot use backreferences`);
+	}
+	if (/\((?:[^()\\]|\\.)*[*+{][^()]*\)\s*[*+{]/.test(pattern)) {
+		throw new Error(
+			`${label} regular expression contains a nested quantifier that may cause excessive backtracking`,
+		);
+	}
+	try {
+		return new RegExp(pattern, "i");
+	} catch (error) {
+		throw new Error(
+			`Invalid ${label} regular expression: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
 
 async function withAnalysisLock<T>(
 	key: string,
@@ -962,7 +1037,7 @@ async function searchSmali(
 	signal?: AbortSignal,
 ) {
 	const matcher = regex
-		? new RegExp(query, "i")
+		? boundedUserRegex(query, "smali_query")
 		: {
 				test: (value: string) =>
 					value.toLowerCase().includes(query.toLowerCase()),
@@ -1061,9 +1136,17 @@ async function scanBinaryStrings(
 	minLength: number,
 	maxResults: number,
 	pattern: string | undefined,
+	patternIsRegex: boolean,
 	signal?: AbortSignal,
 ) {
-	const filter = pattern ? new RegExp(pattern, "i") : undefined;
+	const filter = pattern
+		? patternIsRegex
+			? boundedUserRegex(pattern, "string_pattern")
+			: {
+					test: (value: string) =>
+						value.toLowerCase().includes(pattern.toLowerCase()),
+				}
+		: undefined;
 	const stat = await fs.stat(target);
 	const maxScanBytes = Math.min(stat.size, 256 * 1024 * 1024);
 	const handle = await fs.open(target, "r");
@@ -1136,6 +1219,7 @@ async function scanBinaryStrings(
 		scanLimited: stat.size > maxScanBytes,
 		minStringLength: minLength,
 		pattern: pattern ?? null,
+		patternMode: pattern ? (patternIsRegex ? "regex" : "literal") : null,
 		resultCount: results.length,
 		resultsTruncated: results.length >= maxResults,
 		categoryCounts,
@@ -1322,7 +1406,7 @@ function machineName(machine: number): string {
 function sampleEntropy(buffer: Buffer): number {
 	if (buffer.length === 0) return 0;
 	const counts = new Uint32Array(256);
-	for (const byte of buffer) counts[byte]! += 1;
+	for (const byte of buffer) counts[byte] = (counts[byte] ?? 0) + 1;
 	let entropy = 0;
 	for (const count of counts) {
 		if (count === 0) continue;
@@ -1469,7 +1553,7 @@ const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
 function crc32(payload: Buffer) {
 	let value = 0xffffffff;
 	for (const byte of payload) {
-		value = CRC32_TABLE[(value ^ byte) & 0xff]! ^ (value >>> 8);
+		value = (CRC32_TABLE[(value ^ byte) & 0xff] ?? 0) ^ (value >>> 8);
 	}
 	return (value ^ 0xffffffff) >>> 0;
 }
@@ -1598,10 +1682,18 @@ async function extractZip(
 	}
 }
 
-async function createExtractionDirectory(requested?: string) {
-	if (!requested)
-		return fs.mkdtemp(path.join(os.tmpdir(), "cline-re-extract-"));
+async function createExtractionDirectory(
+	requested: string | undefined,
+	acknowledgeExternal: boolean | undefined,
+) {
+	if (!requested) {
+		const outputDir = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-extract-"),
+		);
+		return { outputDir, outputScope: "managed" as const };
+	}
 	const outputDir = path.resolve(requested);
+	const outputScope = await enforceOutputPath(outputDir, acknowledgeExternal);
 	if (await exists(outputDir)) {
 		throw new Error(
 			"output_directory must not already exist for extraction; choose a new directory",
@@ -1609,7 +1701,7 @@ async function createExtractionDirectory(requested?: string) {
 	}
 	await fs.mkdir(path.dirname(outputDir), { recursive: true, mode: 0o700 });
 	await fs.mkdir(outputDir, { mode: 0o700 });
-	return outputDir;
+	return { outputDir, outputScope };
 }
 
 function shellLikeQuote(value: string): string {
@@ -1629,19 +1721,31 @@ async function resolveAnalysisDirectory(
 	reuseAnalysis: boolean,
 	hash: string,
 	engine: Engine,
-): Promise<{ outputDir: string; persistent: boolean }> {
+	acknowledgeExternal: boolean | undefined,
+): Promise<{
+	outputDir: string;
+	persistent: boolean;
+	outputScope: OutputScope;
+}> {
 	if (requested) {
-		return { outputDir: path.resolve(requested), persistent: true };
+		const outputDir = path.resolve(requested);
+		return {
+			outputDir,
+			persistent: true,
+			outputScope: await enforceOutputPath(outputDir, acknowledgeExternal),
+		};
 	}
 	if (!reuseAnalysis) {
 		return {
 			outputDir: await fs.mkdtemp(path.join(os.tmpdir(), "cline-re-")),
 			persistent: false,
+			outputScope: "managed",
 		};
 	}
 	return {
 		outputDir: path.join(analysisCacheRoot(), hash, engine),
 		persistent: true,
+		outputScope: "managed",
 	};
 }
 
@@ -1679,7 +1783,13 @@ async function writeAnalysisManifest(
 }
 
 async function listGeneratedArtifacts(outputDir: string) {
-	const artifacts: Array<{ path: string; size: number }> = [];
+	const artifacts: Array<{
+		path: string;
+		size: number;
+		sha256: string | null;
+		hashSkipped: boolean;
+	}> = [];
+	let hashedBytes = 0;
 	const visit = async (directory: string) => {
 		if (artifacts.length >= 200) return;
 		let entries: Dirent[];
@@ -1695,9 +1805,15 @@ async function listGeneratedArtifacts(outputDir: string) {
 				await visit(absolute);
 			} else if (entry.isFile() && entry.name !== ANALYSIS_MANIFEST) {
 				const stat = await fs.stat(absolute);
+				const canHash =
+					stat.size <= MAX_ARTIFACT_HASH_BYTES &&
+					hashedBytes + stat.size <= MAX_TOTAL_ARTIFACT_HASH_BYTES;
+				if (canHash) hashedBytes += stat.size;
 				artifacts.push({
 					path: path.relative(outputDir, absolute),
 					size: stat.size,
+					sha256: canHash ? await sha256(absolute) : null,
+					hashSkipped: !canHash,
 				});
 			}
 		}
@@ -1752,10 +1868,7 @@ async function ensureGhidraDecompileScript(outputDir: string) {
 	return scriptPath;
 }
 
-async function ensureIdaDecompileScript(
-	outputDir: string,
-	outputPath: string,
-) {
+async function ensureIdaDecompileScript(outputDir: string, outputPath: string) {
 	const scriptPath = path.join(outputDir, "cline_decompile_all.py");
 	const source = `# Generated by Cline Enhanced for authorized static analysis.
 import traceback
@@ -2072,6 +2185,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						input.min_string_length ?? 6,
 						input.max_results ?? 1_000,
 						input.string_pattern,
+						input.string_pattern_regex === true,
 						context.signal,
 					)),
 					durationMs: Date.now() - started,
@@ -2208,13 +2322,17 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				throw new Error(
 					"extract currently supports ZIP, APK, AAB, and JAR containers",
 				);
-			const outputDir = await createExtractionDirectory(input.output_directory);
+			const { outputDir, outputScope } = await createExtractionDirectory(
+				input.output_directory,
+				input.acknowledge_external_output,
+			);
 			const archive = await inspectZip(target);
 			return JSON.stringify(
 				{
 					target,
 					sha256: hash,
 					kind: archiveKind(target, archive.parsed),
+					outputScope,
 					...(await extractZip(target, outputDir, archive)),
 				},
 				null,
@@ -2222,10 +2340,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 		}
 		if (input.operation === "script") {
-			if (!path.isAbsolute(input.script_path!)) {
+			const scriptPath = input.script_path;
+			if (!scriptPath || !path.isAbsolute(scriptPath)) {
 				throw new Error("script_path must be an absolute path");
 			}
-			const scriptStat = await fs.stat(input.script_path!);
+			const scriptStat = await fs.stat(scriptPath);
 			if (!scriptStat.isFile()) {
 				throw new Error(`script_path is not a file: ${input.script_path}`);
 			}
@@ -2249,6 +2368,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				input.output_directory ??
 					path.join(analysisCacheRoot(), hash, "smali", "decoded"),
 			);
+			const outputScope = await enforceOutputPath(
+				outputDir,
+				input.acknowledge_external_output,
+			);
 			const smaliManifestPath = `${outputDir}.${ANALYSIS_MANIFEST}`;
 			return withAnalysisLock(outputDir, async () => {
 				const existingManifest = await readJsonFile(smaliManifestPath);
@@ -2264,6 +2387,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							target,
 							sha256: hash,
 							outputDirectory: outputDir,
+							outputScope,
 							command,
 							reusedAnalysis: true,
 							artifacts,
@@ -2311,6 +2435,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						target,
 						operation: input.operation,
 						tool: apkContainer ? "apktool" : "baksmali",
+						outputScope,
 						updatedAt: new Date().toISOString(),
 					});
 				} else {
@@ -2326,6 +2451,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						target,
 						sha256: hash,
 						outputDirectory: outputDir,
+						outputScope,
 						command,
 						args,
 						reusedAnalysis: false,
@@ -2349,6 +2475,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				);
 			}
 			const outputFile = path.resolve(input.output_file);
+			const outputScope = await enforceOutputPath(
+				outputFile,
+				input.acknowledge_external_output,
+			);
 			const expectedExtension =
 				input.operation === "assemble_smali" ? ".dex" : ".apk";
 			if (path.extname(outputFile).toLowerCase() !== expectedExtension) {
@@ -2408,6 +2538,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						target,
 						sha256: hash,
 						outputFile,
+						outputScope,
 						command,
 						args,
 						durationMs: Date.now() - started,
@@ -2428,12 +2559,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		const gui = input.operation === "open_gui";
 		const command = gui ? await discover(engine, true) : available[engine];
 		if (!command) throw new Error(`${engine} executable was not found`);
-		const { outputDir, persistent } = await resolveAnalysisDirectory(
-			input.output_directory,
-			input.reuse_analysis !== false,
-			hash,
-			engine,
-		);
+		const { outputDir, persistent, outputScope } =
+			await resolveAnalysisDirectory(
+				input.output_directory,
+				input.reuse_analysis !== false,
+				hash,
+				engine,
+				input.acknowledge_external_output,
+			);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 		const timeoutMs = input.timeout_ms ?? 900_000;
 		const engineIdentity = await toolIdentity(engine, available[engine]);
@@ -2571,6 +2704,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						sha256: hash,
 						command,
 						outputDirectory: outputDir,
+						outputScope,
 						reusedAnalysis,
 						handoffTarget: args[0],
 						...(await launchDetachedGui(command, args)),
@@ -2614,6 +2748,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					engineVersionSource: engineIdentity.versionSource,
 					analysisOptionsHash: optionsHash,
 					operation: input.operation,
+					outputScope,
 					updatedAt: new Date().toISOString(),
 				});
 			}
@@ -2625,6 +2760,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					target,
 					sha256: hash,
 					outputDirectory: outputDir,
+					outputScope,
 					persistent,
 					reusedAnalysis,
 					command,

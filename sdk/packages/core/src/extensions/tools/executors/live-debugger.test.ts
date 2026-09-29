@@ -67,6 +67,21 @@ it("requires explicit risk acknowledgement", async () => {
 	).rejects.toThrow("acknowledge_risk=true");
 });
 
+it("requires separate confirmation before resuming execution", async () => {
+	await expect(
+		createLiveDebuggerExecutor()(
+			{
+				operation: "continue",
+				debugger: "auto",
+				target_kind: "local",
+				pid: 123,
+				acknowledge_risk: true,
+			},
+			{} as never,
+		),
+	).rejects.toThrow("confirm_execution_control=true");
+});
+
 describe("debugger location validation", () => {
 	it("accepts bounded symbols and addresses", () => {
 		for (const breakpoint of ["main", "Namespace::method", "0x401000"]) {

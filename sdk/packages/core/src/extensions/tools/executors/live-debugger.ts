@@ -129,6 +129,8 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 					backends: available,
 					model: "one-shot supervised debugger invocations",
 					persistentSession: false,
+					defaultMode: "inspect-only",
+					executionControlRequiresConfirmation: true,
 				},
 				null,
 				2,
@@ -138,6 +140,12 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 			throw new Error(
 				"Live debugging executes or attaches to a process; set acknowledge_risk=true after confirming authorization.",
 			);
+		const resumesExecution = ["continue", "step"].includes(input.operation);
+		if (resumesExecution && input.confirm_execution_control !== true) {
+			throw new Error(
+				"continue and step resume target execution; set confirm_execution_control=true after reviewing the target.",
+			);
+		}
 		if (input.target_kind === "remote")
 			throw new Error(
 				"Remote debugging is not enabled; use a local authorized target or device-specific tooling.",
@@ -173,6 +181,8 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 				args,
 				target: input.target,
 				pid: input.pid,
+				executionControlConfirmed: resumesExecution,
+				mode: resumesExecution ? "execution-control" : "inspect-only",
 				succeeded:
 					result.exitCode === 0 && !result.timedOut && !result.cancelled,
 				...result,

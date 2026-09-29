@@ -59,6 +59,7 @@ const requiredMarkers: Array<{
 			"Record installer smoke-test result",
 			"Run required desktop sidecar regression suite",
 			"repository-tool.test.ts",
+			"live-debugger.test.ts",
 			"permission-profile.test.ts",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
@@ -487,6 +488,10 @@ const requiredMarkers: Array<{
 			"cline_decompile_all.py",
 			"ida_hexrays.decompile(function)",
 			"artifactVerified",
+			"acknowledge_external_output=true",
+			"boundedUserRegex",
+			"external-approved",
+			"MAX_ARTIFACT_HASH_BYTES",
 		],
 	},
 	{
@@ -500,7 +505,13 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/live-debugger.ts",
-		markers: ["acknowledge_risk=true", "persistentSession", "process detach"],
+		markers: [
+			"acknowledge_risk=true",
+			"confirm_execution_control=true",
+			"inspect-only",
+			"persistentSession",
+			"process detach",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
@@ -517,6 +528,24 @@ const requiredMarkers: Array<{
 	{
 		path: "docs/ANDROID_DEVICE_AUTOMATION.md",
 		markers: ["Unrestricted shell", "acknowledge_risk: true", "screenChanged"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/android-device.ts",
+		markers: [
+			"redactSensitiveText",
+			"confirm_package_change=true",
+			"confirm_log_clear=true",
+		],
+	},
+	{
+		path: "docs/FORENSIC_TOOL_RELIABILITY.md",
+		markers: [
+			"Forensic tool reliability",
+			"acknowledge_external_output: true",
+			"confirm_execution_control: true",
+			"confirm_package_change: true",
+			"native Windows sandboxing",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/command-latency-baseline.ts",

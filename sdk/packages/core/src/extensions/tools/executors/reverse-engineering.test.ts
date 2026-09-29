@@ -146,6 +146,47 @@ describe("reverse-engineering archive inspection", () => {
 		).toBe("ok");
 	});
 
+	it("requires acknowledgement for output outside managed roots", async () => {
+		const directory = await fs.mkdtemp(
+			path.join(os.tmpdir(), "cline-re-test-"),
+		);
+		temporaryDirectories.push(directory);
+		const target = path.join(directory, "sample.zip");
+		const cleanZip =
+			"UEsDBBQAAAAAAGIZN11H3dx5AgAAAAIAAAANAAAAc2FmZS9maWxlLnR4dG9rUEsBAhQDFAAAAAAAYhk3XUfd3HkCAAAAAgAAAA0AAAAAAAAAAAAAAIABAAAAAHNhZmUvZmlsZS50eHRQSwUGAAAAAAEAAQA7AAAALQAAAAAA";
+		await fs.writeFile(target, Buffer.from(cleanZip, "base64"));
+		const outputDirectory = path.join(
+			process.cwd(),
+			`.cline-re-external-${process.pid}-${Date.now()}`,
+		);
+		temporaryDirectories.push(outputDirectory);
+		const execute = createReverseEngineeringExecutor();
+		await expect(
+			execute(
+				{
+					engine: "auto",
+					operation: "extract",
+					target,
+					output_directory: outputDirectory,
+				},
+				{} as never,
+			),
+		).rejects.toThrow("acknowledge_external_output=true");
+		const approved = JSON.parse(
+			await execute(
+				{
+					engine: "auto",
+					operation: "extract",
+					target,
+					output_directory: outputDirectory,
+					acknowledge_external_output: true,
+				},
+				{} as never,
+			),
+		);
+		expect(approved.outputScope).toBe("external-approved");
+	});
+
 	it("inspects a non-ZIP binary without trying to parse a ZIP directory", async () => {
 		const directory = await fs.mkdtemp(
 			path.join(os.tmpdir(), "cline-re-test-"),
@@ -240,6 +281,33 @@ describe("reverse-engineering archive inspection", () => {
 			url: 1,
 			securityRelevant: 1,
 		});
+		const literal = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "scan_strings",
+					target,
+					string_pattern: "https?://",
+				},
+				{} as never,
+			),
+		);
+		expect(literal.patternMode).toBe("literal");
+		expect(literal.results).toHaveLength(0);
+		const regex = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "scan_strings",
+					target,
+					string_pattern: "https?://",
+					string_pattern_regex: true,
+				},
+				{} as never,
+			),
+		);
+		expect(regex.patternMode).toBe("regex");
+		expect(regex.results).toHaveLength(1);
 	});
 });
 
@@ -310,6 +378,18 @@ describe("reverse-engineering Smali reading", () => {
 			method: "public check(I)Z",
 			text: "    if-lez p1, :deny",
 		});
+		await expect(
+			createReverseEngineeringExecutor()(
+				{
+					engine: "auto",
+					operation: "search_smali",
+					target: directory,
+					smali_query: "(a+)+$",
+					smali_regex: true,
+				},
+				{} as never,
+			),
+		).rejects.toThrow("nested quantifier");
 	});
 });
 
@@ -370,6 +450,11 @@ printf "%s\\n" "$@"`,
 		expect(
 			await fs.readFile(path.join(outputDirectory, "decompiled.c"), "utf8"),
 		).toContain("int recovered");
+		expect(
+			result.artifacts.find(
+				(artifact: { path: string }) => artifact.path === "decompiled.c",
+			).sha256,
+		).toMatch(/^[a-f0-9]{64}$/);
 		expect(
 			JSON.parse(
 				await fs.readFile(
