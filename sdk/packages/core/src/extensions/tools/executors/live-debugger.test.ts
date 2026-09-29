@@ -82,6 +82,54 @@ it("requires separate confirmation before resuming execution", async () => {
 	).rejects.toThrow("confirm_execution_control=true");
 });
 
+it("inspects Windows minidump metadata without launching the target", async () => {
+	const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cline-minidump-"));
+	directories.push(directory);
+	const dump = path.join(directory, "sample.dmp");
+	const header = Buffer.alloc(32);
+	header.write("MDMP", 0, "ascii");
+	header.writeUInt32LE(0x0000a793, 4);
+	header.writeUInt32LE(3, 8);
+	header.writeUInt32LE(32, 12);
+	header.writeUInt32LE(1_700_000_000, 20);
+	header.writeBigUInt64LE(2n, 24);
+	await fs.writeFile(dump, header);
+	const result = JSON.parse(
+		await createLiveDebuggerExecutor()(
+			{
+				operation: "inspect_dump",
+				debugger: "auto",
+				target_kind: "local",
+				target: dump,
+			},
+			{} as never,
+		),
+	);
+	expect(result.metadata).toMatchObject({
+		signature: "MDMP",
+		streamCount: 3,
+		streamDirectoryRva: 32,
+		flags: "0x2",
+	});
+	if (result.debuggerAvailable === false) {
+		expect(result.hint).toContain("cdb.exe");
+	} else {
+		expect(result.backend).toBe("cdb");
+	}
+	await expect(
+		createLiveDebuggerExecutor()(
+			{
+				operation: "inspect_dump",
+				debugger: "auto",
+				target_kind: "local",
+				target: dump,
+				symbol_path: "srv*cache;quit",
+			},
+			{} as never,
+		),
+	).rejects.toThrow("symbol_path");
+});
+
 describe("debugger location validation", () => {
 	it("accepts bounded symbols and addresses", () => {
 		for (const breakpoint of ["main", "Namespace::method", "0x401000"]) {

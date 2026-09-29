@@ -188,6 +188,8 @@ Primary files:
 - IDA Hex-Rays batch decompilation uses a generated bounded IDAPython script, verifies a non-empty pseudocode artifact, and never passes output paths through the incompatible `-Ohexrays:<path>:ALL` form.
 - A separate opt-in `live_debugger` tool provides explicitly acknowledged, bounded, one-shot GDB/LLDB launch and attach workflows with command-safe breakpoint and address validation; see `docs/LIVE_DEBUGGING.md`.
 - The forensic reliability boundary keeps reverse-engineering string filters literal by default, rejects unsafe or oversized opt-in regular expressions, requires acknowledgement for output outside managed cache/temporary roots, resolves future outputs through real parents to block symlink or reparse-point escapes, and records SHA-256 evidence for bounded generated artifacts. Live-debugger execution control requires a second confirmation, while Android package changes and log deletion have separate confirmations and Android text output uses the shared secret redactor. See `docs/FORENSIC_TOOL_RELIABILITY.md`.
+- Advanced forensic reports combine executable/archive structure, bounded categorized indicators, findings, and hashed JSON or print-ready HTML output. Each completed stage is persisted by artifact hash so interrupted reports resume without repeating finished inspection, string, or APK-security stages. APK reports add `apksigner` scheme/certificate evidence and bounded `aapt2` permission/exported-component signals when those tools are installed.
+- `live_debugger inspect_dump` validates Windows `MDMP` metadata without launching the target and optionally uses CDB for bounded `!analyze -v` and stack evidence with a validated, redacted symbol path and local cache. See `docs/ADVANCED_FORENSIC_ANALYSIS.md`.
 - APK comparison improvements.
 - Codex-compatible tool calls and binary attachment handling.
 
@@ -198,6 +200,7 @@ Primary files:
 - `sdk/packages/core/src/extensions/tools/executors/live-debugger.ts`
 - `docs/LIVE_DEBUGGING.md`
 - `docs/FORENSIC_TOOL_RELIABILITY.md`
+- `docs/ADVANCED_FORENSIC_ANALYSIS.md`
 
 ### Scoped Windows computer use
 

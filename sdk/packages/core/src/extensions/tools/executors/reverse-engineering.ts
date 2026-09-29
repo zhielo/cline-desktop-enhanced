@@ -41,6 +41,8 @@ type SupplementalToolInventory = Record<string, string | undefined>;
 
 const ANALYSIS_MANIFEST = "cline-analysis.json";
 const ANALYSIS_SCHEMA_VERSION = 2;
+const FORENSIC_REPORT_SCHEMA_VERSION = 1;
+const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
 const GHIDRA_SCRIPT_VERSION = 2;
 const IDA_DECOMPILE_SCRIPT_VERSION = 1;
 const analysisLocks = new Map<string, Promise<void>>();
@@ -1532,6 +1534,223 @@ async function inspectBinary(target: string) {
 	}
 }
 
+async function artifactInspection(
+	target: string,
+	hash: string,
+	size: number,
+	zip: boolean,
+) {
+	if (!zip) {
+		return {
+			target,
+			sha256: hash,
+			size,
+			...(await inspectBinary(target)),
+		};
+	}
+	const archive = await inspectZip(target);
+	const { parsed: _parsed, ...publicArchive } = archive;
+	const names = archive.parsed.map((entry) => entry.normalized);
+	const android =
+		path.extname(target).toLowerCase() === ".apk" ||
+		names.includes("AndroidManifest.xml")
+			? {
+					hasManifest: names.includes("AndroidManifest.xml"),
+					dexFiles: names.filter((name) => /^classes\d*\.dex$/i.test(name)),
+					nativeLibraries: names.filter((name) =>
+						/^lib\/[^/]+\/[^/]+\.so$/i.test(name),
+					),
+					abis: [
+						...new Set(
+							names
+								.map((name) => /^lib\/([^/]+)\/[^/]+\.so$/i.exec(name)?.[1])
+								.filter((value): value is string => Boolean(value)),
+						),
+					],
+				}
+			: undefined;
+	return {
+		target,
+		sha256: hash,
+		size,
+		kind: archiveKind(target, archive.parsed),
+		archive: publicArchive,
+		android,
+	};
+}
+
+function parseApkSignerOutput(value: string) {
+	const schemes: Record<string, boolean> = {};
+	for (const match of value.matchAll(
+		/Verified using (?:v)?(\d+) scheme[^:]*:\s*(true|false)/gi,
+	)) {
+		schemes[`v${match[1]}`] = match[2]?.toLowerCase() === "true";
+	}
+	const certificates = value
+		.split(/\r?\n/)
+		.filter((line) =>
+			/Signer #\d+ certificate (?:DN|SHA-256 digest):/i.test(line),
+		)
+		.slice(0, 100)
+		.map((line) => line.trim());
+	return { schemes, certificates };
+}
+
+async function apkSecurityInspection(
+	target: string,
+	utilities: AndroidReUtilities,
+	timeoutMs: number,
+	signal?: AbortSignal,
+) {
+	const signature = utilities.apksigner
+		? await runSupervised(
+				utilities.apksigner,
+				["verify", "--verbose", "--print-certs", target],
+				timeoutMs,
+				signal,
+			)
+		: undefined;
+	const manifest = utilities.aapt2
+		? await runSupervised(
+				utilities.aapt2,
+				["dump", "xmltree", target, "--file", "AndroidManifest.xml"],
+				timeoutMs,
+				signal,
+			)
+		: undefined;
+	const signatureText = signature
+		? `${signature.stdout}\n${signature.stderr}`.slice(0, MAX_OUTPUT_CHARS)
+		: "";
+	const manifestText = manifest
+		? `${manifest.stdout}\n${manifest.stderr}`.slice(0, MAX_OUTPUT_CHARS)
+		: "";
+	const permissions = [
+		...new Set(
+			[...manifestText.matchAll(/android\.permission\.[A-Z0-9_.]+/gi)].map(
+				(match) => match[0],
+			),
+		),
+	].slice(0, 500);
+	const exportedSignals = (
+		manifestText.match(
+			/android:exported(?:\([^)]*\))?=(?:true|0xffffffff|\(type 0x12\)0xffffffff)/gi,
+		) ?? []
+	).length;
+	return {
+		signature: signature
+			? {
+					tool: utilities.apksigner,
+					verified:
+						signature.exitCode === 0 &&
+						!signature.timedOut &&
+						!signature.cancelled,
+					...parseApkSignerOutput(signatureText),
+					exitCode: signature.exitCode,
+					timedOut: signature.timedOut,
+					cancelled: signature.cancelled,
+				}
+			: { available: false },
+		manifest: manifest
+			? {
+					tool: utilities.aapt2,
+					parsed: manifest.exitCode === 0,
+					permissions,
+					exportedSignals,
+					exitCode: manifest.exitCode,
+					timedOut: manifest.timedOut,
+					cancelled: manifest.cancelled,
+				}
+			: { available: false },
+	};
+}
+
+function reportFindings(
+	inspection: Record<string, unknown>,
+	strings: Record<string, unknown>,
+	apk: Record<string, unknown> | undefined,
+) {
+	const findings: Array<{
+		severity: "info" | "low" | "medium" | "high";
+		code: string;
+		summary: string;
+		evidence: unknown;
+	}> = [];
+	const entropy = inspection.sampleEntropy;
+	if (typeof entropy === "number" && entropy >= 7.2) {
+		findings.push({
+			severity: "medium",
+			code: "high-sample-entropy",
+			summary: "The initial file sample has high entropy.",
+			evidence: { sampleEntropy: entropy },
+		});
+	}
+	const categories = strings.categoryCounts as
+		| Record<string, number>
+		| undefined;
+	if ((categories?.securityRelevant ?? 0) > 0) {
+		findings.push({
+			severity: "low",
+			code: "security-relevant-strings",
+			summary: "Security-relevant strings were identified for manual review.",
+			evidence: { count: categories?.securityRelevant },
+		});
+	}
+	const signature = apk?.signature as
+		| { verified?: boolean; available?: boolean }
+		| undefined;
+	if (
+		signature &&
+		signature.available !== false &&
+		signature.verified === false
+	) {
+		findings.push({
+			severity: "high",
+			code: "apk-signature-unverified",
+			summary: "APK signature verification did not succeed.",
+			evidence: signature,
+		});
+	}
+	const manifest = apk?.manifest as
+		| { exportedSignals?: number; permissions?: string[] }
+		| undefined;
+	if ((manifest?.exportedSignals ?? 0) > 0) {
+		findings.push({
+			severity: "info",
+			code: "apk-exported-components",
+			summary: "The manifest contains explicitly exported component signals.",
+			evidence: { count: manifest?.exportedSignals },
+		});
+	}
+	return findings;
+}
+
+function escapeHtml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;");
+}
+
+function renderForensicHtml(report: Record<string, unknown>): string {
+	const findings = (report.findings as Array<Record<string, unknown>>) ?? [];
+	const rows = findings
+		.map(
+			(finding) =>
+				`<tr><td>${escapeHtml(String(finding.severity ?? ""))}</td><td>${escapeHtml(String(finding.code ?? ""))}</td><td>${escapeHtml(String(finding.summary ?? ""))}</td></tr>`,
+		)
+		.join("");
+	return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Forensic analysis report</title>
+<style>body{font:14px system-ui;max-width:1100px;margin:40px auto;padding:0 24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}pre{white-space:pre-wrap;background:#f6f8fa;padding:16px;border-radius:8px}</style>
+</head><body><h1>Forensic analysis report</h1>
+<p><strong>SHA-256:</strong> ${escapeHtml(String(report.sha256 ?? ""))}</p>
+<p><strong>Generated:</strong> ${escapeHtml(String(report.generatedAt ?? ""))}</p>
+<h2>Findings</h2><table><thead><tr><th>Severity</th><th>Code</th><th>Summary</th></tr></thead><tbody>${rows}</tbody></table>
+<h2>Structured evidence</h2><pre>${escapeHtml(JSON.stringify(report, null, 2))}</pre></body></html>`;
+}
+
 function archiveKind(target: string, entries: ZipEntry[]) {
 	const extension = path.extname(target).toLowerCase();
 	if (extension === ".apk") return "apk";
@@ -2194,6 +2413,151 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				2,
 			);
 		}
+		if (
+			input.operation === "forensic_report" ||
+			input.operation === "apk_security_report"
+		) {
+			if (input.operation === "apk_security_report" && !zip) {
+				throw new Error("apk_security_report requires an APK/ZIP container");
+			}
+			const format = input.report_format ?? "json";
+			const reportDirectory = path.join(analysisCacheRoot(), hash, "reports");
+			const reportFile = path.resolve(
+				input.report_output_file ??
+					path.join(reportDirectory, `forensic-report.${format}`),
+			);
+			const expectedExtension = format === "html" ? ".html" : ".json";
+			if (path.extname(reportFile).toLowerCase() !== expectedExtension) {
+				throw new Error(
+					`report_output_file must end with ${expectedExtension} for ${format} output`,
+				);
+			}
+			const outputScope = await enforceOutputPath(
+				reportFile,
+				input.acknowledge_external_output,
+			);
+			await fs.mkdir(path.dirname(reportFile), {
+				recursive: true,
+				mode: 0o700,
+			});
+			const stateFile = path.join(
+				path.dirname(reportFile),
+				FORENSIC_REPORT_STATE,
+			);
+			const previous = await readJsonFile(stateFile);
+			const reusable =
+				input.reuse_analysis !== false &&
+				previous?.schemaVersion === FORENSIC_REPORT_SCHEMA_VERSION &&
+				previous?.sha256 === hash;
+			const stages =
+				reusable &&
+				previous?.stages &&
+				typeof previous.stages === "object" &&
+				!Array.isArray(previous.stages)
+					? (previous.stages as Record<string, unknown>)
+					: {};
+			const resumedStages = reusable ? Object.keys(stages) : [];
+			const saveState = async (complete: boolean) =>
+				writeJsonFile(stateFile, {
+					schemaVersion: FORENSIC_REPORT_SCHEMA_VERSION,
+					sha256: hash,
+					target,
+					outputScope,
+					stages,
+					complete,
+					updatedAt: new Date().toISOString(),
+				});
+			if (!stages.inspection) {
+				stages.inspection = await artifactInspection(
+					target,
+					hash,
+					stat.size,
+					zip,
+				);
+				await saveState(false);
+			}
+			if (!stages.strings) {
+				stages.strings = await scanBinaryStrings(
+					target,
+					input.min_string_length ?? 6,
+					Math.min(input.max_results ?? 500, 1_000),
+					input.string_pattern,
+					input.string_pattern_regex === true,
+					context.signal,
+				);
+				await saveState(false);
+			}
+			const inspection = stages.inspection as Record<string, unknown>;
+			const isApk =
+				zip &&
+				(path.extname(target).toLowerCase() === ".apk" ||
+					Boolean(inspection.android));
+			if (isApk && !stages.apkSecurity) {
+				stages.apkSecurity = await apkSecurityInspection(
+					target,
+					androidUtilities,
+					Math.min(input.timeout_ms ?? 120_000, 120_000),
+					context.signal,
+				);
+				await saveState(false);
+			}
+			const strings = stages.strings as Record<string, unknown>;
+			const apkSecurity = stages.apkSecurity as
+				| Record<string, unknown>
+				| undefined;
+			const report: Record<string, unknown> = {
+				schemaVersion: FORENSIC_REPORT_SCHEMA_VERSION,
+				operation: input.operation,
+				generatedAt: new Date().toISOString(),
+				target,
+				sha256: hash,
+				size: stat.size,
+				outputScope,
+				resumedStages,
+				stages: {
+					inspection: true,
+					strings: true,
+					apkSecurity: Boolean(apkSecurity),
+				},
+				inspection,
+				stringIndicators: strings,
+				apkSecurity,
+				findings: reportFindings(inspection, strings, apkSecurity),
+			};
+			const temporary = `${reportFile}.${process.pid}.${Date.now()}.tmp`;
+			await fs.writeFile(
+				temporary,
+				format === "html"
+					? renderForensicHtml(report)
+					: `${JSON.stringify(report, null, 2)}\n`,
+				{ mode: 0o600 },
+			);
+			await fs.rm(reportFile, { force: true });
+			await fs.rename(temporary, reportFile);
+			await saveState(true);
+			const reportStat = await fs.stat(reportFile);
+			return JSON.stringify(
+				{
+					operation: input.operation,
+					target,
+					sha256: hash,
+					reportFile,
+					reportFormat: format,
+					outputScope,
+					resumed: resumedStages.length > 0,
+					completedStages: Object.keys(stages),
+					findings: report.findings,
+					artifact: {
+						path: reportFile,
+						size: reportStat.size,
+						sha256: await sha256(reportFile),
+					},
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
 		if (input.operation === "verify_apk_signature") {
 			if (!zip) {
 				throw new Error("verify_apk_signature requires an APK/ZIP container");
@@ -2267,52 +2631,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 		}
 		if (input.operation === "inspect") {
-			if (!zip) {
-				return JSON.stringify(
-					{
-						target,
-						sha256: hash,
-						size: stat.size,
-						...(await inspectBinary(target)),
-					},
-					null,
-					2,
-				);
-			}
-			const archive = await inspectZip(target);
-			const { parsed: _parsed, ...publicArchive } = archive;
-			const names = archive.parsed.map((entry) => entry.normalized);
 			return JSON.stringify(
-				{
-					target,
-					sha256: hash,
-					size: stat.size,
-					kind: archiveKind(target, archive.parsed),
-					archive: publicArchive,
-					android:
-						path.extname(target).toLowerCase() === ".apk" ||
-						names.includes("AndroidManifest.xml")
-							? {
-									hasManifest: names.includes("AndroidManifest.xml"),
-									dexFiles: names.filter((name) =>
-										/^classes\d*\.dex$/i.test(name),
-									),
-									nativeLibraries: names.filter((name) =>
-										/^lib\/[^/]+\/[^/]+\.so$/i.test(name),
-									),
-									abis: [
-										...new Set(
-											names
-												.map(
-													(name) =>
-														/^lib\/([^/]+)\/[^/]+\.so$/i.exec(name)?.[1],
-												)
-												.filter((value): value is string => Boolean(value)),
-										),
-									],
-								}
-							: undefined,
-				},
+				await artifactInspection(target, hash, stat.size, zip),
 				null,
 				2,
 			);

@@ -492,6 +492,9 @@ const requiredMarkers: Array<{
 			"boundedUserRegex",
 			"external-approved",
 			"MAX_ARTIFACT_HASH_BYTES",
+			"FORENSIC_REPORT_STATE",
+			"apkSecurityInspection",
+			"renderForensicHtml",
 		],
 	},
 	{
@@ -508,6 +511,8 @@ const requiredMarkers: Array<{
 		markers: [
 			"acknowledge_risk=true",
 			"confirm_execution_control=true",
+			"inspect_dump",
+			"inspectMinidump",
 			"inspect-only",
 			"persistentSession",
 			"process detach",
@@ -545,6 +550,16 @@ const requiredMarkers: Array<{
 			"confirm_execution_control: true",
 			"confirm_package_change: true",
 			"native Windows sandboxing",
+		],
+	},
+	{
+		path: "docs/ADVANCED_FORENSIC_ANALYSIS.md",
+		markers: [
+			"Advanced forensic analysis",
+			"cline-forensic-report-state.json",
+			"apk_security_report",
+			"inspect_dump",
+			"does not publish a GitHub Release",
 		],
 	},
 	{
