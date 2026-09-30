@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRunError } from "./run-error";
+import { formatRunError, isTransientHubDisconnect } from "./run-error";
 
 describe("formatRunError", () => {
 	it.each([
@@ -16,6 +16,23 @@ describe("formatRunError", () => {
 		expect(
 			formatRunError("The run failed: maximum context tokens exceeded"),
 		).not.toContain("Settings");
+	});
+});
+
+describe("isTransientHubDisconnect", () => {
+	it.each([
+		"Hub connection closed (code=1006, reason=Connection ended)",
+		"The run failed: Hub connection closed (code=1006, reason=Connection ended)",
+	])("recognizes the recoverable abnormal close: %s", (detail) => {
+		expect(isTransientHubDisconnect(detail)).toBe(true);
+	});
+
+	it.each([
+		"Hub connection closed (code=1008, reason=Unauthorized)",
+		"Cloud run failed",
+		"Connection ended",
+	])("does not hide a different failure: %s", (detail) => {
+		expect(isTransientHubDisconnect(detail)).toBe(false);
 	});
 });
 
