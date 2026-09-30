@@ -99,6 +99,33 @@ it("replaces a legacy source row when its first edit fork uses the source id as 
 	]);
 });
 
+it("deduplicates edited forks when lineage is present only in metadata", () => {
+	const editedFork = {
+		...sessionRow("edited-fork"),
+		metadata: {
+			conversationId: "source-session",
+			fork: { forkedFromSessionId: "source-session" },
+		},
+	};
+	const legacySource = sessionRow("source-session");
+
+	expect(dedupeSessionsByIdentity([editedFork, legacySource])).toEqual([
+		editedFork,
+	]);
+});
+
+it("falls back to fork provenance when conversation metadata is absent", () => {
+	const editedFork = {
+		...sessionRow("edited-fork"),
+		metadata: { fork: { forkedFromSessionId: "source-session" } },
+	};
+	const legacySource = sessionRow("source-session");
+
+	expect(dedupeSessionsByIdentity([editedFork, legacySource])).toEqual([
+		editedFork,
+	]);
+});
+
 it("preserves the same conversation from different environments", () => {
 	const local = {
 		...sessionRow("local-resume"),

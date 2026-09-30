@@ -880,32 +880,49 @@ export class HubRuntimeHost implements RuntimeHost {
 		);
 		const plannedSessionId =
 			input.config.sessionId?.trim() || createSessionId();
-		const sendCreateCommand = () =>
-			this.client.command("session.create", {
-				workspaceRoot: input.config.workspaceRoot?.trim() || input.config.cwd,
-				cwd: input.config.cwd,
-				sessionConfig: toJsonRecord(
-					buildCommandSessionConfig(input, plannedSessionId),
-				),
-				metadata: buildCommandSessionMetadata(input),
-				runtimeOptions: {
-					...(clientContext ? { clientContext } : {}),
-					...(userContext ? { userContext } : {}),
-					...(clientContributions.manifest.length > 0
-						? { clientContributions: clientContributions.manifest }
-						: {}),
-					...(input.localRuntime?.configExtensions
-						? { configExtensions: input.localRuntime.configExtensions }
-						: {}),
-				},
-				toolPolicies: toJsonRecord(
-					input.toolPolicies as Record<string, unknown> | undefined,
-				),
-				initialMessages: input.initialMessages,
-				...(input.initialCompactionState
-					? { initialCompactionState: input.initialCompactionState }
+		// Replaying a long transcript during message editing can legitimately take
+		// longer than the generic Hub command deadline. session.create is not safe
+		// to retry after dispatch: the first request may still create a session and a
+		// retry would leave duplicate branches behind. Fresh sessions keep the
+		// bounded timeout and idle-Hub recovery below.
+		const seededCreateOptions = input.initialMessages?.length
+			? { timeoutMs: null, retryOnTransport: false }
+			: undefined;
+		const createPayload = {
+			workspaceRoot: input.config.workspaceRoot?.trim() || input.config.cwd,
+			cwd: input.config.cwd,
+			sessionConfig: toJsonRecord(
+				buildCommandSessionConfig(input, plannedSessionId),
+			),
+			metadata: buildCommandSessionMetadata(input),
+			runtimeOptions: {
+				...(clientContext ? { clientContext } : {}),
+				...(userContext ? { userContext } : {}),
+				...(clientContributions.manifest.length > 0
+					? { clientContributions: clientContributions.manifest }
 					: {}),
-			});
+				...(input.localRuntime?.configExtensions
+					? { configExtensions: input.localRuntime.configExtensions }
+					: {}),
+			},
+			toolPolicies: toJsonRecord(
+				input.toolPolicies as Record<string, unknown> | undefined,
+			),
+			initialMessages: input.initialMessages,
+			...(input.initialCompactionState
+				? { initialCompactionState: input.initialCompactionState }
+				: {}),
+		};
+		const sendCreateCommand = () =>
+			seededCreateOptions
+				? this.client.command(
+						"session.create",
+						createPayload,
+						undefined,
+						seededCreateOptions,
+					)
+				: this.client.command("session.create", createPayload);
+
 		this.registerPlannedSession(
 			plannedSessionId,
 			capabilities,
@@ -1060,6 +1077,9 @@ export class HubRuntimeHost implements RuntimeHost {
 						: {}),
 				},
 				sessionId,
+				restoreMessages && startConfig
+					? { timeoutMs: null, retryOnTransport: false }
+					: undefined,
 			);
 		} catch (error) {
 			if (plannedSessionId) {

@@ -1783,7 +1783,38 @@ async function handleAbort(
 	return { sessionId, ok: true };
 }
 
+const forkOperationsByContext = new WeakMap<
+	SidecarContext,
+	Map<string, Promise<unknown>>
+>();
+
 async function handleFork(
+	ctx: SidecarContext,
+	request: ChatSessionCommandRequest,
+): Promise<unknown> {
+	const sourceSessionId = request.sessionId?.trim();
+	if (!sourceSessionId) throw new Error("sessionId is required");
+	let operations = forkOperationsByContext.get(ctx);
+	if (!operations) {
+		operations = new Map();
+		forkOperationsByContext.set(ctx, operations);
+	}
+	const operationKey = `${readEnvironmentId(request.config) || ctx.activeEnvironmentId}\u0000${sourceSessionId}\u0000${request.forkBeforeRunCount ?? "all"}`;
+	const existing = operations.get(operationKey);
+	if (existing) return existing;
+
+	const operation = handleForkOnce(ctx, request);
+	operations.set(operationKey, operation);
+	try {
+		return await operation;
+	} finally {
+		if (operations.get(operationKey) === operation) {
+			operations.delete(operationKey);
+		}
+	}
+}
+
+async function handleForkOnce(
 	ctx: SidecarContext,
 	request: ChatSessionCommandRequest,
 ): Promise<unknown> {

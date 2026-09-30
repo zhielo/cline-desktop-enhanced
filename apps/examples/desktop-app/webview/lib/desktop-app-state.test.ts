@@ -58,6 +58,33 @@ describe("desktopAppReducer", () => {
 		).toEqual(["local"]);
 	});
 
+	it("replaces the visible source thread with its edited fork", () => {
+		let state = createDesktopAppState("welcome", settingsSection, "local");
+		state = desktopAppReducer(state, {
+			type: "open-session",
+			session: createSession("source-session"),
+			environmentId: "local",
+		});
+		state = desktopAppReducer(state, {
+			type: "open-session",
+			session: {
+				...createSession("edited-fork"),
+				conversationId: "source-session",
+			},
+			environmentId: "local",
+			initialPromptDraft: "Edited prompt",
+		});
+
+		const visibleSessionThreads = state.threads.filter(
+			(thread) => thread.historySession,
+		);
+		expect(visibleSessionThreads).toHaveLength(1);
+		expect(visibleSessionThreads[0]?.historySession?.sessionId).toBe(
+			"edited-fork",
+		);
+		expect(visibleSessionThreads[0]?.initialPromptDraft).toBe("Edited prompt");
+	});
+
 	it("hands an edited prompt to a fork exactly once", () => {
 		let state = createDesktopAppState("welcome", settingsSection, "local");
 		state = desktopAppReducer(state, {

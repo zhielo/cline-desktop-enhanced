@@ -638,6 +638,15 @@ export function useChatSession(environmentId: string) {
 	const hydrationRequestIdRef = useRef(0);
 	const workspaceSelectionRequestRef = useRef(0);
 	const sessionStartPromiseRef = useRef<Promise<string> | null>(null);
+	const forkSessionPromiseRef = useRef<{
+		key: string;
+		promise: Promise<{
+			newSessionId: string;
+			forkedFromSessionId: string;
+			conversationId?: string;
+			messages: ChatMessage[];
+		}>;
+	} | null>(null);
 	const promptDispatchTailRef = useRef<Promise<void>>(Promise.resolve());
 	const pendingQueueSubmissionsRef = useRef(new Map<Promise<void>, string>());
 	const activePromptSubmissionsRef = useRef(0);
@@ -1048,6 +1057,7 @@ export function useChatSession(environmentId: string) {
 			};
 			if (
 				body.action === "send" ||
+				body.action === "fork" ||
 				(body.action === "start" && bodyConfig.executionTarget === "cloud")
 			) {
 				return await desktopClient.invoke<ChatSessionCommandResponse>(
@@ -4063,42 +4073,61 @@ export function useChatSession(environmentId: string) {
 			if (BUSY_STATUSES.has(status)) {
 				throw new Error("Wait for the current turn to finish before forking.");
 			}
-			const payload = (await postSession({
-				action: "fork",
-				sessionId: activeSessionId,
-				config,
-				forkBeforeRunCount: options?.beforeRunCount,
-			})) as {
-				sessionId?: string;
-				forkedFromSessionId?: string;
-				conversationId?: string;
-			};
-			const newSessionId =
-				typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
-			if (!newSessionId) {
-				throw new Error("Fork did not return a new session id.");
+
+			const key = `${activeSessionId}:${options?.beforeRunCount ?? "all"}`;
+			const inFlight = forkSessionPromiseRef.current;
+			if (inFlight?.key === key) return inFlight.promise;
+			if (inFlight) {
+				throw new Error("Another message edit is already in progress.");
 			}
-			const forkedFromSessionId =
-				typeof payload.forkedFromSessionId === "string"
-					? payload.forkedFromSessionId
-					: activeSessionId;
-			const conversationId =
-				typeof payload.conversationId === "string"
-					? payload.conversationId.trim() || undefined
-					: undefined;
-			const nextMessages = Array.isArray(payload.messages)
-				? (payload.messages as ChatMessage[])
-				: await desktopClient.invoke<ChatMessage[]>("read_session_messages", {
-						environmentId,
-						sessionId: newSessionId,
-						maxMessages: MAX_MESSAGES,
-					});
-			return {
-				newSessionId,
-				forkedFromSessionId,
-				conversationId,
-				messages: nextMessages,
-			};
+
+			const promise = (async () => {
+				const payload = (await postSession({
+					action: "fork",
+					sessionId: activeSessionId,
+					config,
+					forkBeforeRunCount: options?.beforeRunCount,
+				})) as {
+					sessionId?: string;
+					forkedFromSessionId?: string;
+					conversationId?: string;
+				};
+				const newSessionId =
+					typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
+				if (!newSessionId) {
+					throw new Error("Fork did not return a new session id.");
+				}
+				const forkedFromSessionId =
+					typeof payload.forkedFromSessionId === "string"
+						? payload.forkedFromSessionId
+						: activeSessionId;
+				const conversationId =
+					typeof payload.conversationId === "string"
+						? payload.conversationId.trim() || undefined
+						: undefined;
+				const nextMessages = Array.isArray(payload.messages)
+					? (payload.messages as ChatMessage[])
+					: await desktopClient.invoke<ChatMessage[]>("read_session_messages", {
+							environmentId,
+							sessionId: newSessionId,
+							maxMessages: MAX_MESSAGES,
+						});
+				return {
+					newSessionId,
+					forkedFromSessionId,
+					conversationId,
+					messages: nextMessages,
+				};
+			})();
+
+			forkSessionPromiseRef.current = { key, promise };
+			try {
+				return await promise;
+			} finally {
+				if (forkSessionPromiseRef.current?.promise === promise) {
+					forkSessionPromiseRef.current = null;
+				}
+			}
 		},
 		[config, environmentId, postSession, status],
 	);
