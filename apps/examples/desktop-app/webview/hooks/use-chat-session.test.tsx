@@ -6802,6 +6802,58 @@ describe("coerced-queue first turn vs stale send response", () => {
 		expect(current.status).toBe("completed");
 	});
 
+	it("removes a code-1006 failure emitted before authoritative recovery", async () => {
+		const sendResolvers = mockTransport();
+		const { sendPromise } = await dispatchPrompt("Continue through reconnect");
+		const chatEventHandler = getChatEventHandler();
+		const endedHandler = subscribeMock.mock.calls.find(
+			([eventName]) => eventName === "chat_session_ended",
+		)?.[1] as ((payload: unknown) => void) | undefined;
+		const sid = current.sessionId;
+
+		await act(async () => {
+			emitTurnEvents(chatEventHandler, sid, [
+				{
+					stream: "chat_core_log",
+					chunk: JSON.stringify({
+						level: "error",
+						message:
+							"Hub connection closed (code=1006, reason=Connection ended)",
+					}),
+					index: 1,
+				},
+			]);
+			endedHandler?.({ sessionId: sid, reason: "error" });
+		});
+		expect(
+			current.messages.some(
+				(message) =>
+					message.role === "error" &&
+					message.content.includes("Hub connection closed"),
+			),
+		).toBe(true);
+
+		await act(async () => {
+			sendResolvers[0]?.({
+				sessionId: sid,
+				ok: true,
+				recoveredAfterDisconnect: true,
+				status: "running",
+			});
+			await sendPromise;
+		});
+
+		expect(current.status).toBe("running");
+		expect(current.error).toBeNull();
+		expect(
+			current.messages.some(
+				(message) =>
+					message.role === "error" &&
+					message.content.includes("Hub connection closed"),
+			),
+		).toBe(false);
+	});
+
 	it("still applies 'running' status events once a new turn has started", async () => {
 		const sendResolvers = mockTransport();
 		const { sendPromise } = await dispatchPrompt("Say the word ready");

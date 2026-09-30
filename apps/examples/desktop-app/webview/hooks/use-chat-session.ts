@@ -50,7 +50,7 @@ import { humanizeCloudSessionError } from "@/lib/cloud-session-error";
 import { appendCappedCommandOutput } from "@/lib/command-output";
 import { desktopClient } from "@/lib/desktop-client";
 import { imageAttachmentMediaType } from "@/lib/image-attachments";
-import { formatRunError } from "@/lib/run-error";
+import { formatRunError, isTransientHubDisconnect } from "@/lib/run-error";
 import {
 	buildSessionDiffState,
 	EMPTY_DIFF_SUMMARY,
@@ -3411,13 +3411,34 @@ export function useChatSession(environmentId: string) {
 				// A queued prompt that already started its turn owns status from here.
 				const newerTurnOwnsStatus = newerTurnOwnsTranscript();
 				if (payload.recoveredAfterDisconnect) {
+					const recoveredTransientDisconnect = isTransientHubDisconnect(
+						lastCoreErrorBySessionRef.current[activeSessionId] ?? "",
+					);
+					if (recoveredTransientDisconnect) {
+						const shown = shownTurnFailureRef.current;
+						if (
+							shown?.sid === activeSessionId &&
+							shown.generation === failureGenerationAtSubmission
+						) {
+							setMessages((previous) =>
+								previous.filter((message) => message.id !== shown.id),
+							);
+							shownTurnFailureRef.current = null;
+						}
+						delete lastCoreErrorBySessionRef.current[activeSessionId];
+						setError(null);
+						if (turnSettledEpochRef.current === turnEpochRef.current) {
+							turnSettledEpochRef.current = turnEpochRef.current - 1;
+						}
+					}
 					const recoveredStatus = mapCloudRuntimeStatus(payload.status);
 					if (
 						!newerTurnOwnsStatus &&
 						recoveredStatus &&
 						!(
 							recoveredStatus === "running" &&
-							turnEpochRef.current === turnSettledEpochRef.current
+							turnEpochRef.current === turnSettledEpochRef.current &&
+							!recoveredTransientDisconnect
 						)
 					) {
 						setStatus(recoveredStatus);
