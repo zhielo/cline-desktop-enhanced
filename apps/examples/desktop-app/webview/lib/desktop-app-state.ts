@@ -173,7 +173,9 @@ export function desktopAppReducer<SettingsSection extends string>(
 			};
 		}
 		case "open-session": {
-			const threadId = `session_${sessionKey({ ...action.session, environmentId: action.environmentId })}`;
+			const logicalSessionId =
+				action.session.conversationId?.trim() || action.session.sessionId;
+			const threadId = `session_${sessionKey({ sessionId: logicalSessionId, environmentId: action.environmentId })}`;
 			const existingIdx = state.threads.findIndex(
 				(thread) => thread.id === threadId,
 			);

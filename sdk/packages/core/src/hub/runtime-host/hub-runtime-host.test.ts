@@ -348,6 +348,40 @@ describe("HubRuntimeHost", () => {
 		expect(unsubscribe).toHaveBeenCalledTimes(1);
 	});
 
+	it("waits without retrying while a seeded session is created", async () => {
+		subscribeMock.mockReturnValue(() => {});
+		commandMock.mockResolvedValue({
+			ok: true,
+			payload: {
+				session: {
+					sessionId: "sess-seeded",
+					status: "running",
+					createdAt: Date.now(),
+					updatedAt: Date.now(),
+					workspaceRoot: "/tmp/project",
+					cwd: "/tmp/project",
+				},
+			},
+		});
+
+		const { HubRuntimeHost } = await import("./hub-runtime-host");
+		const host = new HubRuntimeHost({ url: "ws://127.0.0.1:25463/hub" });
+
+		await host.startSession({
+			config: createConfig(),
+			source: SessionSource.DESKTOP,
+			initialMessages: [{ role: "user", content: "earlier prompt" }],
+		});
+
+		expect(commandMock).toHaveBeenCalledTimes(1);
+		expect(commandMock).toHaveBeenCalledWith(
+			"session.create",
+			expect.objectContaining({ initialMessages: expect.any(Array) }),
+			undefined,
+			{ timeoutMs: null, retryOnTransport: false },
+		);
+	});
+
 	it("restarts an idle local hub and retries session.create after startup timeout", async () => {
 		subscribeMock.mockReturnValue(() => {});
 		const timeoutError = Object.assign(new Error("session.create timed out"), {

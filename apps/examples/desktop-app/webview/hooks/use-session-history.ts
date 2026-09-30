@@ -185,10 +185,24 @@ export function dedupeSessionsByIdentity(
 ): SessionHistoryItem[] {
 	const seen = new Set<string>();
 	return sessions.filter((session) => {
-		const conversationId = session.conversationId?.trim();
-		const key = `${session.environmentId || LOCAL_WORKSPACE_ENVIRONMENT_ID}\u0000${
-			conversationId || session.sessionId
-		}`;
+		const metadataConversationId =
+			typeof session.metadata?.conversationId === "string"
+				? session.metadata.conversationId.trim()
+				: "";
+		const fork =
+			session.metadata?.fork && typeof session.metadata.fork === "object"
+				? (session.metadata.fork as { forkedFromSessionId?: unknown })
+				: undefined;
+		const forkedFromSessionId =
+			typeof fork?.forkedFromSessionId === "string"
+				? fork.forkedFromSessionId.trim()
+				: "";
+		const logicalSessionId =
+			session.conversationId?.trim() ||
+			metadataConversationId ||
+			forkedFromSessionId ||
+			session.sessionId;
+		const key = `${session.environmentId || LOCAL_WORKSPACE_ENVIRONMENT_ID}\u0000${logicalSessionId}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;
