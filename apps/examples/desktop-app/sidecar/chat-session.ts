@@ -1288,6 +1288,43 @@ async function startRebuiltSession(
 	}
 }
 
+async function rebuildAttachedSessionRuntime(
+	ctx: SidecarContext,
+	binding: SessionRuntimeBinding,
+	sessionId: string,
+	config: JsonRecord,
+): Promise<void> {
+	const manager = binding.sessionManager;
+	const effectiveConfig =
+		binding.kind === "ssh"
+			? await withRemoteProviderCredentials(config)
+			: config;
+	const [messages, compactionState, systemPrompt] = await Promise.all([
+		manager.readMessages(sessionId),
+		manager.readSessionCompactionState(sessionId).catch((error) => {
+			ctx.logger?.log?.("Failed to read resumed session compaction state", {
+				sessionId,
+				error,
+				severity: "warn",
+			});
+			return undefined;
+		}),
+		binding.kind === "ssh"
+			? Promise.resolve(readExplicitSystemPrompt(effectiveConfig))
+			: resolveSystemPrompt(effectiveConfig),
+	]);
+
+	await startRebuiltSession(
+		manager,
+		ctx,
+		sessionId,
+		effectiveConfig,
+		systemPrompt,
+		messages,
+		compactionState,
+	);
+}
+
 async function rebuildSessionForProviderChange(
 	ctx: SidecarContext,
 	binding: SessionRuntimeBinding,
@@ -1490,6 +1527,7 @@ async function handleSend(
 			sessionId,
 			request.attachments?.userFiles,
 		);
+		const wasAttachedViaHub = session?.attachedViaHub === true;
 		if (session?.attachedViaHub) {
 			// Once ClineCore sends a turn it owns the session: the attach-time
 			// connection refresh above has happened and the observer projection is
@@ -1557,15 +1595,31 @@ async function handleSend(
 			// Baseline reads improve duplicate detection but must never block a send.
 			// The live projection is the safe fallback when history is unavailable.
 		}
-		let result: Awaited<ReturnType<ClineCore["send"]>>;
-		try {
-			result = await manager.send({
+		const sendPrompt = () =>
+			manager.send({
 				sessionId,
 				prompt: runtimePrompt,
 				delivery,
 				userImages: request.attachments?.userImages,
 				userFiles,
 			});
+		const rebuildAndSend = async () => {
+			try {
+				await rebuildAttachedSessionRuntime(
+					ctx,
+					binding,
+					sessionId,
+					nextConfig ?? session?.config ?? {},
+				);
+				return await sendPrompt();
+			} catch (error) {
+				deleteMaterializedAttachments(sessionId, userFiles);
+				throw error;
+			}
+		};
+		let result: Awaited<ReturnType<ClineCore["send"]>>;
+		try {
+			result = await sendPrompt();
 		} catch (error) {
 			if (isHubReconnectableTransportError(error)) {
 				const recovered = await recoverAcceptedHubSend(
@@ -1595,9 +1649,33 @@ async function handleSend(
 						status: recovered.status,
 					};
 				}
+
+				// A chat restored after an OS restart can still be attached to its
+				// durable record while the old in-memory runtime no longer exists.
+				// Only retry after the bounded history check proves the first prompt
+				// was not accepted; this keeps the non-idempotent send duplicate-safe.
+				if (wasAttachedViaHub) {
+					try {
+						result = await sendPrompt();
+					} catch (retryError) {
+						if (!isSessionNotFoundError(retryError)) {
+							deleteMaterializedAttachments(sessionId, userFiles);
+							throw retryError;
+						}
+						result = await rebuildAndSend();
+					}
+				} else {
+					deleteMaterializedAttachments(sessionId, userFiles);
+					throw error;
+				}
+			} else if (wasAttachedViaHub && isSessionNotFoundError(error)) {
+				// The Hub survived long enough to answer, but its pre-restart runtime
+				// did not. Rebuild from the durable transcript and retry exactly once.
+				result = await rebuildAndSend();
+			} else {
+				deleteMaterializedAttachments(sessionId, userFiles);
+				throw error;
 			}
-			deleteMaterializedAttachments(sessionId, userFiles);
-			throw error;
 		}
 		if (result === undefined) {
 			// The runtime queued or steered the prompt instead of running it

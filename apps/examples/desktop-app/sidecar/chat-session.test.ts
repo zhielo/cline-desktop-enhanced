@@ -1747,6 +1747,37 @@ describe("first-send connection updates", () => {
 		}
 	});
 
+	it("rebuilds a hub-attached session whose runtime was lost on restart", async () => {
+		const { ctx, readMessages, send, sessionId, start } = createContext({
+			attachedViaHub: true,
+		});
+		send.mockRejectedValueOnce({
+			code: "session_not_found",
+			message: `Unknown session: ${sessionId}`,
+		});
+
+		await expect(
+			handleChatSessionCommand(ctx, {
+				action: "send",
+				sessionId,
+				prompt: "continue after restart",
+				config: { ...baseConfig },
+			}),
+		).resolves.toMatchObject({
+			ok: true,
+			result: { finishReason: "completed" },
+		});
+
+		expect(send).toHaveBeenCalledTimes(2);
+		expect(start).toHaveBeenCalledTimes(1);
+		expect(start).toHaveBeenCalledWith(
+			expect.objectContaining({
+				interactive: true,
+				initialMessages: await readMessages.mock.results[1]?.value,
+			}),
+		);
+	});
+
 	it("refreshes hub-attached sessions even when the cached config matches", async () => {
 		const { ctx, sessionId, updateSessionConnection } = createContext({
 			attachedViaHub: true,
