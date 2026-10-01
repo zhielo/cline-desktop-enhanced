@@ -626,6 +626,83 @@ describe("session forks", () => {
 		expect(start).not.toHaveBeenCalled();
 	});
 
+	it("recovers when another process wins the database idempotency race", async () => {
+		const sourceSessionId = "racing-source";
+		const operationId = "fork:racing-source:edit:message-3:2";
+		const sourceMessages = [
+			{ role: "user" as const, content: "first prompt" },
+			{ role: "assistant" as const, content: "first response" },
+			{ role: "user" as const, content: "edit this" },
+		];
+		const list = vi
+			.fn()
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([
+				{
+					sessionId: "winning-fork",
+					conversationId: "conversation-root",
+					metadata: {
+						fork: { operationId, forkedFromSessionId: sourceSessionId },
+					},
+				},
+			]);
+		const start = vi.fn(async () => {
+			throw new Error("duplicate session fork operation id");
+		});
+		const ctx = {
+			liveSessions: new Map([
+				[
+					sourceSessionId,
+					{
+						config: { cwd: "/workspace/project" },
+						messages: sourceMessages,
+						promptsInQueue: [],
+						busy: false,
+						startedAt: Date.now(),
+						status: "completed",
+					},
+				],
+			]),
+			restoringWorkspacePaths: new Set(),
+			...localRuntimeContext(
+				{
+					list,
+					get: vi.fn(async () => ({
+						sessionId: sourceSessionId,
+						source: "desktop",
+						status: "completed",
+						provider: "cline",
+						model: "test-model",
+						cwd: "/workspace/project",
+						workspaceRoot: "/workspace/project",
+						metadata: {},
+					})),
+					readMessages: vi.fn(async () => sourceMessages.slice(0, 2)),
+					start,
+				},
+				{ sessionIds: [sourceSessionId] },
+			),
+			streamIndices: new Map(),
+			wsClients: new Set(),
+		} as unknown as SidecarContext;
+
+		await expect(
+			handleChatSessionCommand(ctx, {
+				action: "fork",
+				sessionId: sourceSessionId,
+				forkBeforeRunCount: 2,
+				forkOperationId: operationId,
+			}),
+		).resolves.toMatchObject({
+			sessionId: "winning-fork",
+			conversationId: "conversation-root",
+		});
+		expect(start).toHaveBeenCalledOnce();
+		expect(list).toHaveBeenCalledTimes(2);
+		expect(ctx.liveSessions.has(sourceSessionId)).toBe(false);
+		expect(ctx.liveSessions.has("winning-fork")).toBe(true);
+	});
+
 	it("coalesces a long edit while reasoning effort changes", async () => {
 		const sourceSessionId = "long-source";
 		const operationId = "fork:long-source:edit:message-300:150";

@@ -1788,6 +1788,47 @@ const forkOperationsByContext = new WeakMap<
 	Map<string, Promise<unknown>>
 >();
 
+type ExistingForkOperation = {
+	sessionId: string;
+	forkedFromSessionId: string;
+	conversationId: string;
+	recovered: true;
+};
+
+async function findExistingForkOperation(
+	manager: ClineCore,
+	operationId: string,
+	sourceSessionId: string,
+): Promise<ExistingForkOperation | undefined> {
+	const existingSessions = await manager.list(500, { hydrate: false });
+	for (const candidate of existingSessions) {
+		const metadata =
+			candidate.metadata && typeof candidate.metadata === "object"
+				? (candidate.metadata as JsonRecord)
+				: undefined;
+		const fork =
+			metadata?.fork && typeof metadata.fork === "object"
+				? (metadata.fork as JsonRecord)
+				: undefined;
+		if (fork?.operationId !== operationId) continue;
+		const sessionId = candidate.sessionId?.trim();
+		if (!sessionId) continue;
+		const conversationId =
+			(typeof candidate.conversationId === "string" &&
+				candidate.conversationId.trim()) ||
+			(typeof metadata?.conversationId === "string" &&
+				metadata.conversationId.trim()) ||
+			sourceSessionId;
+		return {
+			sessionId,
+			forkedFromSessionId: sourceSessionId,
+			conversationId,
+			recovered: true,
+		};
+	}
+	return undefined;
+}
+
 async function handleFork(
 	ctx: SidecarContext,
 	request: ChatSessionCommandRequest,
@@ -1835,36 +1876,18 @@ async function handleForkOnce(
 	const forkOperationId = request.forkOperationId?.trim();
 	if (forkOperationId) {
 		try {
-			const existingSessions = await manager.list(500, { hydrate: false });
-			for (const candidate of existingSessions) {
-				const metadata =
-					candidate.metadata && typeof candidate.metadata === "object"
-						? (candidate.metadata as JsonRecord)
-						: undefined;
-				const fork =
-					metadata?.fork && typeof metadata.fork === "object"
-						? (metadata.fork as JsonRecord)
-						: undefined;
-				if (fork?.operationId !== forkOperationId) continue;
-				const existingSessionId = candidate.sessionId?.trim();
-				if (!existingSessionId) continue;
-				const conversationId =
-					(typeof candidate.conversationId === "string" &&
-						candidate.conversationId.trim()) ||
-					(typeof metadata?.conversationId === "string" &&
-						metadata.conversationId.trim()) ||
-					sourceSessionId;
+			const existing = await findExistingForkOperation(
+				manager,
+				forkOperationId,
+				sourceSessionId,
+			);
+			if (existing) {
 				ctx.logger?.log("Reusing completed desktop message edit", {
 					operationId: forkOperationId,
 					sourceSessionId,
-					sessionId: existingSessionId,
+					sessionId: existing.sessionId,
 				});
-				return {
-					sessionId: existingSessionId,
-					forkedFromSessionId: sourceSessionId,
-					conversationId,
-					recovered: true,
-				};
+				return existing;
 			}
 		} catch (error) {
 			ctx.logger?.debug("Could not reconcile a prior desktop message edit", {
@@ -1964,7 +1987,7 @@ async function handleForkUnlocked(
 	// conversation. Keep a stable lineage id so history does not render every
 	// edit fork as another independent session. Older sessions without an
 	// explicit conversation id use their session id as the lineage root.
-	const conversationId = inheritedConversationId?.trim() || sourceSessionId;
+	let conversationId = inheritedConversationId?.trim() || sourceSessionId;
 	const baseForkConfig: JsonRecord = {
 		...(liveConfig ?? {}),
 		...(request.config ?? {}),
@@ -2083,11 +2106,29 @@ async function handleForkUnlocked(
 		}
 		newSessionId = restored.sessionId;
 	} else {
-		const started = await manager.start({
-			...startInput,
-			initialMessages: forkMessages,
-		});
-		newSessionId = started.sessionId;
+		try {
+			const started = await manager.start({
+				...startInput,
+				initialMessages: forkMessages,
+			});
+			newSessionId = started.sessionId;
+		} catch (error) {
+			const existing = forkOperationId
+				? await findExistingForkOperation(
+						manager,
+						forkOperationId,
+						sourceSessionId,
+					)
+				: undefined;
+			if (!existing) throw error;
+			newSessionId = existing.sessionId;
+			conversationId = existing.conversationId;
+			ctx.logger?.log("Recovered concurrent desktop message edit", {
+				operationId: forkOperationId,
+				sourceSessionId,
+				sessionId: newSessionId,
+			});
+		}
 	}
 	try {
 		const read = await manager.readMessages(newSessionId);

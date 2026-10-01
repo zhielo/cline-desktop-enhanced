@@ -79,6 +79,54 @@ describe("withSqliteBusyRetry", () => {
 describe("ensureSessionSchema", () => {
 	const sqliteIt = sqliteAvailable ? it : it.skip;
 
+	sqliteIt("enforces one persisted session per fork operation", () => {
+		const dir = mkdtempSync(join(tmpdir(), "sqlite-fork-idempotency-"));
+		try {
+			const db = loadSqliteDb(join(dir, "sessions.db"));
+			ensureSessionSchema(db, { includeLegacyMigrations: true });
+			const insert = db.prepare(`INSERT OR REPLACE INTO sessions (
+				session_id, source, pid, started_at, status, interactive, provider, model, cwd,
+				workspace_root, enable_tools, enable_spawn, enable_teams, metadata_json, hook_path, updated_at
+			) VALUES (?, 'desktop', 1, '2026-10-01T00:00:00.000Z', 'idle', 1,
+				'cline', 'test-model', '/tmp', '/tmp', 1, 1, 1, ?, '', '2026-10-01T00:00:00.000Z')`);
+			const metadata = JSON.stringify({
+				fork: { operationId: "fork:source:edit:message-1:1" },
+			});
+			insert.run("fork-one", metadata);
+			expect(() => insert.run("fork-two", metadata)).toThrow(
+				"duplicate session fork operation id",
+			);
+			expect(db.prepare("SELECT session_id FROM sessions").all()).toEqual([
+				{ session_id: "fork-one" },
+			]);
+
+			// An upgrade may encounter duplicate branches created before the
+			// constraint existed. Preserve both sessions, but retain the operation
+			// identity only on the newest row before recreating the unique index.
+			db.exec("DROP TRIGGER sessions_fork_operation_id_guard;");
+			db.exec("DROP INDEX sessions_fork_operation_id_unique;");
+			insert.run("fork-two", metadata);
+			ensureSessionSchema(db, { includeLegacyMigrations: true });
+			expect(
+				db
+					.prepare(
+						`SELECT session_id, json_extract(metadata_json, '$.fork.operationId') AS operation_id
+						 FROM sessions ORDER BY session_id`,
+					)
+					.all(),
+			).toEqual([
+				{ session_id: "fork-one", operation_id: null },
+				{
+					session_id: "fork-two",
+					operation_id: "fork:source:edit:message-1:1",
+				},
+			]);
+			db.close?.();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	sqliteIt(
 		"adds transcript_path back to legacy sessions tables when missing",
 		() => {

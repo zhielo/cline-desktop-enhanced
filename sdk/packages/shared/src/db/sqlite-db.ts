@@ -215,6 +215,35 @@ const SCHEMA_STATEMENTS = [
 		messages_path TEXT,
 		updated_at TEXT NOT NULL
 	);`,
+	`UPDATE sessions
+	 SET metadata_json = json_remove(metadata_json, '$.fork.operationId')
+	 WHERE json_extract(metadata_json, '$.fork.operationId') IS NOT NULL
+	   AND json_extract(metadata_json, '$.fork.operationId') != ''
+	   AND session_id NOT IN (
+		SELECT keeper.session_id
+		FROM sessions AS keeper
+		WHERE json_extract(keeper.metadata_json, '$.fork.operationId') =
+			json_extract(sessions.metadata_json, '$.fork.operationId')
+		ORDER BY keeper.updated_at DESC, keeper.session_id DESC
+		LIMIT 1
+	   );`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS sessions_fork_operation_id_unique
+	 ON sessions(json_extract(metadata_json, '$.fork.operationId'))
+	 WHERE json_extract(metadata_json, '$.fork.operationId') IS NOT NULL
+	   AND json_extract(metadata_json, '$.fork.operationId') != '';`,
+	`CREATE TRIGGER IF NOT EXISTS sessions_fork_operation_id_guard
+	 BEFORE INSERT ON sessions
+	 WHEN json_extract(NEW.metadata_json, '$.fork.operationId') IS NOT NULL
+	  AND json_extract(NEW.metadata_json, '$.fork.operationId') != ''
+	  AND EXISTS (
+		SELECT 1 FROM sessions
+		WHERE json_extract(metadata_json, '$.fork.operationId') =
+			json_extract(NEW.metadata_json, '$.fork.operationId')
+		  AND session_id != NEW.session_id
+	  )
+	 BEGIN
+		SELECT RAISE(ABORT, 'duplicate session fork operation id');
+	 END;`,
 	`CREATE TABLE IF NOT EXISTS subagent_spawn_queue (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		root_session_id TEXT NOT NULL,
