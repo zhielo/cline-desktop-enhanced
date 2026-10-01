@@ -580,6 +580,144 @@ describe("session forks", () => {
 		expect(ctx.restoringWorkspacePaths.size).toBe(0);
 	});
 
+	it("reuses a completed edit operation after a sidecar restart", async () => {
+		const sourceSessionId = "restart-source";
+		const operationId = "fork:restart-source:edit:message-9:5";
+		const get = vi.fn();
+		const start = vi.fn();
+		const list = vi.fn(async () => [
+			{
+				sessionId: "restart-fork",
+				conversationId: "conversation-root",
+				metadata: {
+					conversationId: "conversation-root",
+					fork: {
+						forkedFromSessionId: sourceSessionId,
+						operationId,
+					},
+				},
+			},
+		]);
+		const ctx = {
+			liveSessions: new Map(),
+			restoringWorkspacePaths: new Set(),
+			...localRuntimeContext(
+				{ list, get, start },
+				{ sessionIds: [sourceSessionId] },
+			),
+			streamIndices: new Map(),
+			wsClients: new Set(),
+		} as unknown as SidecarContext;
+
+		await expect(
+			handleChatSessionCommand(ctx, {
+				action: "fork",
+				sessionId: sourceSessionId,
+				forkBeforeRunCount: 5,
+				forkOperationId: operationId,
+			}),
+		).resolves.toEqual({
+			sessionId: "restart-fork",
+			forkedFromSessionId: sourceSessionId,
+			conversationId: "conversation-root",
+			recovered: true,
+		});
+		expect(list).toHaveBeenCalledWith(500, { hydrate: false });
+		expect(start).not.toHaveBeenCalled();
+	});
+
+	it("coalesces a long edit while reasoning effort changes", async () => {
+		const sourceSessionId = "long-source";
+		const operationId = "fork:long-source:edit:message-300:150";
+		const sourceMessages = Array.from({ length: 400 }, (_, index) => ({
+			role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+			content: `message-${index}`,
+		}));
+		let releaseStart = () => {};
+		const startGate = new Promise<void>((resolve) => {
+			releaseStart = resolve;
+		});
+		let markStarted = () => {};
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		let capturedStart: { initialMessages: unknown[] } | undefined;
+		const start = vi.fn(async (input: { initialMessages: unknown[] }) => {
+			capturedStart = input;
+			markStarted();
+			await startGate;
+			return { sessionId: "long-fork" };
+		});
+		const ctx = {
+			liveSessions: new Map([
+				[
+					sourceSessionId,
+					{
+						config: { cwd: "/workspace/project" },
+						messages: sourceMessages,
+						promptsInQueue: [],
+						busy: false,
+						startedAt: Date.now(),
+						status: "completed",
+					},
+				],
+			]),
+			restoringWorkspacePaths: new Set(),
+			...localRuntimeContext(
+				{
+					list: vi.fn(async () => []),
+					get: vi.fn(async () => ({
+						sessionId: sourceSessionId,
+						source: "desktop",
+						status: "completed",
+						provider: "cline",
+						model: "test-model",
+						cwd: "/workspace/project",
+						workspaceRoot: "/workspace/project",
+						metadata: {},
+					})),
+					readMessages: vi.fn(async () => []),
+					start,
+				},
+				{ sessionIds: [sourceSessionId] },
+			),
+			streamIndices: new Map(),
+			wsClients: new Set(),
+		} as unknown as SidecarContext;
+
+		const high = handleChatSessionCommand(ctx, {
+			action: "fork",
+			sessionId: sourceSessionId,
+			forkBeforeRunCount: 150,
+			forkOperationId: operationId,
+			config: { reasoningEffort: "high" },
+		});
+		await started;
+		const medium = handleChatSessionCommand(ctx, {
+			action: "fork",
+			sessionId: sourceSessionId,
+			forkBeforeRunCount: 150,
+			forkOperationId: operationId,
+			config: { reasoningEffort: "medium" },
+		});
+		releaseStart();
+
+		await expect(Promise.all([high, medium])).resolves.toEqual([
+			expect.objectContaining({ sessionId: "long-fork" }),
+			expect.objectContaining({ sessionId: "long-fork" }),
+		]);
+		expect(start).toHaveBeenCalledOnce();
+		expect(start).toHaveBeenCalledWith(
+			expect.objectContaining({
+				initialMessages: expect.any(Array),
+				sessionMetadata: expect.objectContaining({
+					fork: expect.objectContaining({ operationId }),
+				}),
+			}),
+		);
+		expect(capturedStart?.initialMessages.length).toBeGreaterThan(250);
+	});
+
 	it("holds the workspace lock for the full edit restore", async () => {
 		const sourceSessionId = `locking-source-${Date.now()}`;
 		const siblingSessionId = `locking-sibling-${Date.now()}`;
