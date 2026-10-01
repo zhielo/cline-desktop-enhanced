@@ -4060,6 +4060,7 @@ export function useChatSession(environmentId: string) {
 	const forkSession = useCallback(
 		async (options?: {
 			beforeRunCount?: number;
+			operationId?: string;
 		}): Promise<{
 			newSessionId: string;
 			forkedFromSessionId: string;
@@ -4074,7 +4075,8 @@ export function useChatSession(environmentId: string) {
 				throw new Error("Wait for the current turn to finish before forking.");
 			}
 
-			const key = `${activeSessionId}:${options?.beforeRunCount ?? "all"}`;
+			const operationId = `fork:${activeSessionId}:${options?.operationId ?? options?.beforeRunCount ?? "all"}`;
+			const key = operationId;
 			const inFlight = forkSessionPromiseRef.current;
 			if (inFlight?.key === key) return inFlight.promise;
 			if (inFlight) {
@@ -4087,6 +4089,7 @@ export function useChatSession(environmentId: string) {
 					sessionId: activeSessionId,
 					config,
 					forkBeforeRunCount: options?.beforeRunCount,
+					forkOperationId: operationId,
 				})) as {
 					sessionId?: string;
 					forkedFromSessionId?: string;

@@ -1799,7 +1799,11 @@ async function handleFork(
 		operations = new Map();
 		forkOperationsByContext.set(ctx, operations);
 	}
-	const operationKey = `${readEnvironmentId(request.config) || ctx.activeEnvironmentId}\u0000${sourceSessionId}\u0000${request.forkBeforeRunCount ?? "all"}`;
+	const requestedOperationId = request.forkOperationId?.trim();
+	if (requestedOperationId && requestedOperationId.length > 512) {
+		throw new Error("forkOperationId must be at most 512 characters");
+	}
+	const operationKey = `${readEnvironmentId(request.config) || ctx.activeEnvironmentId}\u0000${requestedOperationId || `${sourceSessionId}\u0000${request.forkBeforeRunCount ?? "all"}`}`;
 	const existing = operations.get(operationKey);
 	if (existing) return existing;
 
@@ -1828,6 +1832,49 @@ async function handleForkOnce(
 		throw new Error("forkBeforeRunCount must be a positive integer");
 	}
 	const manager = getSessionManager(ctx, sourceSessionId, request.config);
+	const forkOperationId = request.forkOperationId?.trim();
+	if (forkOperationId) {
+		try {
+			const existingSessions = await manager.list(500, { hydrate: false });
+			for (const candidate of existingSessions) {
+				const metadata =
+					candidate.metadata && typeof candidate.metadata === "object"
+						? (candidate.metadata as JsonRecord)
+						: undefined;
+				const fork =
+					metadata?.fork && typeof metadata.fork === "object"
+						? (metadata.fork as JsonRecord)
+						: undefined;
+				if (fork?.operationId !== forkOperationId) continue;
+				const existingSessionId = candidate.sessionId?.trim();
+				if (!existingSessionId) continue;
+				const conversationId =
+					(typeof candidate.conversationId === "string" &&
+						candidate.conversationId.trim()) ||
+					(typeof metadata?.conversationId === "string" &&
+						metadata.conversationId.trim()) ||
+					sourceSessionId;
+				ctx.logger?.log("Reusing completed desktop message edit", {
+					operationId: forkOperationId,
+					sourceSessionId,
+					sessionId: existingSessionId,
+				});
+				return {
+					sessionId: existingSessionId,
+					forkedFromSessionId: sourceSessionId,
+					conversationId,
+					recovered: true,
+				};
+			}
+		} catch (error) {
+			ctx.logger?.debug("Could not reconcile a prior desktop message edit", {
+				operationId: forkOperationId,
+				sourceSessionId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+
 	const liveSourceSession = ctx.liveSessions.get(sourceSessionId);
 	if (
 		forkBeforeRunCount !== undefined &&
@@ -1879,6 +1926,8 @@ async function handleForkUnlocked(
 	sourceSession: SessionRecord | undefined,
 	restoreWorkspacePath?: string,
 ): Promise<unknown> {
+	const forkStartedAt = Date.now();
+	const forkOperationId = request.forkOperationId?.trim();
 	const binding = getSessionRuntimeBinding(
 		ctx,
 		sourceSessionId,
@@ -1969,6 +2018,7 @@ async function handleForkUnlocked(
 		fork: {
 			forkedFromSessionId: sourceSessionId,
 			forkedAt: new Date().toISOString(),
+			...(forkOperationId ? { operationId: forkOperationId } : {}),
 			source: sourceSession?.source ?? "desktop",
 			...(forkBeforeRunCount !== undefined
 				? { beforeRunCount: forkBeforeRunCount }
@@ -2073,6 +2123,15 @@ async function handleForkUnlocked(
 	ctx.sessionEnvironmentIds.set(newSessionId, binding.environmentId);
 	sendPromptsInQueueSnapshot(ctx, sourceSessionId);
 	sendPromptsInQueueSnapshot(ctx, newSessionId);
+	ctx.logger?.log("Desktop message edit restored conversation", {
+		operationId: forkOperationId,
+		sourceSessionId,
+		sessionId: newSessionId,
+		messageCount: forkMessages.length,
+		durationMs: Date.now() - forkStartedAt,
+		reasoningEffort:
+			request.config?.reasoningEffort ?? request.config?.reasoning_effort,
+	});
 	return {
 		sessionId: newSessionId,
 		forkedFromSessionId: sourceSessionId,

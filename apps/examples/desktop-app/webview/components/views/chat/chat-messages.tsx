@@ -897,6 +897,14 @@ function ChatMessagesImpl({
 								) : null}
 							</div>
 						)}
+						{editingMessageId ? (
+							<div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-[1px]">
+								<div className="flex items-center gap-1.5">
+									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+									Restoring conversation...
+								</div>
+							</div>
+						) : null}
 						{showSwitchTransition ? (
 							hasMessages ? (
 								<div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-[1px]">

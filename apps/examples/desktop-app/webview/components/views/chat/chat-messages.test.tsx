@@ -1173,6 +1173,42 @@ describe("ChatMessages tool disclosures", () => {
 		);
 	});
 
+	it("shows restoration progress while an edited message is being rebuilt", async () => {
+		let finishEdit = () => {};
+		const onEditMessage = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finishEdit = resolve;
+				}),
+		);
+		await renderMessages(
+			[
+				{
+					id: "editable-user",
+					sessionId: "session-1",
+					role: "user",
+					content: "Original prompt",
+					createdAt: 1,
+				},
+			],
+			{ onEditMessage },
+		);
+
+		const editButton = container.querySelector<HTMLButtonElement>(
+			'button[aria-label="Edit user message"]',
+		);
+		await act(async () => editButton?.click());
+		const continueButton = [...document.body.querySelectorAll("button")].find(
+			(button) => button.textContent === "Continue",
+		);
+		await act(async () => continueButton?.click());
+
+		expect(container.textContent).toContain("Restoring conversation...");
+		expect(editButton?.disabled).toBe(true);
+		await act(async () => finishEdit());
+		expect(container.textContent).not.toContain("Restoring conversation...");
+	});
+
 	it("copies a user message without its transport envelope", async () => {
 		const writeText = vi.fn(async () => undefined);
 		Object.assign(navigator, { clipboard: { writeText } });

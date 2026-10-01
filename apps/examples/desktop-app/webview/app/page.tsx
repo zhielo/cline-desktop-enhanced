@@ -2015,8 +2015,11 @@ function ChatThreadPane({
 	);
 
 	const handleEditMessage = useCallback(
-		async (_messageId: string, content: string, runCount: number) => {
-			const result = await forkSession({ beforeRunCount: runCount });
+		async (messageId: string, content: string, runCount: number) => {
+			const result = await forkSession({
+				beforeRunCount: runCount,
+				operationId: `edit:${messageId}:${runCount}`,
+			});
 			openForkedSession(result, content);
 		},
 		[forkSession, openForkedSession],
