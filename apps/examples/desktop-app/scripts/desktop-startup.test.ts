@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
@@ -54,9 +55,10 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 				([key]) => !/^(CLINE_|OTEL_|TELEMETRY_|ERROR_SERVICE_)/.test(key),
 			),
 		);
+		const dataDir = join(root, "data");
 		Object.assign(env, {
 			CLINE_DIR: root,
-			CLINE_DATA_DIR: join(root, "data"),
+			CLINE_DATA_DIR: dataDir,
 			CLINE_HUB_DISCOVERY_PATH: discoveryPath,
 		});
 		// Bootstrap on an OS-assigned port using the same executable. Pin the
@@ -103,6 +105,107 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 		});
 		expect(health.ok).toBe(true);
 		expect(await health.json()).toMatchObject({ ok: true, pid: child.pid });
+
+		// The installed backend must initialize the same atomic edit-recovery
+		// constraint used by source builds. This catches packaging drift where an
+		// older embedded Hub silently permits duplicate long-chat edit forks.
+		const sessionsDbPath = join(dataDir, "db", "sessions.db");
+		const sessionsDb = new Database(sessionsDbPath);
+		try {
+			const schemaObjects = sessionsDb
+				.query(
+					"SELECT name FROM sqlite_master WHERE name IN (?, ?) ORDER BY name",
+				)
+				.all(
+					"sessions_fork_operation_id_guard",
+					"sessions_fork_operation_id_unique",
+				);
+			expect(schemaObjects).toEqual([
+				{ name: "sessions_fork_operation_id_guard" },
+				{ name: "sessions_fork_operation_id_unique" },
+			]);
+
+			const insertFork = sessionsDb.prepare(`INSERT OR REPLACE INTO sessions (
+				session_id, source, pid, started_at, status, interactive, provider, model, cwd,
+				workspace_root, enable_tools, enable_spawn, enable_teams, metadata_json, hook_path, updated_at
+			) VALUES (?, 'desktop', 1, '2026-10-01T00:00:00.000Z', 'idle', 1,
+				'cline', 'installer-smoke', ?, ?, 1, 1, 1, ?, '', '2026-10-01T00:00:00.000Z')`);
+			const editOperationId = "fork:installer-long-chat:edit:message-300:150";
+			const forkMetadata = JSON.stringify({
+				conversationId: "installer-long-chat",
+				fork: {
+					operationId: editOperationId,
+					forkedFromSessionId: "installer-long-chat",
+					beforeRunCount: 150,
+				},
+			});
+			insertFork.run("installer-edit-fork", root, root, forkMetadata);
+			expect(() =>
+				insertFork.run("installer-duplicate-fork", root, root, forkMetadata),
+			).toThrow("duplicate session fork operation id");
+		} finally {
+			sessionsDb.close();
+		}
+
+		// Reboot-equivalent smoke: stop and restart the installed sidecar against
+		// the same data directory and detached Hub, then require a fresh ready line
+		// and healthy endpoint. Persisted edit identity must survive this boundary.
+		child.kill();
+		await Promise.race([child.exited, Bun.sleep(6_000)]);
+		if (child.exitCode === null) child.kill("SIGKILL");
+		await child.exited;
+		child = Bun.spawn([binary], {
+			cwd: root,
+			env,
+			stdin: "ignore",
+			stdout,
+			stderr,
+		});
+		let restartedEndpoint: string | undefined;
+		const restartDeadline = Date.now() + SIDECAR_READY_TIMEOUT_MS;
+		while (Date.now() < restartDeadline) {
+			const readyLines = readFileSync(stdoutPath, "utf8")
+				.split("\n")
+				.flatMap((line) => {
+					try {
+						const message = JSON.parse(line);
+						return message.type === "ready" ? [message.endpoint as string] : [];
+					} catch {
+						return [];
+					}
+				});
+			if (readyLines.length >= 2) restartedEndpoint = readyLines.at(-1);
+			if (restartedEndpoint || child.exitCode !== null) break;
+			await Bun.sleep(50);
+		}
+		expect(
+			restartedEndpoint,
+			"Restarted backend never became ready",
+		).toBeTruthy();
+		const restartedHealth = await fetch(`${restartedEndpoint}/health`, {
+			signal: AbortSignal.timeout(5_000),
+		});
+		expect(restartedHealth.ok).toBe(true);
+		expect(await restartedHealth.json()).toMatchObject({
+			ok: true,
+			pid: child.pid,
+		});
+		const restartedDb = new Database(sessionsDbPath, { readonly: true });
+		try {
+			expect(
+				restartedDb
+					.query(
+						`SELECT session_id, json_extract(metadata_json, '$.fork.operationId') AS operation_id
+						 FROM sessions WHERE session_id = ?`,
+					)
+					.get("installer-edit-fork"),
+			).toEqual({
+				session_id: "installer-edit-fork",
+				operation_id: "fork:installer-long-chat:edit:message-300:150",
+			});
+		} finally {
+			restartedDb.close();
+		}
 	} finally {
 		if (child && child.exitCode === null) {
 			child.kill();
