@@ -2266,7 +2266,26 @@ async function openFileInCodeEditor(
 	return "system default";
 }
 
-function openArtifactWithSystem(filePath: string): string {
+function spawnDetachedAndWait(
+	command: string,
+	args: string[],
+	options: { windowsHide?: boolean; windowsVerbatimArguments?: boolean } = {},
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			stdio: "ignore",
+			detached: true,
+			...options,
+		});
+		child.once("error", reject);
+		child.once("spawn", () => {
+			child.unref();
+			resolve();
+		});
+	});
+}
+
+async function openArtifactWithSystem(filePath: string): Promise<string> {
 	if (
 		process.platform === "win32" &&
 		WINDOWS_CMD_UNSAFE_PATTERN.test(filePath)
@@ -2275,24 +2294,28 @@ function openArtifactWithSystem(filePath: string): string {
 			"File path contains characters that cannot be passed safely to the Windows shell",
 		);
 	}
-	const child =
-		process.platform === "darwin"
-			? spawn("open", [filePath], { stdio: "ignore", detached: true })
-			: process.platform === "win32"
-				? spawn("rundll32", ["url.dll,FileProtocolHandler", filePath], {
-						stdio: "ignore",
-						detached: true,
-						windowsHide: true,
-					})
-				: spawn("xdg-open", [filePath], {
-						stdio: "ignore",
-						detached: true,
-					});
-	child.unref();
+	if (process.platform === "darwin") {
+		await spawnDetachedAndWait("open", [filePath]);
+	} else if (process.platform === "win32") {
+		await spawnDetachedAndWait(
+			"rundll32.exe",
+			["url.dll,FileProtocolHandler", filePath],
+			{ windowsHide: true },
+		);
+	} else {
+		await spawnDetachedAndWait("xdg-open", [filePath]);
+	}
 	return "system default";
 }
 
-function revealArtifactInFolder(filePath: string): string {
+export function windowsExplorerRevealArgs(
+	filePath: string,
+	isDirectory: boolean,
+): string[] {
+	return isDirectory ? [filePath] : [`/select,"${filePath}"`];
+}
+
+async function revealArtifactInFolder(filePath: string): Promise<string> {
 	if (
 		process.platform === "win32" &&
 		WINDOWS_CMD_UNSAFE_PATTERN.test(filePath)
@@ -2301,29 +2324,22 @@ function revealArtifactInFolder(filePath: string): string {
 			"File path contains characters that cannot be passed safely to the Windows shell",
 		);
 	}
-	const directory = statSync(filePath).isDirectory()
-		? filePath
-		: dirname(filePath);
-	const child =
-		process.platform === "darwin"
-			? spawn("open", ["-R", filePath], { stdio: "ignore", detached: true })
-			: process.platform === "win32"
-				? spawn(
-						"explorer.exe",
-						statSync(filePath).isDirectory()
-							? [filePath]
-							: ["/select,", filePath],
-						{
-							stdio: "ignore",
-							detached: true,
-							windowsHide: true,
-						},
-					)
-				: spawn("xdg-open", [directory], {
-						stdio: "ignore",
-						detached: true,
-					});
-	child.unref();
+	const isDirectory = statSync(filePath).isDirectory();
+	const directory = isDirectory ? filePath : dirname(filePath);
+	if (process.platform === "darwin") {
+		await spawnDetachedAndWait("open", ["-R", filePath]);
+	} else if (process.platform === "win32") {
+		await spawnDetachedAndWait(
+			"explorer.exe",
+			windowsExplorerRevealArgs(filePath, isDirectory),
+			{
+				windowsHide: false,
+				windowsVerbatimArguments: !isDirectory,
+			},
+		);
+	} else {
+		await spawnDetachedAndWait("xdg-open", [directory]);
+	}
 	return directory;
 }
 
@@ -4618,7 +4634,7 @@ export async function handleCommand(
 		if (!existsSync(filePath)) {
 			throw new Error(`Artifact not found: ${filePath}`);
 		}
-		return { path: filePath, opener: openArtifactWithSystem(filePath) };
+		return { path: filePath, opener: await openArtifactWithSystem(filePath) };
 	}
 	if (command === "reveal_artifact_in_folder") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
@@ -4636,7 +4652,10 @@ export async function handleCommand(
 		if (!existsSync(filePath)) {
 			throw new Error(`Artifact not found: ${filePath}`);
 		}
-		return { path: filePath, directory: revealArtifactInFolder(filePath) };
+		return {
+			path: filePath,
+			directory: await revealArtifactInFolder(filePath),
+		};
 	}
 	if (command === "read_artifact_preview") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {

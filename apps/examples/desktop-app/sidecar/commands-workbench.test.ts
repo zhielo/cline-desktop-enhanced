@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { handleCommand } from "./commands";
+import { handleCommand, windowsExplorerRevealArgs } from "./commands";
 import type { SidecarContext } from "./types";
 
 let workspace: string;
@@ -33,6 +33,18 @@ beforeEach(() => {
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
 describe("desktop execution workbench boundaries", () => {
+	it("uses Explorer's canonical single-argument select syntax for files", () => {
+		expect(
+			windowsExplorerRevealArgs(
+				"C:\\Users\\Pzhielo\\work\\PATCH_REPORT.md",
+				false,
+			),
+		).toEqual(['/select,"C:\\Users\\Pzhielo\\work\\PATCH_REPORT.md"']);
+		expect(windowsExplorerRevealArgs("C:\\Users\\Pzhielo\\work", true)).toEqual(
+			["C:\\Users\\Pzhielo\\work"],
+		);
+	});
+
 	it("requires explicit Full Access confirmation before starting a host terminal", async () => {
 		await expect(
 			handleCommand(context, "workspace_terminal_start", { cwd: workspace }),

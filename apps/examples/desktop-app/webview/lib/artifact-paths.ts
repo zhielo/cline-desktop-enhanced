@@ -27,6 +27,50 @@ const CODE_EXTENSIONS = new Set([
 	"vue",
 ]);
 
+const INLINE_PREVIEW_EXTENSIONS = new Set([
+	"c",
+	"cc",
+	"cpp",
+	"cs",
+	"css",
+	"csv",
+	"gif",
+	"go",
+	"h",
+	"hpp",
+	"html",
+	"java",
+	"jpeg",
+	"jpg",
+	"js",
+	"json",
+	"jsx",
+	"kt",
+	"log",
+	"md",
+	"mjs",
+	"pdf",
+	"php",
+	"png",
+	"py",
+	"rb",
+	"rs",
+	"scss",
+	"sh",
+	"sql",
+	"svg",
+	"swift",
+	"toml",
+	"ts",
+	"tsx",
+	"txt",
+	"vue",
+	"webp",
+	"xml",
+	"yaml",
+	"yml",
+]);
+
 export const ARTIFACT_EXTENSION_SOURCE =
 	"7z|aab|apk|apks|c|cc|cpp|cs|css|csv|doc|docx|exe|gif|go|h|hpp|html|java|jpeg|jpg|js|json|jsx|kt|kts|log|md|mjs|msi|pdf|php|png|ppt|pptx|py|rar|rb|rs|scss|sh|sql|svg|swift|tar|toml|ts|tsx|txt|vue|webp|xls|xlsx|xml|yaml|yml|zip";
 
@@ -53,6 +97,14 @@ export function isCodeArtifactPath(path: string): boolean {
 		.match(/\.([A-Za-z0-9]+)$/)?.[1]
 		?.toLowerCase();
 	return extension ? CODE_EXTENSIONS.has(extension) : false;
+}
+
+export function isInlinePreviewArtifactPath(path: string): boolean {
+	const extension = path
+		.replace(/:\d+(?::\d+)?$/, "")
+		.match(/\.([A-Za-z0-9]+)$/)?.[1]
+		?.toLowerCase();
+	return extension ? INLINE_PREVIEW_EXTENSIONS.has(extension) : false;
 }
 
 export function isArtifactReference(value: string): boolean {

@@ -1,7 +1,12 @@
 "use client";
 
 import { Copy, ExternalLink, Eye, FolderOpen, Loader2 } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import {
+	cloneElement,
+	type ReactElement,
+	type MouseEvent as ReactMouseEvent,
+	useState,
+} from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -42,12 +47,14 @@ export function ArtifactContextMenu({
 	environmentId,
 	onOpen,
 	path,
+	primaryAction = "open",
 }: {
 	children: ReactElement;
 	cwd?: string;
 	environmentId?: string;
 	onOpen: () => void | Promise<void>;
 	path: string;
+	primaryAction?: "open" | "preview";
 }) {
 	const [previewOpen, setPreviewOpen] = useState(false);
 	const [previewLoading, setPreviewLoading] = useState(false);
@@ -102,11 +109,26 @@ export function ArtifactContextMenu({
 			setPreviewLoading(false);
 		}
 	};
+	const trigger =
+		primaryAction === "preview"
+			? cloneElement(
+					children as ReactElement<{
+						onClick?: (event: ReactMouseEvent<HTMLElement>) => void;
+					}>,
+					{
+						onClick: (event: ReactMouseEvent<HTMLElement>) => {
+							event.preventDefault();
+							event.stopPropagation();
+							void showPreview();
+						},
+					},
+				)
+			: children;
 
 	return (
 		<>
 			<ContextMenu>
-				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+				<ContextMenuTrigger asChild>{trigger}</ContextMenuTrigger>
 				<ContextMenuContent className="w-52">
 					<ContextMenuItem onSelect={() => void showPreview()}>
 						<Eye />
@@ -114,7 +136,7 @@ export function ArtifactContextMenu({
 					</ContextMenuItem>
 					<ContextMenuItem onSelect={() => void onOpen()}>
 						<ExternalLink />
-						Open artifact
+						Open with default app
 					</ContextMenuItem>
 					<ContextMenuItem onSelect={() => void reveal()}>
 						<FolderOpen />

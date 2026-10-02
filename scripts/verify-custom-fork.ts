@@ -595,6 +595,32 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "apps/examples/desktop-app/webview/components/ui/markdown.tsx",
+		markers: [
+			"isInlinePreviewArtifactPath",
+			'primaryAction={previewsInApp ? "preview" : "open"}',
+			"event.preventDefault()",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/artifact-context-menu.tsx",
+		markers: [
+			'primaryAction?: "open" | "preview"',
+			"cloneElement",
+			"Open with default app",
+			"Show in folder",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/commands.ts",
+		markers: [
+			"spawnDetachedAndWait",
+			"windowsExplorerRevealArgs",
+			'/select,"',
+			"windowsVerbatimArguments",
+		],
+	},
+	{
 		path: "apps/examples/desktop-app/webview/components/views/chat/workspace-terminal.tsx",
 		markers: [
 			"workspace_terminal_start",
