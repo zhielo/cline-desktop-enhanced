@@ -56,6 +56,8 @@ import {
 import {
 	cancelPendingCapabilityRequests,
 	handleCapabilityProgress,
+	markCapabilityOwnerDisconnected,
+	pendingCapabilityEvents,
 	handleCapabilityRequest,
 	handleCapabilityRespond,
 	requestCapability as requestCapabilityHandler,
@@ -807,9 +809,10 @@ export class HubServerTransport implements NativeHubTransport {
 				return reply;
 			}
 			case "client.unregister": {
+				const transient = envelope.payload?.transient === true;
 				const reply = handleClientUnregister(this.ctx, envelope, (clientId) => {
 					this.listeners.delete(clientId);
-					this.detachClientFromSessions(clientId);
+					this.detachClientFromSessions(clientId, transient);
 				});
 				this.tasks.notifyAutomationReadinessChanged();
 				return reply;
@@ -1112,11 +1115,24 @@ export class HubServerTransport implements NativeHubTransport {
 		for (const count of this.activeRpcTurnCountBySession.values()) {
 			activeRpcTurns += count;
 		}
+		let leasedCapabilityRequests = 0;
+		for (const pending of this.pendingCapabilityRequests.values()) {
+			if (pending.ownerDisconnectedAt !== undefined) {
+				leasedCapabilityRequests += 1;
+			}
+		}
+		const memory = process.memoryUsage();
 		return {
 			hubId: this.hubId,
 			draining: this.draining,
 			activeRpcTurns,
 			pendingRuns: this.runQueue?.countPending() ?? 0,
+			pendingCapabilityRequests: this.pendingCapabilityRequests.size,
+			leasedCapabilityRequests,
+			memory: {
+				rssBytes: memory.rss,
+				heapUsedBytes: memory.heapUsed,
+			},
 			eventLog: this.eventLog
 				? { lastSequence: this.eventLog.lastSequence() }
 				: undefined,
@@ -1160,7 +1176,10 @@ export class HubServerTransport implements NativeHubTransport {
 		this.listeners.set(clientId, current);
 		// Re-issue pending approvals so a (re)connecting client can answer a
 		// request raised while it was away instead of leaving the turn parked.
-		const pending = pendingApprovalEvents(this.ctx, options?.sessionId);
+		const pending = [
+			...pendingApprovalEvents(this.ctx, options?.sessionId),
+			...pendingCapabilityEvents(this.ctx, clientId, options?.sessionId),
+		];
 		if (pending.length > 0) {
 			queueMicrotask(() => {
 				const listeners = this.listeners.get(clientId);
@@ -1191,7 +1210,10 @@ export class HubServerTransport implements NativeHubTransport {
 		};
 	}
 
-	private detachClientFromSessions(clientId: string): void {
+	private detachClientFromSessions(
+		clientId: string,
+		preserveCapabilities = false,
+	): void {
 		for (const [sessionId, state] of this.sessionState.entries()) {
 			state.participants.delete(clientId);
 			if (state.createdByClientId === clientId) {
@@ -1201,11 +1223,15 @@ export class HubServerTransport implements NativeHubTransport {
 				this.sessionState.delete(sessionId);
 			}
 		}
-		cancelPendingCapabilityRequests(
-			this.ctx,
-			(request) => request.targetClientId === clientId,
-			`Capability owner client ${clientId} disconnected before request was resolved.`,
-		);
+		if (preserveCapabilities) {
+			markCapabilityOwnerDisconnected(this.ctx, clientId);
+		} else {
+			cancelPendingCapabilityRequests(
+				this.ctx,
+				(request) => request.targetClientId === clientId,
+				`Capability owner client ${clientId} disconnected before request was resolved.`,
+			);
+		}
 	}
 
 	private publish(event: HubEventEnvelope): void {

@@ -23,3 +23,17 @@ Please keep the details private until a resolution has been reached.
 If you are unable to submit through Bugcrowd, you may send an email to security@cline.bot.
 
 Thank you for helping us keep Cline users safe.
+
+## Enhanced desktop fork safeguards
+
+Cline Enhanced provides host-enforced Read only, Workspace, Workspace + network,
+and Full access profiles. Full access removes repetitive tool approvals but does
+not bypass Windows UAC, filesystem ACLs, authentication, parser limits, or
+licensing. Keep restricted profiles available for untrusted projects and review
+the persistent Full Access indicator before starting a local session.
+
+The packaged Tauri application uses an explicit content security policy. The
+upstream auto-update endpoint remains disabled, so maintainers of this fork are
+responsible for monitoring and applying upstream security fixes. Tagged Windows
+releases must be Authenticode signed; private manual artifacts may remain
+unsigned and can trigger Windows SmartScreen.

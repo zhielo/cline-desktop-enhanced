@@ -50,7 +50,11 @@ import { humanizeCloudSessionError } from "@/lib/cloud-session-error";
 import { appendCappedCommandOutput } from "@/lib/command-output";
 import { desktopClient } from "@/lib/desktop-client";
 import { imageAttachmentMediaType } from "@/lib/image-attachments";
-import { formatRunError, isTransientHubDisconnect } from "@/lib/run-error";
+import {
+	formatRunError,
+	isTransientHubDisconnect,
+	retryRecoverableFork,
+} from "@/lib/run-error";
 import {
 	buildSessionDiffState,
 	EMPTY_DIFF_SUMMARY,
@@ -4084,13 +4088,33 @@ export function useChatSession(environmentId: string) {
 			}
 
 			const promise = (async () => {
-				const payload = (await postSession({
-					action: "fork",
-					sessionId: activeSessionId,
-					config,
-					forkBeforeRunCount: options?.beforeRunCount,
-					forkOperationId: operationId,
-				})) as {
+				const forkRequest = () =>
+					postSession({
+						action: "fork",
+						sessionId: activeSessionId,
+						config,
+						forkBeforeRunCount: options?.beforeRunCount,
+						forkOperationId: operationId,
+					});
+				const reconcileFork = async () => {
+					const status = (await postSession({
+						action: "fork_status",
+						sessionId: activeSessionId,
+						config,
+						forkOperationId: operationId,
+					})) as {
+						status?: string;
+						sessionId?: string;
+						forkedFromSessionId?: string;
+						conversationId?: string;
+					};
+					return status.status === "completed" ? status : undefined;
+				};
+				const payload = (await retryRecoverableFork(
+					forkRequest,
+					750,
+					reconcileFork,
+				)) as {
 					sessionId?: string;
 					forkedFromSessionId?: string;
 					conversationId?: string;

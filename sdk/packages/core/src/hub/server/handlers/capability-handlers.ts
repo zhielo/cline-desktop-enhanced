@@ -1,7 +1,13 @@
-import type { HubCommandEnvelope, HubReplyEnvelope } from "@cline/shared";
+import type {
+	HubCommandEnvelope,
+	HubEventEnvelope,
+	HubReplyEnvelope,
+} from "@cline/shared";
 import { createSessionId } from "@cline/shared";
 import { logHubMessage } from "../hub-server-logging";
 import { errorReply, type HubTransportContext, okReply } from "./context";
+
+export const CAPABILITY_OWNER_RECONNECT_LEASE_MS = 15_000;
 
 export async function requestCapability(
 	ctx: HubTransportContext,
@@ -20,11 +26,17 @@ export async function requestCapability(
 		targetClientId,
 	});
 	return await new Promise((resolve, reject) => {
+		const requestedEvent = ctx.buildEvent(
+			"capability.requested",
+			{ requestId, targetClientId, capabilityName, payload },
+			sessionId,
+		);
 		ctx.pendingCapabilityRequests.set(requestId, {
 			sessionId,
 			targetClientId,
 			capabilityName,
 			onProgress,
+			requestedEvent,
 			resolve: (result) => {
 				logHubMessage(result.ok ? "info" : "warn", "capability.request.end", {
 					requestId,
@@ -47,18 +59,7 @@ export async function requestCapability(
 				resolve(result.payload);
 			},
 		});
-		ctx.publish(
-			ctx.buildEvent(
-				"capability.requested",
-				{
-					requestId,
-					targetClientId,
-					capabilityName,
-					payload,
-				},
-				sessionId,
-			),
-		);
+		ctx.publish(requestedEvent);
 		logHubMessage("info", "capability.request.published", {
 			requestId,
 			sessionId,
@@ -110,6 +111,63 @@ export function handleCapabilityProgress(
 	return okReply(envelope, { requestId });
 }
 
+/**
+ * Keep capability work alive across an unexpected WebSocket loss. The same
+ * logical client id may reconnect and reclaim the request before the lease
+ * expires; explicit detach/unregister paths still cancel immediately.
+ */
+export function markCapabilityOwnerDisconnected(
+	ctx: HubTransportContext,
+	clientId: string,
+	leaseMs = CAPABILITY_OWNER_RECONNECT_LEASE_MS,
+): number {
+	let leased = 0;
+	for (const [requestId, pending] of ctx.pendingCapabilityRequests) {
+		if (pending.targetClientId !== clientId || pending.disconnectTimer) continue;
+		pending.ownerDisconnectedAt = Date.now();
+		pending.disconnectTimer = setTimeout(() => {
+			cancelPendingCapabilityRequests(
+				ctx,
+				(request) => request.requestId === requestId,
+				`Capability owner client ${clientId} did not reconnect within ${leaseMs}ms.`,
+			);
+		}, leaseMs);
+		logHubMessage("warn", "capability.request.owner_disconnected", {
+			requestId,
+			sessionId: pending.sessionId,
+			capabilityName: pending.capabilityName,
+			targetClientId: clientId,
+			leaseMs,
+		});
+		leased += 1;
+	}
+	return leased;
+}
+
+/** Reclaim and re-issue pending capability requests for a reconnecting owner. */
+export function pendingCapabilityEvents(
+	ctx: HubTransportContext,
+	targetClientId: string,
+	sessionId?: string,
+): HubEventEnvelope[] {
+	const events: HubEventEnvelope[] = [];
+	for (const [requestId, pending] of ctx.pendingCapabilityRequests) {
+		if (pending.targetClientId !== targetClientId) continue;
+		if (sessionId && pending.sessionId !== sessionId) continue;
+		if (pending.disconnectTimer) clearTimeout(pending.disconnectTimer);
+		pending.disconnectTimer = undefined;
+		pending.ownerDisconnectedAt = undefined;
+		if (pending.requestedEvent) events.push(pending.requestedEvent);
+		logHubMessage("info", "capability.request.owner_reconnected", {
+			requestId,
+			sessionId: pending.sessionId,
+			capabilityName: pending.capabilityName,
+			targetClientId,
+		});
+	}
+	return events;
+}
+
 export function cancelPendingCapabilityRequests(
 	ctx: HubTransportContext,
 	filter: (request: {
@@ -128,6 +186,7 @@ export function cancelPendingCapabilityRequests(
 			continue;
 		}
 		ctx.pendingCapabilityRequests.delete(requestId);
+		if (pending.disconnectTimer) clearTimeout(pending.disconnectTimer);
 		logHubMessage("warn", "capability.request.cancelled", {
 			requestId,
 			sessionId: pending.sessionId,
@@ -234,6 +293,7 @@ export function handleCapabilityRespond(
 		);
 	}
 	ctx.pendingCapabilityRequests.delete(requestId);
+	if (pending.disconnectTimer) clearTimeout(pending.disconnectTimer);
 	const payload =
 		envelope.payload?.payload &&
 		typeof envelope.payload.payload === "object" &&

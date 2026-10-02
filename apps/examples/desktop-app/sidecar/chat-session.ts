@@ -1829,6 +1829,32 @@ async function findExistingForkOperation(
 	return undefined;
 }
 
+async function handleForkStatus(
+	ctx: SidecarContext,
+	request: ChatSessionCommandRequest,
+): Promise<unknown> {
+	const sourceSessionId = request.sessionId?.trim();
+	const operationId = request.forkOperationId?.trim();
+	if (!sourceSessionId || !operationId) {
+		throw new Error("sessionId and forkOperationId are required");
+	}
+	const environmentId =
+		readEnvironmentId(request.config) || ctx.activeEnvironmentId;
+	const operationKey = `${environmentId}\u0000${operationId}`;
+	if (forkOperationsByContext.get(ctx)?.has(operationKey)) {
+		return { operationId, status: "running" };
+	}
+	const manager = getSessionManager(ctx, sourceSessionId, request.config);
+	const existing = await findExistingForkOperation(
+		manager,
+		operationId,
+		sourceSessionId,
+	);
+	return existing
+		? { operationId, status: "completed", ...existing }
+		: { operationId, status: "not_found" };
+}
+
 async function handleFork(
 	ctx: SidecarContext,
 	request: ChatSessionCommandRequest,
@@ -2447,6 +2473,7 @@ const ACTION_HANDLERS: Record<
 	stop: handleStop,
 	abort: handleAbort,
 	fork: handleFork,
+	fork_status: handleForkStatus,
 	reset: handleReset,
 	restore_checkpoint: handleRestoreCheckpoint,
 	pending_prompts: handlePendingPrompts,

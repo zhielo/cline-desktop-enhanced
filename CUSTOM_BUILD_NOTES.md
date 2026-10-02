@@ -71,9 +71,16 @@ Run the repository's Bun test and build commands on the target Windows build
 machine before distribution. This workspace did not contain the repository's
 installed Bun dependencies, so a full monorepo build was not performed here.
 
-The manual GitHub Actions workflow at
-`.github/workflows/build-custom-windows-installer.yml` performs that native
-Windows build and uploads a single NSIS `setup.exe` artifact plus its SHA-256
-checksum. The workflow intentionally creates an unsigned private test build;
-Windows may show a SmartScreen warning until the installer is Authenticode
-signed with the publisher's certificate.
+The GitHub Actions workflow at
+`.github/workflows/build-custom-windows-installer.yml` performs the native
+Windows build, runs an installed-application smoke test, and uploads a single
+NSIS `setup.exe` artifact plus its SHA-256 checksum. It runs manually for
+private test builds and from `desktop-v*` tags for durable GitHub Releases.
+
+Manual runs are unsigned unless both `WINDOWS_CERTIFICATE_BASE64` and
+`WINDOWS_CERTIFICATE_PASSWORD` repository secrets are configured. Tagged
+releases require those secrets and fail closed when signing is unavailable.
+Store the Base64-encoded PFX only as an Actions secret. Never commit signing
+material. A normal installer artifact is uploaded only after the silent-install,
+sidecar-health, and GUI-startup smoke test succeeds; failed-smoke artifacts are
+clearly separated and retained for seven days for diagnosis.
