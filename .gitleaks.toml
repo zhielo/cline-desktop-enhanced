@@ -4,5 +4,12 @@ title = "Cline SDK secret scanning"
 useDefault = true
 
 [[allowlists]]
-description = "Known synthetic credentials and documentation placeholders from upstream fixture refresh"
-commits = ["126d1fea2d30bae748ac1b3b4c37cbc8db8b4f77"]
+description = "Known synthetic credentials and documentation placeholders"
+paths = [
+  '''^apps/cli/src/tests/configs/(?:claude-sonnet-4\.6|default)/data/settings/providers\.json$''',
+  '''^apps/vscode/src/sdk/cline-session-factory\.test\.ts$''',
+  '''^docs/api/(?:authentication|chat-completions|getting-started|models|overview)\.mdx$''',
+  '''^docs/enterprise-solutions/api-reference\.mdx$''',
+  '''^sdk/packages/core/src/hub/server/index\.test\.ts$''',
+  '''^sdk/packages/core/src/services/storage/provider-settings-legacy-migration\.test\.ts$''',
+]
