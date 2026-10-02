@@ -41,6 +41,7 @@ export function isRecoverableForkTransportError(error: unknown): boolean {
 export async function retryRecoverableFork<T>(
 	operation: () => Promise<T>,
 	delayMs = 750,
+	reconcile?: () => Promise<T | undefined>,
 ): Promise<T> {
 	try {
 		return await operation();
@@ -48,6 +49,16 @@ export async function retryRecoverableFork<T>(
 		if (!isRecoverableForkTransportError(error)) throw error;
 		if (delayMs > 0) {
 			await new Promise((resolve) => setTimeout(resolve, delayMs));
+		}
+		if (reconcile) {
+			try {
+				const recovered = await reconcile();
+				if (recovered !== undefined) return recovered;
+			} catch (reconcileError) {
+				if (!isRecoverableForkTransportError(reconcileError)) {
+					throw reconcileError;
+				}
+			}
 		}
 		return await operation();
 	}

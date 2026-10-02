@@ -2,6 +2,7 @@
 
 ## 0.0.34
 
+- Long-session message edits and forks now survive transient Hub disconnects. Capability-owner requests receive a bounded reconnect lease and are re-issued to the same logical client, fork operations expose durable reconciliation status before any replay, and lost responses reuse the already-created branch instead of creating duplicates. The UI keeps the primary failure while suppressing a redundant consecutive code-1006 error
 - Composio connectors now load all their tools, not just the first 20. Google Calendar, for example, showed only 20 of its 47 tools, and the Installed view wrongly said "20/20." The full list is now fetched and the tool cache refreshes instead of staying stale forever
 - You can now connect to a Mac as an SSH remote from a Mac. Picking a Mac host used to fail with "Remote target darwin/arm64 is unsupported in SSH" even though **Test** passed on the same profile. The app now uses its own signed backend as the helper on both Apple Silicon and Intel Mac hosts. Windows and Linux desktops still can't connect to a Mac out of the box
 - Session errors now stay in the transcript when you leave a session or open it in another client. Before, a failed run's error disappeared once you went away and came back, or opened the session in the CLI. Failures after all retries run out are now recorded too, and these error-only entries are left out of compaction

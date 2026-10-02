@@ -4096,7 +4096,25 @@ export function useChatSession(environmentId: string) {
 						forkBeforeRunCount: options?.beforeRunCount,
 						forkOperationId: operationId,
 					});
-				const payload = (await retryRecoverableFork(forkRequest)) as {
+				const reconcileFork = async () => {
+					const status = (await postSession({
+						action: "fork_status",
+						sessionId: activeSessionId,
+						config,
+						forkOperationId: operationId,
+					})) as {
+						status?: string;
+						sessionId?: string;
+						forkedFromSessionId?: string;
+						conversationId?: string;
+					};
+					return status.status === "completed" ? status : undefined;
+				};
+				const payload = (await retryRecoverableFork(
+					forkRequest,
+					750,
+					reconcileFork,
+				)) as {
 					sessionId?: string;
 					forkedFromSessionId?: string;
 					conversationId?: string;

@@ -484,6 +484,7 @@ export class BrowserWebSocketHubAdapter {
 					version: "v1",
 					command: "client.unregister",
 					clientId,
+					payload: { transient: true },
 				});
 			}
 			registeredClientIds.clear();

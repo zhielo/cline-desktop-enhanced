@@ -34,6 +34,7 @@ export type ChatSessionCommandRequest = {
 		| "stop"
 		| "abort"
 		| "fork"
+		| "fork_status"
 		| "reset"
 		| "restore_checkpoint"
 		| "pending_prompts"

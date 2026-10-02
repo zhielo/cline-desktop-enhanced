@@ -1691,7 +1691,29 @@ export function useSessionHistory({
 							},
 						},
 					});
-				const payload = await retryRecoverableFork(invokeFork);
+				const reconcileFork = async () => {
+					const status = await desktopClient.invoke<{
+						status?: string;
+						sessionId?: string;
+						forkedFromSessionId?: string;
+					}>("chat_session_command", {
+						request: {
+							action: "fork_status",
+							sessionId: sourceSession.sessionId,
+							forkOperationId: operationId,
+							config: {
+								environmentId:
+									sourceSession.environmentId ?? LOCAL_WORKSPACE_ENVIRONMENT_ID,
+							},
+						},
+					});
+					return status.status === "completed" ? status : undefined;
+				};
+				const payload = await retryRecoverableFork(
+					invokeFork,
+					750,
+					reconcileFork,
+				);
 				const newSessionId = payload.sessionId?.trim();
 				if (!newSessionId) {
 					throw new Error("Fork did not return a new session id.");

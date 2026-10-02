@@ -72,6 +72,21 @@ describe("fork transport recovery", () => {
 		).toBe(true);
 	});
 
+	it("uses a reconciled result before replaying a lost fork response", async () => {
+		let attempts = 0;
+		const operation = async () => {
+			attempts += 1;
+			throw new Error(
+				"Hub connection closed (code=1006, reason=Connection ended)",
+			);
+		};
+		const result = await retryRecoverableFork(operation, 0, async () => ({
+			sessionId: "recovered-fork",
+		}));
+		expect(result).toEqual({ sessionId: "recovered-fork" });
+		expect(attempts).toBe(1);
+	});
+
 	it("retries one idempotent fork after a recoverable disconnect", async () => {
 		let attempts = 0;
 		const result = await retryRecoverableFork(async () => {

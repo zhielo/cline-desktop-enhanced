@@ -17,6 +17,9 @@ import {
 	requestToolApproval,
 } from "./handlers/approval-handlers";
 import {
+	markCapabilityOwnerDisconnected,
+} from "./handlers/capability-handlers";
+import {
 	ensureSessionParticipant,
 	ensureSessionState,
 	type HubTransportContext,
@@ -1231,6 +1234,88 @@ describe("HubServerTransport boundaries", () => {
 		});
 
 		await expect(answerPromise).resolves.toBe("Use hub");
+	});
+
+	it("leases and re-issues a capability request after a transient owner disconnect", async () => {
+		const transport = createTransport();
+		const ctx = getContext(transport);
+		const resolved = vi.fn();
+		const requestedEvent = ctx.buildEvent(
+			"capability.requested",
+			{
+				requestId: "capreq-reconnect",
+				targetClientId: "owner-client",
+				capabilityName: "tool_executor.askQuestion",
+				payload: { question: "Continue?" },
+			},
+			"session-1",
+		);
+		ctx.pendingCapabilityRequests.set("capreq-reconnect", {
+			sessionId: "session-1",
+			targetClientId: "owner-client",
+			capabilityName: "tool_executor.askQuestion",
+			requestedEvent,
+			resolve: resolved,
+		});
+
+		const unregisterReply = await transport.handleCommand({
+			version: "v1",
+			requestId: "req-transient-unregister",
+			command: "client.unregister",
+			clientId: "owner-client",
+			payload: { transient: true },
+		});
+		expect(unregisterReply.ok).toBe(true);
+		expect(resolved).not.toHaveBeenCalled();
+		expect(ctx.pendingCapabilityRequests.has("capreq-reconnect")).toBe(true);
+
+		const replayed: HubEventEnvelope[] = [];
+		transport.subscribe("owner-client", (event) => replayed.push(event));
+		await Promise.resolve();
+		expect(replayed).toContainEqual(requestedEvent);
+
+		await transport.handleCommand({
+			version: "v1",
+			requestId: "req-reconnected-response",
+			command: "capability.respond",
+			clientId: "owner-client",
+			sessionId: "session-1",
+			payload: {
+				requestId: "capreq-reconnect",
+				ok: true,
+				payload: { result: "continued" },
+			},
+		});
+		expect(resolved).toHaveBeenCalledWith({
+			ok: true,
+			payload: { result: "continued" },
+			error: undefined,
+		});
+	});
+
+	it("expires a disconnected capability owner lease", async () => {
+		vi.useFakeTimers();
+		try {
+			const transport = createTransport();
+			const ctx = getContext(transport);
+			const resolved = vi.fn();
+			ctx.pendingCapabilityRequests.set("capreq-expire", {
+				sessionId: "session-1",
+				targetClientId: "owner-client",
+				capabilityName: "tool_executor.askQuestion",
+				resolve: resolved,
+			});
+			markCapabilityOwnerDisconnected(ctx, "owner-client", 10);
+			await vi.advanceTimersByTimeAsync(10);
+			expect(ctx.pendingCapabilityRequests.has("capreq-expire")).toBe(false);
+			expect(resolved).toHaveBeenCalledWith({
+				ok: false,
+				error:
+					"Capability owner client owner-client did not reconnect within 10ms.",
+			});
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("rejects capability responses from non-owner clients", async () => {

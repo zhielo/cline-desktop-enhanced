@@ -44,6 +44,11 @@ export type PendingCapabilityRequest = {
 	targetClientId: string;
 	capabilityName: string;
 	onProgress?: (payload: Record<string, unknown>) => void;
+	/** Original event re-issued when the logical owner reconnects. */
+	requestedEvent?: HubEventEnvelope;
+	/** Grace-period timer for an unexpected transport disconnect. */
+	disconnectTimer?: ReturnType<typeof setTimeout>;
+	ownerDisconnectedAt?: number;
 	resolve: (result: {
 		ok: boolean;
 		payload?: Record<string, unknown>;
