@@ -11,7 +11,8 @@ import {
 	type LinkSafetyModalProps,
 	Streamdown,
 } from "streamdown";
-import { openExternalUrl } from "@/lib/desktop-client";
+import { toast } from "@/hooks/use-toast";
+import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
 import {
 	AlertDialog,
@@ -23,6 +24,66 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "./alert-dialog";
+
+const CLINE_FILE_ROUTE = "./__cline_file__";
+const INLINE_FILE_REFERENCE =
+	/(?<!\[)`((?:(?:\.{1,2}[\\/])|(?:[A-Za-z]:[\\/])|(?:[\w@.-]+[\\/]))[\w@ .()\-\\/]+\.(?:c|cc|cpp|cs|css|go|h|hpp|html|java|js|json|jsx|kt|kts|md|mjs|php|py|rb|rs|scss|sh|sql|swift|toml|ts|tsx|vue|xml|yaml|yml)(?::\d+(?::\d+)?)?)`/g;
+
+type WorkspaceFileReference = { path: string; line?: number; column?: number };
+
+function parseFileLocation(value: string): WorkspaceFileReference {
+	const match = value.match(/^(.*?):(\d+)(?::(\d+))?$/);
+	if (!match) return { path: value };
+	return {
+		path: match[1] ?? value,
+		line: Number(match[2]),
+		column: match[3] ? Number(match[3]) : undefined,
+	};
+}
+
+function fileReferenceHref(reference: WorkspaceFileReference): string {
+	const params = new URLSearchParams({ path: reference.path });
+	if (reference.line) params.set("line", String(reference.line));
+	if (reference.column) params.set("column", String(reference.column));
+	return `${CLINE_FILE_ROUTE}?${params.toString()}`;
+}
+
+export function linkifyWorkspaceFileReferences(content: string): string {
+	let fenced = false;
+	return content
+		.split("\n")
+		.map((line) => {
+			if (/^\s*(?:```|~~~)/.test(line)) {
+				fenced = !fenced;
+				return line;
+			}
+			if (fenced) return line;
+			return line.replace(INLINE_FILE_REFERENCE, (_match, value: string) => {
+				const reference = parseFileLocation(value);
+				return `[\`${value}\`](${fileReferenceHref(reference)})`;
+			});
+		})
+		.join("\n");
+}
+
+function parseClineFileHref(url: string): WorkspaceFileReference | null {
+	if (!url.includes("__cline_file__")) return null;
+	try {
+		const parsed = new URL(url, "https://cline.local/");
+		if (!parsed.pathname.endsWith("/__cline_file__")) return null;
+		const path = parsed.searchParams.get("path")?.trim();
+		if (!path) return null;
+		const line = Number(parsed.searchParams.get("line"));
+		const column = Number(parsed.searchParams.get("column"));
+		return {
+			path,
+			line: Number.isInteger(line) && line > 0 ? line : undefined,
+			column: Number.isInteger(column) && column > 0 ? column : undefined,
+		};
+	} catch {
+		return null;
+	}
+}
 
 const streamdownPlugins = { cjk, code: markdownCodeHighlighter };
 
@@ -159,6 +220,42 @@ function SafeMarkdownLink({
 			>
 				{children}
 			</span>
+		);
+	}
+
+	const fileReference = parseClineFileHref(url);
+	if (fileReference) {
+		const openFile = (event: MouseEvent<HTMLAnchorElement>) => {
+			event.preventDefault();
+			void desktopClient
+				.invoke("open_file_in_editor", {
+					path: fileReference.path,
+					...(fileReference.line ? { line: fileReference.line } : {}),
+					...(fileReference.column ? { column: fileReference.column } : {}),
+				})
+				.catch((error) => {
+					toast({
+						variant: "destructive",
+						title: "Could not open file",
+						description:
+							error instanceof Error
+								? error.message
+								: "The file could not be opened.",
+					});
+				});
+		};
+		return (
+			<a
+				{...props}
+				className={`inline-flex cursor-pointer items-center rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.92em] text-primary no-underline hover:bg-primary/10 ${className ?? ""}`}
+				data-cline-file-reference={fileReference.path}
+				data-streamdown="link"
+				href={url}
+				onClick={openFile}
+				title={`Open ${fileReference.path}${fileReference.line ? `:${fileReference.line}` : ""}`}
+			>
+				{children}
+			</a>
 		);
 	}
 
@@ -315,7 +412,7 @@ export const MemoizedMarkdown = memo(
 			parseIncompleteMarkdown={streaming}
 			plugins={streamdownPlugins}
 		>
-			{content}
+			{linkifyWorkspaceFileReferences(content)}
 		</Streamdown>
 	),
 );

@@ -2540,6 +2540,10 @@ function ChatThreadPane({
 							/>
 						) : (
 							<ChatMessages
+								cwd={config.cwd || config.workspaceRoot}
+								environmentId={environmentId}
+								fileDiffs={fileDiffs}
+								onOpenDiff={hasDiffChanges ? handleOpenDiff : undefined}
 								onAnswerAskQuestion={handleAnswerAskQuestion}
 								onApproveToolApproval={handleApproveToolApproval}
 								onRejectToolApproval={handleRejectToolApproval}

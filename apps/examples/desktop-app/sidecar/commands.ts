@@ -2137,8 +2137,32 @@ async function listAvailableCodeEditors(): Promise<
 	return editors;
 }
 
-/** Launches `executable filePath` detached; false if the CLI is unusable. */
-function launchEditorCli(executable: string, filePath: string): boolean {
+function editorCliArgs(
+	editorId: string,
+	filePath: string,
+	line?: number,
+	column?: number,
+): string[] {
+	if (!line) return [filePath];
+	const location = `${filePath}:${line}:${column ?? 1}`;
+	if (["vscode", "cursor", "windsurf", "vscode-insiders"].includes(editorId)) {
+		return ["--goto", location];
+	}
+	if (["zed", "sublime"].includes(editorId)) return [location];
+	if (["intellijidea", "xcode"].includes(editorId)) {
+		return ["--line", String(line), filePath];
+	}
+	return [filePath];
+}
+
+/** Launches an editor at a file and optional source position. */
+function launchEditorCli(
+	executable: string,
+	editorId: string,
+	filePath: string,
+	line?: number,
+	column?: number,
+): boolean {
 	// Windows `where` resolves editor CLIs to .cmd/.bat shims, which
 	// spawn() cannot launch directly — route those through cmd.exe.
 	const isWindowsShim =
@@ -2146,12 +2170,13 @@ function launchEditorCli(executable: string, filePath: string): boolean {
 	if (isWindowsShim && WINDOWS_CMD_UNSAFE_PATTERN.test(executable)) {
 		return false;
 	}
+	const args = editorCliArgs(editorId, filePath, line, column);
 	const child = isWindowsShim
-		? spawn("cmd", ["/c", executable, filePath], {
+		? spawn("cmd", ["/c", executable, ...args], {
 				stdio: "ignore",
 				detached: true,
 			})
-		: spawn(executable, [filePath], {
+		: spawn(executable, args, {
 				stdio: "ignore",
 				detached: true,
 			});
@@ -2178,6 +2203,8 @@ async function launchMacApp(app: string, filePath: string): Promise<boolean> {
 async function openFileInCodeEditor(
 	filePath: string,
 	editorId?: string,
+	line?: number,
+	column?: number,
 ): Promise<string> {
 	if (
 		process.platform === "win32" &&
@@ -2193,7 +2220,10 @@ async function openFileInCodeEditor(
 			throw new Error(`Unknown editor: ${editorId}`);
 		}
 		const executable = await findExecutableOnPath(editor.cli);
-		if (executable && launchEditorCli(executable, filePath)) {
+		if (
+			executable &&
+			launchEditorCli(executable, editor.id, filePath, line, column)
+		) {
 			return editor.label;
 		}
 		if (process.platform === "darwin") {
@@ -2208,7 +2238,10 @@ async function openFileInCodeEditor(
 	if (!editorId) {
 		for (const editor of CODE_EDITOR_CATALOG) {
 			const executable = await findExecutableOnPath(editor.cli);
-			if (executable && launchEditorCli(executable, filePath)) {
+			if (
+				executable &&
+				launchEditorCli(executable, editor.id, filePath, line, column)
+			) {
 				return editor.cli;
 			}
 		}
@@ -4214,8 +4247,23 @@ export async function handleCommand(
 			typeof args?.editor === "string" && args.editor.trim()
 				? args.editor.trim()
 				: undefined;
-		const editor = await openFileInCodeEditor(filePath, requestedEditor);
-		return { path: filePath, editor };
+		const requestedLine = Number(args?.line);
+		const requestedColumn = Number(args?.column);
+		const line =
+			Number.isInteger(requestedLine) && requestedLine > 0
+				? requestedLine
+				: undefined;
+		const column =
+			Number.isInteger(requestedColumn) && requestedColumn > 0
+				? requestedColumn
+				: undefined;
+		const editor = await openFileInCodeEditor(
+			filePath,
+			requestedEditor,
+			line,
+			column,
+		);
+		return { path: filePath, editor, line, column };
 	}
 
 	throw new Error(`unsupported desktop command: ${command}`);

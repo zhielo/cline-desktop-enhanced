@@ -18,12 +18,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ChatSessionStatus } from "@/lib/chat-schema";
-import type {
+import {
 	formatTaskReportText,
-	SessionTaskReport,
-	TaskEvidenceStatus,
-	TaskReportStep,
-	TaskReportStepStatus,
+	type SessionTaskReport,
+	type TaskEvidenceStatus,
+	type TaskReportStep,
+	type TaskReportStepStatus,
 } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
 
@@ -197,7 +197,7 @@ export function TaskReportPanel({
 		<section
 			aria-label="AI task report"
 			className={cn(
-				"sticky top-2 z-20 overflow-hidden rounded-2xl border bg-background/95 shadow-[0_14px_38px_-24px_rgba(15,23,42,0.55)] backdrop-blur-xl",
+				"sticky top-11 z-20 overflow-hidden rounded-xl border bg-background/95 shadow-sm backdrop-blur-xl",
 				state.tone === "active" && "border-blue-500/30",
 				state.tone === "success" && "border-emerald-500/30",
 				state.tone === "warning" && "border-amber-500/35",
