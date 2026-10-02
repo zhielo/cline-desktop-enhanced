@@ -17,6 +17,7 @@ import {
 	type ArtifactReference,
 	isArtifactReference,
 	isCodeArtifactPath,
+	isInlinePreviewArtifactPath,
 	parseArtifactReference,
 } from "@/lib/artifact-paths";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
@@ -254,6 +255,9 @@ function SafeMarkdownLink({
 
 	const fileReference = parseClineFileHref(url);
 	if (fileReference) {
+		const previewsInApp =
+			!isCodeArtifactPath(fileReference.path) &&
+			isInlinePreviewArtifactPath(fileReference.path);
 		const openFile = () => {
 			const openInEditor = isCodeArtifactPath(fileReference.path);
 			void desktopClient
@@ -278,7 +282,11 @@ function SafeMarkdownLink({
 				});
 		};
 		return (
-			<ArtifactContextMenu onOpen={openFile} path={fileReference.path}>
+			<ArtifactContextMenu
+				onOpen={openFile}
+				path={fileReference.path}
+				primaryAction={previewsInApp ? "preview" : "open"}
+			>
 				<a
 					{...props}
 					className={

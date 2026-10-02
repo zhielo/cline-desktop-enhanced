@@ -251,6 +251,44 @@ describe("MemoizedMarkdown interactions", () => {
 		});
 	});
 
+	test("previews readable Markdown artifacts in-app instead of navigating to the internal route", async () => {
+		const invoke = vi.spyOn(desktopClient, "invoke").mockResolvedValue({
+			path: "C:\\Users\\Pzhielo\\work\\PATCH_REPORT.md",
+			name: "PATCH_REPORT.md",
+			size: 24,
+			modifiedAt: "2026-10-02T10:00:00.000Z",
+			kind: "text",
+			mime: "text/plain",
+			content: "# Patch report\n\nVerified.",
+		});
+		await renderMarkdown({
+			content: "Report: `C:\\Users\\Pzhielo\\work\\PATCH_REPORT.md`",
+		});
+		const artifact = await vi.waitFor(() => {
+			const rendered = [
+				...container.querySelectorAll<HTMLAnchorElement>(
+					"[data-cline-file-reference]",
+				),
+			].find(
+				(candidate) =>
+					candidate.getAttribute("data-cline-file-reference") ===
+					"C:\\Users\\Pzhielo\\work\\PATCH_REPORT.md",
+			);
+			expect(rendered).not.toBeNull();
+			return rendered as HTMLAnchorElement;
+		});
+
+		await click(artifact);
+
+		expect(invoke).toHaveBeenCalledWith("read_artifact_preview", {
+			path: "C:\\Users\\Pzhielo\\work\\PATCH_REPORT.md",
+		});
+		expect(invoke).not.toHaveBeenCalledWith("open_artifact", expect.anything());
+		await vi.waitFor(() => {
+			expect(document.body.textContent).toContain("Verified.");
+		});
+	});
+
 	test("does not link file-looking text inside fenced code", async () => {
 		await renderMarkdown({ content: "```text\n`src/app.ts:42`\n```" });
 		expect(container.querySelector("[data-cline-file-reference]")).toBeNull();

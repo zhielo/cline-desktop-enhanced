@@ -1,5 +1,10 @@
 # Cline Desktop Changelog
 
+## 0.0.36
+
+- Readable artifacts such as Markdown, text, JSON, images, and PDFs now open in the in-app preview instead of navigating the WebView to the internal `__cline_file__` route. The context menu retains a separate **Open with default app** action
+- **Show in folder** now waits for a verified shell launch and uses Explorer's canonical `/select,"<file>"` command line so Windows opens File Explorer with the exact artifact selected. Launch failures now reach the UI instead of being reported as successful
+
 ## 0.0.35
 
 - Added a unified execution and analysis workspace with resumable PTY/ConPTY terminal tabs, process controls, static IDA/Ghidra/JADX operations, supervised GDB/LLDB/CDB actions, live tool health, structured evidence output, and permanent header access. Host terminal and debugger execution remain explicitly confirmed and are never presented as an operating-system sandbox
