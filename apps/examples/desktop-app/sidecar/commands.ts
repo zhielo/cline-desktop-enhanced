@@ -41,6 +41,8 @@ import {
 	type ClineAccountUser,
 	clearAccountTelemetryIdentity,
 	createConfiguredStreamingTranscriptionSession,
+	createLiveDebuggerExecutor,
+	createReverseEngineeringExecutor,
 	createUserInstructionConfigService,
 	ensureCustomProvidersLoaded,
 	executeClineAccountAction,
@@ -50,14 +52,17 @@ import {
 	getPowerShellWorkerBaselineDecision,
 	getProviderAuthHandler,
 	identifyAccount,
+	LiveDebuggerInputSchema,
 	listHookConfigFiles,
 	listLocalProviders,
 	normalizeOAuthProvider,
+	ProcessSessionManager,
 	ProviderSettingsManager,
 	parseMcpServerRegistration,
 	persistClineAccountTelemetryIdentity,
 	probeMcpServerConnection,
 	RemoteEnvironmentService,
+	ReverseEngineeringInputSchema,
 	readCommandLatencyBaseline,
 	readGlobalSettings,
 	resolveClineAccountTelemetryIdentity,
@@ -2540,6 +2545,57 @@ function openWorkspaceTerminal(directory: string): string {
 	return directory;
 }
 
+const desktopWorkspaceProcessManager = new ProcessSessionManager({
+	recoveryFilePath: join(
+		resolveClineDir(),
+		"process-sessions",
+		"desktop-workspace.json",
+	),
+});
+const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor();
+const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
+
+function workspaceProcessOwner(baseDir: string): string {
+	const normalized = resolve(baseDir);
+	return `desktop-workspace:${process.platform === "win32" ? normalized.toLowerCase() : normalized}`;
+}
+
+function desktopToolContext(ownerSessionId: string) {
+	return {
+		sessionId: ownerSessionId,
+		agentId: "desktop-workbench",
+		conversationId: ownerSessionId,
+		iteration: 0,
+		toolCallId: randomUUID(),
+	};
+}
+
+function workspaceShellProfile(profileValue: unknown): {
+	executable: string;
+	args: string[];
+	label: string;
+} {
+	const profile = String(profileValue ?? "default").toLowerCase();
+	if (process.platform === "win32") {
+		if (profile === "cmd")
+			return { executable: "cmd.exe", args: [], label: "Command Prompt" };
+		if (profile === "wsl")
+			return { executable: "wsl.exe", args: [], label: "WSL" };
+		return {
+			executable: "powershell.exe",
+			args: ["-NoLogo", "-NoExit"],
+			label: "PowerShell",
+		};
+	}
+	if (profile === "zsh")
+		return { executable: "zsh", args: ["-l"], label: "zsh" };
+	return {
+		executable: process.env.SHELL || "bash",
+		args: ["-l"],
+		label: basename(process.env.SHELL || "bash"),
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Main command router
 // ---------------------------------------------------------------------------
@@ -4653,6 +4709,188 @@ export async function handleCommand(
 			throw new Error(`Workspace directory not found: ${baseDir}`);
 		}
 		return { directory: openWorkspaceTerminal(baseDir) };
+	}
+	if (
+		command === "workspace_terminal_start" ||
+		command === "workspace_terminal_list" ||
+		command === "workspace_terminal_read" ||
+		command === "workspace_terminal_write" ||
+		command === "workspace_terminal_resize" ||
+		command === "workspace_terminal_signal" ||
+		command === "workspace_terminal_close"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("The integrated terminal is local-only in this build.");
+		}
+		const baseDir = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		const owner = workspaceProcessOwner(baseDir);
+		await desktopWorkspaceProcessManager.initializeRecovery();
+		if (command === "workspace_terminal_start") {
+			if (args?.confirmFullAccess !== true) {
+				throw new Error(
+					"Starting a host terminal requires explicit Full Access confirmation.",
+				);
+			}
+			const profile = workspaceShellProfile(args?.profile);
+			const session = await desktopWorkspaceProcessManager.start({
+				ownerSessionId: owner,
+				executable: profile.executable,
+				args: profile.args,
+				cwd: baseDir,
+				interactive: true,
+				columns: Number(args?.columns ?? 100),
+				rows: Number(args?.rows ?? 30),
+			});
+			return { ...session, label: profile.label };
+		}
+		if (command === "workspace_terminal_list") {
+			return desktopWorkspaceProcessManager.list(owner);
+		}
+		const processId = String(args?.processId ?? "").trim();
+		if (!processId) throw new Error("processId is required");
+		if (command === "workspace_terminal_read") {
+			return desktopWorkspaceProcessManager.read(
+				owner,
+				processId,
+				Number(args?.cursor ?? 0),
+			);
+		}
+		if (command === "workspace_terminal_write") {
+			const input = String(args?.input ?? "");
+			await desktopWorkspaceProcessManager.writeStdin(owner, processId, input);
+			return desktopWorkspaceProcessManager.get(owner, processId);
+		}
+		if (command === "workspace_terminal_resize") {
+			return desktopWorkspaceProcessManager.resize(
+				owner,
+				processId,
+				Number(args?.columns ?? 100),
+				Number(args?.rows ?? 30),
+			);
+		}
+		if (command === "workspace_terminal_signal") {
+			const signal = String(args?.signal ?? "");
+			if (!["interrupt", "terminate", "kill"].includes(signal)) {
+				throw new Error("signal must be interrupt, terminate, or kill");
+			}
+			await desktopWorkspaceProcessManager.signal(
+				owner,
+				processId,
+				signal as "interrupt" | "terminate" | "kill",
+			);
+			return desktopWorkspaceProcessManager.get(owner, processId);
+		}
+		return {
+			closed: desktopWorkspaceProcessManager.close(owner, processId),
+			processId,
+		};
+	}
+	if (
+		command === "discover_analysis_tools" ||
+		command === "run_static_analysis" ||
+		command === "open_analysis_gui" ||
+		command === "run_debugger_action"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("The analysis workbench is local-only in this build.");
+		}
+		const baseDir = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		const owner = workspaceProcessOwner(baseDir);
+		const toolContext = desktopToolContext(owner);
+		if (command === "discover_analysis_tools") {
+			const [reverseEngineering, debuggerTools] = await Promise.all([
+				desktopReverseEngineeringExecutor(
+					ReverseEngineeringInputSchema.parse({
+						engine: "auto",
+						operation: "discover",
+					}),
+					toolContext,
+				),
+				desktopLiveDebuggerExecutor(
+					LiveDebuggerInputSchema.parse({
+						debugger: "auto",
+						operation: "discover",
+					}),
+					toolContext,
+				),
+			]);
+			return {
+				reverseEngineering: JSON.parse(reverseEngineering),
+				debugger: JSON.parse(debuggerTools),
+			};
+		}
+		if (command === "run_debugger_action") {
+			if (args?.confirmAuthorized !== true) {
+				throw new Error(
+					"Debugger actions require confirmation that the target is authorized.",
+				);
+			}
+			const input = LiveDebuggerInputSchema.parse(args?.input);
+			return {
+				kind: "debugger",
+				result: JSON.parse(
+					await desktopLiveDebuggerExecutor(input, toolContext),
+				),
+			};
+		}
+		const rawInput = {
+			...(typeof args?.input === "object" && args.input ? args.input : {}),
+		} as Record<string, unknown>;
+		for (const key of [
+			"target",
+			"compare_target",
+			"script_path",
+			"output_directory",
+			"output_file",
+			"report_output_file",
+		]) {
+			const value = rawInput[key];
+			if (typeof value === "string" && value.trim() && !isAbsolute(value)) {
+				rawInput[key] = resolve(baseDir, value);
+			}
+		}
+		if (command === "open_analysis_gui") {
+			if (args?.confirmLaunch !== true) {
+				throw new Error(
+					"Opening an external analysis GUI requires confirmation.",
+				);
+			}
+			rawInput.operation = "open_gui";
+		} else {
+			const operation = String(rawInput.operation ?? "");
+			if (
+				![
+					"inspect",
+					"forensic_report",
+					"apk_security_report",
+					"compare_apks",
+					"verify_apk_signature",
+					"scan_strings",
+					"analyze",
+					"decompile",
+					"disassemble_smali",
+				].includes(operation)
+			) {
+				throw new Error(
+					"This workbench action is not part of the static-analysis allowlist.",
+				);
+			}
+		}
+		const input = ReverseEngineeringInputSchema.parse(rawInput);
+		const result = await desktopReverseEngineeringExecutor(input, toolContext);
+		try {
+			return { kind: "reverse-engineering", result: JSON.parse(result) };
+		} catch {
+			return { kind: "reverse-engineering", result };
+		}
 	}
 
 	throw new Error(`unsupported desktop command: ${command}`);

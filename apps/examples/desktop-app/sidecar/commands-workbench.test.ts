@@ -1,0 +1,59 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { handleCommand } from "./commands";
+import type { SidecarContext } from "./types";
+
+let workspace: string;
+let context: SidecarContext;
+
+beforeEach(() => {
+	workspace = mkdtempSync(join(tmpdir(), "cline-workbench-"));
+	context = {
+		activeEnvironmentId: "local",
+		localWorkspaceRoot: workspace,
+		liveSessions: new Map(),
+		sessionEnvironmentIds: new Map(),
+		runtimeBindings: new Map([
+			[
+				"local",
+				{
+					kind: "local",
+					environmentId: "local",
+					workspaceRoot: workspace,
+					hubClient: { getUrl: () => null, isConnected: () => false },
+					sessionManager: {},
+				},
+			],
+		]),
+	} as unknown as SidecarContext;
+});
+
+afterEach(() => rmSync(workspace, { recursive: true, force: true }));
+
+describe("desktop execution workbench boundaries", () => {
+	it("requires explicit Full Access confirmation before starting a host terminal", async () => {
+		await expect(
+			handleCommand(context, "workspace_terminal_start", { cwd: workspace }),
+		).rejects.toThrow("explicit Full Access confirmation");
+	});
+
+	it("rejects non-static reverse-engineering operations from the workbench", async () => {
+		await expect(
+			handleCommand(context, "run_static_analysis", {
+				cwd: workspace,
+				input: { operation: "script", engine: "auto", target: "sample.exe" },
+			}),
+		).rejects.toThrow("not part of the static-analysis allowlist");
+	});
+
+	it("requires authorization before any debugger action", async () => {
+		await expect(
+			handleCommand(context, "run_debugger_action", {
+				cwd: workspace,
+				input: { operation: "attach_snapshot", debugger: "auto", pid: 42 },
+			}),
+		).rejects.toThrow("target is authorized");
+	});
+});

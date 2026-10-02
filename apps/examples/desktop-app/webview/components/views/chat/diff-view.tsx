@@ -41,8 +41,10 @@ import { desktopClient } from "@/lib/desktop-client";
 import type { SessionDiffHunk, SessionFileDiff } from "@/lib/session-diff";
 import { cn } from "@/lib/utils";
 import { resolveWorkspaceFilePath } from "@/lib/workspace-paths";
+import { AnalysisWorkbench } from "./analysis-workbench";
 import { ArtifactContextMenu } from "./artifact-context-menu";
 import { EditorIcon } from "./editor-icons";
+import { WorkspaceTerminal } from "./workspace-terminal";
 
 type DiffViewProps = {
 	environmentId: string;
@@ -68,7 +70,9 @@ export function DiffView({
 	const [hiddenPaths, setHiddenPaths] = useState<Set<string>>(new Set());
 	const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
 	const [pendingRevert, setPendingRevert] = useState<string[] | null>(null);
-	const [activeTab, setActiveTab] = useState<"changes" | "files">("changes");
+	const [activeTab, setActiveTab] = useState<
+		"changes" | "files" | "terminal" | "analysis"
+	>("changes");
 	const [fileQuery, setFileQuery] = useState("");
 	const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
 	const [filesLoading, setFilesLoading] = useState(false);
@@ -211,21 +215,23 @@ export function DiffView({
 		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-3 py-1.5">
 				<div className="flex items-center gap-1">
-					{(["changes", "files"] as const).map((tab) => (
-						<button
-							className={cn(
-								"rounded-md px-2.5 py-1 text-xs capitalize",
-								activeTab === tab
-									? "bg-secondary text-foreground"
-									: "text-muted-foreground hover:text-foreground",
-							)}
-							key={tab}
-							onClick={() => setActiveTab(tab)}
-							type="button"
-						>
-							{tab}
-						</button>
-					))}
+					{(["changes", "files", "terminal", "analysis"] as const).map(
+						(tab) => (
+							<button
+								className={cn(
+									"rounded-md px-2.5 py-1 text-xs capitalize",
+									activeTab === tab
+										? "bg-secondary text-foreground"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+								key={tab}
+								onClick={() => setActiveTab(tab)}
+								type="button"
+							>
+								{tab}
+							</button>
+						),
+					)}
 					{activeTab === "changes" && (
 						<span className="ml-1 rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
 							Files: {reviewFiles.length}
@@ -343,7 +349,7 @@ export function DiffView({
 						)}
 					</ScrollArea>
 				</>
-			) : (
+			) : activeTab === "files" ? (
 				<>
 					<div className="relative shrink-0 border-b border-border p-3">
 						<Search className="absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -391,6 +397,10 @@ export function DiffView({
 						</div>
 					</ScrollArea>
 				</>
+			) : activeTab === "terminal" ? (
+				<WorkspaceTerminal cwd={cwd} environmentId={environmentId} />
+			) : (
+				<AnalysisWorkbench cwd={cwd} environmentId={environmentId} />
 			)}
 
 			<AlertDialog

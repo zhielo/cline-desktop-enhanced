@@ -97,6 +97,13 @@ Primary files:
 - `apps/examples/desktop-app/webview/components/views/onboarding/onboarding-view.test.tsx`
 - `.github/workflows/build-custom-windows-installer.yml`
 
+### Desktop execution and analysis workbench
+
+- The chat header opens a unified Workspace with Changes, Files, Terminal, and Analysis tabs.
+- Integrated terminals reuse `ProcessSessionManager` rather than spawning an unrelated shell path. Starting one requires an explicit host Full Access confirmation; output stays bounded and secret-redacted, and active processes retain stable IDs and conservative recovery.
+- The Analysis tab exposes a static-operation allowlist for IDA/Ghidra/JADX workflows, live tool/version discovery, evidence output, verified GUI handoff, and separately confirmed one-shot GDB/LLDB/CDB actions. Arbitrary analysis scripts and unconfirmed execution-control operations are blocked.
+- These controls remain capability boundaries, not native Windows containment. Unknown executables require an externally provisioned disposable VM; see `docs/EXECUTION_WORKBENCH.md`.
+
 ### Command execution performance
 
 - Command execution favors structured direct argv calls when shell syntax is unnecessary, immediately emits the first output chunk, records duration, time-to-first-output, and output-volume telemetry without command text, and sends the command preview only once instead of repeating it on every progress event. The implemented behavior contract is recorded in `docs/CODEX_LIKE_COMMAND_EXECUTION.md`.

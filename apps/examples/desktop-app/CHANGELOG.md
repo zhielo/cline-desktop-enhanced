@@ -1,5 +1,9 @@
 # Cline Desktop Changelog
 
+## 0.0.35
+
+- Added a unified execution and analysis workspace with resumable PTY/ConPTY terminal tabs, process controls, static IDA/Ghidra/JADX operations, supervised GDB/LLDB/CDB actions, live tool health, structured evidence output, and permanent header access. Host terminal and debugger execution remain explicitly confirmed and are never presented as an operating-system sandbox
+
 ## 0.0.34
 
 - Codex-style artifacts and permissions are now functional rather than decorative. Full Access is a real composer menu with Read only, Workspace, Workspace + network, and Full access profiles; the selection is saved and applies to the next run. Assistant paths for code, APK/APKS, archives, documents, spreadsheets, presentations, images, and installers become clickable artifacts, code opens at its exact line and column, non-code files open with the Windows handler, and the completion summary counts and lists generated artifacts alongside changed files

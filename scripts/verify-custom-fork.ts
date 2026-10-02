@@ -586,6 +586,33 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "docs/EXECUTION_WORKBENCH.md",
+		markers: [
+			"Desktop execution and analysis workbench",
+			"not an operating-system sandbox",
+			"strict subset",
+			"owned or authorized",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/workspace-terminal.tsx",
+		markers: [
+			"workspace_terminal_start",
+			"confirmFullAccess",
+			"workspace_terminal_signal",
+			"secret-redacted output",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/analysis-workbench.tsx",
+		markers: [
+			"discover_analysis_tools",
+			"run_static_analysis",
+			"run_debugger_action",
+			"confirmAuthorized",
+		],
+	},
+	{
 		path: "docs/CODEX_PARITY_ROADMAP.md",
 		markers: [
 			"Resumable process sessions",
