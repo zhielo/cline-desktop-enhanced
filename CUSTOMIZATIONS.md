@@ -33,7 +33,8 @@ Primary files:
 
 - The composer permissions control is interactive in every local chat. It can switch the next run between Read only, Workspace, Workspace + network, and Full access, persists the selected default, and restores the previous value if saving fails.
 - Assistant output recognizes code and non-code artifact paths. Code references can include `:line:column` and open at that exact editor location; generated APK/APKS, archives, documents, spreadsheets, presentations, images, installers, and other non-code files open through the operating system's registered handler.
-- Right-clicking an inline artifact or completion-summary artifact opens a native context menu with Open artifact, Show in folder, and Copy path. Show in folder selects the exact file in Windows Explorer, reveals it in Finder on macOS, and opens its containing directory on Linux.
+- Right-clicking an inline artifact, workspace file, or completion-summary artifact opens a native context menu with Preview, Open artifact, Show in folder, and Copy path. Text, image, and PDF previews stay inside the app; Show in folder selects the exact file in Windows Explorer, reveals it in Finder on macOS, and opens its containing directory on Linux.
+- The review surface has Last turn, Unstaged, and Staged scopes; per-file and bulk stage/unstage actions; confirmation-gated revert actions; searchable workspace files; direct editor opening; and an Open terminal here shortcut.
 - A single artifact path in a fenced Markdown block renders as an actionable artifact card instead of a passive copy-only code block.
 - Finished sessions combine declared task artifacts, artifact paths found in assistant output, and changed Git files into one completion summary. Artifact rows open the exact file, while changed-code rows retain direct editor and review-pane actions.
 - Remote artifacts remain blocked from local opening until an explicit remote download/preview boundary exists.
