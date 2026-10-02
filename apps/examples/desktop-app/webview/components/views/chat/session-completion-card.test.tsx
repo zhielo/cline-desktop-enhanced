@@ -44,7 +44,7 @@ describe("SessionCompletionCard", () => {
 		await act(async () => {
 			root.render(
 				<SessionCompletionCard
-					cwd="C:\\work\\project"
+					cwd={"C:\\work\\project"}
 					environmentId="local"
 					fileDiffs={[
 						{ path: "src/app.ts", additions: 12, deletions: 3, hunks: [] },
