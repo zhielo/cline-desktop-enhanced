@@ -48,10 +48,10 @@ const requiredMarkers: Array<{
 	{
 		path: ".github/workflows/build-custom-windows-installer.yml",
 		markers: [
-			"Build unsigned custom Windows installer",
+			"Build custom Windows installer",
 			"Verify custom fork preservation",
 			"Get-AuthenticodeSignature",
-			"Upload unsigned setup.exe",
+			"Upload verified setup.exe",
 			"CUSTOMIZATIONS.md",
 			"BUILD-INFO.txt",
 			"CLINE_TEST_SIDECAR_BIN",
@@ -63,7 +63,8 @@ const requiredMarkers: Array<{
 			"permission-profile.test.ts",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
-			'bun-version: "1.3.14"',
+			'BUN_VERSION: "1.3.13"',
+			"bun-version: ${{ env.BUN_VERSION }}",
 		],
 	},
 	{
