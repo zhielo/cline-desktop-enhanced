@@ -3,8 +3,6 @@ name: Build custom Windows installer
 on:
   workflow_dispatch:
   push:
-    branches:
-      - "ui/codex-desktop-workspace"
     tags:
       - "desktop-v*"
 
