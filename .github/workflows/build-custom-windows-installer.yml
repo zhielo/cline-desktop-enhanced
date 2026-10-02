@@ -3,6 +3,8 @@ name: Build custom Windows installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "ui/codex-desktop-workspace"
     tags:
       - "desktop-v*"
 
@@ -144,13 +146,21 @@ jobs:
         working-directory: apps/examples/desktop-app
         run: bun x vitest run webview/lib/task-report.test.ts --config vitest.config.mts
 
-      - name: Run focused customization tests
+      - name: Test desktop chat UI
+        working-directory: apps/examples/desktop-app
+        run: bun run test:chat-ui
+
+      - name: Run desktop customization tests
         shell: bash
         run: |
           bunx vitest run \
             apps/examples/desktop-app/sidecar/browser-manager.test.ts \
             apps/examples/desktop-app/sidecar/repository-tool.test.ts \
             --config apps/examples/desktop-app/vitest.config.mts
+
+      - name: Run SDK customization tests
+        shell: bash
+        run: |
           bunx vitest run \
             sdk/packages/core/src/extensions/tools/executors/android-device.test.ts \
             sdk/packages/core/src/extensions/tools/executors/live-debugger.test.ts \
@@ -160,6 +170,10 @@ jobs:
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             sdk/packages/core/src/extensions/tools/runtime.test.ts \
             --config vitest.config.mts
+
+      - name: Run process-session terminal smoke test
+        shell: bash
+        run: |
           bun build sdk/packages/core/scripts/process-session-terminal-smoke.ts \
             --compile \
             --outfile "$RUNNER_TEMP/process-session-terminal-smoke.exe"
