@@ -103,5 +103,27 @@ describe("SessionCompletionCard", () => {
 			path: "dist/release.apk",
 			cwd: "C:\\work\\project",
 		});
+		await act(async () => {
+			artifactButton?.dispatchEvent(
+				new MouseEvent("contextmenu", {
+					bubbles: true,
+					button: 2,
+					cancelable: true,
+				}),
+			);
+		});
+		const revealItem = await vi.waitFor(() => {
+			const item = [
+				...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+			].find((candidate) => candidate.textContent?.includes("Show in folder"));
+			expect(item).toBeDefined();
+			return item as HTMLElement;
+		});
+		await act(async () => revealItem.click());
+		expect(invoke).toHaveBeenCalledWith("reveal_artifact_in_folder", {
+			environmentId: "local",
+			path: "dist/release.apk",
+			cwd: "C:\\work\\project",
+		});
 	});
 });

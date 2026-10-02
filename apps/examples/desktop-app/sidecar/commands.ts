@@ -2285,6 +2285,41 @@ function openArtifactWithSystem(filePath: string): string {
 	return "system default";
 }
 
+function revealArtifactInFolder(filePath: string): string {
+	if (
+		process.platform === "win32" &&
+		WINDOWS_CMD_UNSAFE_PATTERN.test(filePath)
+	) {
+		throw new Error(
+			"File path contains characters that cannot be passed safely to the Windows shell",
+		);
+	}
+	const directory = statSync(filePath).isDirectory()
+		? filePath
+		: dirname(filePath);
+	const child =
+		process.platform === "darwin"
+			? spawn("open", ["-R", filePath], { stdio: "ignore", detached: true })
+			: process.platform === "win32"
+				? spawn(
+						"explorer.exe",
+						statSync(filePath).isDirectory()
+							? [filePath]
+							: ["/select,", filePath],
+						{
+							stdio: "ignore",
+							detached: true,
+							windowsHide: true,
+						},
+					)
+				: spawn("xdg-open", [directory], {
+						stdio: "ignore",
+						detached: true,
+					});
+	child.unref();
+	return directory;
+}
+
 // ---------------------------------------------------------------------------
 // Main command router
 // ---------------------------------------------------------------------------
@@ -4308,6 +4343,24 @@ export async function handleCommand(
 			throw new Error(`Artifact not found: ${filePath}`);
 		}
 		return { path: filePath, opener: openArtifactWithSystem(filePath) };
+	}
+	if (command === "reveal_artifact_in_folder") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Revealing remote artifacts on the local desktop is not available yet.",
+			);
+		}
+		const rawPath = String(args?.path ?? "").trim();
+		if (!rawPath) throw new Error("path is required");
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const filePath = isAbsolute(rawPath) ? rawPath : join(baseDir, rawPath);
+		if (!existsSync(filePath)) {
+			throw new Error(`Artifact not found: ${filePath}`);
+		}
+		return { path: filePath, directory: revealArtifactInFolder(filePath) };
 	}
 
 	throw new Error(`unsupported desktop command: ${command}`);

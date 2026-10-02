@@ -21,6 +21,7 @@ import {
 } from "@/lib/artifact-paths";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
+import { ArtifactContextMenu } from "../views/chat/artifact-context-menu";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -253,8 +254,7 @@ function SafeMarkdownLink({
 
 	const fileReference = parseClineFileHref(url);
 	if (fileReference) {
-		const openFile = (event: MouseEvent<HTMLAnchorElement>) => {
-			event.preventDefault();
+		const openFile = () => {
 			const openInEditor = isCodeArtifactPath(fileReference.path);
 			void desktopClient
 				.invoke(openInEditor ? "open_file_in_editor" : "open_artifact", {
@@ -278,22 +278,27 @@ function SafeMarkdownLink({
 				});
 		};
 		return (
-			<a
-				{...props}
-				className={
-					fileReference.artifact
-						? `my-2 flex w-full cursor-pointer items-center rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 font-mono text-xs text-foreground no-underline transition-colors hover:bg-muted/55 ${className ?? ""}`
-						: `inline-flex cursor-pointer items-center rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.92em] text-primary no-underline hover:bg-primary/10 ${className ?? ""}`
-				}
-				data-cline-file-reference={fileReference.path}
-				data-cline-artifact={fileReference.artifact ? "true" : undefined}
-				data-streamdown="link"
-				href={url}
-				onClick={openFile}
-				title={`Open ${fileReference.path}${fileReference.line ? `:${fileReference.line}` : ""}`}
-			>
-				{children}
-			</a>
+			<ArtifactContextMenu onOpen={openFile} path={fileReference.path}>
+				<a
+					{...props}
+					className={
+						fileReference.artifact
+							? `my-2 flex w-full cursor-pointer items-center rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 font-mono text-xs text-foreground no-underline transition-colors hover:bg-muted/55 ${className ?? ""}`
+							: `inline-flex cursor-pointer items-center rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.92em] text-primary no-underline hover:bg-primary/10 ${className ?? ""}`
+					}
+					data-cline-file-reference={fileReference.path}
+					data-cline-artifact={fileReference.artifact ? "true" : undefined}
+					data-streamdown="link"
+					href={url}
+					onClick={(event) => {
+						event.preventDefault();
+						openFile();
+					}}
+					title={`Open ${fileReference.path}${fileReference.line ? `:${fileReference.line}` : ""}`}
+				>
+					{children}
+				</a>
+			</ArtifactContextMenu>
 		);
 	}
 

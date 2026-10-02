@@ -24,6 +24,7 @@ import {
 	type SessionTaskReport,
 } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
+import { ArtifactContextMenu } from "./artifact-context-menu";
 
 function completionState(status: ChatSessionStatus) {
 	if (status === "failed" || status === "error") {
@@ -250,26 +251,37 @@ export function SessionCompletionCard({
 						Artifacts
 					</div>
 					<div className="divide-y divide-border/50 border-y border-border/50">
-						{artifacts.slice(0, 8).map((path) => (
-							<button
-								className="group flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-								key={path}
-								onClick={() => void openPath(path, isCodeArtifactPath(path))}
-								type="button"
-							>
-								{openingPath === path ? (
-									<Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-								) : (
-									<PackageOpen className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
-								)}
-								<span className="min-w-0 flex-1 truncate font-mono text-xs">
-									{path}
-								</span>
-								<span className="shrink-0 text-[11px] text-muted-foreground">
-									Open
-								</span>
-							</button>
-						))}
+						{artifacts.slice(0, 8).map((path) => {
+							const openArtifact = () =>
+								openPath(path, isCodeArtifactPath(path));
+							return (
+								<ArtifactContextMenu
+									cwd={cwd}
+									environmentId={environmentId}
+									key={path}
+									onOpen={openArtifact}
+									path={path}
+								>
+									<button
+										className="group flex min-h-11 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+										onClick={() => void openArtifact()}
+										type="button"
+									>
+										{openingPath === path ? (
+											<Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+										) : (
+											<PackageOpen className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
+										)}
+										<span className="min-w-0 flex-1 truncate font-mono text-xs">
+											{path}
+										</span>
+										<span className="shrink-0 text-[11px] text-muted-foreground">
+											Open
+										</span>
+									</button>
+								</ArtifactContextMenu>
+							);
+						})}
 					</div>
 				</div>
 			) : null}
