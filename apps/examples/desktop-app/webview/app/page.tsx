@@ -1937,6 +1937,38 @@ function ChatThreadPane({
 		},
 		[setConfig],
 	);
+	const handlePermissionProfileChange = useCallback(
+		async (
+			nextProfile: NonNullable<ChatSessionConfig["permissionProfile"]>,
+		) => {
+			const previousProfile = config.permissionProfile ?? "full-access";
+			if (previousProfile === nextProfile) return;
+			setConfig((previous) => ({
+				...previous,
+				permissionProfile: nextProfile,
+			}));
+			try {
+				await desktopClient.invoke("set_permission_profile", {
+					permission_profile: nextProfile,
+				});
+			} catch (error) {
+				setConfig((previous) =>
+					previous.permissionProfile === nextProfile
+						? { ...previous, permissionProfile: previousProfile }
+						: previous,
+				);
+				toast({
+					variant: "destructive",
+					title: "Could not change permissions",
+					description:
+						error instanceof Error
+							? error.message
+							: "The permission profile could not be saved.",
+				});
+			}
+		},
+		[config.permissionProfile, setConfig],
+	);
 
 	const handleRemoveQueuedPrompt = useCallback(
 		async (promptId: string) => {
@@ -2448,6 +2480,7 @@ function ChatThreadPane({
 			onModelChange={handleModelChange}
 			onPromptInputChange={handlePromptInputChange}
 			onOpenModelSettings={onOpenModelSettings}
+			onPermissionProfileChange={handlePermissionProfileChange}
 			onReasoningChange={handleReasoningChange}
 			onSteerPromptInQueue={steerPromptInQueue}
 			onEditPromptInQueue={updatePromptInQueue}
@@ -2464,6 +2497,7 @@ function ChatThreadPane({
 			promptsInQueue={promptsInQueue}
 			promptDraft={promptDraft}
 			provider={config.provider}
+			permissionProfile={config.permissionProfile ?? "full-access"}
 			reasoningEffort={config.reasoningEffort}
 			status={status}
 			summary={summary}

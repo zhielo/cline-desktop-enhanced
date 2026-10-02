@@ -18,6 +18,7 @@ let root: Root;
 
 beforeEach(() => {
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	HTMLElement.prototype.scrollTo = vi.fn();
 	container = document.createElement("div");
 	document.body.appendChild(container);
 	root = createRoot(container);
@@ -227,6 +228,26 @@ describe("MemoizedMarkdown interactions", () => {
 			path: "src/app.ts",
 			line: 42,
 			column: 7,
+		});
+	});
+
+	test("opens a fenced non-code artifact with the system handler", async () => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockResolvedValue({ path: "C:\\Downloads\\release.apk" });
+		await renderMarkdown({
+			content: "```text\nC:\\Downloads\\release.apk\n```",
+		});
+		const artifact = await vi.waitFor(() => {
+			const rendered = container.querySelector<HTMLAnchorElement>(
+				'[data-cline-artifact="true"]',
+			);
+			expect(rendered).not.toBeNull();
+			return rendered as HTMLAnchorElement;
+		});
+		await click(artifact);
+		expect(invoke).toHaveBeenCalledWith("open_artifact", {
+			path: "C:\\Downloads\\release.apk",
 		});
 	});
 

@@ -314,6 +314,7 @@ type ChatInputBarProps = {
 	modelContextWindow?: number;
 	thinking: ChatSessionConfig["thinking"];
 	reasoningEffort: ChatSessionConfig["reasoningEffort"];
+	permissionProfile?: ChatSessionConfig["permissionProfile"];
 	/** Branch name, "no-git" for a non-repo folder, null while discovery is pending. */
 	gitBranch: string | null;
 	executionTarget?: "local" | "cloud";
@@ -327,6 +328,9 @@ type ChatInputBarProps = {
 	onReasoningChange: (
 		next: Pick<ChatSessionConfig, "thinking" | "reasoningEffort">,
 	) => void;
+	onPermissionProfileChange?: (
+		profile: NonNullable<ChatSessionConfig["permissionProfile"]>,
+	) => void | Promise<void>;
 	onListGitBranches: () => Promise<{ current: string; branches: string[] }>;
 	onSwitchGitBranch: (branch: string) => Promise<boolean>;
 	onSend: (prompt: string) => void;
@@ -362,6 +366,7 @@ function ChatInputBarImpl({
 	modelContextWindow,
 	thinking,
 	reasoningEffort,
+	permissionProfile = "full-access",
 	gitBranch,
 	executionTarget = "local",
 	repoUrl,
@@ -372,6 +377,7 @@ function ChatInputBarImpl({
 	onProviderChange,
 	onModelChange,
 	onReasoningChange,
+	onPermissionProfileChange,
 	onListGitBranches,
 	onSwitchGitBranch,
 	onSend,
@@ -1630,13 +1636,43 @@ function ChatInputBarImpl({
 						ref={fileInputRef}
 						type="file"
 					/>
-					<div
-						className="flex shrink-0 items-center gap-1.5 rounded-md border border-orange-500/40 bg-orange-500/10 px-2 py-1 font-medium text-orange-600 dark:text-orange-400"
-						title="Full Access: local tools run without repetitive approval prompts"
+					<Select
+						disabled={executionTarget === "cloud" || !onPermissionProfileChange}
+						onValueChange={(value) => {
+							if (
+								value === "read-only" ||
+								value === "workspace" ||
+								value === "workspace-network" ||
+								value === "full-access"
+							) {
+								void onPermissionProfileChange?.(value);
+							}
+						}}
+						value={permissionProfile}
 					>
-						<ShieldCheck className="size-3.5" />
-						<span>Full Access</span>
-					</div>
+						<SelectTrigger
+							aria-label="Agent permissions"
+							className={cn(
+								"h-7 w-auto shrink-0 gap-1.5 px-2 text-xs font-medium shadow-none",
+								permissionProfile === "full-access"
+									? "border-orange-500/40 bg-orange-500/10 text-orange-600 hover:bg-orange-500/15 dark:text-orange-400"
+									: "border-border/70 bg-transparent text-muted-foreground hover:bg-surface-hover",
+							)}
+							size="sm"
+							title="Choose the filesystem, command, and network access for the next run"
+						>
+							<ShieldCheck className="size-3.5" />
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent align="start">
+							<SelectItem value="read-only">Read only</SelectItem>
+							<SelectItem value="workspace">Workspace</SelectItem>
+							<SelectItem value="workspace-network">
+								Workspace + network
+							</SelectItem>
+							<SelectItem value="full-access">Full access</SelectItem>
+						</SelectContent>
+					</Select>
 					<div className="min-w-0 shrink-0">
 						<ModelSelector
 							allowedProviderIds={

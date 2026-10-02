@@ -12,6 +12,13 @@ import {
 	Streamdown,
 } from "streamdown";
 import { toast } from "@/hooks/use-toast";
+import {
+	ARTIFACT_EXTENSION_SOURCE,
+	type ArtifactReference,
+	isArtifactReference,
+	isCodeArtifactPath,
+	parseArtifactReference,
+} from "@/lib/artifact-paths";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
 import {
@@ -26,47 +33,67 @@ import {
 } from "./alert-dialog";
 
 const CLINE_FILE_ROUTE = "./__cline_file__";
-const INLINE_FILE_REFERENCE =
-	/(?<!\[)`((?:(?:\.{1,2}[\\/])|(?:[A-Za-z]:[\\/])|(?:[\w@.-]+[\\/]))[\w@ .()\-\\/]+\.(?:c|cc|cpp|cs|css|go|h|hpp|html|java|js|json|jsx|kt|kts|md|mjs|php|py|rb|rs|scss|sh|sql|swift|toml|ts|tsx|vue|xml|yaml|yml)(?::\d+(?::\d+)?)?)`/g;
+const INLINE_FILE_REFERENCE = new RegExp(
+	`(?<!\\[)\\x60((?:(?:\\.{1,2}[\\\\/])|(?:[A-Za-z]:[\\\\/])|(?:[\\w@.-]+[\\\\/]))[\\w@ .()\\-\\\\/]+\\.(?:${ARTIFACT_EXTENSION_SOURCE})(?::\\d+(?::\\d+)?)?)\\x60`,
+	"gi",
+);
 
-type WorkspaceFileReference = { path: string; line?: number; column?: number };
-
-function parseFileLocation(value: string): WorkspaceFileReference {
-	const match = value.match(/^(.*?):(\d+)(?::(\d+))?$/);
-	if (!match) return { path: value };
-	return {
-		path: match[1] ?? value,
-		line: Number(match[2]),
-		column: match[3] ? Number(match[3]) : undefined,
-	};
-}
-
-function fileReferenceHref(reference: WorkspaceFileReference): string {
+function fileReferenceHref(
+	reference: ArtifactReference,
+	artifact = false,
+): string {
 	const params = new URLSearchParams({ path: reference.path });
 	if (reference.line) params.set("line", String(reference.line));
 	if (reference.column) params.set("column", String(reference.column));
+	if (artifact) params.set("artifact", "1");
 	return `${CLINE_FILE_ROUTE}?${params.toString()}`;
 }
 
 export function linkifyWorkspaceFileReferences(content: string): string {
-	let fenced = false;
-	return content
-		.split("\n")
-		.map((line) => {
-			if (/^\s*(?:```|~~~)/.test(line)) {
-				fenced = !fenced;
-				return line;
+	const lines = content.split("\n");
+	const output: string[] = [];
+	for (let index = 0; index < lines.length; index++) {
+		const line = lines[index] ?? "";
+		const opening = line.match(/^\s*(```|~~~)[^\r\n]*$/);
+		if (opening) {
+			const closingIndex = lines.findIndex(
+				(candidate, candidateIndex) =>
+					candidateIndex > index &&
+					new RegExp(`^\\s*${opening[1]}\\s*$`).test(candidate),
+			);
+			if (closingIndex > index) {
+				const body = lines
+					.slice(index + 1, closingIndex)
+					.join("\n")
+					.trim();
+				if (!body.includes("\n") && isArtifactReference(body)) {
+					const reference = parseArtifactReference(body);
+					output.push(
+						`[${body.replaceAll("[", "\\[").replaceAll("]", "\\]")}](${fileReferenceHref(reference, true)})`,
+					);
+					index = closingIndex;
+					continue;
+				}
+				output.push(...lines.slice(index, closingIndex + 1));
+				index = closingIndex;
+				continue;
 			}
-			if (fenced) return line;
-			return line.replace(INLINE_FILE_REFERENCE, (_match, value: string) => {
-				const reference = parseFileLocation(value);
+			output.push(line);
+			continue;
+		}
+		output.push(
+			line.replace(INLINE_FILE_REFERENCE, (_match, value: string) => {
+				const reference = parseArtifactReference(value);
 				return `[\`${value}\`](${fileReferenceHref(reference)})`;
-			});
-		})
-		.join("\n");
+			}),
+		);
+	}
+	return output.join("\n");
 }
 
-function parseClineFileHref(url: string): WorkspaceFileReference | null {
+function parseClineFileHref(
+	url: string,
+): (ArtifactReference & { artifact?: boolean }) | null {
 	if (!url.includes("__cline_file__")) return null;
 	try {
 		const parsed = new URL(url, "https://cline.local/");
@@ -79,6 +106,7 @@ function parseClineFileHref(url: string): WorkspaceFileReference | null {
 			path,
 			line: Number.isInteger(line) && line > 0 ? line : undefined,
 			column: Number.isInteger(column) && column > 0 ? column : undefined,
+			artifact: parsed.searchParams.get("artifact") === "1",
 		};
 	} catch {
 		return null;
@@ -227,11 +255,16 @@ function SafeMarkdownLink({
 	if (fileReference) {
 		const openFile = (event: MouseEvent<HTMLAnchorElement>) => {
 			event.preventDefault();
+			const openInEditor = isCodeArtifactPath(fileReference.path);
 			void desktopClient
-				.invoke("open_file_in_editor", {
+				.invoke(openInEditor ? "open_file_in_editor" : "open_artifact", {
 					path: fileReference.path,
-					...(fileReference.line ? { line: fileReference.line } : {}),
-					...(fileReference.column ? { column: fileReference.column } : {}),
+					...(openInEditor && fileReference.line
+						? { line: fileReference.line }
+						: {}),
+					...(openInEditor && fileReference.column
+						? { column: fileReference.column }
+						: {}),
 				})
 				.catch((error) => {
 					toast({
@@ -247,8 +280,13 @@ function SafeMarkdownLink({
 		return (
 			<a
 				{...props}
-				className={`inline-flex cursor-pointer items-center rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.92em] text-primary no-underline hover:bg-primary/10 ${className ?? ""}`}
+				className={
+					fileReference.artifact
+						? `my-2 flex w-full cursor-pointer items-center rounded-lg border border-border/70 bg-card/60 px-3 py-2.5 font-mono text-xs text-foreground no-underline transition-colors hover:bg-muted/55 ${className ?? ""}`
+						: `inline-flex cursor-pointer items-center rounded bg-muted/70 px-1 py-0.5 font-mono text-[0.92em] text-primary no-underline hover:bg-primary/10 ${className ?? ""}`
+				}
 				data-cline-file-reference={fileReference.path}
+				data-cline-artifact={fileReference.artifact ? "true" : undefined}
 				data-streamdown="link"
 				href={url}
 				onClick={openFile}

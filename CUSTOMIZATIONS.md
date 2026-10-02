@@ -29,6 +29,22 @@ Primary files:
 - `apps/examples/desktop-app/webview/lib/task-report.ts`
 - `apps/examples/desktop-app/webview/components/views/chat/task-report-panel.tsx`
 
+### Codex-style chat, artifacts, and permissions
+
+- The composer permissions control is interactive in every local chat. It can switch the next run between Read only, Workspace, Workspace + network, and Full access, persists the selected default, and restores the previous value if saving fails.
+- Assistant output recognizes code and non-code artifact paths. Code references can include `:line:column` and open at that exact editor location; generated APK/APKS, archives, documents, spreadsheets, presentations, images, installers, and other non-code files open through the operating system's registered handler.
+- A single artifact path in a fenced Markdown block renders as an actionable artifact card instead of a passive copy-only code block.
+- Finished sessions combine declared task artifacts, artifact paths found in assistant output, and changed Git files into one completion summary. Artifact rows open the exact file, while changed-code rows retain direct editor and review-pane actions.
+- Remote artifacts remain blocked from local opening until an explicit remote download/preview boundary exists.
+
+Primary files:
+
+- `apps/examples/desktop-app/webview/lib/artifact-paths.ts`
+- `apps/examples/desktop-app/webview/components/ui/markdown.tsx`
+- `apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.tsx`
+- `apps/examples/desktop-app/webview/components/views/chat/session-completion-card.tsx`
+- `apps/examples/desktop-app/sidecar/commands.ts`
+
 ### Permanent Custom AI Instructions
 
 - Visible editor under **Settings → General → Custom AI instructions**.

@@ -192,6 +192,8 @@ async function renderVoiceComposer({
 	readOnly = false,
 	executionTarget,
 	onAttachFiles = vi.fn(),
+	onPermissionProfileChange = vi.fn(),
+	permissionProfile = "full-access",
 }: {
 	attachments?: Parameters<typeof ChatInputBar>[0]["attachments"];
 	model?: string;
@@ -205,6 +207,10 @@ async function renderVoiceComposer({
 	readOnly?: boolean;
 	executionTarget?: "cloud" | "local";
 	onAttachFiles?: Parameters<typeof ChatInputBar>[0]["onAttachFiles"];
+	onPermissionProfileChange?: Parameters<
+		typeof ChatInputBar
+	>[0]["onPermissionProfileChange"];
+	permissionProfile?: Parameters<typeof ChatInputBar>[0]["permissionProfile"];
 } = {}) {
 	await act(async () => {
 		root.render(
@@ -226,6 +232,7 @@ async function renderVoiceComposer({
 					}))}
 					onModeChange={vi.fn()}
 					onModelChange={vi.fn()}
+					onPermissionProfileChange={onPermissionProfileChange}
 					onPromptInputChange={onPromptInputChange}
 					onProviderChange={vi.fn()}
 					onReasoningChange={vi.fn()}
@@ -237,6 +244,7 @@ async function renderVoiceComposer({
 					promptDraft={{ version: promptVersion, value: prompt }}
 					promptsInQueue={[]}
 					provider="cline"
+					permissionProfile={permissionProfile}
 					reasoningEffort="low"
 					status={status}
 					summary={{ toolCalls: 0, tokensIn: 0, tokensOut: 0 }}
@@ -249,6 +257,35 @@ async function renderVoiceComposer({
 }
 
 describe("ChatInputBar", () => {
+	it("changes the local permission profile from the composer", async () => {
+		const onPermissionProfileChange = vi.fn();
+		await renderVoiceComposer({ onPermissionProfileChange });
+		const trigger = container.querySelector<HTMLButtonElement>(
+			'[aria-label="Agent permissions"]',
+		);
+		expect(trigger).not.toBeNull();
+		await act(async () => {
+			trigger?.dispatchEvent(
+				new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+			);
+			trigger?.click();
+		});
+		const workspaceOption = await vi.waitFor(() => {
+			const option = [
+				...document.querySelectorAll<HTMLElement>('[role="option"]'),
+			].find((candidate) => candidate.textContent?.trim() === "Workspace");
+			expect(option).toBeDefined();
+			return option as HTMLElement;
+		});
+		await act(async () => {
+			workspaceOption.dispatchEvent(
+				new MouseEvent("pointerup", { bubbles: true, cancelable: true }),
+			);
+			workspaceOption.click();
+		});
+		expect(onPermissionProfileChange).toHaveBeenCalledWith("workspace");
+	});
+
 	it("prevents sending from a read-only session", async () => {
 		const onSend = vi.fn();
 		await renderVoiceComposer({ prompt: "Test", readOnly: true, onSend });
@@ -1546,7 +1583,10 @@ describe("ChatInputBar", () => {
 		});
 	});
 
-	it.each(["local", "cloud"] as const)("shows %s queued prompts in an accessible list with clear priority actions", async (executionTarget) => {
+	it.each([
+		"local",
+		"cloud",
+	] as const)("shows %s queued prompts in an accessible list with clear priority actions", async (executionTarget) => {
 		const onSteerPromptInQueue = vi
 			.fn()
 			.mockRejectedValue(new Error("steer failed"));

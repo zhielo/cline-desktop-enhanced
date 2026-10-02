@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { extractArtifactPaths } from "@/lib/artifact-paths";
 import type {
 	ChatMessage,
 	ChatMessageImage,
@@ -378,6 +379,19 @@ function ChatMessagesImpl({
 		[messages, status],
 	);
 	const runMetrics = useMemo(() => getSessionRunMetrics(messages), [messages]);
+	const artifactPaths = useMemo(
+		() =>
+			messages
+				.filter((message) => message.role === "assistant")
+				.flatMap((message) => extractArtifactPaths(message.content))
+				.filter(
+					(path, index, paths) =>
+						paths.findIndex(
+							(candidate) => candidate.toLowerCase() === path.toLowerCase(),
+						) === index,
+				),
+		[messages],
+	);
 	const isTerminal =
 		status === "completed" ||
 		status === "failed" ||
@@ -913,6 +927,7 @@ function ChatMessagesImpl({
 								) : null}
 								{isTerminal && messages.length > 0 ? (
 									<SessionCompletionCard
+										artifactPaths={artifactPaths}
 										cwd={cwd}
 										environmentId={environmentId}
 										fileDiffs={fileDiffs}

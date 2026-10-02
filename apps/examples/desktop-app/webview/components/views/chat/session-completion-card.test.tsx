@@ -57,8 +57,8 @@ describe("SessionCompletionCard", () => {
 			);
 		});
 
-		const fileButton = [...container.querySelectorAll("button")].find((button) =>
-			button.textContent?.includes("src/app.ts"),
+		const fileButton = [...container.querySelectorAll("button")].find(
+			(button) => button.textContent?.includes("src/app.ts"),
 		);
 		expect(fileButton).toBeDefined();
 		await click(fileButton as HTMLButtonElement);
@@ -73,5 +73,35 @@ describe("SessionCompletionCard", () => {
 		);
 		await click(reviewButton as HTMLButtonElement);
 		expect(onOpenDiff).toHaveBeenCalledOnce();
+	});
+
+	it("opens generated non-code artifacts with the system handler", async () => {
+		const invoke = vi.spyOn(desktopClient, "invoke").mockResolvedValue({
+			path: "dist/release.apk",
+			opener: "system default",
+		});
+		await act(async () => {
+			root.render(
+				<SessionCompletionCard
+					artifactPaths={["dist/release.apk"]}
+					cwd={"C:\\work\\project"}
+					environmentId="local"
+					fileDiffs={[]}
+					status="completed"
+					tools={2}
+					turns={1}
+				/>,
+			);
+		});
+		const artifactButton = [...container.querySelectorAll("button")].find(
+			(button) => button.textContent?.includes("dist/release.apk"),
+		);
+		expect(artifactButton).toBeDefined();
+		await click(artifactButton as HTMLButtonElement);
+		expect(invoke).toHaveBeenCalledWith("open_artifact", {
+			environmentId: "local",
+			path: "dist/release.apk",
+			cwd: "C:\\work\\project",
+		});
 	});
 });

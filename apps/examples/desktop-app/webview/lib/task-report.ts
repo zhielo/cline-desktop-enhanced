@@ -18,6 +18,7 @@ export type TaskReportStep = {
 	status: TaskReportStepStatus;
 	kind: TaskReportStepKind;
 	parentStepId?: string;
+	artifacts?: string[];
 };
 
 export type TaskRepairState =
@@ -246,6 +247,12 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 		if (status === "in_progress") hasActiveStep = true;
 		const rawId = step.id;
 		const rawParentId = step.parent_step_id ?? step.parentStepId;
+		const artifacts = Array.isArray(step.artifacts)
+			? step.artifacts.filter(
+					(artifact): artifact is string =>
+						typeof artifact === "string" && artifact.trim().length > 0,
+				)
+			: undefined;
 		return [
 			{
 				id:
@@ -259,6 +266,9 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 					typeof rawParentId === "string" && rawParentId.trim()
 						? rawParentId.trim()
 						: undefined,
+				...(artifacts?.length
+					? { artifacts: artifacts.map((artifact) => artifact.trim()) }
+					: {}),
 			},
 		];
 	});

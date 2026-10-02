@@ -2259,6 +2259,32 @@ async function openFileInCodeEditor(
 	return "system default";
 }
 
+function openArtifactWithSystem(filePath: string): string {
+	if (
+		process.platform === "win32" &&
+		WINDOWS_CMD_UNSAFE_PATTERN.test(filePath)
+	) {
+		throw new Error(
+			"File path contains characters that cannot be passed safely to the Windows shell",
+		);
+	}
+	const child =
+		process.platform === "darwin"
+			? spawn("open", [filePath], { stdio: "ignore", detached: true })
+			: process.platform === "win32"
+				? spawn("rundll32", ["url.dll,FileProtocolHandler", filePath], {
+						stdio: "ignore",
+						detached: true,
+						windowsHide: true,
+					})
+				: spawn("xdg-open", [filePath], {
+						stdio: "ignore",
+						detached: true,
+					});
+	child.unref();
+	return "system default";
+}
+
 // ---------------------------------------------------------------------------
 // Main command router
 // ---------------------------------------------------------------------------
@@ -4264,6 +4290,24 @@ export async function handleCommand(
 			column,
 		);
 		return { path: filePath, editor, line, column };
+	}
+	if (command === "open_artifact") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Opening remote artifacts on the local desktop is not available yet.",
+			);
+		}
+		const rawPath = String(args?.path ?? "").trim();
+		if (!rawPath) throw new Error("path is required");
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const filePath = isAbsolute(rawPath) ? rawPath : join(baseDir, rawPath);
+		if (!existsSync(filePath)) {
+			throw new Error(`Artifact not found: ${filePath}`);
+		}
+		return { path: filePath, opener: openArtifactWithSystem(filePath) };
 	}
 
 	throw new Error(`unsupported desktop command: ${command}`);
