@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatRunError, isTransientHubDisconnect } from "./run-error";
+import {
+	formatRunError,
+	isCapabilityOwnerDisconnect,
+	isRecoverableForkTransportError,
+	isTransientHubDisconnect,
+	retryRecoverableFork,
+} from "./run-error";
 
 describe("formatRunError", () => {
 	it.each([
@@ -46,4 +52,38 @@ it.each([
 	expect(text).toContain("`claude` CLI");
 	expect(text).not.toContain("Settings");
 	expect(formatRunError(text, "claude-code")).toBe(text);
+});
+
+
+describe("fork transport recovery", () => {
+	it.each([
+		"Hub connection closed (code=1006, reason=Connection ended)",
+		"Capability owner client core-example disconnected before request was resolved.",
+		"Desktop backend transport closed",
+	])("recognizes a recoverable fork failure: %s", (detail) => {
+		expect(isRecoverableForkTransportError(new Error(detail))).toBe(true);
+	});
+
+	it("recognizes the primary capability-owner failure", () => {
+		expect(
+			isCapabilityOwnerDisconnect(
+				"The run failed: Capability owner client core-example disconnected before request was resolved.",
+			),
+		).toBe(true);
+	});
+
+	it("retries one idempotent fork after a recoverable disconnect", async () => {
+		let attempts = 0;
+		const result = await retryRecoverableFork(async () => {
+			attempts += 1;
+			if (attempts === 1) {
+				throw new Error(
+					"Hub connection closed (code=1006, reason=Connection ended)",
+				);
+			}
+			return "recovered";
+		}, 0);
+		expect(result).toBe("recovered");
+		expect(attempts).toBe(2);
+	});
 });

@@ -6,6 +6,7 @@ import { normalizeTitle } from "@/components/utils";
 import { toast } from "@/hooks/use-toast";
 import { humanizeCloudSessionError } from "@/lib/cloud-session-error";
 import { desktopClient } from "@/lib/desktop-client";
+import { retryRecoverableFork } from "@/lib/run-error";
 import type {
 	SessionHistoryItem,
 	SessionHistoryStatus,
@@ -1669,24 +1670,28 @@ export function useSessionHistory({
 			if (!sourceSession) return false;
 			setPendingAction({ sessionId: threadId, action: "fork" });
 			try {
-				const payload = await desktopClient.invoke<{
-					sessionId?: string;
-					forkedFromSessionId?: string;
-				}>("chat_session_command", {
-					request: {
-						action: "fork",
-						sessionId: sourceSession?.sessionId,
-						config: {
-							environmentId:
-								sourceSession?.environmentId ?? LOCAL_WORKSPACE_ENVIRONMENT_ID,
-							provider: sourceSession?.provider || thread.provider,
-							model: sourceSession?.model || thread.model,
-							cwd: sourceSession?.cwd || sourceSession?.workspaceRoot || "",
-							workspaceRoot:
-								sourceSession?.workspaceRoot || sourceSession?.cwd || "",
+				const operationId = `fork:${sourceSession.sessionId}:manual:${globalThis.crypto.randomUUID()}`;
+				const invokeFork = () =>
+					desktopClient.invoke<{
+						sessionId?: string;
+						forkedFromSessionId?: string;
+					}>("chat_session_command", {
+						request: {
+							action: "fork",
+							sessionId: sourceSession.sessionId,
+							forkOperationId: operationId,
+							config: {
+								environmentId:
+									sourceSession.environmentId ?? LOCAL_WORKSPACE_ENVIRONMENT_ID,
+								provider: sourceSession.provider || thread.provider,
+								model: sourceSession.model || thread.model,
+								cwd: sourceSession.cwd || sourceSession.workspaceRoot || "",
+								workspaceRoot:
+									sourceSession.workspaceRoot || sourceSession.cwd || "",
+							},
 						},
-					},
-				});
+					});
+				const payload = await retryRecoverableFork(invokeFork);
 				const newSessionId = payload.sessionId?.trim();
 				if (!newSessionId) {
 					throw new Error("Fork did not return a new session id.");

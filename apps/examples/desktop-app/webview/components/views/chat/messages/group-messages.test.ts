@@ -136,6 +136,26 @@ describe("groupChatMessages", () => {
 		expect(items[0]).toMatchObject({ type: "message", message: first });
 	});
 
+	it("hides a secondary code-1006 error after a capability-owner disconnect", () => {
+		const primary = makeMessage({
+			id: "error-owner",
+			role: "error",
+			content:
+				"The run failed: Capability owner client core-example disconnected before request was resolved.",
+		});
+		const secondary = makeMessage({
+			id: "error-1006",
+			role: "error",
+			content:
+				"The run failed: Hub connection closed (code=1006, reason=Connection ended)",
+		});
+
+		const items = groupChatMessages([primary, secondary]);
+
+		expect(items).toHaveLength(1);
+		expect(items[0]).toMatchObject({ type: "message", message: primary });
+	});
+
 	it("preserves distinct failures and failures from different sessions", () => {
 		const first = makeMessage({
 			id: "error-1",

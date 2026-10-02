@@ -1,5 +1,9 @@
 import type { AgentMessageRole } from "@cline/ui/components/agent-chat";
 import type { ChatMessage } from "@/lib/chat-schema";
+import {
+	isCapabilityOwnerDisconnect,
+	isTransientHubDisconnect,
+} from "@/lib/run-error";
 import { parseToolPayload } from "./tool-summaries";
 
 export type ChatRenderItem =
@@ -365,7 +369,11 @@ export function groupChatMessages(messages: ChatMessage[]): ChatRenderItem[] {
 		}
 		const normalize = (value: string) =>
 			value.trim().replace(/\s+/g, " ").toLowerCase();
-		return normalize(previous.message.content) === normalize(message.content);
+		return (
+			normalize(previous.message.content) === normalize(message.content) ||
+			(isCapabilityOwnerDisconnect(previous.message.content) &&
+				isTransientHubDisconnect(message.content))
+		);
 	};
 
 	const pushMessage = (
