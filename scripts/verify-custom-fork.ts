@@ -67,7 +67,7 @@ const requiredMarkers: Array<{
 			"permission-profile.test.ts",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
-			'BUN_VERSION: "1.3.13"',
+			'BUN_VERSION: "1.3.14"',
 			"bun-version: ${{ env.BUN_VERSION }}",
 		],
 	},
