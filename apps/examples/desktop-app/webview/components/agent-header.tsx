@@ -15,6 +15,7 @@ import {
 	Plus,
 	RotateCcw,
 	Square,
+	SquareTerminal,
 	Trash2,
 } from "lucide-react";
 import { type CSSProperties, memo, useEffect, useMemo, useState } from "react";
@@ -235,6 +236,18 @@ function AgentHeaderImpl({
 
 			{showSessionActions ? (
 				<div className="flex shrink-0 items-center gap-2">
+					<Button
+						aria-label="Open workspace tools"
+						className="flex items-center gap-1.5 rounded-md text-xs text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+						onClick={() => onOpenDiff?.()}
+						size="sm"
+						title="Files, changes, terminal, analysis, and debugging"
+						type="button"
+						variant="ghost"
+					>
+						<SquareTerminal className="h-3.5 w-3.5" />
+						<span className="hidden md:inline">Workspace</span>
+					</Button>
 					<AgentActivityStatus
 						activity={agentActivity}
 						agents={agents}

@@ -15,14 +15,16 @@ export function SessionContent({
 	status?: ChatSessionStatus;
 	taskReport?: SessionTaskReport | null;
 }) {
+	const showLiveReport =
+		status === "starting" || status === "running" || status === "stopping";
 	return (
 		<div
 			className={cn(
-				"mx-auto w-full min-w-0 max-w-(--breakpoint-lg)",
+				"mx-auto w-full min-w-0 max-w-[880px]",
 				className,
 			)}
 		>
-			{taskReport ? (
+			{taskReport && showLiveReport ? (
 				<div className="mb-4">
 					<TaskReportPanel
 						key={taskReport.sourceMessageId}

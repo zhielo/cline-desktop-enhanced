@@ -98,6 +98,14 @@ function menuItems(): HTMLElement[] {
 	);
 }
 
+function buttonWithText(label: string): HTMLButtonElement {
+	const button = Array.from(
+		document.querySelectorAll<HTMLButtonElement>("button"),
+	).find((candidate) => candidate.textContent?.trim() === label);
+	expect(button).not.toBeUndefined();
+	return button as HTMLButtonElement;
+}
+
 const FILE_DIFF: SessionFileDiff = {
 	path: "docs/a.mdx",
 	additions: 2,
@@ -232,6 +240,60 @@ describe("DiffView file actions", () => {
 
 		expect(writeText).toHaveBeenCalledWith("docs/a.mdx");
 	});
+
+	it("stages and unstages a file from the review surface", async () => {
+		await act(async () => {
+			root.render(
+				<DiffView
+					cwd="/Users/renee/cline"
+					environmentId="local"
+					fileDiffs={[FILE_DIFF]}
+					onClose={vi.fn()}
+				/>,
+			);
+		});
+
+		await click(buttonWithText("Stage"));
+		expect(invokeMock).toHaveBeenCalledWith("stage_git_paths", {
+			environmentId: "local",
+			cwd: "/Users/renee/cline",
+			paths: ["docs/a.mdx"],
+		});
+
+		await click(buttonWithText("Unstage"));
+		expect(invokeMock).toHaveBeenCalledWith("unstage_git_paths", {
+			environmentId: "local",
+			cwd: "/Users/renee/cline",
+			paths: ["docs/a.mdx"],
+		});
+	});
+
+	it("requires confirmation before reverting a file", async () => {
+		await act(async () => {
+			root.render(
+				<DiffView
+					cwd="/Users/renee/cline"
+					environmentId="local"
+					fileDiffs={[FILE_DIFF]}
+					onClose={vi.fn()}
+				/>,
+			);
+		});
+
+		await click(buttonWithLabel("Revert docs/a.mdx"));
+		expect(invokeMock).not.toHaveBeenCalledWith(
+			"revert_git_paths",
+			expect.anything(),
+		);
+
+		await click(buttonWithText("Revert changes"));
+		expect(invokeMock).toHaveBeenCalledWith("revert_git_paths", {
+			environmentId: "local",
+			cwd: "/Users/renee/cline",
+			paths: ["docs/a.mdx"],
+			confirm: true,
+		});
+	});
 });
 
 describe("DiffView hunk rendering", () => {
@@ -266,9 +328,9 @@ describe("DiffView hunk rendering", () => {
 
 		expect(diffContainers()).toHaveLength(1);
 
-		const toggle = container.querySelector<HTMLButtonElement>(
-			"button:not([aria-label])",
-		);
+		const toggle = Array.from(
+			container.querySelectorAll<HTMLButtonElement>("button"),
+		).find((button) => button.textContent?.includes("src/app.ts"));
 		expect(toggle?.textContent).toContain("src/app.ts");
 		await click(toggle as Element);
 		expect(diffContainers()).toHaveLength(0);

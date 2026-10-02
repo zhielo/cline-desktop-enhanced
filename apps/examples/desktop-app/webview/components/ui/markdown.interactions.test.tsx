@@ -3,6 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { desktopClient } from "@/lib/desktop-client";
 import { MarkdownLinkSafetyModal, MemoizedMarkdown } from "./markdown";
 
 const originalClipboard = Object.getOwnPropertyDescriptor(
@@ -17,6 +18,7 @@ let root: Root;
 
 beforeEach(() => {
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	HTMLElement.prototype.scrollTo = vi.fn();
 	container = document.createElement("div");
 	document.body.appendChild(container);
 	root = createRoot(container);
@@ -205,6 +207,53 @@ describe("MemoizedMarkdown interactions", () => {
 			"_blank",
 			"noopener,noreferrer",
 		);
+	});
+
+	test("opens inline file references at the exact editor line", async () => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockResolvedValue({ path: "src/app.ts", editor: "code" });
+		await renderMarkdown({
+			content: "Updated `src/app.ts:42:7` and verified the result.",
+		});
+		const link = await vi.waitFor(() => {
+			const rendered = container.querySelector<HTMLAnchorElement>(
+				'[data-cline-file-reference="src/app.ts"]',
+			);
+			expect(rendered).not.toBeNull();
+			return rendered as HTMLAnchorElement;
+		});
+		await click(link);
+		expect(invoke).toHaveBeenCalledWith("open_file_in_editor", {
+			path: "src/app.ts",
+			line: 42,
+			column: 7,
+		});
+	});
+
+	test("opens a fenced non-code artifact with the system handler", async () => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockResolvedValue({ path: "C:\\Downloads\\release.apk" });
+		await renderMarkdown({
+			content: "```text\nC:\\Downloads\\release.apk\n```",
+		});
+		const artifact = await vi.waitFor(() => {
+			const rendered = container.querySelector<HTMLAnchorElement>(
+				'[data-cline-artifact="true"]',
+			);
+			expect(rendered).not.toBeNull();
+			return rendered as HTMLAnchorElement;
+		});
+		await click(artifact);
+		expect(invoke).toHaveBeenCalledWith("open_artifact", {
+			path: "C:\\Downloads\\release.apk",
+		});
+	});
+
+	test("does not link file-looking text inside fenced code", async () => {
+		await renderMarkdown({ content: "```text\n`src/app.ts:42`\n```" });
+		expect(container.querySelector("[data-cline-file-reference]")).toBeNull();
 	});
 
 	test("keeps same-document links navigable without a confirmation", async () => {

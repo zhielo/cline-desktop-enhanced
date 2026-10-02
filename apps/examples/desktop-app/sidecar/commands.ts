@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import type { Dirent } from "node:fs";
 import {
 	existsSync,
 	mkdirSync,
@@ -18,6 +19,7 @@ import {
 	isAbsolute,
 	join,
 	posix,
+	relative,
 	resolve,
 	sep,
 } from "node:path";
@@ -39,6 +41,8 @@ import {
 	type ClineAccountUser,
 	clearAccountTelemetryIdentity,
 	createConfiguredStreamingTranscriptionSession,
+	createLiveDebuggerExecutor,
+	createReverseEngineeringExecutor,
 	createUserInstructionConfigService,
 	ensureCustomProvidersLoaded,
 	executeClineAccountAction,
@@ -48,14 +52,17 @@ import {
 	getPowerShellWorkerBaselineDecision,
 	getProviderAuthHandler,
 	identifyAccount,
+	LiveDebuggerInputSchema,
 	listHookConfigFiles,
 	listLocalProviders,
 	normalizeOAuthProvider,
+	ProcessSessionManager,
 	ProviderSettingsManager,
 	parseMcpServerRegistration,
 	persistClineAccountTelemetryIdentity,
 	probeMcpServerConnection,
 	RemoteEnvironmentService,
+	ReverseEngineeringInputSchema,
 	readCommandLatencyBaseline,
 	readGlobalSettings,
 	resolveClineAccountTelemetryIdentity,
@@ -2137,8 +2144,32 @@ async function listAvailableCodeEditors(): Promise<
 	return editors;
 }
 
-/** Launches `executable filePath` detached; false if the CLI is unusable. */
-function launchEditorCli(executable: string, filePath: string): boolean {
+function editorCliArgs(
+	editorId: string,
+	filePath: string,
+	line?: number,
+	column?: number,
+): string[] {
+	if (!line) return [filePath];
+	const location = `${filePath}:${line}:${column ?? 1}`;
+	if (["vscode", "cursor", "windsurf", "vscode-insiders"].includes(editorId)) {
+		return ["--goto", location];
+	}
+	if (["zed", "sublime"].includes(editorId)) return [location];
+	if (["intellijidea", "xcode"].includes(editorId)) {
+		return ["--line", String(line), filePath];
+	}
+	return [filePath];
+}
+
+/** Launches an editor at a file and optional source position. */
+function launchEditorCli(
+	executable: string,
+	editorId: string,
+	filePath: string,
+	line?: number,
+	column?: number,
+): boolean {
 	// Windows `where` resolves editor CLIs to .cmd/.bat shims, which
 	// spawn() cannot launch directly — route those through cmd.exe.
 	const isWindowsShim =
@@ -2146,12 +2177,13 @@ function launchEditorCli(executable: string, filePath: string): boolean {
 	if (isWindowsShim && WINDOWS_CMD_UNSAFE_PATTERN.test(executable)) {
 		return false;
 	}
+	const args = editorCliArgs(editorId, filePath, line, column);
 	const child = isWindowsShim
-		? spawn("cmd", ["/c", executable, filePath], {
+		? spawn("cmd", ["/c", executable, ...args], {
 				stdio: "ignore",
 				detached: true,
 			})
-		: spawn(executable, [filePath], {
+		: spawn(executable, args, {
 				stdio: "ignore",
 				detached: true,
 			});
@@ -2178,6 +2210,8 @@ async function launchMacApp(app: string, filePath: string): Promise<boolean> {
 async function openFileInCodeEditor(
 	filePath: string,
 	editorId?: string,
+	line?: number,
+	column?: number,
 ): Promise<string> {
 	if (
 		process.platform === "win32" &&
@@ -2193,7 +2227,10 @@ async function openFileInCodeEditor(
 			throw new Error(`Unknown editor: ${editorId}`);
 		}
 		const executable = await findExecutableOnPath(editor.cli);
-		if (executable && launchEditorCli(executable, filePath)) {
+		if (
+			executable &&
+			launchEditorCli(executable, editor.id, filePath, line, column)
+		) {
 			return editor.label;
 		}
 		if (process.platform === "darwin") {
@@ -2208,7 +2245,10 @@ async function openFileInCodeEditor(
 	if (!editorId) {
 		for (const editor of CODE_EDITOR_CATALOG) {
 			const executable = await findExecutableOnPath(editor.cli);
-			if (executable && launchEditorCli(executable, filePath)) {
+			if (
+				executable &&
+				launchEditorCli(executable, editor.id, filePath, line, column)
+			) {
 				return editor.cli;
 			}
 		}
@@ -2224,6 +2264,336 @@ async function openFileInCodeEditor(
 	}
 	openFileInEditor(filePath);
 	return "system default";
+}
+
+function openArtifactWithSystem(filePath: string): string {
+	if (
+		process.platform === "win32" &&
+		WINDOWS_CMD_UNSAFE_PATTERN.test(filePath)
+	) {
+		throw new Error(
+			"File path contains characters that cannot be passed safely to the Windows shell",
+		);
+	}
+	const child =
+		process.platform === "darwin"
+			? spawn("open", [filePath], { stdio: "ignore", detached: true })
+			: process.platform === "win32"
+				? spawn("rundll32", ["url.dll,FileProtocolHandler", filePath], {
+						stdio: "ignore",
+						detached: true,
+						windowsHide: true,
+					})
+				: spawn("xdg-open", [filePath], {
+						stdio: "ignore",
+						detached: true,
+					});
+	child.unref();
+	return "system default";
+}
+
+function revealArtifactInFolder(filePath: string): string {
+	if (
+		process.platform === "win32" &&
+		WINDOWS_CMD_UNSAFE_PATTERN.test(filePath)
+	) {
+		throw new Error(
+			"File path contains characters that cannot be passed safely to the Windows shell",
+		);
+	}
+	const directory = statSync(filePath).isDirectory()
+		? filePath
+		: dirname(filePath);
+	const child =
+		process.platform === "darwin"
+			? spawn("open", ["-R", filePath], { stdio: "ignore", detached: true })
+			: process.platform === "win32"
+				? spawn(
+						"explorer.exe",
+						statSync(filePath).isDirectory()
+							? [filePath]
+							: ["/select,", filePath],
+						{
+							stdio: "ignore",
+							detached: true,
+							windowsHide: true,
+						},
+					)
+				: spawn("xdg-open", [directory], {
+						stdio: "ignore",
+						detached: true,
+					});
+	child.unref();
+	return directory;
+}
+
+const ARTIFACT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
+const ARTIFACT_TEXT_EXTENSIONS = new Set([
+	".c",
+	".cc",
+	".cpp",
+	".cs",
+	".css",
+	".csv",
+	".go",
+	".h",
+	".hpp",
+	".html",
+	".java",
+	".js",
+	".json",
+	".jsx",
+	".kt",
+	".log",
+	".md",
+	".mjs",
+	".php",
+	".py",
+	".rb",
+	".rs",
+	".scss",
+	".sh",
+	".sql",
+	".swift",
+	".toml",
+	".ts",
+	".tsx",
+	".txt",
+	".vue",
+	".xml",
+	".yaml",
+	".yml",
+]);
+const ARTIFACT_IMAGE_TYPES: Record<string, string> = {
+	".gif": "image/gif",
+	".jpeg": "image/jpeg",
+	".jpg": "image/jpeg",
+	".png": "image/png",
+	".svg": "image/svg+xml",
+	".webp": "image/webp",
+};
+
+function readArtifactPreview(filePath: string) {
+	const stats = statSync(filePath);
+	const extension = extname(filePath).toLowerCase();
+	const base = {
+		path: filePath,
+		name: basename(filePath),
+		size: stats.size,
+		modifiedAt: stats.mtime.toISOString(),
+	};
+	if (stats.isDirectory()) return { ...base, kind: "directory" as const };
+	if (stats.size > ARTIFACT_PREVIEW_MAX_BYTES) {
+		return {
+			...base,
+			kind: "metadata" as const,
+			reason: "Preview is limited to files no larger than 2 MB.",
+		};
+	}
+	if (ARTIFACT_TEXT_EXTENSIONS.has(extension)) {
+		return {
+			...base,
+			kind: "text" as const,
+			mime: "text/plain",
+			content: readFileSync(filePath, "utf8"),
+		};
+	}
+	const imageMime = ARTIFACT_IMAGE_TYPES[extension];
+	if (imageMime) {
+		return {
+			...base,
+			kind: "image" as const,
+			mime: imageMime,
+			content: readFileSync(filePath).toString("base64"),
+		};
+	}
+	if (extension === ".pdf") {
+		return {
+			...base,
+			kind: "pdf" as const,
+			mime: "application/pdf",
+			content: readFileSync(filePath).toString("base64"),
+		};
+	}
+	return {
+		...base,
+		kind: "metadata" as const,
+		reason: "This file type opens in its registered desktop application.",
+	};
+}
+
+function validateRepositoryPaths(baseDir: string, value: unknown): string[] {
+	if (!Array.isArray(value) || value.length === 0) {
+		throw new Error("paths must be a non-empty array");
+	}
+	const root = resolve(baseDir);
+	const rootPrefix = `${root}${sep}`;
+	return value.map((entry) => {
+		const path = String(entry ?? "").trim();
+		if (!path || isAbsolute(path)) {
+			throw new Error("repository paths must be non-empty relative paths");
+		}
+		const resolvedPath = resolve(root, path);
+		const comparableRoot =
+			process.platform === "win32" ? rootPrefix.toLowerCase() : rootPrefix;
+		const comparablePath =
+			process.platform === "win32"
+				? `${resolvedPath}${sep}`.toLowerCase()
+				: `${resolvedPath}${sep}`;
+		if (!comparablePath.startsWith(comparableRoot)) {
+			throw new Error(`Repository path escapes the workspace: ${path}`);
+		}
+		return path;
+	});
+}
+
+async function mutateGitPaths(
+	action: "stage" | "unstage" | "revert",
+	baseDir: string,
+	paths: string[],
+) {
+	const args =
+		action === "stage"
+			? ["add", "--", ...paths]
+			: action === "unstage"
+				? ["restore", "--staged", "--", ...paths]
+				: ["restore", "--worktree", "--", ...paths];
+	await execFileAsync("git", ["-C", baseDir, ...args], {
+		windowsHide: true,
+	});
+	return { action, paths };
+}
+
+const WORKSPACE_FILE_LIMIT = 2_000;
+const WORKSPACE_SEARCH_IGNORES = new Set([
+	".git",
+	".next",
+	".turbo",
+	"build",
+	"coverage",
+	"dist",
+	"node_modules",
+	"target",
+]);
+
+function listWorkspaceFiles(baseDir: string, queryValue: unknown): string[] {
+	const root = resolve(baseDir);
+	const query = String(queryValue ?? "")
+		.trim()
+		.toLowerCase();
+	const matches: string[] = [];
+	const pending = [root];
+	while (pending.length > 0 && matches.length < WORKSPACE_FILE_LIMIT) {
+		const directory = pending.pop();
+		if (!directory) break;
+		let entries: Dirent[];
+		try {
+			entries = readdirSync(directory, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+		entries.sort((left, right) => left.name.localeCompare(right.name));
+		for (const entry of entries) {
+			if (
+				entry.isDirectory() &&
+				(WORKSPACE_SEARCH_IGNORES.has(entry.name) || entry.name.startsWith("."))
+			) {
+				continue;
+			}
+			const absolutePath = join(directory, entry.name);
+			if (entry.isDirectory()) {
+				pending.push(absolutePath);
+				continue;
+			}
+			if (!entry.isFile()) continue;
+			const path = relative(root, absolutePath);
+			if (!query || path.toLowerCase().includes(query)) matches.push(path);
+			if (matches.length >= WORKSPACE_FILE_LIMIT) break;
+		}
+	}
+	return matches.sort((left, right) => left.localeCompare(right));
+}
+
+function openWorkspaceTerminal(directory: string): string {
+	const options = {
+		stdio: "ignore" as const,
+		detached: true,
+		windowsHide: false,
+	};
+	const child =
+		process.platform === "darwin"
+			? spawn("open", ["-a", "Terminal", directory], options)
+			: process.platform === "win32"
+				? spawn(
+						"powershell.exe",
+						[
+							"-NoExit",
+							"-Command",
+							"Set-Location -LiteralPath $env:CLINE_WORKSPACE",
+						],
+						{
+							...options,
+							env: { ...process.env, CLINE_WORKSPACE: directory },
+						},
+					)
+				: spawn(
+						"x-terminal-emulator",
+						[`--working-directory=${directory}`],
+						options,
+					);
+	child.unref();
+	return directory;
+}
+
+const desktopWorkspaceProcessManager = new ProcessSessionManager({
+	recoveryFilePath: join(
+		resolveClineDir(),
+		"process-sessions",
+		"desktop-workspace.json",
+	),
+});
+const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor();
+const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
+
+function workspaceProcessOwner(baseDir: string): string {
+	const normalized = resolve(baseDir);
+	return `desktop-workspace:${process.platform === "win32" ? normalized.toLowerCase() : normalized}`;
+}
+
+function desktopToolContext(ownerSessionId: string) {
+	return {
+		sessionId: ownerSessionId,
+		agentId: "desktop-workbench",
+		conversationId: ownerSessionId,
+		iteration: 0,
+		toolCallId: randomUUID(),
+	};
+}
+
+function workspaceShellProfile(profileValue: unknown): {
+	executable: string;
+	args: string[];
+	label: string;
+} {
+	const profile = String(profileValue ?? "default").toLowerCase();
+	if (process.platform === "win32") {
+		if (profile === "cmd")
+			return { executable: "cmd.exe", args: [], label: "Command Prompt" };
+		if (profile === "wsl")
+			return { executable: "wsl.exe", args: [], label: "WSL" };
+		return {
+			executable: "powershell.exe",
+			args: ["-NoLogo", "-NoExit"],
+			label: "PowerShell",
+		};
+	}
+	if (profile === "zsh")
+		return { executable: "zsh", args: ["-l"], label: "zsh" };
+	return {
+		executable: process.env.SHELL || "bash",
+		args: ["-l"],
+		label: basename(process.env.SHELL || "bash"),
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -4214,8 +4584,313 @@ export async function handleCommand(
 			typeof args?.editor === "string" && args.editor.trim()
 				? args.editor.trim()
 				: undefined;
-		const editor = await openFileInCodeEditor(filePath, requestedEditor);
-		return { path: filePath, editor };
+		const requestedLine = Number(args?.line);
+		const requestedColumn = Number(args?.column);
+		const line =
+			Number.isInteger(requestedLine) && requestedLine > 0
+				? requestedLine
+				: undefined;
+		const column =
+			Number.isInteger(requestedColumn) && requestedColumn > 0
+				? requestedColumn
+				: undefined;
+		const editor = await openFileInCodeEditor(
+			filePath,
+			requestedEditor,
+			line,
+			column,
+		);
+		return { path: filePath, editor, line, column };
+	}
+	if (command === "open_artifact") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Opening remote artifacts on the local desktop is not available yet.",
+			);
+		}
+		const rawPath = String(args?.path ?? "").trim();
+		if (!rawPath) throw new Error("path is required");
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const filePath = isAbsolute(rawPath) ? rawPath : join(baseDir, rawPath);
+		if (!existsSync(filePath)) {
+			throw new Error(`Artifact not found: ${filePath}`);
+		}
+		return { path: filePath, opener: openArtifactWithSystem(filePath) };
+	}
+	if (command === "reveal_artifact_in_folder") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Revealing remote artifacts on the local desktop is not available yet.",
+			);
+		}
+		const rawPath = String(args?.path ?? "").trim();
+		if (!rawPath) throw new Error("path is required");
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const filePath = isAbsolute(rawPath) ? rawPath : join(baseDir, rawPath);
+		if (!existsSync(filePath)) {
+			throw new Error(`Artifact not found: ${filePath}`);
+		}
+		return { path: filePath, directory: revealArtifactInFolder(filePath) };
+	}
+	if (command === "read_artifact_preview") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("Remote artifact previews are not available yet.");
+		}
+		const rawPath = String(args?.path ?? "").trim();
+		if (!rawPath) throw new Error("path is required");
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const filePath = isAbsolute(rawPath) ? rawPath : join(baseDir, rawPath);
+		if (!existsSync(filePath)) {
+			throw new Error(`Artifact not found: ${filePath}`);
+		}
+		return readArtifactPreview(filePath);
+	}
+	if (
+		command === "stage_git_paths" ||
+		command === "unstage_git_paths" ||
+		command === "revert_git_paths"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Local Git review actions are not available over SSH yet.",
+			);
+		}
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const paths = validateRepositoryPaths(baseDir, args?.paths);
+		if (command === "revert_git_paths" && args?.confirm !== true) {
+			throw new Error("Reverting files requires confirm=true");
+		}
+		return await mutateGitPaths(
+			command === "stage_git_paths"
+				? "stage"
+				: command === "unstage_git_paths"
+					? "unstage"
+					: "revert",
+			baseDir,
+			paths,
+		);
+	}
+	if (command === "list_workspace_files") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("Workspace file search is not available over SSH yet.");
+		}
+		const baseDir =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		return {
+			root: resolve(baseDir),
+			files: listWorkspaceFiles(baseDir, args?.query),
+			limit: WORKSPACE_FILE_LIMIT,
+		};
+	}
+	if (command === "open_workspace_terminal") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("Opening a local terminal is not available over SSH.");
+		}
+		const baseDir = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		if (!existsSync(baseDir) || !statSync(baseDir).isDirectory()) {
+			throw new Error(`Workspace directory not found: ${baseDir}`);
+		}
+		return { directory: openWorkspaceTerminal(baseDir) };
+	}
+	if (
+		command === "workspace_terminal_start" ||
+		command === "workspace_terminal_list" ||
+		command === "workspace_terminal_read" ||
+		command === "workspace_terminal_write" ||
+		command === "workspace_terminal_resize" ||
+		command === "workspace_terminal_signal" ||
+		command === "workspace_terminal_close"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("The integrated terminal is local-only in this build.");
+		}
+		const baseDir = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		const owner = workspaceProcessOwner(baseDir);
+		await desktopWorkspaceProcessManager.initializeRecovery();
+		if (command === "workspace_terminal_start") {
+			if (args?.confirmFullAccess !== true) {
+				throw new Error(
+					"Starting a host terminal requires explicit Full Access confirmation.",
+				);
+			}
+			const profile = workspaceShellProfile(args?.profile);
+			const session = await desktopWorkspaceProcessManager.start({
+				ownerSessionId: owner,
+				executable: profile.executable,
+				args: profile.args,
+				cwd: baseDir,
+				interactive: true,
+				columns: Number(args?.columns ?? 100),
+				rows: Number(args?.rows ?? 30),
+			});
+			return { ...session, label: profile.label };
+		}
+		if (command === "workspace_terminal_list") {
+			return desktopWorkspaceProcessManager.list(owner);
+		}
+		const processId = String(args?.processId ?? "").trim();
+		if (!processId) throw new Error("processId is required");
+		if (command === "workspace_terminal_read") {
+			return desktopWorkspaceProcessManager.read(
+				owner,
+				processId,
+				Number(args?.cursor ?? 0),
+			);
+		}
+		if (command === "workspace_terminal_write") {
+			const input = String(args?.input ?? "");
+			await desktopWorkspaceProcessManager.writeStdin(owner, processId, input);
+			return desktopWorkspaceProcessManager.get(owner, processId);
+		}
+		if (command === "workspace_terminal_resize") {
+			return desktopWorkspaceProcessManager.resize(
+				owner,
+				processId,
+				Number(args?.columns ?? 100),
+				Number(args?.rows ?? 30),
+			);
+		}
+		if (command === "workspace_terminal_signal") {
+			const signal = String(args?.signal ?? "");
+			if (!["interrupt", "terminate", "kill"].includes(signal)) {
+				throw new Error("signal must be interrupt, terminate, or kill");
+			}
+			await desktopWorkspaceProcessManager.signal(
+				owner,
+				processId,
+				signal as "interrupt" | "terminate" | "kill",
+			);
+			return desktopWorkspaceProcessManager.get(owner, processId);
+		}
+		return {
+			closed: desktopWorkspaceProcessManager.close(owner, processId),
+			processId,
+		};
+	}
+	if (
+		command === "discover_analysis_tools" ||
+		command === "run_static_analysis" ||
+		command === "open_analysis_gui" ||
+		command === "run_debugger_action"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error("The analysis workbench is local-only in this build.");
+		}
+		const baseDir = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		const owner = workspaceProcessOwner(baseDir);
+		const toolContext = desktopToolContext(owner);
+		if (command === "discover_analysis_tools") {
+			const [reverseEngineering, debuggerTools] = await Promise.all([
+				desktopReverseEngineeringExecutor(
+					ReverseEngineeringInputSchema.parse({
+						engine: "auto",
+						operation: "discover",
+					}),
+					toolContext,
+				),
+				desktopLiveDebuggerExecutor(
+					LiveDebuggerInputSchema.parse({
+						debugger: "auto",
+						operation: "discover",
+					}),
+					toolContext,
+				),
+			]);
+			return {
+				reverseEngineering: JSON.parse(reverseEngineering),
+				debugger: JSON.parse(debuggerTools),
+			};
+		}
+		if (command === "run_debugger_action") {
+			if (args?.confirmAuthorized !== true) {
+				throw new Error(
+					"Debugger actions require confirmation that the target is authorized.",
+				);
+			}
+			const input = LiveDebuggerInputSchema.parse(args?.input);
+			return {
+				kind: "debugger",
+				result: JSON.parse(
+					await desktopLiveDebuggerExecutor(input, toolContext),
+				),
+			};
+		}
+		const rawInput = {
+			...(typeof args?.input === "object" && args.input ? args.input : {}),
+		} as Record<string, unknown>;
+		for (const key of [
+			"target",
+			"compare_target",
+			"script_path",
+			"output_directory",
+			"output_file",
+			"report_output_file",
+		]) {
+			const value = rawInput[key];
+			if (typeof value === "string" && value.trim() && !isAbsolute(value)) {
+				rawInput[key] = resolve(baseDir, value);
+			}
+		}
+		if (command === "open_analysis_gui") {
+			if (args?.confirmLaunch !== true) {
+				throw new Error(
+					"Opening an external analysis GUI requires confirmation.",
+				);
+			}
+			rawInput.operation = "open_gui";
+		} else {
+			const operation = String(rawInput.operation ?? "");
+			if (
+				![
+					"inspect",
+					"forensic_report",
+					"apk_security_report",
+					"compare_apks",
+					"verify_apk_signature",
+					"scan_strings",
+					"analyze",
+					"decompile",
+					"disassemble_smali",
+				].includes(operation)
+			) {
+				throw new Error(
+					"This workbench action is not part of the static-analysis allowlist.",
+				);
+			}
+		}
+		const input = ReverseEngineeringInputSchema.parse(rawInput);
+		const result = await desktopReverseEngineeringExecutor(input, toolContext);
+		try {
+			return { kind: "reverse-engineering", result: JSON.parse(result) };
+		} catch {
+			return { kind: "reverse-engineering", result };
+		}
 	}
 
 	throw new Error(`unsupported desktop command: ${command}`);

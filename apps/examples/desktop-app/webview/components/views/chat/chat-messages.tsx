@@ -31,12 +31,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { extractArtifactPaths } from "@/lib/artifact-paths";
 import type {
 	ChatMessage,
 	ChatMessageImage,
 	ChatSessionStatus,
 } from "@/lib/chat-schema";
 import { formatRunError } from "@/lib/run-error";
+import type { SessionFileDiff } from "@/lib/session-diff";
 import type { SessionImportTool } from "@/lib/session-import";
 import { buildSessionTaskReport } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
@@ -59,10 +61,15 @@ import {
 import { ToolMessageBlock } from "./messages/tool-message-block";
 import { buildToolPresentation } from "./messages/tool-summaries";
 import { WorkBlock } from "./messages/work-block";
+import { SessionCompletionCard } from "./session-completion-card";
 import { SessionContent } from "./session-content";
 
 type ChatMessagesProps = {
 	sessionId: string | null;
+	environmentId?: string;
+	cwd?: string;
+	fileDiffs?: SessionFileDiff[];
+	onOpenDiff?: () => void;
 	status: ChatSessionStatus;
 	chatTransportState?:
 		| "connecting"
@@ -241,6 +248,10 @@ function SessionRunBar({
 
 function ChatMessagesImpl({
 	sessionId,
+	environmentId = "local",
+	cwd,
+	fileDiffs = [],
+	onOpenDiff,
 	status,
 	chatTransportState = "connecting",
 	isSessionSwitching = false,
@@ -367,6 +378,25 @@ function ChatMessagesImpl({
 		() => buildSessionTaskReport(messages, status),
 		[messages, status],
 	);
+	const runMetrics = useMemo(() => getSessionRunMetrics(messages), [messages]);
+	const artifactPaths = useMemo(
+		() =>
+			messages
+				.filter((message) => message.role === "assistant")
+				.flatMap((message) => extractArtifactPaths(message.content))
+				.filter(
+					(path, index, paths) =>
+						paths.findIndex(
+							(candidate) => candidate.toLowerCase() === path.toLowerCase(),
+						) === index,
+				),
+		[messages],
+	);
+	const isTerminal =
+		status === "completed" ||
+		status === "failed" ||
+		status === "error" ||
+		status === "cancelled";
 	const isRunActive =
 		status === "starting" || status === "running" || status === "stopping";
 	const lastUserItemIndex = renderItems.findLastIndex(
@@ -687,7 +717,7 @@ function ChatMessagesImpl({
 			>
 				<ConversationContent
 					className={cn(
-						"mx-auto min-h-full w-full min-w-0 max-w-[1040px]",
+						"mx-auto min-h-full w-full min-w-0 max-w-[980px]",
 						showIdleDetails ? "p-0" : "px-6",
 					)}
 				>
@@ -893,6 +923,19 @@ function ChatMessagesImpl({
 										items={askQuestionItems}
 										onAnswer={handleAskQuestionAnswer}
 										pendingAnswers={askQuestionActions}
+									/>
+								) : null}
+								{isTerminal && messages.length > 0 ? (
+									<SessionCompletionCard
+										artifactPaths={artifactPaths}
+										cwd={cwd}
+										environmentId={environmentId}
+										fileDiffs={fileDiffs}
+										onOpenDiff={onOpenDiff}
+										report={taskReport}
+										status={status}
+										tools={runMetrics.tools}
+										turns={runMetrics.turns}
 									/>
 								) : null}
 							</div>
