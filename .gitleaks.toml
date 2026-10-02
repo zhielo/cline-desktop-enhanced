@@ -2,3 +2,7 @@ title = "Cline SDK secret scanning"
 
 [extend]
 useDefault = true
+
+[[allowlists]]
+description = "Known synthetic credentials and documentation placeholders from upstream fixture refresh"
+commits = ["126d1fea2d30bae748ac1b3b4c37cbc8db8b4f77"]
