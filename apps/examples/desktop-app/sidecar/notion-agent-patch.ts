@@ -121,7 +121,6 @@ export type AppliedNotionAgentPatch = NotionAgentPatchPreview & {
 	branch: string;
 	previousBranch: string;
 	appliedHashes: Record<string, string | null>;
-	originalHashes: Record<string, string | null>;
 };
 
 function git(root: string, args: string[], input?: string): string {
@@ -377,9 +376,6 @@ export function applyNotionAgentPatch(
 				hashFile(preview.root, file.path),
 			]),
 		),
-		originalHashes: Object.fromEntries(
-			preview.files.map((file) => [file.path, file.originalHash]),
-		),
 	};
 }
 
@@ -389,7 +385,6 @@ export function rollbackNotionAgentPatch(options: {
 	branch: string;
 	previousBranch: string;
 	appliedHashes: Record<string, string | null>;
-	originalHashes: Record<string, string | null>;
 	confirm: boolean;
 }): { rolledBack: true; branchDeleted: string; currentBranch: string } {
 	if (options.confirm !== true)
@@ -411,16 +406,19 @@ export function rollbackNotionAgentPatch(options: {
 	}
 	git(root, ["apply", "--reverse", "--check", "-"], options.patch);
 	git(root, ["apply", "--reverse", "-"], options.patch);
-	for (const [path, expected] of Object.entries(options.originalHashes)) {
+	for (const path of Object.keys(options.appliedHashes)) {
 		const normalized = normalizePatchPath(root, path);
-		if (hashFile(root, normalized) !== expected)
-			throw new Error(
-				`Reverse patch did not restore the approved original content: ${path}`,
-			);
-		if (expected !== null) {
-			// Normalize platform line endings and file metadata from the branch
-			// index after proving reverse-apply restored the approved bytes.
+		try {
+			git(root, ["cat-file", "-e", `HEAD:${normalized}`]);
+			// Restore the exact branch-index bytes and platform line endings after
+			// the reverse patch succeeds. The post-apply hash guard above proves
+			// the user did not edit these paths after application.
 			git(root, ["checkout", "--", normalized]);
+		} catch {
+			if (existsSync(resolve(root, normalized)))
+				throw new Error(
+					`Reverse patch did not remove the Agent-created file: ${path}`,
+				);
 		}
 	}
 	if (git(root, ["status", "--porcelain"]) !== "")

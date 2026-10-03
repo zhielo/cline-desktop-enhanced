@@ -84,7 +84,6 @@ describe("Notion Agent patch pipeline", () => {
 			branch: applied.branch,
 			previousBranch: applied.previousBranch,
 			appliedHashes: applied.appliedHashes,
-			originalHashes: applied.originalHashes,
 			confirm: true,
 		});
 		expect(rolledBack.currentBranch).toBe("main");

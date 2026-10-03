@@ -4793,17 +4793,6 @@ export async function handleCommand(
 							]),
 						)
 					: {},
-			originalHashes:
-				args?.originalHashes &&
-				typeof args.originalHashes === "object" &&
-				!Array.isArray(args.originalHashes)
-					? Object.fromEntries(
-							Object.entries(args.originalHashes).map(([path, hash]) => [
-								path,
-								hash === null ? null : String(hash),
-							]),
-						)
-					: {},
 			confirm: args?.confirm === true,
 		});
 	}
