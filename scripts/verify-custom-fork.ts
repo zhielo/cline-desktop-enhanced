@@ -330,6 +330,8 @@ const requiredMarkers: Array<{
 			"https://mcp.notion.com/mcp",
 			"No special database",
 			"Open in new session",
+			"Local function audit",
+			"Create reusable function",
 		],
 	},
 	{
@@ -430,6 +432,8 @@ const requiredMarkers: Array<{
 			'"read-only"',
 			'"workspace-network"',
 			'"full-access"',
+			'"notion-functions"',
+			"only the official Notion MCP tools",
 			"unclassified plugin or MCP tool",
 			"not an operating-system sandbox",
 			"desktop computer control is disabled",

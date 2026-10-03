@@ -244,6 +244,7 @@ describe("desktopAppReducer", () => {
 			threadId: "function-draft",
 			environmentId: "local",
 			initialPromptDraft: "Use Notion MCP only for this explicit function.",
+			notionFunctionTitle: "Search Notion workspace",
 		});
 
 		expect(state.threads[0]).toEqual({
@@ -254,6 +255,7 @@ describe("desktopAppReducer", () => {
 			id: "function-draft",
 			environmentId: "local",
 			initialPromptDraft: "Use Notion MCP only for this explicit function.",
+			notionFunctionTitle: "Search Notion workspace",
 		});
 		expect(state.navigation.current).toMatchObject({
 			activeThreadId: "function-draft",

@@ -22,7 +22,13 @@ export const ChatSessionConfigSchema = z.object({
 	enableTools: z.boolean(),
 	autoApproveTools: z.boolean().optional(),
 	permissionProfile: z
-		.enum(["read-only", "workspace", "workspace-network", "full-access"])
+		.enum([
+			"read-only",
+			"workspace",
+			"workspace-network",
+			"notion-functions",
+			"full-access",
+		])
 		.optional(),
 	missionStepInterval: z.number().int().positive().optional(),
 	missionTimeIntervalMs: z.number().int().positive().optional(),

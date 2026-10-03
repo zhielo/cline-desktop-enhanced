@@ -39,7 +39,9 @@ For protected or obfuscated Android applications, `disassemble_smali` uses `apkt
 
 The sidebar **Functions** page is an isolated, opt-in launcher for Notion-assisted workflows. A function opens a new draft in a separate Cline session and uses the model already selected in Cline. Ordinary Cline chat, provider selection, permissions, and tools remain unchanged; the app never routes normal prompts to Notion automatically.
 
-Functions can install and authorize the official Streamable HTTP endpoint `https://mcp.notion.com/mcp` through the existing browser OAuth flow. Notion workspace access is used only when the user explicitly launches a Notion function and the selected permission profile allows MCP tools. Write-oriented templates require a preview and explicit approval before asking the model to create or update content.
+Functions can install and authorize the official Streamable HTTP endpoint `https://mcp.notion.com/mcp` through the existing browser OAuth flow. Notion workspace access is used only when the user explicitly launches a Notion function. The app applies its session-only Notion capability profile automatically, so no global permission change is required. Write-oriented templates require a preview and explicit approval before asking the model to create or update content.
+
+Function sessions use a host-enforced Notion-only capability profile and disable automatic tool approval. They display a persistent banner, keep normal chat permissions untouched, and retain write proposals and tool activity in the session transcript. The Functions hub also provides an optional local default destination, reusable personal templates, recent-run reruns, and a bounded device-local launch audit.
 
 Settings → Customize → MCP → **Connect Notion** remains available for manual management. The only setup requirement is signing in with a Notion account and selecting the workspace access allowed by Notion OAuth. No dedicated database, automation, integration token, or Custom Agent configuration is required. The feature does not expose or claim a private Notion AI inference API, and Notion AI is not added as a Cline model provider.
 

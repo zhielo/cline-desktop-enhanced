@@ -1670,6 +1670,7 @@ function ChatInputBarImpl({
 							<SelectItem value="workspace-network">
 								Workspace + network
 							</SelectItem>
+							<SelectItem value="notion-functions">Notion only</SelectItem>
 							<SelectItem value="full-access">Full access</SelectItem>
 						</SelectContent>
 					</Select>

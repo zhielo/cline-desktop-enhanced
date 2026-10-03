@@ -75,7 +75,10 @@ import { AccountView } from "./account-view";
 import { AddProviderContent, type AddProviderPayload } from "./add-provider";
 import { ChannelsContent } from "./channels-view";
 import { CustomizeView } from "./customize-view";
-import { FunctionsView } from "./functions-view";
+import {
+	FunctionsView,
+	type FunctionLaunchRequest,
+} from "./functions-view";
 import { ImportContent } from "./import-view";
 import { NotificationSettings } from "./notification-settings";
 import {
@@ -178,7 +181,7 @@ export function SettingsView({
 	section: SettingsSection;
 	onNavigateSection: (section: SettingsSection) => void;
 	onOpenSession?: (sessionId: string) => void | Promise<void>;
-	onLaunchFunction?: (prompt: string) => void;
+	onLaunchFunction?: (request: FunctionLaunchRequest) => void;
 }) {
 	const activeNav = section;
 	const [providers, setProviders] = useState<Provider[]>(
