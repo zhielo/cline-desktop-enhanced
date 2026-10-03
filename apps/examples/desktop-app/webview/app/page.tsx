@@ -480,17 +480,27 @@ export default function Home() {
 	useEffect(() => watchDesktopNotifications(), []);
 	useEffect(() => watchBuiltInBrowser(), []);
 
-	const createThreadForEnvironment = useCallback((environmentId: string) => {
-		dispatchApp({
-			type: "new-thread",
-			threadId: makeThreadId(),
-			environmentId,
-		});
-		requestPromptInputFocus();
-	}, []);
+	const createThreadForEnvironment = useCallback(
+		(environmentId: string, initialPromptDraft?: string) => {
+			dispatchApp({
+				type: "new-thread",
+				threadId: makeThreadId(),
+				environmentId,
+				initialPromptDraft,
+			});
+			requestPromptInputFocus();
+		},
+		[],
+	);
 	const handleNewThread = useCallback(() => {
 		createThreadForEnvironment(activeEnvironmentId);
 	}, [activeEnvironmentId, createThreadForEnvironment]);
+	const handleLaunchFunction = useCallback(
+		(prompt: string) => {
+			createThreadForEnvironment(activeEnvironmentId, prompt);
+		},
+		[activeEnvironmentId, createThreadForEnvironment],
+	);
 	const selectEnvironmentDraft = useCallback((environmentId: string) => {
 		dispatchApp({
 			type: "select-environment-draft",
@@ -1043,6 +1053,7 @@ export default function Home() {
 								{view === "settings" ? (
 									<div className="absolute inset-0 z-30 bg-background text-foreground">
 										<SettingsView
+											onLaunchFunction={handleLaunchFunction}
 											onNavigateSection={handleSettingsSectionChange}
 											onOpenSession={handleOpenSessionById}
 											section={settingsSection}
@@ -1804,6 +1815,20 @@ function ChatThreadPane({
 		threadId,
 		setPromptInput,
 		setPendingAttachments,
+	]);
+
+	useEffect(() => {
+		if (historySession || initialPromptDraft === undefined) {
+			return;
+		}
+		setPromptInput(initialPromptDraft);
+		onInitialPromptDraftConsumed?.(threadId);
+	}, [
+		historySession,
+		initialPromptDraft,
+		onInitialPromptDraftConsumed,
+		setPromptInput,
+		threadId,
 	]);
 
 	useEffect(() => {

@@ -37,7 +37,11 @@ For protected or obfuscated Android applications, `disassemble_smali` uses `apkt
 
 ## Notion
 
-Settings → MCP Servers → **Connect Notion** installs the official Streamable HTTP endpoint `https://mcp.notion.com/mcp` and starts the existing browser OAuth flow. Interactive OAuth is required by Notion. This provides workspace tools to Cline; it does not claim private Notion model APIs or a Cline MCP server for Notion Custom Agents.
+The sidebar **Functions** page is an isolated, opt-in launcher for Notion-assisted workflows. A function opens a new draft in a separate Cline session and uses the model already selected in Cline. Ordinary Cline chat, provider selection, permissions, and tools remain unchanged; the app never routes normal prompts to Notion automatically.
+
+Functions can install and authorize the official Streamable HTTP endpoint `https://mcp.notion.com/mcp` through the existing browser OAuth flow. Notion workspace access is used only when the user explicitly launches a Notion function and the selected permission profile allows MCP tools. Write-oriented templates require a preview and explicit approval before asking the model to create or update content.
+
+Settings → Customize → MCP → **Connect Notion** remains available for manual management. The only setup requirement is signing in with a Notion account and selecting the workspace access allowed by Notion OAuth. No dedicated database, automation, integration token, or Custom Agent configuration is required. The feature does not expose or claim a private Notion AI inference API, and Notion AI is not added as a Cline model provider.
 
 ## Build and validation
 

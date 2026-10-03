@@ -237,6 +237,30 @@ describe("desktopAppReducer", () => {
 		expect(state.threads[0]?.environmentId).toBe("pi-host");
 	});
 
+	it("opens a function prompt in a separate draft without replacing normal chat", () => {
+		let state = createDesktopAppState("normal-chat", settingsSection, "local");
+		state = desktopAppReducer(state, {
+			type: "new-thread",
+			threadId: "function-draft",
+			environmentId: "local",
+			initialPromptDraft: "Use Notion MCP only for this explicit function.",
+		});
+
+		expect(state.threads[0]).toEqual({
+			id: "normal-chat",
+			environmentId: "local",
+		});
+		expect(state.threads.at(-1)).toMatchObject({
+			id: "function-draft",
+			environmentId: "local",
+			initialPromptDraft: "Use Notion MCP only for this explicit function.",
+		});
+		expect(state.navigation.current).toMatchObject({
+			activeThreadId: "function-draft",
+			view: "chat",
+		});
+	});
+
 	it("carries environment identity through new and restored threads", () => {
 		let state = createDesktopAppState("welcome", settingsSection, "local");
 		state = desktopAppReducer(state, {

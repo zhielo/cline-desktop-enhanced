@@ -1,5 +1,10 @@
 # Cline Desktop Changelog
 
+## 0.0.37
+
+- Added a separate **Functions** hub for optional Notion-assisted workflows. Each card opens a new draft powered by the currently selected Cline model; normal Cline sessions, providers, permissions, and tools are unchanged
+- Added direct official Notion MCP OAuth status and connection controls inside Functions, plus guarded workspace-search, page-drafting, database-analysis, release-report, and action-plan templates. Only a Notion account is required; no special database, automation, or private Notion AI model API is used
+
 ## 0.0.36
 
 - Readable artifacts such as Markdown, text, JSON, images, and PDFs now open in the in-app preview instead of navigating the WebView to the internal `__cline_file__` route. The context menu retains a separate **Open with default app** action

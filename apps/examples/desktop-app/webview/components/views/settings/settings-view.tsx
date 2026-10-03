@@ -75,6 +75,7 @@ import { AccountView } from "./account-view";
 import { AddProviderContent, type AddProviderPayload } from "./add-provider";
 import { ChannelsContent } from "./channels-view";
 import { CustomizeView } from "./customize-view";
+import { FunctionsView } from "./functions-view";
 import { ImportContent } from "./import-view";
 import { NotificationSettings } from "./notification-settings";
 import {
@@ -172,10 +173,12 @@ export function SettingsView({
 	section,
 	onNavigateSection,
 	onOpenSession,
+	onLaunchFunction,
 }: {
 	section: SettingsSection;
 	onNavigateSection: (section: SettingsSection) => void;
 	onOpenSession?: (sessionId: string) => void | Promise<void>;
+	onLaunchFunction?: (prompt: string) => void;
 }) {
 	const activeNav = section;
 	const [providers, setProviders] = useState<Provider[]>(
@@ -693,6 +696,11 @@ export function SettingsView({
 			<ChannelsContent />
 		) : activeNav === "Schedules" ? (
 			<RoutineSchedulesContent onOpenSession={onOpenSession} />
+		) : activeNav === "Functions" ? (
+			<FunctionsView
+				onLaunchFunction={onLaunchFunction}
+				onOpenMcpSettings={() => onNavigateSection("Customize")}
+			/>
 		) : activeNav === "Import" ? (
 			<ImportContent />
 		) : activeNav === "Remote" ? (

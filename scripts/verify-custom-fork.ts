@@ -7,6 +7,7 @@ const requiredMarkers: Array<{
 	{
 		path: "CUSTOMIZATIONS.md",
 		markers: [
+			"Separate Notion-assisted Functions",
 			"AI task execution UI",
 			"Permanent Custom AI Instructions",
 			"Windows reliability",
@@ -320,6 +321,20 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/examples/desktop-app/sidecar/chat-session.ts",
 		markers: ["mergeDesktopAiInstructions", "taskToolStepIds"],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",
+		markers: [
+			"Notion-assisted functions",
+			"Uses your current Cline model",
+			"https://mcp.notion.com/mcp",
+			"No special database",
+			"Open in new session",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/desktop-app-state.ts",
+		markers: ["initialPromptDraft?: string", 'type: "new-thread"'],
 	},
 	{
 		path: "apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx",
