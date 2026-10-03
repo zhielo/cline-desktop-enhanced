@@ -154,6 +154,7 @@ jobs:
           bunx vitest run \
             apps/examples/desktop-app/sidecar/browser-manager.test.ts \
             apps/examples/desktop-app/sidecar/repository-tool.test.ts \
+            apps/examples/desktop-app/sidecar/notion-agent-bridge.test.ts \
             apps/examples/desktop-app/webview/components/views/settings/functions-view.test.tsx \
             --config apps/examples/desktop-app/vitest.config.mts
 

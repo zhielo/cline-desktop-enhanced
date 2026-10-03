@@ -29,6 +29,9 @@ This file is the durable customization ledger for this repository. The source on
 - Manual synchronization recipes cover builds, Cline engineering logs, GitHub work, releases, and technical-debt backlogs. No background synchronization is started.
 - Local audits can be exported without prompts or Notion content. Official GitHub Actions now use Node 24 generations, and unrelated reverse-engineering timing tests no longer block the focused Notion installer gate.
 - The compiled terminal smoke fixture waits for its explicit input payload and ignores incidental ConPTY control traffic, preventing a resize event from ending an otherwise healthy Windows build.
+- The separate **Notion Agent Bridge** packages an explicitly selected local repository into a bounded text-only context package. It respects Git ignore rules, confines paths to the workspace, excludes credential/binary files, redacts likely secrets, hashes evidence, and uploads nothing until the user reviews the complete package and approves the exact Notion operation.
+- Bridge modes support exact published-Custom-Agent discovery and session launch, automatic manual-handoff fallback, same-session follow-ups, temporary-page retention, persistent incremental project memory, and narrowly scoped cleanup. Agent identity is never guessed, and unavailable session capabilities stop safely.
+- Approved snapshot hashes are stored locally to show added, changed, unchanged, and removed evidence on later packages. The bridge never schedules background synchronization and never turns Notion into the provider for ordinary Cline chat.
 
 Primary files:
 

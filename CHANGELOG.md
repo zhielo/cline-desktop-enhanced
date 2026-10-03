@@ -1,5 +1,17 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.0.39
+
+### Added
+
+- Added a standalone Notion Agent Bridge for computer-only projects with Git-aware text packaging, workspace path confinement, file and byte limits, credential-file blocking, secret redaction, evidence hashes, full package preview, and explicit upload approval.
+- Added exact published-Custom-Agent discovery and launch instructions, capability-aware manual Notion AI fallback, same-session follow-ups, temporary retention, persistent incremental project memory, and narrowly scoped bridge-page cleanup.
+- Added file-level added/changed/unchanged/removed comparisons and focused sidecar/UI tests for bridge security and approval boundaries.
+
+### Security
+
+- Local project content is never sent while preparing a package. Repository content is treated as untrusted evidence, binaries and common credential files are excluded, and Notion writes and agent launches retain native confirmation gates.
+
 ## Cline Enhanced Desktop 0.0.38
 
 ### Added
