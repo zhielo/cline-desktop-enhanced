@@ -11,6 +11,7 @@
 ### Changed
 
 - Upgraded the custom Windows installer workflow to Node 24 GitHub Actions and focused its Notion isolation gate so unrelated reverse-engineering timing cannot block this feature build.
+- Hardened the native terminal smoke fixture so Windows ConPTY resize/control traffic cannot be mistaken for the expected input payload.
 - Normal Cline chat, models, providers, tools, and existing sessions remain unchanged; every Notion capability is still explicitly launched in a separate host-isolated session.
 
 ## [4.1.20]

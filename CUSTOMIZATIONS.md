@@ -28,6 +28,7 @@ This file is the durable customization ledger for this repository. The source on
 - A visual approval center lets users queue, select, dry-run, and explicitly approve create, update, archive, or relation operations. Every target and database schema is revalidated before execution; operations run sequentially and stop safely on partial failure.
 - Manual synchronization recipes cover builds, Cline engineering logs, GitHub work, releases, and technical-debt backlogs. No background synchronization is started.
 - Local audits can be exported without prompts or Notion content. Official GitHub Actions now use Node 24 generations, and unrelated reverse-engineering timing tests no longer block the focused Notion installer gate.
+- The compiled terminal smoke fixture waits for its explicit input payload and ignores incidental ConPTY control traffic, preventing a resize event from ending an otherwise healthy Windows build.
 
 Primary files:
 
