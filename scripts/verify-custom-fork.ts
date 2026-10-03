@@ -65,7 +65,7 @@ const requiredMarkers: Array<{
       "Run process-session terminal smoke test",
       "repository-tool.test.ts",
       "functions-view.test.tsx",
-      "runtime-builder.test.ts",
+      "notion-provenance.test.ts",
       "permission-profile.test.ts",
       "always() && steps.installer.outcome == 'success'",
       "process-session-terminal-smoke.ts",

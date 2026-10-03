@@ -165,7 +165,7 @@ jobs:
         run: |
           bunx vitest run \
             sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
-            sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts \
+            sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts \
             --config vitest.config.mts \
             --testTimeout=60000
 
