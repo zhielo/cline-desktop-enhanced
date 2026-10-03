@@ -1,5 +1,19 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.0.38
+
+### Added
+
+- Added a separate Project Intelligence workspace to Notion Functions with device-local project profiles, approved source and destination scopes, schema discovery, connection health, and evidence-backed project analysis.
+- Added a visual Notion approval center with selectable operation queues, dry-run diffs, per-operation approval, hard operation limits, sensitive-value redaction, sequential execution, and partial-failure recovery instructions.
+- Added manual build, Cline-session, GitHub, release, and technical-debt synchronization recipes plus privacy-preserving local audit export.
+
+### Changed
+
+- Upgraded the custom Windows installer workflow to Node 24 GitHub Actions and focused its Notion isolation gate so unrelated reverse-engineering timing cannot block this feature build.
+- Hardened the native terminal smoke fixture so Windows ConPTY resize/control traffic cannot be mistaken for the expected input payload.
+- Normal Cline chat, models, providers, tools, and existing sessions remain unchanged; every Notion capability is still explicitly launched in a separate host-isolated session.
+
 ## [4.1.20]
 
 ### Changed
@@ -780,11 +794,13 @@ These land through SDK v0.0.74 and therefore apply to windows running the SDK bu
 ## [3.74.0]
 
 ### Added
+
 - Implement dynamic free model detection for Cline API
 - Add file read deduplication cache to prevent repeated reads
 - Add feature tips tooltip during thinking state
 
 ### Fixed
+
 - Replace error message when not logged in to Cline
 - Align ClineRulesToggleModal padding with ServersToggleModal
 - Skip WebP for GLM and Devstral models running through llama.cpp
@@ -842,7 +858,7 @@ These land through SDK v0.0.74 and therefore apply to windows running the SDK bu
 ### Added
 
 - New Cline API docs: Getting Started, Auth, Chat Completions, Models, Errors, and SDK Examples
-- Hook payloads now include `model.provider` and `model.slug` 
+- Hook payloads now include `model.provider` and `model.slug`
 - Token/cost updates now happen immediately as usage chunks arrive, not after tool execution
 
 ### Fixed
@@ -855,8 +871,7 @@ These land through SDK v0.0.74 and therefore apply to windows running the SDK bu
 ### Changed
 
 - Windows test cleanup now retries on locked files and applies per-test timeouts
-- Updated hooks docs 
-
+- Updated hooks docs
 
 ## [3.69.0]
 
@@ -948,7 +963,6 @@ These land through SDK v0.0.74 and therefore apply to windows running the SDK bu
 
 - Gemini-3.1 Pro Preview
 
-
 ## [3.65.0]
 
 ### Added
@@ -964,8 +978,8 @@ These land through SDK v0.0.74 and therefore apply to windows running the SDK bu
 ## [3.64.0]
 
 ### Added
-- Added sonnet 4.6
 
+- Added sonnet 4.6
 
 ## [3.63.0]
 

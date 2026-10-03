@@ -222,9 +222,9 @@ function isSkillsToolEnabledForSession(input: {
 
 const SKILLS_PROBE_EXECUTOR = (async () => "") as SkillsExecutorWithMetadata;
 
-const OFFICIAL_NOTION_MCP_URL = "https://mcp.notion.com/mcp";
+export const OFFICIAL_NOTION_MCP_URL = "https://mcp.notion.com/mcp";
 
-function isOfficialNotionRegistration(registration: {
+export function isOfficialNotionRegistration(registration: {
 	name: string;
 	metadata?: Record<string, unknown>;
 	transport: { type: string; url?: string };

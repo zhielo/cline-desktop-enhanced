@@ -63,7 +63,7 @@ try {
 		executable: bunExecutable,
 		args: [
 			"-e",
-			'console.log("tty:" + process.stdin.isTTY + ":" + process.stdout.isTTY); process.stdin.resume(); process.stdin.once("data", chunk => { const input = Buffer.from(chunk).toString().replace(/[\\r\\n]+/g, ""); process.stdout.write("input:" + input + "\\n", () => process.exit(0)); }); console.log("ready:input");',
+			'console.log("tty:" + process.stdin.isTTY + ":" + process.stdout.isTTY); let input = ""; process.stdin.resume(); process.stdin.on("data", chunk => { input += Buffer.from(chunk).toString(); if (input.includes("ping")) process.stdout.write("input:ping\\n", () => process.exit(0)); }); console.log("ready:input");',
 		],
 		cwd: process.cwd(),
 		interactive: true,
