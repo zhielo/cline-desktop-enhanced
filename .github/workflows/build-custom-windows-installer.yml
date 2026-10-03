@@ -3,6 +3,8 @@ name: Build custom Windows installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "feat/notion-agent-review-pipeline"
     tags:
       - "desktop-v*"
 
