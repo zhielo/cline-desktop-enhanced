@@ -23,6 +23,11 @@ This file is the durable customization ledger for this repository. The source on
 - Function sessions disable tool auto-approval, display a persistent Notion Function banner, and preserve proposed writes in the chat transcript for explicit review.
 - The hub stores optional default destinations, reusable custom templates, and a bounded local launch audit in browser-local storage. Recent functions can be run again; actual tool calls remain visible in their separate session transcripts.
 - A device-local context basket pins existing Notion page names or URLs to function drafts. Manual Notion Agent handoff publishes an approved project-analysis page and returns a copyable Agent instruction; review import reads the resulting page back into a read-only Cline planning session without pretending to invoke the private Agent API.
+- Device-local Project Intelligence profiles bind a repository to approved Notion sources, a destination, project instructions, a context TTL, a write policy, a redaction policy, and a hard operation cap without storing Notion credentials or page content.
+- The Project Intelligence dashboard launches evidence-backed repository analysis, schema-aware workspace discovery, and official-connection health checks. Claims must cite repository, commit/PR, build, Cline-session, or Notion evidence.
+- A visual approval center lets users queue, select, dry-run, and explicitly approve create, update, archive, or relation operations. Every target and database schema is revalidated before execution; operations run sequentially and stop safely on partial failure.
+- Manual synchronization recipes cover builds, Cline engineering logs, GitHub work, releases, and technical-debt backlogs. No background synchronization is started.
+- Local audits can be exported without prompts or Notion content. Official GitHub Actions now use Node 24 generations, and unrelated reverse-engineering timing tests no longer block the focused Notion installer gate.
 
 Primary files:
 
