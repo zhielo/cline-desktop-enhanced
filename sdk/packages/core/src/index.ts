@@ -440,11 +440,7 @@ export type {
 export * from "./hub";
 export { HubRuntimeHost } from "./hub/runtime-host/hub-runtime-host";
 export { RemoteRuntimeHost } from "./hub/runtime-host/remote-runtime-host";
-export {
-	hashSecret,
-	sdkDebug,
-	setSdkLogger,
-} from "./logging/early-logger";
+export { hashSecret, sdkDebug, setSdkLogger } from "./logging/early-logger";
 export {
 	buildRemoteConfigSessionBlobUploadMetadata,
 	createRemoteConfigSessionMessagesArtifactUploader,
@@ -906,10 +902,7 @@ export type {
 	CoreSettingsToggleInput,
 	CoreSettingsType,
 } from "./settings";
-export {
-	CoreSettingsService,
-	createCoreSettingsService,
-} from "./settings";
+export { CoreSettingsService, createCoreSettingsService } from "./settings";
 export * from "./tasks";
 export type {
 	ChatMessage,
@@ -995,6 +988,7 @@ export {
 	PATCH_MARKERS,
 	PatchActionType,
 	type PatchFileChange,
+  getProcessSessionRuntimeCapabilities,
 	ProcessSessionManager,
 	type ProcessSessionReadResult,
 	type ProcessSessionSignal,

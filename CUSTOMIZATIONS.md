@@ -132,6 +132,9 @@ Primary files:
 - The chat header opens a unified Workspace with Changes, Files, Terminal, and Analysis tabs.
 - Integrated terminals reuse `ProcessSessionManager` rather than spawning an unrelated shell path. Starting one requires an explicit host Full Access confirmation; output stays bounded and secret-redacted, and active processes retain stable IDs and conservative recovery.
 - The Analysis tab exposes a static-operation allowlist for IDA/Ghidra/JADX workflows, live tool/version discovery, evidence output, verified GUI handoff, and separately confirmed one-shot GDB/LLDB/CDB actions. Arbitrary analysis scripts and unconfirmed execution-control operations are blocked.
+- A device-local Analysis Orchestrator prepares immutable task envelopes before execution, enforces workspace path confinement, permission requirements and resource budgets, and issues one-time tokens bound to the exact operation and target. Completed tasks retain only bounded metadata, output paths, and SHA-256 evidence hashes.
+- The workbench separates Tasks, Analyze, Debug, Terminal, Approvals, Evidence, and Diagnostics. Fast discovery is cached; deep health checks explicitly probe versions, IDA Hex-Rays/idalib, Ghidra/PyGhidra, JADX, Android build tools, and supplemental utilities.
+- Interactive process sessions negotiate PTY or Windows ConPTY and fall back to bounded, secret-redacted pipes when the runtime lacks terminal support. Dynamic analysis remains disabled on the host and requires a separately provisioned isolated worker or disposable VM.
 - These controls remain capability boundaries, not native Windows containment. Unknown executables require an externally provisioned disposable VM; see `docs/EXECUTION_WORKBENCH.md`.
 
 ### Command execution performance

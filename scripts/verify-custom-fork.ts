@@ -61,8 +61,12 @@ const requiredMarkers: Array<{
 			"Run required desktop sidecar regression suite",
 			"Test desktop chat UI",
 			"Run desktop customization tests",
-			"Run Notion isolation SDK tests",
+      "Run focused SDK safety tests",
 			"Run process-session terminal smoke test",
+      "analysis-task-orchestrator.test.ts",
+      "commands-workbench.test.ts",
+      "process-session-manager.test.ts",
+      "reverse-engineering.test.ts",
 			"repository-tool.test.ts",
 			"notion-agent-bridge.test.ts",
 			"notion-agent-patch.test.ts",
@@ -75,6 +79,26 @@ const requiredMarkers: Array<{
 			"bun-version: ${{ env.BUN_VERSION }}",
 		],
 	},
+  {
+    path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
+    markers: [
+      "AnalysisTaskOrchestrator",
+      "awaiting-approval",
+      "executionToken",
+      "isolated analysis worker",
+      "resultHash",
+    ],
+  },
+  {
+    path: "apps/examples/desktop-app/webview/components/views/chat/analysis-workbench.tsx",
+    markers: [
+      "prepare_analysis_task",
+      "approve_analysis_task",
+      "Approval boundary",
+      "Evidence ledger",
+      "Deep check",
+    ],
+  },
 	{
 		path: "apps/examples/desktop-app/sidecar/repository-tool.ts",
 		markers: [

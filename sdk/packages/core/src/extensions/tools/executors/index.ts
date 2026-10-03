@@ -60,6 +60,7 @@ export {
 	DEFAULT_MAX_PROCESS_SESSIONS,
 	DEFAULT_MAX_PROCESS_SESSIONS_PER_OWNER,
 	DEFAULT_PROCESS_OUTPUT_BYTES,
+  getProcessSessionRuntimeCapabilities,
 	ProcessSessionManager,
 	type ProcessSessionManagerOptions,
 	type ProcessSessionOutputChunk,

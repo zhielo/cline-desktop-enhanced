@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "feat/notion-agent-review-pipeline"
+      - "feat/analysis-orchestrator-workbench"
     tags:
       - "desktop-v*"
 
@@ -154,21 +154,22 @@ jobs:
         shell: bash
         run: |
           bunx vitest run \
+            apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts \
             apps/examples/desktop-app/sidecar/browser-manager.test.ts \
+            apps/examples/desktop-app/sidecar/commands-workbench.test.ts \
             apps/examples/desktop-app/sidecar/repository-tool.test.ts \
             apps/examples/desktop-app/sidecar/notion-agent-bridge.test.ts \
             apps/examples/desktop-app/sidecar/notion-agent-patch.test.ts \
             apps/examples/desktop-app/webview/components/views/settings/functions-view.test.tsx \
             --config apps/examples/desktop-app/vitest.config.mts
 
-      # Keep this release gate focused on Notion session isolation. Broader
-      # reverse-engineering regressions remain in the normal SDK CI matrix and
-      # cannot block an unrelated Notion desktop installer because of timing.
-      - name: Run Notion isolation SDK tests
+      - name: Run focused SDK safety tests
         shell: bash
         run: |
           bunx vitest run \
             sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
+            sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts \
+            sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
             sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts \
             --config vitest.config.mts \
             --testTimeout=60000

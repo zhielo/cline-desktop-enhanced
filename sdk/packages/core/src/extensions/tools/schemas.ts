@@ -160,6 +160,12 @@ export const ReverseEngineeringInputSchema = z.object({
 			"Optional absolute destination for a JSON or HTML forensic report",
 		),
 	report_format: z.enum(["json", "html"]).default("json"),
+  discovery_depth: z
+    .enum(["fast", "deep"])
+    .default("fast")
+    .describe(
+      "Discovery only: fast returns cached executable inventory; deep also verifies versions, plugins, decompilers, and supplemental tools",
+    ),
 	acknowledge_external_output: z
 		.boolean()
 		.optional()
@@ -576,7 +582,7 @@ export type ReadFilesInput = z.infer<typeof ReadFilesInputSchema>;
 /**
  * Input for the search_codebase tool
  */
-export type ReverseEngineeringInput = z.infer<
+export type ReverseEngineeringInput = z.input<
 	typeof ReverseEngineeringInputSchema
 >;
 export type LiveDebuggerInput = z.infer<typeof LiveDebuggerInputSchema>;

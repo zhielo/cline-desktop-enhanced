@@ -46,6 +46,12 @@ const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
 const GHIDRA_SCRIPT_VERSION = 2;
 const IDA_DECOMPILE_SCRIPT_VERSION = 1;
 const analysisLocks = new Map<string, Promise<void>>();
+const DISCOVERY_CACHE_TTL_MS = 5 * 60_000;
+const DISCOVERY_PROBE_TIMEOUT_MS = 5_000;
+const discoveryCache = new Map<
+  string,
+  { expiresAt: number; value: Promise<Record<string, unknown>> }
+>();
 
 type OutputScope = "managed" | "external-approved";
 
@@ -397,6 +403,31 @@ async function discoverFirst(commands: string[]): Promise<string | undefined> {
 		if (await commandAvailable(command)) return command;
 	}
 	return undefined;
+}
+
+async function boundedDiscoveryProbe<T>(
+  label: string,
+  probe: () => Promise<T>,
+): Promise<{ value?: T; error?: string }> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const value = await Promise.race([
+      probe(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} discovery timed out`)),
+          DISCOVERY_PROBE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    return { value };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function knownAndroidSdkRoots(): Promise<string[]> {
@@ -1685,8 +1716,7 @@ function reportFindings(
 		});
 	}
 	const categories = strings.categoryCounts as
-		| Record<string, number>
-		| undefined;
+    Record<string, number> | undefined;
 	if ((categories?.securityRelevant ?? 0) > 0) {
 		findings.push({
 			severity: "low",
@@ -1696,8 +1726,7 @@ function reportFindings(
 		});
 	}
 	const signature = apk?.signature as
-		| { verified?: boolean; available?: boolean }
-		| undefined;
+    { verified?: boolean; available?: boolean } | undefined;
 	if (
 		signature &&
 		signature.available !== false &&
@@ -1711,8 +1740,7 @@ function reportFindings(
 		});
 	}
 	const manifest = apk?.manifest as
-		| { exportedSignals?: number; permissions?: string[] }
-		| undefined;
+    { exportedSignals?: number; permissions?: string[] } | undefined;
 	if ((manifest?.exportedSignals ?? 0) > 0) {
 		findings.push({
 			severity: "info",
@@ -2272,6 +2300,107 @@ async function installationCapabilities(
 	};
 }
 
+async function discoverCapabilities(
+  depth: "fast" | "deep",
+): Promise<Record<string, unknown>> {
+  const cacheKey = JSON.stringify({
+    depth,
+    platform: process.platform,
+    path: process.env.PATH ?? "",
+    ghidra: process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR ?? "",
+    ida: process.env.IDA_HOME ?? process.env.IDADIR ?? "",
+    jadx: process.env.JADX_HOME ?? "",
+  });
+  const cached = discoveryCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      ...(await cached.value),
+      discovery: { cacheHit: true, depth, ttlMs: DISCOVERY_CACHE_TTL_MS },
+    };
+  }
+  if (cached) discoveryCache.delete(cacheKey);
+
+  const startedAtMs = Date.now();
+  const value = (async (): Promise<Record<string, unknown>> => {
+    const [ghidra, ida, jadx, android] = await Promise.all([
+      boundedDiscoveryProbe("Ghidra", () => discover("ghidra")),
+      boundedDiscoveryProbe("IDA", () => discover("ida")),
+      boundedDiscoveryProbe("JADX", () => discover("jadx")),
+      boundedDiscoveryProbe("Android build tools", discoverAndroidUtilities),
+    ]);
+    const available: ToolInventory = {
+      ghidra: ghidra.value,
+      ida: ida.value,
+      jadx: jadx.value,
+    };
+    const androidUtilities = android.value ?? {};
+    const probeErrors = Object.fromEntries(
+      [
+        ["ghidra", ghidra.error],
+        ["ida", ida.error],
+        ["jadx", jadx.error],
+        ["androidBuildTools", android.error],
+      ].filter((entry): entry is [string, string] => Boolean(entry[1])),
+    );
+
+    let capabilities: Record<string, unknown>;
+    if (depth === "deep") {
+      const deep = await boundedDiscoveryProbe("Deep tool health", () =>
+        installationCapabilities(available, androidUtilities),
+      );
+      capabilities =
+        deep.value ??
+        ({
+          platform: process.platform,
+          ghidra: { headless: available.ghidra },
+          ida: { headless: available.ida },
+          jadx: { cli: available.jadx },
+          androidBuildTools: androidUtilities,
+          androidStudio: { detected: false },
+          supplementalTools: {},
+          toolSelectionGuide: {},
+          cacheDirectory: analysisCacheRoot(),
+        } satisfies Record<string, unknown>);
+      if (deep.error) probeErrors.deepHealth = deep.error;
+    } else {
+      capabilities = {
+        platform: process.platform,
+        ghidra: { headless: available.ghidra },
+        ida: { headless: available.ida },
+        jadx: { cli: available.jadx },
+        androidBuildTools: androidUtilities,
+        androidStudio: { plugins: [], status: "deep discovery not requested" },
+        supplementalTools: {},
+        toolSelectionGuide: {
+          nextStep:
+            "Run deep discovery to verify versions, GUI tools, plugins, decompilers, and supplemental utilities.",
+        },
+        cacheDirectory: analysisCacheRoot(),
+      };
+    }
+    return {
+      capabilities,
+      ...(Object.keys(probeErrors).length > 0 ? { probeErrors } : {}),
+      discovery: {
+        cacheHit: false,
+        depth,
+        durationMs: Date.now() - startedAtMs,
+        ttlMs: DISCOVERY_CACHE_TTL_MS,
+      },
+    };
+  })();
+  discoveryCache.set(cacheKey, {
+    expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS,
+    value,
+  });
+  try {
+    return await value;
+  } catch (error) {
+    discoveryCache.delete(cacheKey);
+    throw error;
+  }
+}
+
 function chooseAuto(
 	target: string,
 	available: ToolInventory,
@@ -2296,26 +2425,23 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
 		const pathRefreshed = await refreshProcessPath();
-		const available: ToolInventory = {
-			ghidra: await discover("ghidra"),
-			ida: await discover("ida"),
-			jadx: await discover("jadx"),
-		};
-		const androidUtilities = await discoverAndroidUtilities();
 		if (input.operation === "discover") {
-			const capabilities = await installationCapabilities(
-				available,
-				androidUtilities,
+      const discovered = await discoverCapabilities(
+        input.discovery_depth ?? "fast",
 			);
+      const capabilities = discovered.capabilities as {
+        ida?: { idalibActivationScript?: string };
+        ghidra?: { bundledPyGhidra?: string };
+      };
 			return JSON.stringify(
 				{
-					capabilities,
+          ...discovered,
 					pathRefreshed,
 					recommendations: {
-						ida: capabilities.ida.idalibActivationScript
+            ida: capabilities.ida?.idalibActivationScript
 							? `Activate idalib once with: uv run "${capabilities.ida.idalibActivationScript}"`
 							: "Set IDADIR or IDA_HOME if IDA is installed but not detected.",
-						ghidra: capabilities.ghidra.bundledPyGhidra
+            ghidra: capabilities.ghidra?.bundledPyGhidra
 							? `Install bundled PyGhidra with: py -m pip install --no-index -f "${capabilities.ghidra.bundledPyGhidra}" pyghidra`
 							: "Set GHIDRA_INSTALL_DIR if Ghidra is installed but not detected.",
 					},
@@ -2324,6 +2450,12 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				2,
 			);
 		}
+    const available: ToolInventory = {
+      ghidra: await discover("ghidra"),
+      ida: await discover("ida"),
+      jadx: await discover("jadx"),
+    };
+    const androidUtilities = await discoverAndroidUtilities();
 		if (!input.target) throw new Error("target is required for this operation");
 		if (!path.isAbsolute(input.target))
 			throw new Error("target must be an absolute path");
@@ -2503,8 +2635,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			}
 			const strings = stages.strings as Record<string, unknown>;
 			const apkSecurity = stages.apkSecurity as
-				| Record<string, unknown>
-				| undefined;
+        Record<string, unknown> | undefined;
 			const report: Record<string, unknown> = {
 				schemaVersion: FORENSIC_REPORT_SCHEMA_VERSION,
 				operation: input.operation,
