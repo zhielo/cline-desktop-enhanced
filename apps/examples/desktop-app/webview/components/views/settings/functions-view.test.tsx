@@ -247,4 +247,150 @@ describe("FunctionsView project intelligence", () => {
     );
     expect(storedHistory).not.toContain("# Package");
   });
+
+  it("dry-runs and applies an Agent patch only after separate local approval", async () => {
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "prepare_notion_agent_bridge") {
+        return {
+          root: "C:\\work\\desktop",
+          createdAt: "2026-10-03T00:00:00.000Z",
+          files: [
+            {
+              path: "src/index.ts",
+              hash: "abc123",
+              originalBytes: 42,
+              sharedBytes: 42,
+              redactions: 0,
+              truncated: false,
+              content: "export const ready = false;",
+            },
+          ],
+          excluded: [],
+          totalOriginalBytes: 42,
+          totalSharedBytes: 42,
+          totalRedactions: 0,
+          truncated: false,
+          packageMarkdown: "# Package",
+        };
+      }
+      if (command === "preview_notion_agent_patch") {
+        return {
+          previewId: "preview-1",
+          root: "C:\\work\\desktop",
+          baseCommit: "1234567890abcdef",
+          baseBranch: "main",
+          cleanWorkspace: true,
+          applicable: true,
+          files: [
+            {
+              path: "src/index.ts",
+              status: "Modified",
+              originalHash: "abc123",
+              expectedHash: "abc123",
+              additions: 1,
+              deletions: 1,
+            },
+          ],
+          additions: 1,
+          deletions: 1,
+          warnings: [],
+          citations: ["src/index.ts:1@sha256:abc123"],
+          patchHash: "patch123",
+        };
+      }
+      if (command === "apply_notion_agent_patch") {
+        return {
+          previewId: "preview-2",
+          root: "C:\\work\\desktop",
+          baseCommit: "1234567890abcdef",
+          baseBranch: "main",
+          cleanWorkspace: true,
+          applicable: true,
+          files: [
+            {
+              path: "src/index.ts",
+              status: "Modified",
+              originalHash: "abc123",
+              expectedHash: "abc123",
+              additions: 1,
+              deletions: 1,
+            },
+          ],
+          additions: 1,
+          deletions: 1,
+          warnings: [],
+          citations: ["src/index.ts:1@sha256:abc123"],
+          patchHash: "patch123",
+          branch: "notion-agent/review",
+          previousBranch: "main",
+          appliedHashes: { "src/index.ts": "def456" },
+        };
+      }
+      return {
+        servers: [
+          {
+            name: "Notion",
+            disabled: false,
+            url: "https://mcp.notion.com/mcp",
+            oauthStatus: { configured: true, authorizationRequired: false },
+          },
+        ],
+      };
+    });
+    await renderFunctions();
+    const question = container.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder^="Analyze this local project"]',
+    )!;
+    await changeTextarea(question, "Review the architecture");
+    const prepare = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Prepare secure preview"),
+    )!;
+    await click(prepare);
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Approved-package preview"),
+    );
+
+    const response = container.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder^="Paste the complete Agent"]',
+    )!;
+    const patch = container.querySelector<HTMLTextAreaElement>(
+      'textarea[placeholder^="diff --git"]',
+    )!;
+    await changeTextarea(response, "Evidence src/index.ts:1@sha256:abc123");
+    await changeTextarea(
+      patch,
+      "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-false\n+true\n",
+    );
+    const dryRun = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Dry-run patch"),
+    )!;
+    await click(dryRun);
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Dry-run passed"),
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      "preview_notion_agent_patch",
+      expect.objectContaining({ approvedHashes: { "src/index.ts": "abc123" } }),
+      { timeoutMs: 120000 },
+    );
+
+    const applyApproval = [
+      ...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ].find((input) =>
+      input.closest("label")?.textContent?.includes("new isolated Git branch"),
+    )!;
+    await act(async () => applyApproval.click());
+    const apply = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Apply on isolated branch"),
+    )!;
+    await click(apply);
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Applied to notion-agent/review"),
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      "apply_notion_agent_patch",
+      expect.objectContaining({ confirm: true }),
+      { timeoutMs: 120000 },
+    );
+  });
 });

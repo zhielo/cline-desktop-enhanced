@@ -9,12 +9,14 @@ import {
   FilePlus2,
   FileText,
   FolderGit2,
+  GitBranch,
   GitPullRequest,
   History,
   ListChecks,
   Loader2,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   ShieldCheck,
@@ -49,11 +51,22 @@ const ACTIVE_PROJECT_KEY = "cline.notion-functions.active-project.v1";
 const OPERATION_QUEUE_KEY = "cline.notion-functions.operation-queue.v1";
 const AGENT_BRIDGE_SNAPSHOTS_KEY =
   "cline.notion-functions.agent-bridge-snapshots.v1";
+const AGENT_BRIDGE_LEDGER_KEY =
+  "cline.notion-functions.agent-bridge-ledger.v1";
+const AGENT_BRIDGE_RECOVERY_KEY =
+  "cline.notion-functions.agent-bridge-recovery.v1";
 
 type FunctionMode = "Read only" | "Approval before write";
 type ProjectAccessMode = "Read only" | "Approval before write";
 type OperationKind = "Create" | "Update" | "Archive" | "Relate";
 type AgentBridgeMode = "Auto" | "Custom Agent" | "Manual handoff";
+type AgentTaskPreset =
+  | "Architecture review"
+  | "Bug investigation"
+  | "Security audit"
+  | "Refactoring plan"
+  | "Test generation"
+  | "Documentation";
 
 type ProjectProfile = {
   id: string;
@@ -81,6 +94,8 @@ type QueuedOperation = {
 type AgentBridgeFile = {
   path: string;
   hash: string;
+  lineCount?: number;
+  selectionReason?: string;
   originalBytes: number;
   sharedBytes: number;
   redactions: number;
@@ -101,6 +116,70 @@ type AgentBridgePackage = {
 };
 
 type AgentBridgeSnapshots = Record<string, Record<string, string>>;
+
+type AgentBridgeLedgerEntry = {
+  id: string;
+  project: string;
+  preset: AgentTaskPreset;
+  mode: AgentBridgeMode;
+  files: number;
+  bytes: number;
+  redactions: number;
+  patchHash?: string;
+  action: "Shared" | "Patch previewed" | "Patch applied" | "Rolled back";
+  createdAt: number;
+};
+
+type AgentRecovery = {
+  project: string;
+  agentName: string;
+  mode: AgentBridgeMode;
+  launchedAt: number;
+  sessionUrl?: string;
+};
+
+type AgentPatchPreview = {
+  previewId: string;
+  root: string;
+  baseCommit: string;
+  baseBranch: string;
+  cleanWorkspace: boolean;
+  applicable: boolean;
+  files: Array<{
+    path: string;
+    status: "Modified" | "Added" | "Deleted";
+    originalHash: string | null;
+    expectedHash: string | null;
+    additions: number;
+    deletions: number;
+  }>;
+  additions: number;
+  deletions: number;
+  warnings: string[];
+  citations: string[];
+  patchHash: string;
+};
+
+type AppliedAgentPatch = AgentPatchPreview & {
+  branch: string;
+  previousBranch: string;
+  appliedHashes: Record<string, string | null>;
+};
+
+const AGENT_TASK_PRESETS: Record<AgentTaskPreset, string> = {
+  "Architecture review":
+    "Analyze architecture boundaries, dependency direction, coupling, reliability, and the highest-value structural improvements.",
+  "Bug investigation":
+    "Find the likely root cause, trace the execution path, identify reproducible evidence, and propose the smallest safe fix with regression tests.",
+  "Security audit":
+    "Identify exploitable trust-boundary, secret-handling, injection, path, authorization, and dependency risks. Rank findings by severity and evidence.",
+  "Refactoring plan":
+    "Identify maintainability hotspots and propose an incremental, behavior-preserving refactor with explicit tests and rollback points.",
+  "Test generation":
+    "Find high-risk untested behavior and propose focused deterministic tests, including failure paths and security boundaries.",
+  Documentation:
+    "Produce accurate developer documentation grounded only in supplied evidence, including architecture, setup, workflows, constraints, and troubleshooting.",
+};
 
 export type FunctionLaunchRequest = {
   title: string;
@@ -377,6 +456,8 @@ export function FunctionsView({
   const [operationTarget, setOperationTarget] = useState("");
   const [operationDetails, setOperationDetails] = useState("");
   const [bridgeMode, setBridgeMode] = useState<AgentBridgeMode>("Auto");
+  const [bridgePreset, setBridgePreset] =
+    useState<AgentTaskPreset>("Architecture review");
   const [bridgeAgentName, setBridgeAgentName] = useState("");
   const [bridgeQuestion, setBridgeQuestion] = useState("");
   const [bridgePaths, setBridgePaths] = useState("");
@@ -395,6 +476,26 @@ export function FunctionsView({
   const [bridgeSnapshots, setBridgeSnapshots] = useState<AgentBridgeSnapshots>(
     {},
   );
+  const [bridgeLedger, setBridgeLedger] = useState<AgentBridgeLedgerEntry[]>(
+    [],
+  );
+  const [agentRecovery, setAgentRecovery] = useState<AgentRecovery | null>(
+    null,
+  );
+  const [agentResponse, setAgentResponse] = useState("");
+  const [agentPatch, setAgentPatch] = useState("");
+  const [patchBranchName, setPatchBranchName] = useState("");
+  const [allowNewPatchFiles, setAllowNewPatchFiles] = useState(false);
+  const [patchPreview, setPatchPreview] = useState<AgentPatchPreview | null>(
+    null,
+  );
+  const [appliedPatch, setAppliedPatch] = useState<AppliedAgentPatch | null>(
+    null,
+  );
+  const [patchBusy, setPatchBusy] = useState(false);
+  const [patchError, setPatchError] = useState<string | null>(null);
+  const [approvePatchApply, setApprovePatchApply] = useState(false);
+  const [approvePatchRollback, setApprovePatchRollback] = useState(false);
 
   useEffect(() => {
     setCustomTemplates(
@@ -420,6 +521,12 @@ export function FunctionsView({
     );
     setBridgeSnapshots(
       readStoredJson<AgentBridgeSnapshots>(AGENT_BRIDGE_SNAPSHOTS_KEY, {}),
+    );
+    setBridgeLedger(
+      readStoredJson<AgentBridgeLedgerEntry[]>(AGENT_BRIDGE_LEDGER_KEY, []),
+    );
+    setAgentRecovery(
+      readStoredJson<AgentRecovery | null>(AGENT_BRIDGE_RECOVERY_KEY, null),
     );
   }, []);
 
@@ -772,6 +879,14 @@ Project instructions: ${activeProject.instructions || "None"}`
     });
   }, [launchTemplate]);
 
+  const appendBridgeLedger = useCallback((entry: AgentBridgeLedgerEntry) => {
+    setBridgeLedger((current) => {
+      const next = [entry, ...current].slice(0, 100);
+      writeStoredJson(AGENT_BRIDGE_LEDGER_KEY, next);
+      return next;
+    });
+  }, []);
+
   const launchAgentBridge = useCallback(() => {
     if (!bridgePackage || !bridgeApproveUpload) return;
     if (bridgeMode !== "Manual handoff" && !bridgeApproveLaunch) return;
@@ -810,6 +925,9 @@ Project instructions: ${activeProject.instructions || "None"}`
     ).length;
     const prompt = `Bridge a local computer project to Notion AI using only the official Notion connection.
 
+Task preset: ${bridgePreset}
+Preset objective: ${AGENT_TASK_PRESETS[bridgePreset]}
+
 Incremental evidence summary: ${added} added, ${changed} changed, ${unchanged} unchanged, ${removed} removed since the last approved package. When updating a persistent bridge page, do not rewrite unchanged evidence sections and do not interpret absence from a truncated package as deletion.
 
 Approved operations:
@@ -822,6 +940,9 @@ Security rules:
 - Do not access local files beyond this package.
 - Do not upload excluded files, hidden secrets, binary files, or unredacted credentials.
 - Validate the destination and agent identity before each operation.
+- Cite every finding as path:start-end@sha256:<full hash> using the evidence manifest. Clearly label any inference that lacks direct evidence.
+- Return findings in severity order, then a machine-readable unified Git patch inside a single \`\`\`diff block when code changes are appropriate. Never include shell commands inside the patch.
+- The patch is a proposal only. It will be dry-run locally, shown as a side-by-side review, and requires a separate local approval before application.
 - Show the final page URL, agent URL if used, session status, completed operations, skipped operations, and recovery steps.
 - Do not start schedules, triggers, background synchronization, or future uploads.
 
@@ -836,6 +957,25 @@ ${bridgePackage.packageMarkdown}
     };
     setBridgeSnapshots(nextSnapshots);
     writeStoredJson(AGENT_BRIDGE_SNAPSHOTS_KEY, nextSnapshots);
+    const recovery: AgentRecovery = {
+      project: projectLabel,
+      agentName: agentTarget,
+      mode: bridgeMode,
+      launchedAt: Date.now(),
+    };
+    setAgentRecovery(recovery);
+    writeStoredJson(AGENT_BRIDGE_RECOVERY_KEY, recovery);
+    appendBridgeLedger({
+      id: makeId("bridge"),
+      project: projectLabel,
+      preset: bridgePreset,
+      mode: bridgeMode,
+      files: bridgePackage.files.length,
+      bytes: bridgePackage.totalSharedBytes,
+      redactions: bridgePackage.totalRedactions,
+      action: "Shared",
+      createdAt: Date.now(),
+    });
     launchTemplate({
       title:
         bridgeMode === "Manual handoff"
@@ -854,9 +994,11 @@ ${bridgePackage.packageMarkdown}
     bridgeApproveUpload,
     bridgeKeepPage,
     bridgeMode,
+    bridgePreset,
     bridgePackage,
     bridgeRetentionDays,
     bridgeSnapshots,
+    appendBridgeLedger,
     launchTemplate,
     projectName,
   ]);
@@ -870,6 +1012,177 @@ ${bridgePackage.packageMarkdown}
       prompt: `Find the Notion page titled "Cline Project Bridge — ${projectLabel}" created by an approved bridge run. Show the exact page URL and confirm that any completed Agent answer is already preserved in this Cline session. Ask for explicit approval, then archive only that bridge page. Do not archive project documentation, databases, or similarly named pages.`,
     });
   }, [activeProject?.name, launchTemplate, projectName]);
+
+  const resumeAgentSession = useCallback(() => {
+    if (!agentRecovery) return;
+    launchTemplate({
+      title: "Resume Notion Agent review",
+      mode: "Read only",
+      prompt: `Recover the most recent Notion Agent session for project "${agentRecovery.project}" launched after ${new Date(agentRecovery.launchedAt).toISOString()}${agentRecovery.agentName ? ` with the exact agent "${agentRecovery.agentName}"` : ""}. Use query_sessions or the available session-status tools, show candidate session URLs if more than one matches, and never guess. Resume only after I select the exact session. Do not create or modify Notion content.`,
+    });
+  }, [agentRecovery, launchTemplate]);
+
+  const previewAgentPatch = useCallback(async () => {
+    if (!bridgePackage || !agentPatch.trim()) return;
+    setPatchBusy(true);
+    setPatchError(null);
+    setPatchPreview(null);
+    setAppliedPatch(null);
+    setApprovePatchApply(false);
+    setApprovePatchRollback(false);
+    try {
+      const preview = await desktopClient.invoke<AgentPatchPreview>(
+        "preview_notion_agent_patch",
+        {
+          cwd: bridgePackage.root,
+          patch: agentPatch,
+          response: agentResponse,
+          approvedHashes: Object.fromEntries(
+            bridgePackage.files.map((file) => [file.path, file.hash]),
+          ),
+          allowNewFiles: allowNewPatchFiles,
+        },
+        { timeoutMs: 120_000 },
+      );
+      setPatchPreview(preview);
+      appendBridgeLedger({
+        id: makeId("bridge"),
+        project: activeProject?.name || projectName.trim() || "Local project",
+        preset: bridgePreset,
+        mode: bridgeMode,
+        files: preview.files.length,
+        bytes: new Blob([agentPatch]).size,
+        redactions: bridgePackage.totalRedactions,
+        patchHash: preview.patchHash,
+        action: "Patch previewed",
+        createdAt: Date.now(),
+      });
+    } catch (cause) {
+      setPatchError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPatchBusy(false);
+    }
+  }, [
+    activeProject?.name,
+    agentPatch,
+    agentResponse,
+    allowNewPatchFiles,
+    appendBridgeLedger,
+    bridgeMode,
+    bridgePackage,
+    bridgePreset,
+    projectName,
+  ]);
+
+  const applyAgentPatch = useCallback(async () => {
+    if (
+      !bridgePackage ||
+      !patchPreview?.applicable ||
+      !approvePatchApply ||
+      !agentPatch.trim()
+    )
+      return;
+    setPatchBusy(true);
+    setPatchError(null);
+    try {
+      const applied = await desktopClient.invoke<AppliedAgentPatch>(
+        "apply_notion_agent_patch",
+        {
+          cwd: bridgePackage.root,
+          patch: agentPatch,
+          response: agentResponse,
+          approvedHashes: Object.fromEntries(
+            bridgePackage.files.map((file) => [file.path, file.hash]),
+          ),
+          allowNewFiles: allowNewPatchFiles,
+          branchName: patchBranchName,
+          confirm: true,
+        },
+        { timeoutMs: 120_000 },
+      );
+      setAppliedPatch(applied);
+      setPatchPreview(applied);
+      setApprovePatchApply(false);
+      appendBridgeLedger({
+        id: makeId("bridge"),
+        project: activeProject?.name || projectName.trim() || "Local project",
+        preset: bridgePreset,
+        mode: bridgeMode,
+        files: applied.files.length,
+        bytes: new Blob([agentPatch]).size,
+        redactions: bridgePackage.totalRedactions,
+        patchHash: applied.patchHash,
+        action: "Patch applied",
+        createdAt: Date.now(),
+      });
+    } catch (cause) {
+      setPatchError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPatchBusy(false);
+    }
+  }, [
+    activeProject?.name,
+    agentPatch,
+    agentResponse,
+    allowNewPatchFiles,
+    appendBridgeLedger,
+    approvePatchApply,
+    bridgeMode,
+    bridgePackage,
+    bridgePreset,
+    patchBranchName,
+    patchPreview?.applicable,
+    projectName,
+  ]);
+
+  const rollbackAgentPatch = useCallback(async () => {
+    if (!bridgePackage || !appliedPatch || !approvePatchRollback) return;
+    setPatchBusy(true);
+    setPatchError(null);
+    try {
+      await desktopClient.invoke(
+        "rollback_notion_agent_patch",
+        {
+          cwd: bridgePackage.root,
+          patch: agentPatch,
+          branch: appliedPatch.branch,
+          previousBranch: appliedPatch.previousBranch,
+          appliedHashes: appliedPatch.appliedHashes,
+          confirm: true,
+        },
+        { timeoutMs: 120_000 },
+      );
+      appendBridgeLedger({
+        id: makeId("bridge"),
+        project: activeProject?.name || projectName.trim() || "Local project",
+        preset: bridgePreset,
+        mode: bridgeMode,
+        files: appliedPatch.files.length,
+        bytes: new Blob([agentPatch]).size,
+        redactions: bridgePackage.totalRedactions,
+        patchHash: appliedPatch.patchHash,
+        action: "Rolled back",
+        createdAt: Date.now(),
+      });
+      setAppliedPatch(null);
+      setPatchPreview(null);
+      setApprovePatchRollback(false);
+    } catch (cause) {
+      setPatchError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPatchBusy(false);
+    }
+  }, [
+    activeProject?.name,
+    agentPatch,
+    appendBridgeLedger,
+    appliedPatch,
+    approvePatchRollback,
+    bridgeMode,
+    bridgePackage,
+    bridgePreset,
+    projectName,
+  ]);
 
   const rerun = useCallback(
     (run: FunctionRun) => {
@@ -1371,6 +1684,17 @@ First validate every target and database schema. Return a table with operation n
               <Trash2 className="size-4" />
               Clean up bridge page
             </Button>
+            {agentRecovery ? (
+              <Button
+                disabled={!connected || !onLaunchFunction}
+                onClick={resumeAgentSession}
+                size="sm"
+                variant="ghost"
+              >
+                <RefreshCw className="size-4" />
+                Resume last agent
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -1397,7 +1721,21 @@ First validate every target and database schema. Return a table with operation n
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Analysis preset
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              onChange={(event) =>
+                setBridgePreset(event.target.value as AgentTaskPreset)
+              }
+              value={bridgePreset}
+            >
+              {Object.keys(AGENT_TASK_PRESETS).map((preset) => (
+                <option key={preset}>{preset}</option>
+              ))}
+            </select>
+          </label>
           <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             Bridge mode
             <select
@@ -1549,6 +1887,10 @@ First validate every target and database schema. Return a table with operation n
                   <span className="break-all text-foreground">{file.path}</span>
                   <span className="text-muted-foreground">
                     {file.sharedBytes} B
+                    {file.lineCount ? ` · ${file.lineCount} lines` : ""}
+                    {file.selectionReason
+                      ? ` · ${file.selectionReason}`
+                      : ""}
                     {file.redactions ? ` · ${file.redactions} redacted` : ""}
                     {file.truncated ? " · truncated" : ""}
                   </span>
@@ -1643,6 +1985,594 @@ First validate every target and database schema. Return a table with operation n
             </div>
           </div>
         ) : null}
+      </section>
+
+      <section className="mb-8 rounded-xl border border-primary/40 bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+          <div className="flex items-center gap-2">
+              <GitBranch className="size-5 text-primary" />
+            <h2 className="text-base font-semibold text-foreground">
+                Notion Agent review-to-patch
+            </h2>
+              <Badge variant="outline">Local approval required</Badge>
+          </div>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Paste the Agent response and its unified Git patch. Cline verifies
+              evidence hashes, paths, file types, citations, workspace state,
+              and <code>git apply --check</code> before showing a review. Apply
+              creates a separate <code>notion-agent/*</code> branch and never
+              commits, pushes, or merges automatically.
+              </p>
+            </div>
+          <Badge variant={bridgePackage ? "outline" : "secondary"}>
+            {bridgePackage
+              ? `${bridgePackage.files.length} approved evidence files`
+              : "Prepare a bridge package first"}
+          </Badge>
+          </div>
+
+        <label
+          className="mt-4 grid gap-1 text-xs font-medium text-muted-foreground"
+          htmlFor="notion-agent-response"
+        >
+          Notion Agent response with path:line@sha256 citations
+          <Textarea
+            disabled={!bridgePackage || Boolean(appliedPatch)}
+            id="notion-agent-response"
+            onChange={(event) => {
+              setAgentResponse(event.target.value);
+              setPatchPreview(null);
+              setApprovePatchApply(false);
+            }}
+            placeholder="Paste the complete Agent findings and evidence citations."
+            rows={5}
+            value={agentResponse}
+          />
+        </label>
+        <label
+          className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground"
+          htmlFor="notion-agent-patch"
+        >
+          Proposed unified Git patch
+          <Textarea
+            className="font-mono"
+            disabled={!bridgePackage || Boolean(appliedPatch)}
+            id="notion-agent-patch"
+            onChange={(event) => {
+              setAgentPatch(event.target.value);
+              setPatchPreview(null);
+              setApprovePatchApply(false);
+            }}
+            placeholder={
+              "diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n..."
+            }
+            rows={9}
+            value={agentPatch}
+          />
+        </label>
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+          <label
+            className="grid gap-1 text-xs font-medium text-muted-foreground"
+            htmlFor="notion-agent-branch"
+          >
+            Isolated branch suffix
+            <Input
+              disabled={Boolean(appliedPatch)}
+              id="notion-agent-branch"
+              onChange={(event) => setPatchBranchName(event.target.value)}
+              placeholder="review-architecture"
+              value={patchBranchName}
+            />
+          </label>
+          <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground">
+            <input
+              checked={allowNewPatchFiles}
+              disabled={Boolean(appliedPatch)}
+              onChange={(event) => {
+                setAllowNewPatchFiles(event.target.checked);
+                setPatchPreview(null);
+              }}
+              type="checkbox"
+            />
+            Allow new text files
+          </label>
+            <Button
+            disabled={
+              patchBusy ||
+              !bridgePackage ||
+              !agentPatch.trim() ||
+              Boolean(appliedPatch)
+            }
+            onClick={() => void previewAgentPatch()}
+              size="sm"
+            variant="outline"
+            >
+            {patchBusy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ShieldCheck className="size-4" />
+            )}
+            Dry-run patch
+          </Button>
+        </div>
+
+        {patchError ? (
+          <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {patchError}
+          </p>
+        ) : null}
+
+        {patchPreview ? (
+          <div className="mt-5 rounded-xl border border-border bg-background/40 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Local patch review
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Base {patchPreview.baseBranch} ·{" "}
+                  {patchPreview.baseCommit.slice(0, 12)} ·{" "}
+                  {patchPreview.patchHash.slice(0, 12)}
+                </p>
+              </div>
+              <Badge
+                variant={patchPreview.applicable ? "outline" : "destructive"}
+              >
+                {patchPreview.applicable
+                  ? "Dry-run passed"
+                  : "Application blocked"}
+              </Badge>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {patchPreview.files.map((file) => (
+                <div
+                  className="grid gap-2 rounded-md border border-border px-3 py-2 text-xs sm:grid-cols-[90px_1fr_auto]"
+                  key={file.path}
+                >
+                  <Badge variant="outline">{file.status}</Badge>
+                  <span className="break-all text-foreground">{file.path}</span>
+                  <span className="text-muted-foreground">
+                    +{file.additions} / -{file.deletions}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              {patchPreview.citations.length} verifiable citation(s) · +
+              {patchPreview.additions} / -{patchPreview.deletions} lines ·{" "}
+              {patchPreview.cleanWorkspace
+                ? "workspace clean"
+                : "workspace has uncommitted changes"}
+            </p>
+            {patchPreview.warnings.length > 0 ? (
+              <ul className="mt-3 grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+                {patchPreview.warnings.map((warning) => (
+                  <li key={warning}>• {warning}</li>
+                ))}
+              </ul>
+            ) : null}
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm font-medium text-foreground">
+                Review exact patch
+              </summary>
+              <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground">
+                {agentPatch}
+              </pre>
+            </details>
+
+            {!appliedPatch ? (
+              <>
+                <label className="mt-4 flex items-start gap-2 text-sm text-foreground">
+                  <input
+                    checked={approvePatchApply}
+                    onChange={(event) =>
+                      setApprovePatchApply(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  <span>
+                    I reviewed the exact diff and approve applying it only to a
+                    new isolated Git branch. No commit, command, push, or merge
+                    is approved.
+                  </span>
+                </label>
+                <div className="mt-3 flex justify-end">
+            <Button
+                    disabled={
+                      patchBusy ||
+                      !patchPreview.applicable ||
+                      !approvePatchApply
+                    }
+                    onClick={() => void applyAgentPatch()}
+              size="sm"
+            >
+                    <GitBranch className="size-4" />
+                    Apply on isolated branch
+            </Button>
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+                <p className="text-sm font-medium text-foreground">
+                  Applied to {appliedPatch.branch}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Return to normal Cline chat to inspect the working tree and
+                  approve formatting, lint, type-check, tests, or builds
+                  individually. The Agent cannot execute those commands.
+                </p>
+                <label className="mt-3 flex items-start gap-2 text-sm text-foreground">
+                  <input
+                    checked={approvePatchRollback}
+                    onChange={(event) =>
+                      setApprovePatchRollback(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  I approve guarded rollback only if every patched file still
+                  matches its post-apply hash.
+                </label>
+                <div className="mt-3 flex justify-end">
+            <Button
+                    disabled={patchBusy || !approvePatchRollback}
+                    onClick={() => void rollbackAgentPatch()}
+              size="sm"
+              variant="outline"
+            >
+                    <RotateCcw className="size-4" />
+                    Roll back patch branch
+            </Button>
+          </div>
+        </div>
+            )}
+        </div>
+        ) : null}
+      </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+        <h2 className="text-base font-semibold text-foreground">
+              Agent Bridge privacy and provenance
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+              Device-local metadata only. Project content, Agent responses, and
+              patch bodies are intentionally excluded from this ledger.
+        </p>
+          </div>
+          <Badge variant="outline">{bridgeLedger.length} events</Badge>
+        </div>
+        <div className="mt-4 max-h-64 overflow-auto rounded-lg border border-border">
+          {bridgeLedger.length === 0 ? (
+            <p className="p-3 text-sm text-muted-foreground">
+              No approved bridge or patch event yet.
+        </p>
+          ) : (
+            bridgeLedger.slice(0, 20).map((entry) => (
+              <div
+                className="grid gap-1 border-b border-border px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[120px_1fr_auto]"
+                key={entry.id}
+              >
+                <Badge variant="outline">{entry.action}</Badge>
+                <span className="text-foreground">
+                  {entry.project} · {entry.preset} · {entry.files} file(s) ·{" "}
+                  {(entry.bytes / 1000).toFixed(1)} KB
+                </span>
+                <span className="text-muted-foreground">
+                  {new Date(entry.createdAt).toLocaleString()}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground">
+                Official Notion connection
+              </h2>
+              <Badge variant={connected ? "default" : "outline"}>
+                {connectionLabel}
+              </Badge>
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Sign in with your Notion account to authorize the pages you
+              choose. No special database, automation, integration token, or
+              extra Notion configuration is required.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={connecting || loading}
+              onClick={() => void connectNotion()}
+              size="sm"
+            >
+              {connecting ? <Loader2 className="size-4 animate-spin" /> : null}
+              {connected ? "Reconnect Notion" : "Connect Notion"}
+            </Button>
+            <Button onClick={onOpenMcpSettings} size="sm" variant="outline">
+              Manage MCP
+            </Button>
+          </div>
+        </div>
+        {error || notionServer?.oauthStatus?.lastError ? (
+          <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {error ?? notionServer?.oauthStatus?.lastError}
+            </p>
+        ) : null}
+      </section>
+
+      <section className="mb-8 rounded-xl border border-primary/30 bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <FolderGit2 className="size-5 text-primary" />
+              <h2 className="text-base font-semibold text-foreground">
+                Project Intelligence workspace
+              </h2>
+              <Badge variant="outline">Local profile</Badge>
+          </div>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Bind a repository to approved Notion context and destinations.
+              Profiles store identifiers and preferences on this device;
+              credentials and Notion content are never stored here.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <select
+              aria-label="Active project"
+              className="h-9 min-w-48 rounded-md border border-input bg-background px-3 text-sm"
+              onChange={(event) => selectProject(event.target.value)}
+              value={activeProjectId}
+            >
+              <option value="">New project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <Button onClick={newProject} size="sm" variant="outline">
+              <Plus className="size-4" />
+              New
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Project name
+            <Input
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="Cline Desktop Enhanced"
+              value={projectName}
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Repository root
+            <Input
+              onChange={(event) => setRepositoryRoot(event.target.value)}
+              placeholder="C:\\Projects\\cline-desktop-enhanced"
+              value={repositoryRoot}
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Approved Notion sources
+          <Textarea
+              onChange={(event) => setProjectSources(event.target.value)}
+              placeholder="One approved page or database name/URL per line"
+            rows={3}
+              value={projectSources}
+          />
+        </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Approved destination
+            <Textarea
+              onChange={(event) => setProjectDestination(event.target.value)}
+              placeholder="Page or database name/URL"
+              rows={3}
+              value={projectDestination}
+            />
+          </label>
+        </div>
+        <label className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
+          Project instructions
+          <Textarea
+            onChange={(event) => setProjectInstructions(event.target.value)}
+            placeholder="Project-specific conventions, exclusions, and reporting expectations"
+            rows={3}
+            value={projectInstructions}
+          />
+        </label>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Access mode
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              onChange={(event) =>
+                setProjectAccessMode(event.target.value as ProjectAccessMode)
+              }
+              value={projectAccessMode}
+            >
+              <option>Read only</option>
+              <option>Approval before write</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Maximum operations
+            <Input
+              max={50}
+              min={1}
+              onChange={(event) =>
+                setMaxOperations(Number(event.target.value) || 1)
+              }
+              type="number"
+              value={maxOperations}
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Context cache TTL (hours)
+            <Input
+              max={168}
+              min={1}
+              onChange={(event) =>
+                setCacheTtlHours(Number(event.target.value) || 1)
+              }
+              type="number"
+              value={cacheTtlHours}
+            />
+          </label>
+          <label className="flex items-center gap-2 self-end rounded-md border border-border px-3 py-2 text-sm text-foreground">
+            <input
+              checked={redactSensitive}
+              onChange={(event) => setRedactSensitive(event.target.checked)}
+              type="checkbox"
+            />
+            Redact sensitive values
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap justify-between gap-2">
+          <div>
+            {activeProject ? (
+          <Button
+                onClick={() => deleteProject(activeProject.id)}
+            size="sm"
+                variant="ghost"
+          >
+                <Trash2 className="size-4" />
+                Delete profile
+          </Button>
+        ) : null}
+          </div>
+          <Button
+            disabled={!projectName.trim()}
+            onClick={saveProject}
+            size="sm"
+          >
+            <CheckCircle2 className="size-4" />
+            Save project profile
+          </Button>
+        </div>
+      </section>
+
+      <section className="mb-8 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+          <div className="flex items-center gap-2">
+            <Activity className="size-5 text-primary" />
+            <h2 className="text-base font-semibold text-foreground">
+              Project Intelligence dashboard
+            </h2>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Active project</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {activeProject?.name ?? "Not configured"}
+                </p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Approved sources</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {activeProject?.sources.split("\n").filter(Boolean).length ?? 0}
+                </p>
+              </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Write policy</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {activeProject?.accessMode ?? "Approval before write"}
+              </p>
+              </div>
+            </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              disabled={!connected || !activeProject}
+              onClick={() => launchTemplate(projectIntelligenceTemplate)}
+              size="sm"
+                >
+              <Sparkles className="size-4" />
+              Analyze project
+            </Button>
+            <Button
+              disabled={!connected}
+              onClick={() => launchTemplate(schemaNavigatorTemplate)}
+              size="sm"
+              variant="outline"
+            >
+              <Database className="size-4" />
+              Discover Notion structure
+            </Button>
+            <Button
+              disabled={!connected}
+              onClick={() => launchTemplate(connectionHealthTemplate)}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw className="size-4" />
+              Health check
+            </Button>
+                </div>
+            </div>
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-5 text-primary" />
+            <h2 className="text-base font-semibold text-foreground">
+              Security posture
+            </h2>
+          </div>
+          <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
+            <li>Official Notion endpoint enforced</li>
+            <li>Normal Cline sessions remain unchanged</li>
+            <li>Per-operation approval for writes</li>
+            <li>
+              {redactSensitive
+                ? "Sensitive-value redaction enabled"
+                : "Redaction exception enabled"}
+            </li>
+            <li>
+              Maximum {activeProject?.maxOperations ?? maxOperations} operations
+              per run
+                    </li>
+                </ul>
+        </div>
+      </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-base font-semibold text-foreground">
+          Default destination
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Optional page name or URL appended to write-oriented drafts. It is
+          stored only on this device.
+        </p>
+        <Input
+          className="mt-3 max-w-2xl"
+          onChange={(event) => saveDestination(event.target.value)}
+          placeholder="Example: Engineering / Release reports"
+          value={defaultDestination}
+                  />
+      </section>
+
+      <section className="mb-8 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-base font-semibold text-foreground">
+          Pinned Notion context
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Optional page names or URLs added to every function as a context
+          basket. Sources are verified through your account when the session
+          runs and stored only on this device.
+        </p>
+        <Textarea
+          className="mt-3 max-w-2xl"
+          onChange={(event) => savePinnedSources(event.target.value)}
+          placeholder={"One page name or URL per line"}
+          rows={4}
+          value={pinnedSources}
+                  />
       </section>
 
       <section className="mb-8 rounded-xl border border-border bg-card p-5">

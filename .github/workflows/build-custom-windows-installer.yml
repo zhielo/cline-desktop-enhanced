@@ -3,6 +3,8 @@ name: Build custom Windows installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "feat/notion-agent-review-pipeline"
     tags:
       - "desktop-v*"
 
@@ -155,6 +157,7 @@ jobs:
             apps/examples/desktop-app/sidecar/browser-manager.test.ts \
             apps/examples/desktop-app/sidecar/repository-tool.test.ts \
             apps/examples/desktop-app/sidecar/notion-agent-bridge.test.ts \
+            apps/examples/desktop-app/sidecar/notion-agent-patch.test.ts \
             apps/examples/desktop-app/webview/components/views/settings/functions-view.test.tsx \
             --config apps/examples/desktop-app/vitest.config.mts
 
@@ -257,6 +260,26 @@ jobs:
 
           $hash = (Get-FileHash $destination -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $env:OUTPUT_FILENAME" | Out-File (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          [ordered]@{
+            schema = 'https://cline.bot/provenance/windows-installer/v1'
+            subject = [ordered]@{
+              name = $env:OUTPUT_FILENAME
+              sha256 = $hash
+            }
+            source = [ordered]@{
+              repository = $env:GITHUB_REPOSITORY
+              commit = $env:GITHUB_SHA
+              ref = $env:GITHUB_REF
+            }
+            build = [ordered]@{
+              workflow = $env:GITHUB_WORKFLOW
+              run_id = $env:GITHUB_RUN_ID
+              run_attempt = $env:GITHUB_RUN_ATTEMPT
+              runner = "$env:RUNNER_OS $env:RUNNER_ARCH"
+              signed = '${{ steps.signing.outputs.signed }}' -eq 'true'
+            }
+          } | ConvertTo-Json -Depth 5 |
+            Out-File (Join-Path $out 'PROVENANCE.json') -Encoding utf8
           @(
             "Version: $env:VERSION"
             "Commit: $env:GITHUB_SHA"
