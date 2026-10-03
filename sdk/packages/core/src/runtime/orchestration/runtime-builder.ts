@@ -222,10 +222,26 @@ function isSkillsToolEnabledForSession(input: {
 
 const SKILLS_PROBE_EXECUTOR = (async () => "") as SkillsExecutorWithMetadata;
 
+const OFFICIAL_NOTION_MCP_URL = "https://mcp.notion.com/mcp";
+
+function isOfficialNotionRegistration(registration: {
+	name: string;
+	metadata?: Record<string, unknown>;
+	transport: { type: string; url?: string };
+}): boolean {
+	return (
+		registration.name === "Notion" &&
+		registration.metadata?.source !== "agent-plugin" &&
+		registration.transport.type === "streamableHttp" &&
+		registration.transport.url === OFFICIAL_NOTION_MCP_URL
+	);
+}
+
 async function loadConfiguredMcpTools(options: {
 	logger?: BasicLogger;
 	includeSettings: boolean;
 	agentPluginServers?: ReadonlyArray<AgentPluginPackageMcpServer>;
+	officialNotionOnly?: boolean;
 }): Promise<{
 	tools: AgentTool[];
 	shutdown?: () => Promise<void>;
@@ -294,7 +310,18 @@ async function loadConfiguredMcpTools(options: {
 		return { tools: [] };
 	}
 
-	const enabled = registrations.filter((r) => r.disabled !== true);
+	const enabled = registrations.filter(
+		(registration) =>
+			registration.disabled !== true &&
+			(!options.officialNotionOnly ||
+				isOfficialNotionRegistration(registration)),
+	);
+	if (options.officialNotionOnly && enabled.length === 0) {
+		options.logger?.log(
+			`[mcp] Notion function session requires the official ${OFFICIAL_NOTION_MCP_URL} registration named "Notion".`,
+			{ severity: "error" },
+		);
+	}
 	const results = await Promise.allSettled(
 		enabled.map((r) =>
 			createMcpTools({
@@ -613,7 +640,12 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 				const mcpRuntime = await loadConfiguredMcpTools({
 					logger: config.logger,
 					includeSettings: !normalized.disableMcpSettingsTools,
-					agentPluginServers: agentPluginMcpServers,
+					agentPluginServers:
+						config.permissionProfile === "notion-functions"
+							? undefined
+							: agentPluginMcpServers,
+					officialNotionOnly:
+						config.permissionProfile === "notion-functions",
 				});
 				tools.push(...mcpRuntime.tools);
 				mcpShutdown = mcpRuntime.shutdown;

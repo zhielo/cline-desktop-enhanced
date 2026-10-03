@@ -323,6 +323,14 @@ const requiredMarkers: Array<{
 		markers: ["mergeDesktopAiInstructions", "taskToolStepIds"],
 	},
 	{
+		path: "sdk/packages/core/src/runtime/orchestration/runtime-builder.ts",
+		markers: [
+			"OFFICIAL_NOTION_MCP_URL",
+			"isOfficialNotionRegistration",
+			"officialNotionOnly",
+		],
+	},
+	{
 		path: "apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",
 		markers: [
 			"Notion-assisted functions",
@@ -332,6 +340,9 @@ const requiredMarkers: Array<{
 			"Open in new session",
 			"Local function audit",
 			"Create reusable function",
+			"Pinned Notion context",
+			"Prepare Notion Agent handoff",
+			"Import Notion Agent review",
 		],
 	},
 	{

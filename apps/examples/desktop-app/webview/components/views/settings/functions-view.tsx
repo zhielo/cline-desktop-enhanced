@@ -1,6 +1,7 @@
 "use client";
 
 import {
+	Bot,
 	Database,
 	FilePlus2,
 	FileText,
@@ -32,6 +33,7 @@ const NOTION_MCP_URL = "https://mcp.notion.com/mcp";
 const CUSTOM_TEMPLATES_KEY = "cline.notion-functions.templates.v1";
 const RUN_HISTORY_KEY = "cline.notion-functions.history.v1";
 const DEFAULT_DESTINATION_KEY = "cline.notion-functions.destination.v1";
+const PINNED_SOURCES_KEY = "cline.notion-functions.sources.v1";
 const MAX_HISTORY_ITEMS = 20;
 
 type FunctionMode = "Read only" | "Approval before write";
@@ -129,6 +131,26 @@ Use the session context or summary I provide. Include decisions, changed files, 
 Summarize the current branch, validations, Windows installer status, risks, and artifact locations. Draft first and do not write to Notion until I approve the target page and final report.`,
 	},
 	{
+		id: "agent-handoff",
+		title: "Prepare Notion Agent handoff",
+		description: "Publish a reviewed project-analysis package for manual Agent review in Notion.",
+		icon: Bot,
+		mode: "Approval before write",
+		prompt: `Prepare an Agent Handoff Package for my project.
+
+Use the project evidence and selected Notion sources available in this session. Draft an executive summary, architecture, requirements coverage, changed files, validation, risks, disputed assumptions, and prioritized next actions. Show the complete target page and draft before publishing. After approval and publication, return the page link and a copyable instruction asking Notion AI or my Notion Agent to challenge assumptions, identify missing risks, and append a clearly labeled review. Do not claim that you invoked the Notion Agent automatically.`,
+	},
+	{
+		id: "agent-review-import",
+		title: "Import Notion Agent review",
+		description: "Read a reviewed Notion page and turn the Agent feedback into a Cline plan.",
+		icon: Bot,
+		mode: "Read only",
+		prompt: `Import a Notion AI or Notion Agent review from: [page name or URL].
+
+Read the reviewed page through the official Notion MCP connection. Compare the Agent feedback with the original project analysis, separate accepted recommendations from disagreements, cite the relevant Notion sections, and produce an updated Cline implementation plan. Do not modify Notion.`,
+	},
+	{
 		id: "action-plan",
 		title: "Create a workspace action plan",
 		description: "Turn existing project context into decisions, owners, and next steps.",
@@ -172,6 +194,7 @@ export function FunctionsView({
 	const [customTemplates, setCustomTemplates] = useState<StoredTemplate[]>([]);
 	const [history, setHistory] = useState<FunctionRun[]>([]);
 	const [defaultDestination, setDefaultDestination] = useState("");
+	const [pinnedSources, setPinnedSources] = useState("");
 	const [newTitle, setNewTitle] = useState("");
 	const [newPrompt, setNewPrompt] = useState("");
 	const [newMode, setNewMode] = useState<FunctionMode>("Read only");
@@ -184,6 +207,7 @@ export function FunctionsView({
 		setDefaultDestination(
 			window.localStorage.getItem(DEFAULT_DESTINATION_KEY) ?? "",
 		);
+		setPinnedSources(window.localStorage.getItem(PINNED_SOURCES_KEY) ?? "");
 	}, []);
 
 	const refresh = useCallback(async () => {
@@ -264,6 +288,11 @@ export function FunctionsView({
 		window.localStorage.setItem(DEFAULT_DESTINATION_KEY, value);
 	}, []);
 
+	const savePinnedSources = useCallback((value: string) => {
+		setPinnedSources(value);
+		window.localStorage.setItem(PINNED_SOURCES_KEY, value);
+	}, []);
+
 	const launchTemplate = useCallback(
 		(template: Pick<FunctionTemplate, "title" | "prompt" | "mode">) => {
 			if (!connected || !onLaunchFunction) return;
@@ -272,9 +301,14 @@ export function FunctionsView({
 				template.mode === "Read only"
 					? "This function is read-only. Do not create, update, archive, or delete Notion content."
 					: "Before any Notion write, show the exact target and proposed change, then wait for my explicit approval.";
+			const sources = pinnedSources.trim();
 			const prompt = `${template.prompt}\n\n${guard}${
 				destination
 					? `\n\nPreferred Notion destination: ${destination}. Confirm it is accessible and appropriate before using it.`
+					: ""
+			}${
+				sources
+					? `\n\nPinned Notion context (page names or URLs; verify access and relevance before use):\n${sources}`
 					: ""
 			}`;
 			const run: FunctionRun = {
@@ -290,7 +324,13 @@ export function FunctionsView({
 			writeStoredJson(RUN_HISTORY_KEY, nextHistory);
 			onLaunchFunction({ title: template.title, prompt });
 		},
-		[connected, defaultDestination, history, onLaunchFunction],
+		[
+			connected,
+			defaultDestination,
+			history,
+			onLaunchFunction,
+			pinnedSources,
+		],
 	);
 
 	const rerun = useCallback(
@@ -403,6 +443,18 @@ export function FunctionsView({
 					onChange={(event) => saveDestination(event.target.value)}
 					placeholder="Example: Engineering / Release reports"
 					value={defaultDestination}
+				/>
+			</section>
+
+			<section className="mb-8 rounded-xl border border-border bg-card p-5">
+				<h2 className="text-base font-semibold text-foreground">Pinned Notion context</h2>
+				<p className="mt-1 text-sm text-muted-foreground">Optional page names or URLs added to every function as a context basket. Sources are verified through your account when the session runs and stored only on this device.</p>
+				<Textarea
+					className="mt-3 max-w-2xl"
+					onChange={(event) => savePinnedSources(event.target.value)}
+					placeholder={"One page name or URL per line"}
+					rows={4}
+					value={pinnedSources}
 				/>
 			</section>
 

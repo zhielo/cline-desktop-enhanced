@@ -5,6 +5,8 @@
 - Added a separate **Functions** hub for optional Notion-assisted workflows. Each card opens a new draft powered by the currently selected Cline model; normal Cline sessions, providers, permissions, and tools are unchanged
 - Added direct official Notion MCP OAuth health and connection controls inside Functions, plus workspace-search, page-drafting, database-analysis, Cline-session export, release-report, and action-plan templates. Only a Notion account is required; no special database, automation, or private Notion AI model API is used
 - Added host-enforced Notion-only function sessions, disabled tool auto-approval, a persistent session banner, optional default destinations, reusable personal templates, bounded local launch history, rerun controls, and read-only or approval-before-write modes without changing normal Cline sessions
+- Bound Notion-only sessions to the exact official `https://mcp.notion.com/mcp` Streamable HTTP registration and excluded agent-plugin or substituted servers with the same display name
+- Added an optional device-local pinned-source context basket plus an account-only manual Notion Agent round trip: publish an approved handoff page, receive a copyable Agent-review instruction, and import the reviewed page into a read-only Cline planning session
 
 ## 0.0.36
 
