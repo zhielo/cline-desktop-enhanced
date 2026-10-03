@@ -1,5 +1,26 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.0.42
+
+### Added
+
+- Added full-envelope analysis approvals: every engine, PID, address, target, option, execution flag, and timeout is canonicalized and SHA-256 bound to a short-lived one-time token.
+- Added a durable, permission-restricted analysis ledger with expiry, restart interruption recovery, cancellation, bounded retention, canonical evidence hashes, structured Evidence cards, and exportable evidence bundles.
+- Added an attested isolated-worker protocol probe. Dynamic analysis remains host-blocked and becomes eligible only with an HTTPS worker and a valid signed capability manifest from a pinned public key.
+- Added SPDX 2.3 installer SBOM generation and build-provenance attestation for protected tagged releases.
+
+### Fixed
+
+- Canonicalized workspace and target paths through real filesystem identities, blocking symlink and Windows reparse-point escapes.
+- Invalidated approved work when a target's size, modification time, or bounded SHA-256 identity changes.
+- Repaired Analysis workbench formatting and added end-to-end component coverage for prepare, review, approval, and exact-request execution.
+- Replaced the stale one-feature installer trigger with reusable `main` and `feat/**` build triggers.
+
+### Security
+
+- Approval tokens now expire, use constant-time verification, disappear before execution, and are never persisted in plaintext.
+- Static and debugger requests carry executor-enforced timeout values. Unknown binaries are never dynamically executed by the desktop host.
+
 ## Cline Enhanced Desktop 0.0.41
 
 ### Added
