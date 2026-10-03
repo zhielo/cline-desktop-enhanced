@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  type Dirent,
   existsSync,
   lstatSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   statSync,
 } from "node:fs";
@@ -99,6 +100,8 @@ const BLOCKED_EXTENSIONS = new Set([
 export type NotionAgentBridgeFile = {
   path: string;
   hash: string;
+  lineCount: number;
+  selectionReason: string;
   originalBytes: number;
   sharedBytes: number;
   redactions: number;
@@ -163,7 +166,7 @@ function fallbackWorkspaceFiles(root: string): string[] {
   while (pending.length > 0 && files.length < 10_000) {
     const directory = pending.pop();
     if (!directory) break;
-    let entries;
+    let entries: Dirent[];
     try {
       entries = readdirSync(directory, { withFileTypes: true });
     } catch {
@@ -209,6 +212,61 @@ function listGitAwareFiles(root: string): string[] {
   } catch {
     return fallbackWorkspaceFiles(root).sort((a, b) => a.localeCompare(b));
   }
+}
+
+function changedGitPaths(root: string): Set<string> {
+  try {
+    const output = execFileSync(
+      "git",
+      ["-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+      {
+        encoding: "utf8",
+        maxBuffer: 8 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      },
+    );
+    const changed = new Set<string>();
+    for (const record of output.split("\0").filter(Boolean)) {
+      const value = record.slice(3).replace(/\\/g, "/");
+      const renamedTarget = value.includes(" -> ")
+        ? value.split(" -> ").at(-1)
+        : value;
+      if (renamedTarget) changed.add(renamedTarget);
+    }
+    return changed;
+  } catch {
+    return new Set();
+  }
+}
+
+function relevanceOrder(
+  paths: string[],
+  changed: Set<string>,
+  question: string,
+): string[] {
+  const tokens = [
+    ...new Set(
+      question
+        .toLowerCase()
+        .match(/[a-z0-9_-]{3,}/g)
+        ?.filter(
+          (token) =>
+            !["about", "analyze", "project", "review", "this", "with"].includes(
+              token,
+            ),
+        ) ?? [],
+    ),
+  ].slice(0, 20);
+  return [...paths].sort((left, right) => {
+    const score = (path: string) =>
+      (changed.has(path) ? 100 : 0) +
+      tokens.reduce(
+        (total, token) => total + (path.toLowerCase().includes(token) ? 10 : 0),
+        0,
+      );
+    return score(right) - score(left) || left.localeCompare(right);
+  });
 }
 
 function fileEligibility(path: string): string | null {
@@ -261,14 +319,14 @@ function markdownPackage(
   const manifest = result.files
     .map(
       (file) =>
-        `- \`${file.path}\` — sha256:${file.hash} — ${file.sharedBytes} shared bytes${file.redactions ? ` — ${file.redactions} redaction(s)` : ""}${file.truncated ? " — truncated" : ""}`,
+        `- \`${file.path}\` — lines 1-${file.lineCount} — sha256:${file.hash} — ${file.selectionReason} — ${file.sharedBytes} shared bytes${file.redactions ? ` — ${file.redactions} redaction(s)` : ""}${file.truncated ? " — truncated" : ""}`,
     )
     .join("\n");
   const fence = "````";
   const excerpts = result.files
     .map(
       (file) =>
-        `## ${file.path}\n\nSHA-256: \`${file.hash}\`\n\n${fence}text\n${file.content}\n${fence}`,
+        `## ${file.path}\n\nCitation format: \`${file.path}:<start>-<end>@sha256:${file.hash}\`\nSelection: ${file.selectionReason}\n\n${fence}text\n${file.content}\n${fence}`,
     )
     .join("\n\n");
   return `# Cline Project Bridge Package\n\nCreated: ${result.createdAt}\nProject root label: ${basename(result.root)}\nQuestion: ${question || "Not supplied yet"}\nFiles: ${result.files.length}\nShared bytes: ${result.totalSharedBytes}\nRedactions: ${result.totalRedactions}\n\n## Evidence manifest\n\n${manifest || "No eligible files selected."}\n\n${excerpts}`;
@@ -294,8 +352,11 @@ export function prepareNotionAgentBridgePackage(
   const selected = options.paths?.length
     ? new Set(options.paths.map((path) => normalizeSelectedPath(root, path)))
     : null;
-  const candidates = listGitAwareFiles(root).filter(
-    (path) => !selected || selected.has(path),
+  const changedPaths = changedGitPaths(root);
+  const candidates = relevanceOrder(
+    listGitAwareFiles(root).filter((path) => !selected || selected.has(path)),
+    changedPaths,
+    options.question?.trim() ?? "",
   );
   const files: NotionAgentBridgeFile[] = [];
   const excluded: Array<{ path: string; reason: string }> = [];
@@ -347,6 +408,12 @@ export function prepareNotionAgentBridgePackage(
     files.push({
       path,
       hash: createHash("sha256").update(original).digest("hex"),
+      lineCount: Math.max(1, content.split(/\r?\n/).length),
+      selectionReason: selected
+        ? "explicit allowlist"
+        : changedPaths.has(path)
+          ? "recent Git change"
+          : "question/path relevance",
       originalBytes,
       sharedBytes,
       redactions: redacted.redactions,

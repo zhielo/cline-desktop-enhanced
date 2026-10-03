@@ -176,6 +176,12 @@ import {
 	runCancellableMcpOAuthAuthorization,
 	shouldRestoreEnabledStateAfterOAuthCancellation,
 } from "./mcp-oauth";
+import { prepareNotionAgentBridgePackage } from "./notion-agent-bridge";
+import {
+	applyNotionAgentPatch,
+	previewNotionAgentPatch,
+	rollbackNotionAgentPatch,
+} from "./notion-agent-patch";
 import {
 	cancelProviderOAuthLogin,
 	runCancellableProviderOAuthLogin,
@@ -210,7 +216,6 @@ import type {
 	SidecarWebSocketClient,
 } from "./types";
 import { LOCAL_ENVIRONMENT_ID } from "./types";
-import { prepareNotionAgentBridgePackage } from "./notion-agent-bridge";
 import { pickWorkspaceDirectory } from "./workspace-picker";
 
 // All child processes in this module run asynchronously: the sidecar is a
@@ -4704,7 +4709,9 @@ export async function handleCommand(
 	}
 	if (command === "prepare_notion_agent_bridge") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
-			throw new Error("Notion Agent Bridge packaging is not available over SSH yet.");
+			throw new Error(
+				"Notion Agent Bridge packaging is not available over SSH yet.",
+			);
 		}
 		const root =
 			typeof args?.cwd === "string" && args.cwd.trim()
@@ -4715,13 +4722,78 @@ export async function handleCommand(
 			paths: Array.isArray(args?.paths)
 				? args.paths.map((path) => String(path))
 				: undefined,
-			maxFiles:
-				typeof args?.maxFiles === "number" ? args.maxFiles : undefined,
-			maxBytes:
-				typeof args?.maxBytes === "number" ? args.maxBytes : undefined,
+			maxFiles: typeof args?.maxFiles === "number" ? args.maxFiles : undefined,
+			maxBytes: typeof args?.maxBytes === "number" ? args.maxBytes : undefined,
 			redactSensitive: args?.redactSensitive !== false,
-			question:
-				typeof args?.question === "string" ? args.question : undefined,
+			question: typeof args?.question === "string" ? args.question : undefined,
+		});
+	}
+	if (
+		command === "preview_notion_agent_patch" ||
+		command === "apply_notion_agent_patch"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Notion Agent patch review is not available over SSH yet.",
+			);
+		}
+		const root =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const options = {
+			root,
+			patch: String(args?.patch ?? ""),
+			approvedHashes:
+				args?.approvedHashes &&
+				typeof args.approvedHashes === "object" &&
+				!Array.isArray(args.approvedHashes)
+					? Object.fromEntries(
+							Object.entries(args.approvedHashes).map(([path, hash]) => [
+								path,
+								String(hash),
+							]),
+						)
+					: undefined,
+			allowNewFiles: args?.allowNewFiles === true,
+			response: typeof args?.response === "string" ? args.response : undefined,
+		};
+		return command === "preview_notion_agent_patch"
+			? previewNotionAgentPatch(options)
+			: applyNotionAgentPatch({
+					...options,
+					confirm: args?.confirm === true,
+					branchName:
+						typeof args?.branchName === "string" ? args.branchName : undefined,
+				});
+	}
+	if (command === "rollback_notion_agent_patch") {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"Notion Agent patch rollback is not available over SSH yet.",
+			);
+		}
+		const root =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		return rollbackNotionAgentPatch({
+			root,
+			patch: String(args?.patch ?? ""),
+			branch: String(args?.branch ?? ""),
+			previousBranch: String(args?.previousBranch ?? ""),
+			appliedHashes:
+				args?.appliedHashes &&
+				typeof args.appliedHashes === "object" &&
+				!Array.isArray(args.appliedHashes)
+					? Object.fromEntries(
+							Object.entries(args.appliedHashes).map(([path, hash]) => [
+								path,
+								hash === null ? null : String(hash),
+							]),
+						)
+					: {},
+			confirm: args?.confirm === true,
 		});
 	}
 	if (command === "list_workspace_files") {

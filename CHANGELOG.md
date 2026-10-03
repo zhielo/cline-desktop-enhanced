@@ -1,5 +1,18 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.0.40
+
+### Added
+
+- Added a guarded Notion Agent review-to-patch pipeline with stale-evidence detection, path and file-type confinement, unified-diff parsing, Git dry runs, exact patch review, isolated `notion-agent/*` branches, and hash-guarded rollback.
+- Added evidence citation contracts, task presets, relevance-guided incremental packaging, resumable Agent-session discovery, and a privacy-preserving local sharing/provenance ledger.
+- Added installer `PROVENANCE.json` generation alongside SHA-256 checksums and the existing optional Authenticode signing gate.
+
+### Security
+
+- Agent patches cannot touch files outside the workspace, hidden credentials, certificates, binaries, symlinks, unapproved stale files, or new files without separate approval. Applying, executing validation commands, committing, pushing, and merging remain separate actions.
+- Normal Cline chat, models, providers, tools, and sessions remain unchanged. Notion Agent output is always treated as an untrusted proposal.
+
 ## Cline Enhanced Desktop 0.0.39
 
 ### Added

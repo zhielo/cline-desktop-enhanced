@@ -65,6 +65,7 @@ const requiredMarkers: Array<{
 			"Run process-session terminal smoke test",
 			"repository-tool.test.ts",
 			"notion-agent-bridge.test.ts",
+			"notion-agent-patch.test.ts",
 			"functions-view.test.tsx",
 			"notion-provenance.test.ts",
 			"permission-profile.test.ts",
@@ -355,6 +356,10 @@ const requiredMarkers: Array<{
 			"Prepare secure preview",
 			"Ask Notion Agent",
 			"Discover agents",
+			"Notion Agent review-to-patch",
+			"Dry-run patch",
+			"Apply on isolated branch",
+			"Agent Bridge privacy and provenance",
 		],
 	},
 	{
@@ -366,6 +371,18 @@ const requiredMarkers: Array<{
 			"sensitive filename",
 			"[REDACTED:token]",
 			"Bridge path escapes the workspace",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/notion-agent-patch.ts",
+		markers: [
+			"previewNotionAgentPatch",
+			"applyNotionAgentPatch",
+			"rollbackNotionAgentPatch",
+			"git",
+			"--check",
+			"Patch target changed after sharing with Notion",
+			"notion-agent/",
 		],
 	},
 	{
