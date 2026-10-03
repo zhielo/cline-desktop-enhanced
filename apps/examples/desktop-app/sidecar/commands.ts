@@ -129,6 +129,7 @@ import {
 	parseComposioToolkitSlug,
 } from "./composio";
 import { readComputerUseMetrics } from "./computer-use-metrics";
+import { probeAnalysisSandbox } from "./analysis-sandbox-client";
 import {
   type AnalysisTaskKind,
   desktopAnalysisTaskOrchestrator,
@@ -4911,6 +4912,8 @@ export async function handleCommand(
 	if (
     command === "prepare_analysis_task" ||
     command === "approve_analysis_task" ||
+    command === "cancel_analysis_task" ||
+    command === "export_analysis_evidence" ||
     command === "list_analysis_tasks" ||
     command === "get_analysis_diagnostics" ||
 		command === "discover_analysis_tools" ||
@@ -4933,16 +4936,33 @@ export async function handleCommand(
       if (!["static", "debugger", "gui", "dynamic"].includes(kind)) {
         throw new Error("kind must be static, debugger, gui, or dynamic");
       }
-      const operation = String(args?.operation ?? "").trim();
+      const suppliedRequest: Record<string, unknown> =
+        typeof args?.request === "object" && args.request
+          ? { ...(args.request as Record<string, unknown>) }
+          : {
+              operation: args?.operation,
+              ...(typeof args?.target === "string" ? { target: args.target } : {}),
+            };
+      const operation = String(suppliedRequest.operation ?? "").trim();
       if (!operation) throw new Error("operation is required");
-      return desktopAnalysisTaskOrchestrator.prepare({
+      if (suppliedRequest.timeout_ms === undefined) {
+        suppliedRequest.timeout_ms = 120_000;
+      }
+      let request: Record<string, unknown>;
+      if (kind === "debugger") {
+        request = LiveDebuggerInputSchema.parse(suppliedRequest);
+      } else if (kind === "dynamic") {
+        request = suppliedRequest;
+      } else {
+        if (kind === "gui") suppliedRequest.operation = "open_gui";
+        request = ReverseEngineeringInputSchema.parse(suppliedRequest);
+      }
+      return await desktopAnalysisTaskOrchestrator.prepare({
         workspaceRoot: baseDir,
         kind,
-        operation,
-        ...(typeof args?.target === "string" && args.target.trim()
-          ? { target: args.target.trim() }
-          : {}),
+        request,
         allowExternalTarget: args?.allowExternalTarget === true,
+        timeoutMs: Number(suppliedRequest.timeout_ms),
       });
     }
     if (command === "approve_analysis_task") {
@@ -4950,7 +4970,32 @@ export async function handleCommand(
       const requirements = Array.isArray(args?.requirements)
         ? args.requirements.map(String)
         : [];
-      return desktopAnalysisTaskOrchestrator.approve(planId, requirements);
+      return desktopAnalysisTaskOrchestrator.approve(
+        planId,
+        requirements,
+        String(args?.requestHash ?? ""),
+      );
+    }
+    if (command === "cancel_analysis_task") {
+      return desktopAnalysisTaskOrchestrator.cancel(
+        String(args?.planId ?? "").trim(),
+      );
+    }
+    if (command === "export_analysis_evidence") {
+      const planId = String(args?.planId ?? "").trim();
+      const bundle = desktopAnalysisTaskOrchestrator.evidenceBundle(
+        planId,
+        baseDir,
+      );
+      const outputDirectory = join(baseDir, ".cline", "analysis-evidence");
+      mkdirSync(outputDirectory, { recursive: true });
+      const outputPath = join(outputDirectory, `${planId}.json`);
+      writeFileSync(
+        outputPath,
+        `${JSON.stringify(bundle, null, 2)}\n`,
+        "utf8",
+      );
+      return { outputPath, bundleHash: bundle.bundleHash };
     }
     if (command === "list_analysis_tasks") {
       return desktopAnalysisTaskOrchestrator.list(baseDir);
@@ -4958,6 +5003,7 @@ export async function handleCommand(
     if (command === "get_analysis_diagnostics") {
       return {
         ...desktopAnalysisTaskOrchestrator.diagnostics(),
+        sandboxHealth: await probeAnalysisSandbox(),
         processSessions: getProcessSessionRuntimeCapabilities(),
       };
     }
@@ -4993,17 +5039,20 @@ export async function handleCommand(
 			const input = LiveDebuggerInputSchema.parse(args?.input);
       const planId = String(args?.planId ?? "").trim();
       const executionToken = String(args?.executionToken ?? "").trim();
-      desktopAnalysisTaskOrchestrator.consume({
+      await desktopAnalysisTaskOrchestrator.consume({
         planId,
         executionToken,
         workspaceRoot: baseDir,
 				kind: "debugger",
-        operation: input.operation,
-        ...(typeof input.target === "string" ? { target: input.target } : {}),
+        request: input,
       });
+      const executionContext = {
+        ...toolContext,
+        signal: desktopAnalysisTaskOrchestrator.signal(planId),
+      };
       try {
         const result = JSON.parse(
-					await desktopLiveDebuggerExecutor(input, toolContext),
+					await desktopLiveDebuggerExecutor(input, executionContext),
         );
         const plan = desktopAnalysisTaskOrchestrator.complete(
           planId,
@@ -5062,17 +5111,20 @@ export async function handleCommand(
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
     const planId = String(args?.planId ?? "").trim();
     const executionToken = String(args?.executionToken ?? "").trim();
-    desktopAnalysisTaskOrchestrator.consume({
+    await desktopAnalysisTaskOrchestrator.consume({
       planId,
       executionToken,
       workspaceRoot: baseDir,
       kind: command === "open_analysis_gui" ? "gui" : "static",
-      operation: input.operation,
-      ...(typeof input.target === "string" ? { target: input.target } : {}),
+      request: input,
     });
+    const executionContext = {
+      ...toolContext,
+      signal: desktopAnalysisTaskOrchestrator.signal(planId),
+    };
     let result: string;
 		try {
-      result = await desktopReverseEngineeringExecutor(input, toolContext);
+      result = await desktopReverseEngineeringExecutor(input, executionContext);
     } catch (error) {
       desktopAnalysisTaskOrchestrator.fail(planId, error);
       throw error;

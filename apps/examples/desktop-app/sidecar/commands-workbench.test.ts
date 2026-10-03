@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -69,32 +69,38 @@ describe("desktop execution workbench boundaries", () => {
 		).rejects.toThrow("target is authorized");
 	});
 
-  it("prepares exact analysis plans and exposes runtime diagnostics", async () => {
-    const plan = (await handleCommand(context, "prepare_analysis_task", {
-      cwd: workspace,
-      kind: "static",
-      operation: "inspect",
-      target: "sample.exe",
-    })) as {
-      id: string;
-      status: string;
-      permission: string;
-      target: string;
-    };
-    expect(plan).toMatchObject({
-      status: "awaiting-approval",
-      permission: "Inspect",
-      target: join(workspace, "sample.exe"),
-    });
-    const diagnostics = (await handleCommand(
-      context,
-      "get_analysis_diagnostics",
-      { cwd: workspace },
-    )) as {
-      dynamicAnalysisOnHost: boolean;
-      processSessions: { pipeFallback: boolean };
-    };
-    expect(diagnostics.dynamicAnalysisOnHost).toBe(false);
-    expect(diagnostics.processSessions.pipeFallback).toBe(true);
-  });
+	it("prepares exact analysis plans and exposes runtime diagnostics", async () => {
+		const plan = (await handleCommand(context, "prepare_analysis_task", {
+			cwd: workspace,
+			kind: "static",
+			request: {
+				operation: "inspect",
+				engine: "auto",
+				target: "sample.exe",
+				timeout_ms: 120_000,
+			},
+		})) as {
+			id: string;
+			status: string;
+			permission: string;
+			target: string;
+			requestHash: string;
+		};
+		expect(plan).toMatchObject({
+			status: "awaiting-approval",
+			permission: "Inspect",
+			target: join(realpathSync.native(workspace), "sample.exe"),
+		});
+		expect(plan.requestHash).toMatch(/^[a-f0-9]{64}$/);
+		const diagnostics = (await handleCommand(
+			context,
+			"get_analysis_diagnostics",
+			{ cwd: workspace },
+		)) as {
+			dynamicAnalysisOnHost: boolean;
+			processSessions: { pipeFallback: boolean };
+		};
+		expect(diagnostics.dynamicAnalysisOnHost).toBe(false);
+		expect(diagnostics.processSessions.pipeFallback).toBe(true);
+	});
 });

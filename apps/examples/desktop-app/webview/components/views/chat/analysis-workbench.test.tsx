@@ -1,0 +1,130 @@
+// @vitest-environment jsdom
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { desktopClient } from "@/lib/desktop-client";
+import { AnalysisWorkbench } from "./analysis-workbench";
+
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	container = document.createElement("div");
+	document.body.appendChild(container);
+	root = createRoot(container);
+});
+
+afterEach(async () => {
+	await act(async () => root.unmount());
+	container.remove();
+	vi.restoreAllMocks();
+});
+
+async function clickText(text: string) {
+	const button = [...container.querySelectorAll("button")].find((candidate) =>
+		candidate.textContent?.includes(text),
+	);
+	expect(button).toBeDefined();
+	await act(async () => {
+		button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		await Promise.resolve();
+	});
+}
+
+async function setInput(input: HTMLInputElement, value: string) {
+	await act(async () => {
+		const setter = Object.getOwnPropertyDescriptor(
+			HTMLInputElement.prototype,
+			"value",
+		)?.set;
+		setter?.call(input, value);
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+}
+
+describe("AnalysisWorkbench approval flow", () => {
+	it("prepares and executes the exact reviewed request envelope", async () => {
+		const reviewedRequest = {
+			engine: "auto",
+			operation: "inspect",
+			target: "C:\\work\\project\\sample.exe",
+			reuse_analysis: true,
+			report_format: "json",
+			timeout_ms: 120_000,
+		};
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockImplementation(async (command: string, args?: unknown) => {
+				if (command === "discover_analysis_tools") return {};
+				if (command === "list_analysis_tasks") return [];
+				if (command === "get_analysis_diagnostics") return {};
+				if (command === "prepare_analysis_task") {
+					return {
+						id: "plan-1",
+						kind: "static",
+						operation: "inspect",
+						target: reviewedRequest.target,
+						request: reviewedRequest,
+						requestHash: "a".repeat(64),
+						permission: "Inspect",
+						status: "awaiting-approval",
+						requirements: [],
+						risk: "low",
+						budget: {},
+						createdAt: new Date().toISOString(),
+						expiresAt: new Date(Date.now() + 60_000).toISOString(),
+					};
+				}
+				if (command === "approve_analysis_task") {
+					return { executionToken: "one-time-token" };
+				}
+				if (command === "run_static_analysis") {
+					return { result: { ok: true } };
+				}
+				throw new Error(
+					`Unexpected command: ${command} ${JSON.stringify(args)}`,
+				);
+			});
+
+		await act(async () => {
+			root.render(
+				<AnalysisWorkbench cwd={"C:\\work\\project"} environmentId="local" />,
+			);
+			await Promise.resolve();
+		});
+		const target = container.querySelector(
+			'input[placeholder="Workspace-relative or absolute path"]',
+		) as HTMLInputElement;
+		await setInput(target, "sample.exe");
+		await clickText("Prepare static-analysis task");
+		expect(invoke).toHaveBeenCalledWith(
+			"prepare_analysis_task",
+			expect.objectContaining({
+				kind: "static",
+				request: expect.objectContaining({
+					operation: "inspect",
+					target: "sample.exe",
+					timeout_ms: 120_000,
+				}),
+			}),
+		);
+		await clickText("Approve exact plan and run");
+		expect(invoke).toHaveBeenCalledWith("approve_analysis_task", {
+			environmentId: "local",
+			cwd: "C:\\work\\project",
+			planId: "plan-1",
+			requirements: [],
+			requestHash: "a".repeat(64),
+		});
+		expect(invoke).toHaveBeenCalledWith(
+			"run_static_analysis",
+			expect.objectContaining({
+				planId: "plan-1",
+				executionToken: "one-time-token",
+				input: reviewedRequest,
+			}),
+		);
+	});
+});
