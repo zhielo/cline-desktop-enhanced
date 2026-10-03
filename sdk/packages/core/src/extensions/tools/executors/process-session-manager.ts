@@ -31,11 +31,7 @@ export const DEFAULT_COMPLETED_PROCESS_RETENTION_MS = 60 * 60 * 1_000;
 export const DEFAULT_RECOVERED_PROCESS_POLL_MS = 2_000;
 
 export type ProcessSessionState =
-	| "starting"
-	| "running"
-	| "exited"
-	| "failed"
-	| "cancelled";
+  "starting" | "running" | "exited" | "failed" | "cancelled";
 
 export type ProcessSessionOutputStream = "stdout" | "stderr";
 export type ProcessSessionSignal = "interrupt" | "terminate" | "kill";
@@ -68,12 +64,33 @@ export interface ProcessSessionSnapshot {
 	exitSignal?: NodeJS.Signals | null;
 	error?: string;
 	interactive: boolean;
+  terminalBackend?: "pty" | "conpty" | "pipe" | "pipe-fallback";
+  terminalFallbackReason?: string;
 	terminalColumns?: number;
 	terminalRows?: number;
 	latestCursor: number;
 	droppedOutputBytes: number;
 	/** True when the host reattached control after losing its ChildProcess handle. */
 	recoveredAfterRestart?: boolean;
+}
+
+export function getProcessSessionRuntimeCapabilities() {
+  const bun = (globalThis as { Bun?: { version?: string; Terminal?: unknown } })
+    .Bun;
+  const terminalApiAvailable = typeof bun?.Terminal === "function";
+  return {
+    runtime: bun ? "bun" : "node",
+    runtimeVersion: bun?.version ?? process.version,
+    terminalApiAvailable,
+    preferredBackend: terminalApiAvailable
+      ? process.platform === "win32"
+        ? "conpty"
+        : "pty"
+      : "pipe",
+    pipeFallback: true,
+    boundedOutputBytes: DEFAULT_PROCESS_OUTPUT_BYTES,
+    sessionSignals: ["interrupt", "terminate", "kill"],
+  };
 }
 
 export interface ProcessSessionRecoveryRecord {
@@ -492,7 +509,7 @@ export class ProcessSessionManager {
 			allowedSensitiveEnvironmentVariables:
 				this.allowedSensitiveEnvironmentVariables,
 		});
-		const interactive = options.interactive === true;
+    const interactiveRequested = options.interactive === true;
 		const terminalColumns = positiveInteger(options.columns, 80);
 		const terminalRows = positiveInteger(options.rows, 24);
 		const output = new BoundedProcessOutput(this.maxOutputBytes);
@@ -519,15 +536,32 @@ export class ProcessSessionManager {
 				),
 			);
 		};
-		const terminalProcess = interactive
-			? this.spawnTerminalProcess(options.executable, args, {
+    let terminalFallbackReason: string | undefined;
+    let terminalProcess: ProcessSessionTerminalProcess | undefined;
+    if (interactiveRequested) {
+      try {
+        terminalProcess = this.spawnTerminalProcess(options.executable, args, {
 					cwd: options.cwd,
 					env: preparedEnvironment.environment,
 					columns: terminalColumns,
 					rows: terminalRows,
 					onData: appendTerminalData,
-				})
-			: undefined;
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          !/Bun\.Terminal|PTY|pseudo.?terminal|Interactive process sessions require/i.test(
+            message,
+          )
+        ) {
+          throw error;
+        }
+        terminalFallbackReason = redactSensitiveText(
+          message,
+          preparedEnvironment.secretValues,
+        ).slice(0, 500);
+      }
+    }
 		const child = terminalProcess
 			? undefined
 			: this.spawnProcess(options.executable, args, {
@@ -548,8 +582,16 @@ export class ProcessSessionManager {
 				args,
 				cwd: options.cwd,
 				startedAtMs,
-				interactive,
-				...(interactive
+        interactive: Boolean(terminalProcess),
+        terminalBackend: terminalProcess
+          ? process.platform === "win32"
+            ? "conpty"
+            : "pty"
+          : interactiveRequested
+            ? "pipe-fallback"
+            : "pipe",
+        ...(terminalFallbackReason ? { terminalFallbackReason } : {}),
+        ...(terminalProcess
 					? {
 							terminalColumns,
 							terminalRows,
@@ -572,6 +614,13 @@ export class ProcessSessionManager {
 		};
 		this.sessions.set(processId, managed);
 		this.bindLifecycle(managed);
+    if (terminalFallbackReason) {
+      this.appendOutput(
+        managed,
+        "stderr",
+        `Interactive terminal unavailable; using bounded pipe mode: ${terminalFallbackReason}\n`,
+      );
+    }
 		for (const data of pendingTerminalData) appendTerminalData(data);
 
 		if (child) {
@@ -1133,6 +1182,11 @@ export class ProcessSessionManager {
 					cwd: record.cwd,
 					startedAtMs: record.startedAtMs,
 					interactive: record.interactive,
+          terminalBackend: record.interactive
+            ? process.platform === "win32"
+              ? "conpty"
+              : "pty"
+            : "pipe",
 					...(record.terminalColumns
 						? { terminalColumns: record.terminalColumns }
 						: {}),

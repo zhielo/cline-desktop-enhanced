@@ -325,6 +325,37 @@ describe("ProcessSessionManager", () => {
 		}
 	});
 
+  it("falls back to bounded pipes when the PTY runtime is unavailable", async () => {
+    const manager = new ProcessSessionManager({
+      spawnTerminalProcess: () => {
+        throw new Error("Bun.Terminal is unavailable in this runtime");
+      },
+    });
+    try {
+      const started = await manager.start({
+        ownerSessionId: OWNER,
+        executable: process.execPath,
+        args: ["-e", "console.log('pipe fallback')"],
+        cwd: process.cwd(),
+        interactive: true,
+      });
+      expect(started).toMatchObject({
+        interactive: false,
+        terminalBackend: "pipe-fallback",
+      });
+      expect(started.terminalFallbackReason).toContain("Bun.Terminal");
+      await waitForCompletion(manager, started.processId);
+      const output = manager
+        .read(OWNER, started.processId)
+        .chunks.map((chunk) => chunk.text)
+        .join("");
+      expect(output).toContain("using bounded pipe mode");
+      expect(output).toContain("pipe fallback");
+    } finally {
+      await manager.dispose();
+    }
+  });
+
 	it("filters environment secrets and redacts explicitly granted values", async () => {
 		const filteredManager = new ProcessSessionManager();
 		try {

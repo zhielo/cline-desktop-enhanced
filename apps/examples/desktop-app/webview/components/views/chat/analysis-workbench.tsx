@@ -4,11 +4,15 @@ import {
 	Activity,
 	Binary,
 	Bug,
-	ExternalLink,
+  FileCheck2,
 	FileSearch,
 	Loader2,
+  ListChecks,
 	RefreshCw,
 	ShieldAlert,
+  ShieldCheck,
+  Terminal,
+  Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -16,9 +20,30 @@ import { toast } from "@/hooks/use-toast";
 import { desktopClient } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
 
-type WorkbenchMode = "analyze" | "debug" | "tools";
+type WorkbenchMode =
+  | "tasks"
+  | "analyze"
+  | "debug"
+  | "terminal"
+  | "approvals"
+  | "evidence"
+  | "diagnostics";
+type TaskKind = "static" | "debugger" | "gui" | "dynamic";
+type TaskPlan = {
+  id: string;
+  kind: TaskKind;
+  operation: string;
+  target?: string;
+  permission: string;
+  status: string;
+  requirements: string[];
+  risk: string;
+  budget: Record<string, unknown>;
+  createdAt: string;
+  evidence?: Record<string, unknown>;
+  error?: string;
+};
 type Discovery = { reverseEngineering?: unknown; debugger?: unknown };
-
 type AnalysisOperation =
 	| "inspect"
 	| "scan_strings"
@@ -39,6 +64,20 @@ type DebugOperation =
 	| "continue"
 	| "step";
 
+const modes: Array<{
+  id: WorkbenchMode;
+  icon: typeof Activity;
+  label: string;
+}> = [
+  { id: "tasks", icon: ListChecks, label: "Tasks" },
+  { id: "analyze", icon: Binary, label: "Analyze" },
+  { id: "debug", icon: Bug, label: "Debug" },
+  { id: "terminal", icon: Terminal, label: "Terminal" },
+  { id: "approvals", icon: ShieldCheck, label: "Approvals" },
+  { id: "evidence", icon: FileCheck2, label: "Evidence" },
+  { id: "diagnostics", icon: Wrench, label: "Diagnostics" },
+];
+
 function pretty(value: unknown): string {
 	if (typeof value === "string") return value;
 	return JSON.stringify(value, null, 2);
@@ -53,6 +92,9 @@ export function AnalysisWorkbench({
 }) {
 	const [mode, setMode] = useState<WorkbenchMode>("analyze");
 	const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [diagnostics, setDiagnostics] = useState<unknown>(null);
+  const [tasks, setTasks] = useState<TaskPlan[]>([]);
+  const [pendingPlan, setPendingPlan] = useState<TaskPlan | null>(null);
 	const [loadingDiscovery, setLoadingDiscovery] = useState(false);
 	const [target, setTarget] = useState("");
 	const [operation, setOperation] = useState<AnalysisOperation>("inspect");
@@ -63,6 +105,7 @@ export function AnalysisWorkbench({
 	const [address, setAddress] = useState("");
 	const [authorized, setAuthorized] = useState(false);
 	const [executionConfirmed, setExecutionConfirmed] = useState(false);
+  const [allowExternalTarget, setAllowExternalTarget] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [result, setResult] = useState<unknown>(null);
 	const common = useMemo(
@@ -70,94 +113,93 @@ export function AnalysisWorkbench({
 		[cwd, environmentId],
 	);
 
-	const discover = useCallback(async () => {
+  const refreshLedger = useCallback(async () => {
+    const [nextTasks, nextDiagnostics] = await Promise.all([
+      desktopClient.invoke<TaskPlan[]>("list_analysis_tasks", common),
+      desktopClient.invoke("get_analysis_diagnostics", common),
+    ]);
+    setTasks(nextTasks);
+    setDiagnostics(nextDiagnostics);
+  }, [common]);
+
+  const discover = useCallback(
+    async (depth: "fast" | "deep" = "fast") => {
 		setLoadingDiscovery(true);
 		try {
 			setDiscovery(
-				await desktopClient.invoke<Discovery>(
-					"discover_analysis_tools",
-					common,
-				),
+          await desktopClient.invoke<Discovery>("discover_analysis_tools", {
+            ...common,
+            depth,
+          }),
 			);
+        await refreshLedger();
 		} catch (error) {
 			toast({
 				variant: "destructive",
-				title: "Tool discovery failed",
+          title: "Diagnostics failed",
 				description:
 					error instanceof Error
 						? error.message
-						: "Could not inspect installed tools.",
+              : "Could not inspect analysis capabilities.",
 			});
 		} finally {
 			setLoadingDiscovery(false);
 		}
-	}, [common]);
+    },
+    [common, refreshLedger],
+  );
+
 	useEffect(() => {
-		void discover();
+    void discover("fast");
 	}, [discover]);
 
-	const runAnalysis = async () => {
-		if (!target.trim()) return;
+  const prepare = async (
+    kind: TaskKind,
+    selectedOperation: string,
+    selectedTarget?: string,
+  ) => {
 		setBusy(true);
 		setResult(null);
 		try {
-			const response = await desktopClient.invoke<{ result: unknown }>(
-				"run_static_analysis",
+      const plan = await desktopClient.invoke<TaskPlan>(
+        "prepare_analysis_task",
 				{
 					...common,
-					input: {
-						engine,
-						operation,
-						target: target.trim(),
-						reuse_analysis: true,
-						report_format: "json",
-					},
+          kind,
+          operation: selectedOperation,
+          ...(selectedTarget?.trim() ? { target: selectedTarget.trim() } : {}),
+          allowExternalTarget,
 				},
 			);
-			setResult(response.result);
+      setPendingPlan(plan);
+      await refreshLedger();
+      setMode("approvals");
 		} catch (error) {
 			toast({
 				variant: "destructive",
-				title: "Analysis failed",
+        title: "Could not prepare task",
 				description:
-					error instanceof Error
-						? error.message
-						: "The analysis operation failed.",
+          error instanceof Error ? error.message : "Task planning failed.",
 			});
 		} finally {
 			setBusy(false);
 		}
 	};
 
-	const openGui = async () => {
-		if (!target.trim()) return;
+  const approveAndRun = async () => {
+    if (!pendingPlan) return;
 		setBusy(true);
+    setResult(null);
 		try {
-			const response = await desktopClient.invoke<{ result: unknown }>(
-				"open_analysis_gui",
-				{
+      const approved = await desktopClient.invoke<{
+        executionToken: string;
+      }>("approve_analysis_task", {
 					...common,
-					confirmLaunch: true,
-					input: { engine, target: target.trim() },
-				},
-			);
-			setResult(response.result);
-		} catch (error) {
-			toast({
-				variant: "destructive",
-				title: "Could not open analysis tool",
-				description:
-					error instanceof Error ? error.message : "GUI launch failed.",
+        planId: pendingPlan.id,
+        requirements: pendingPlan.requirements,
 			});
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	const runDebugger = async () => {
-		if (!authorized) return;
-		setBusy(true);
-		setResult(null);
+      let response: { result: unknown; plan?: TaskPlan };
+      if (pendingPlan.kind === "debugger") {
 		const numericPid = Number(pid);
 		const input: Record<string, unknown> = {
 			operation: debugOperation,
@@ -166,60 +208,95 @@ export function AnalysisWorkbench({
 			acknowledge_risk: true,
 		};
 		if (target.trim()) input.target = target.trim();
-		if (Number.isInteger(numericPid) && numericPid > 0) input.pid = numericPid;
+        if (Number.isInteger(numericPid) && numericPid > 0)
+          input.pid = numericPid;
 		if (address.trim()) input.address = address.trim();
 		if (debugOperation === "continue" || debugOperation === "step")
 			input.confirm_execution_control = executionConfirmed;
-		try {
-			const response = await desktopClient.invoke<{ result: unknown }>(
-				"run_debugger_action",
-				{ ...common, confirmAuthorized: true, input },
+        response = await desktopClient.invoke("run_debugger_action", {
+          ...common,
+          planId: pendingPlan.id,
+          executionToken: approved.executionToken,
+          confirmAuthorized: true,
+          input,
+        });
+      } else {
+        response = await desktopClient.invoke(
+          pendingPlan.kind === "gui"
+            ? "open_analysis_gui"
+            : "run_static_analysis",
+          {
+            ...common,
+            planId: pendingPlan.id,
+            executionToken: approved.executionToken,
+            ...(pendingPlan.kind === "gui" ? { confirmLaunch: true } : {}),
+            input: {
+              engine,
+              operation,
+              target: target.trim(),
+              reuse_analysis: true,
+              report_format: "json",
+            },
+          },
 			);
+      }
 			setResult(response.result);
+      setPendingPlan(null);
+      await refreshLedger();
+      setMode("evidence");
 		} catch (error) {
+      await refreshLedger().catch(() => undefined);
 			toast({
 				variant: "destructive",
-				title: "Debugger action failed",
+        title: "Supervised task failed",
 				description:
-					error instanceof Error
-						? error.message
-						: "The supervised debugger action failed.",
+          error instanceof Error ? error.message : "The task did not complete.",
 			});
 		} finally {
 			setBusy(false);
 		}
 	};
 
+  const formButton = (label: string, action: () => void, disabled = false) => (
+    <button
+      className="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50"
+      disabled={busy || disabled}
+      onClick={action}
+      type="button"
+    >
+      {busy ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <FileSearch className="h-3.5 w-3.5" />
+      )}
+      {label}
+    </button>
+  );
+
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2">
-				{(["analyze", "debug", "tools"] as const).map((item) => (
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 py-2">
+        {modes.map((item) => (
 					<button
 						className={cn(
-							"flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs capitalize",
-							mode === item
+              "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[11px]",
+              mode === item.id
 								? "bg-secondary text-foreground"
 								: "text-muted-foreground hover:text-foreground",
 						)}
-						key={item}
-						onClick={() => setMode(item)}
+            key={item.id}
+            onClick={() => setMode(item.id)}
 						type="button"
 					>
-						{item === "analyze" ? (
-							<Binary className="h-3.5 w-3.5" />
-						) : item === "debug" ? (
-							<Bug className="h-3.5 w-3.5" />
-						) : (
-							<Activity className="h-3.5 w-3.5" />
-						)}
-						{item}
+            <item.icon className="h-3.5 w-3.5" />
+            {item.label}
 					</button>
 				))}
 				<button
-					aria-label="Refresh tool discovery"
+          aria-label="Refresh diagnostics"
 					className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
 					disabled={loadingDiscovery}
-					onClick={() => void discover()}
+          onClick={() => void discover("fast")}
 					type="button"
 				>
 					<RefreshCw
@@ -227,27 +304,25 @@ export function AnalysisWorkbench({
 					/>
 				</button>
 			</div>
-			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
 					{mode === "analyze" && (
 						<div className="space-y-4">
 							<div>
-								<h3 className="text-sm font-semibold">Static analysis</h3>
+                <h3 className="text-sm font-semibold">
+                  Static reverse engineering
+                </h3>
 								<p className="mt-1 text-xs text-muted-foreground">
-									Analyze binaries and APKs as data. Targets are never executed
-									automatically.
+                  Prepare an immutable task plan first. Files are analyzed as
+                  data and never executed.
 								</p>
 							</div>
-							<label
-								className="block text-xs font-medium"
-								htmlFor="analysis-target"
-							>
+              <label className="block text-xs font-medium">
 								Artifact path
 								<Input
-									id="analysis-target"
 									className="mt-1.5 h-9 font-mono text-xs"
 									onChange={(event) => setTarget(event.target.value)}
-									placeholder="C:\\path\\sample.exe or workspace-relative path"
+                  placeholder="Workspace-relative or absolute path"
 									value={target}
 								/>
 							</label>
@@ -265,12 +340,10 @@ export function AnalysisWorkbench({
 										<option value="scan_strings">Scan strings</option>
 										<option value="forensic_report">Forensic report</option>
 										<option value="apk_security_report">APK security</option>
-										<option value="verify_apk_signature">
-											Verify APK signature
-										</option>
+                    <option value="verify_apk_signature">APK signature</option>
 										<option value="analyze">Headless analysis</option>
 										<option value="decompile">Decompile</option>
-										<option value="disassemble_smali">Disassemble Smali</option>
+                    <option value="disassemble_smali">Smali</option>
 									</select>
 								</label>
 								<label className="text-xs font-medium">
@@ -287,31 +360,33 @@ export function AnalysisWorkbench({
 									</select>
 								</label>
 							</div>
-							<div className="flex gap-2">
-								<button
-									className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50"
-									disabled={busy || !target.trim()}
-									onClick={() => void runAnalysis()}
-									type="button"
-								>
-									{busy ? (
-										<Loader2 className="h-3.5 w-3.5 animate-spin" />
-									) : (
-										<FileSearch className="h-3.5 w-3.5" />
+              <label className="flex items-start gap-2 text-xs">
+                <input
+                  checked={allowExternalTarget}
+                  className="mt-0.5"
+                  onChange={(event) =>
+                    setAllowExternalTarget(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  Allow this explicitly reviewed path outside workspace.
+                </span>
+              </label>
+              {formButton(
+                "Prepare static-analysis task",
+                () => void prepare("static", operation, target),
+                !target.trim(),
 									)}
-									Run analysis
-								</button>
 								<button
-									className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50"
+                className="w-full rounded-md border border-border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50"
 									disabled={busy || !target.trim()}
-									onClick={() => void openGui()}
+                onClick={() => void prepare("gui", "open_gui", target)}
 									type="button"
 								>
-									<ExternalLink className="h-3.5 w-3.5" />
-									Open GUI
+                Prepare external GUI launch
 								</button>
 							</div>
-						</div>
 					)}
 					{mode === "debug" && (
 						<div className="space-y-4">
@@ -321,8 +396,7 @@ export function AnalysisWorkbench({
 									Authorized targets only
 								</div>
 								<p className="mt-1 text-[11px] text-muted-foreground">
-									Debugger actions are bounded and one-shot. This is not a
-									persistent hidden debugger session.
+                  Every action gets an exact, one-time approval token.
 								</p>
 							</div>
 							<label className="block text-xs font-medium">
@@ -345,39 +419,26 @@ export function AnalysisWorkbench({
 									<option value="step">Step</option>
 								</select>
 							</label>
-							<label
-								className="block text-xs font-medium"
-								htmlFor="debug-target"
-							>
-								Executable or dump path
 								<Input
-									id="debug-target"
-									className="mt-1.5 h-9 font-mono text-xs"
+                className="h-9 font-mono text-xs"
 									onChange={(event) => setTarget(event.target.value)}
+                placeholder="Executable or dump path"
 									value={target}
 								/>
-							</label>
 							<div className="grid grid-cols-2 gap-2">
-								<label className="text-xs font-medium" htmlFor="debug-pid">
-									PID
 									<Input
-										id="debug-pid"
-										className="mt-1.5 h-9 font-mono text-xs"
+                  className="h-9 font-mono text-xs"
 										inputMode="numeric"
 										onChange={(event) => setPid(event.target.value)}
+                  placeholder="PID"
 										value={pid}
 									/>
-								</label>
-								<label className="text-xs font-medium" htmlFor="debug-address">
-									Address
 									<Input
-										id="debug-address"
-										className="mt-1.5 h-9 font-mono text-xs"
+                  className="h-9 font-mono text-xs"
 										onChange={(event) => setAddress(event.target.value)}
-										placeholder="0x401000"
+                  placeholder="Address (0x401000)"
 										value={address}
 									/>
-								</label>
 							</div>
 							<label className="flex items-start gap-2 text-xs">
 								<input
@@ -388,7 +449,9 @@ export function AnalysisWorkbench({
 								/>
 								<span>I own or am authorized to inspect this target.</span>
 							</label>
-							{(debugOperation === "continue" || debugOperation === "step") && (
+              {(["continue", "step", "launch"] as string[]).includes(
+                debugOperation,
+              ) && (
 								<label className="flex items-start gap-2 text-xs">
 									<input
 										checked={executionConfirmed}
@@ -398,63 +461,128 @@ export function AnalysisWorkbench({
 										}
 										type="checkbox"
 									/>
-									<span>
-										I understand this operation resumes target execution.
-									</span>
+                  <span>I approve target execution control.</span>
 								</label>
 							)}
-							<button
-								className="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50"
-								disabled={
-									busy ||
+              {formButton(
+                "Prepare debugger task",
+                () => void prepare("debugger", debugOperation, target),
 									!authorized ||
-									((debugOperation === "continue" ||
-										debugOperation === "step") &&
-										!executionConfirmed)
-								}
-								onClick={() => void runDebugger()}
-								type="button"
-							>
-								{busy ? (
-									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ((["continue", "step", "launch"] as string[]).includes(
+                    debugOperation,
+                  ) &&
+                    !executionConfirmed),
+              )}
+            </div>
+          )}
+          {mode === "approvals" && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Approval boundary</h3>
+              {pendingPlan ? (
+                <>
+                  <pre className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-[11px]">
+                    {pretty(pendingPlan)}
+                  </pre>
+                  {formButton(
+                    "Approve exact plan and run",
+                    () => void approveAndRun(),
+                  )}
+                </>
 								) : (
-									<Bug className="h-3.5 w-3.5" />
+                <p className="text-xs text-muted-foreground">
+                  No plan is waiting for approval.
+                </p>
 								)}
-								Run supervised debugger
+            </div>
+          )}
+          {mode === "tasks" && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold">Task ledger</h3>
+              {tasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No tasks yet.</p>
+              ) : (
+                tasks.map((task) => (
+                  <button
+                    className="w-full rounded-lg border p-3 text-left hover:bg-secondary"
+                    key={task.id}
+                    onClick={() => setResult(task)}
+                    type="button"
+                  >
+                    <div className="flex justify-between text-xs font-medium">
+                      <span>{task.operation}</span>
+                      <span>{task.status}</span>
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      {task.permission} · {task.risk} risk
+                    </div>
 							</button>
+                ))
+              )}
 						</div>
 					)}
-					{mode === "tools" && (
+          {mode === "terminal" && (
 						<div className="space-y-3">
-							<div>
-								<h3 className="text-sm font-semibold">Tool health</h3>
-								<p className="mt-1 text-xs text-muted-foreground">
-									Detected versions, executable paths, capabilities and setup
-									recommendations.
+              <h3 className="text-sm font-semibold">Terminal safety</h3>
+              <p className="text-xs text-muted-foreground">
+                Use the dedicated Workspace Terminal for interactive shell work.
+                It negotiates ConPTY/PTY and falls back to bounded pipes when
+                the runtime lacks terminal support.
 								</p>
+              <pre className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-[11px]">
+                {pretty(diagnostics)}
+              </pre>
 							</div>
-							{loadingDiscovery ? (
-								<div className="grid place-items-center py-16">
-									<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          )}
+          {mode === "diagnostics" && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">
+                  IDA, Ghidra and runtime health
+                </h3>
+                <button
+                  className="rounded-md border px-2 py-1 text-[11px]"
+                  disabled={loadingDiscovery}
+                  onClick={() => void discover("deep")}
+                  type="button"
+                >
+                  Deep check
+                </button>
 								</div>
-							) : (
-								<pre className="overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/30 p-3 font-mono text-[11px] leading-5">
-									{pretty(discovery ?? "No discovery result.")}
+              <pre className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-[11px]">
+                {pretty({ diagnostics, discovery })}
 								</pre>
+            </div>
 							)}
+          {mode === "evidence" && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Evidence ledger</h3>
+              <p className="text-xs text-muted-foreground">
+                Results include a SHA-256 evidence hash and bounded output
+                paths.
+              </p>
+              {tasks
+                .filter((task) => task.evidence)
+                .map((task) => (
+                  <pre
+                    className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-[10px]"
+                    key={task.id}
+                  >
+                    {pretty(task)}
+                  </pre>
+                ))}
 						</div>
 					)}
 				</div>
 				<div className="min-h-0 overflow-auto bg-muted/10 p-4">
 					<div className="mb-2 flex items-center gap-2 text-xs font-medium">
 						<Activity className="h-3.5 w-3.5" />
-						Evidence and output
+            Supervised output
 					</div>
 					<pre className="min-h-48 whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-4 font-mono text-xs leading-5">
 						{busy
-							? "Running supervised operation…"
+              ? "Running bounded operation…"
 							: result === null
-								? "Analysis results, hashes, tool versions and generated artifact paths appear here."
+                ? "Task results, evidence hashes, tool versions and generated paths appear here."
 								: pretty(result)}
 					</pre>
 				</div>

@@ -68,4 +68,33 @@ describe("desktop execution workbench boundaries", () => {
 			}),
 		).rejects.toThrow("target is authorized");
 	});
+
+  it("prepares exact analysis plans and exposes runtime diagnostics", async () => {
+    const plan = (await handleCommand(context, "prepare_analysis_task", {
+      cwd: workspace,
+      kind: "static",
+      operation: "inspect",
+      target: "sample.exe",
+    })) as {
+      id: string;
+      status: string;
+      permission: string;
+      target: string;
+    };
+    expect(plan).toMatchObject({
+      status: "awaiting-approval",
+      permission: "Inspect",
+      target: join(workspace, "sample.exe"),
+    });
+    const diagnostics = (await handleCommand(
+      context,
+      "get_analysis_diagnostics",
+      { cwd: workspace },
+    )) as {
+      dynamicAnalysisOnHost: boolean;
+      processSessions: { pipeFallback: boolean };
+    };
+    expect(diagnostics.dynamicAnalysisOnHost).toBe(false);
+    expect(diagnostics.processSessions.pipeFallback).toBe(true);
+  });
 });

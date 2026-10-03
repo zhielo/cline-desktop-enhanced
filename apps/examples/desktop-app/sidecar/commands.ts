@@ -50,6 +50,7 @@ import {
 	getCoreBuiltinToolCatalog,
 	getLocalProviderModels,
 	getPowerShellWorkerBaselineDecision,
+  getProcessSessionRuntimeCapabilities,
 	getProviderAuthHandler,
 	identifyAccount,
 	LiveDebuggerInputSchema,
@@ -128,6 +129,10 @@ import {
 	parseComposioToolkitSlug,
 } from "./composio";
 import { readComputerUseMetrics } from "./computer-use-metrics";
+import {
+  type AnalysisTaskKind,
+  desktopAnalysisTaskOrchestrator,
+} from "./analysis-task-orchestrator";
 import {
 	connectorChannelsPayload,
 	startConnectorChannel,
@@ -4904,6 +4909,10 @@ export async function handleCommand(
 		};
 	}
 	if (
+    command === "prepare_analysis_task" ||
+    command === "approve_analysis_task" ||
+    command === "list_analysis_tasks" ||
+    command === "get_analysis_diagnostics" ||
 		command === "discover_analysis_tools" ||
 		command === "run_static_analysis" ||
 		command === "open_analysis_gui" ||
@@ -4919,12 +4928,46 @@ export async function handleCommand(
 		);
 		const owner = workspaceProcessOwner(baseDir);
 		const toolContext = desktopToolContext(owner);
+    if (command === "prepare_analysis_task") {
+      const kind = String(args?.kind ?? "") as AnalysisTaskKind;
+      if (!["static", "debugger", "gui", "dynamic"].includes(kind)) {
+        throw new Error("kind must be static, debugger, gui, or dynamic");
+      }
+      const operation = String(args?.operation ?? "").trim();
+      if (!operation) throw new Error("operation is required");
+      return desktopAnalysisTaskOrchestrator.prepare({
+        workspaceRoot: baseDir,
+        kind,
+        operation,
+        ...(typeof args?.target === "string" && args.target.trim()
+          ? { target: args.target.trim() }
+          : {}),
+        allowExternalTarget: args?.allowExternalTarget === true,
+      });
+    }
+    if (command === "approve_analysis_task") {
+      const planId = String(args?.planId ?? "").trim();
+      const requirements = Array.isArray(args?.requirements)
+        ? args.requirements.map(String)
+        : [];
+      return desktopAnalysisTaskOrchestrator.approve(planId, requirements);
+    }
+    if (command === "list_analysis_tasks") {
+      return desktopAnalysisTaskOrchestrator.list(baseDir);
+    }
+    if (command === "get_analysis_diagnostics") {
+      return {
+        ...desktopAnalysisTaskOrchestrator.diagnostics(),
+        processSessions: getProcessSessionRuntimeCapabilities(),
+      };
+    }
 		if (command === "discover_analysis_tools") {
 			const [reverseEngineering, debuggerTools] = await Promise.all([
 				desktopReverseEngineeringExecutor(
 					ReverseEngineeringInputSchema.parse({
 						engine: "auto",
 						operation: "discover",
+            discovery_depth: args?.depth === "deep" ? "deep" : "fast",
 					}),
 					toolContext,
 				),
@@ -4948,12 +4991,30 @@ export async function handleCommand(
 				);
 			}
 			const input = LiveDebuggerInputSchema.parse(args?.input);
-			return {
+      const planId = String(args?.planId ?? "").trim();
+      const executionToken = String(args?.executionToken ?? "").trim();
+      desktopAnalysisTaskOrchestrator.consume({
+        planId,
+        executionToken,
+        workspaceRoot: baseDir,
 				kind: "debugger",
-				result: JSON.parse(
+        operation: input.operation,
+        ...(typeof input.target === "string" ? { target: input.target } : {}),
+      });
+      try {
+        const result = JSON.parse(
 					await desktopLiveDebuggerExecutor(input, toolContext),
-				),
-			};
+        );
+        const plan = desktopAnalysisTaskOrchestrator.complete(
+          planId,
+          result,
+          "live-debugger",
+        );
+        return { kind: "debugger", result, plan };
+      } catch (error) {
+        desktopAnalysisTaskOrchestrator.fail(planId, error);
+        throw error;
+      }
 		}
 		const rawInput = {
 			...(typeof args?.input === "object" && args.input ? args.input : {}),
@@ -4999,11 +5060,49 @@ export async function handleCommand(
 			}
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
-		const result = await desktopReverseEngineeringExecutor(input, toolContext);
+    const planId = String(args?.planId ?? "").trim();
+    const executionToken = String(args?.executionToken ?? "").trim();
+    desktopAnalysisTaskOrchestrator.consume({
+      planId,
+      executionToken,
+      workspaceRoot: baseDir,
+      kind: command === "open_analysis_gui" ? "gui" : "static",
+      operation: input.operation,
+      ...(typeof input.target === "string" ? { target: input.target } : {}),
+    });
+    let result: string;
 		try {
-			return { kind: "reverse-engineering", result: JSON.parse(result) };
+      result = await desktopReverseEngineeringExecutor(input, toolContext);
+    } catch (error) {
+      desktopAnalysisTaskOrchestrator.fail(planId, error);
+      throw error;
+    }
+    try {
+      const parsed = JSON.parse(result);
+      const outputPaths =
+        parsed && typeof parsed === "object"
+          ? [
+              parsed.outputDirectory,
+              parsed.outputFile,
+              parsed.reportOutputFile,
+            ].filter((value): value is string => typeof value === "string")
+          : [];
+      const plan = desktopAnalysisTaskOrchestrator.complete(
+        planId,
+        parsed,
+        command === "open_analysis_gui"
+          ? "external-analysis-gui"
+          : "reverse-engineering",
+        outputPaths,
+      );
+      return { kind: "reverse-engineering", result: parsed, plan };
 		} catch {
-			return { kind: "reverse-engineering", result };
+      const plan = desktopAnalysisTaskOrchestrator.complete(
+        planId,
+        result,
+        "reverse-engineering",
+      );
+      return { kind: "reverse-engineering", result, plan };
 		}
 	}
 

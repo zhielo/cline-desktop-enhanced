@@ -1,5 +1,23 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.0.41
+
+### Added
+
+- Added a local Analysis Orchestrator with immutable task envelopes, workspace confinement, explicit permission requirements, one-time execution tokens, bounded budgets, task history, and SHA-256 evidence provenance.
+- Expanded Analysis into a workbench with Tasks, Analyze, Debug, Terminal, Approvals, Evidence, and Diagnostics surfaces. IDA, Ghidra, JADX, debugger, and GUI actions now use a prepare-review-approve-run flow.
+- Added fast cached tool discovery plus an explicit deep health check for versions, plugins, decompilers, Android tools, and supplemental utilities.
+
+### Fixed
+
+- Standardized Windows validation on Bun 1.3.14 and added safe PTY/ConPTY capability negotiation with bounded pipe fallback.
+- Fixed reverse-engineering input typing so schema defaults remain optional to callers, and removed the slow discovery path that caused the 20-second CI timeout.
+
+### Security
+
+- Static analysis remains the default. Debugger execution control and GUI launch require exact approval; dynamic analysis never runs on the host and requires an externally configured isolated worker or VM.
+- Normal Cline chat, providers, models, tools, Notion Functions, and Notion Agent workflows remain unchanged and separate from the Analysis workbench.
+
 ## Cline Enhanced Desktop 0.0.40
 
 ### Added
