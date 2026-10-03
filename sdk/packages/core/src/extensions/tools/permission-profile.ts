@@ -23,6 +23,7 @@ export type PermissionProfileName =
 	| "read-only"
 	| "workspace"
 	| "workspace-network"
+	| "notion-functions"
 	| "full-access";
 
 export interface CustomPermissionProfile {
@@ -127,6 +128,19 @@ function builtInProfile(
 				allowedToolNames: new Set(),
 				deniedToolNames: new Set(),
 			};
+		case "notion-functions":
+			return {
+				name: profile,
+				allowFileWrites: false,
+				allowCommands: false,
+				allowProcessSessions: false,
+				allowComputerUse: false,
+				allowNetwork: false,
+				allowExternalTools: false,
+				allowUnknownTools: false,
+				allowedToolNames: new Set(),
+				deniedToolNames: new Set(),
+			};
 		case "full-access":
 			return {
 				name: profile,
@@ -197,6 +211,20 @@ function evaluateTool(
 	const toolName = context.tool.name;
 	if (profile.deniedToolNames.has(toolName)) {
 		return blockedReason(profile.name, `${toolName} is explicitly denied.`);
+	}
+	if (profile.name === "notion-functions") {
+		const normalizedToolName = toolName.toLowerCase();
+		if (
+			normalizedToolName.startsWith("notion__") ||
+			toolName === "ask_question" ||
+			toolName === "submit_and_exit"
+		) {
+			return undefined;
+		}
+		return blockedReason(
+			profile.name,
+			"only the official Notion MCP tools and user coordination are enabled.",
+		);
 	}
 	const explicitlyAllowed = profile.allowedToolNames.has(toolName);
 	if (!isKnownTool(toolName) && !isCoordinationTool(toolName)) {

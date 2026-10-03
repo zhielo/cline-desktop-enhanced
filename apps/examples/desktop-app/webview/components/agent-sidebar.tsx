@@ -23,6 +23,7 @@ import {
 	Radio,
 	Search,
 	Settings,
+	Sparkles,
 	SlidersHorizontal,
 	Stethoscope,
 	Store,
@@ -151,6 +152,7 @@ const SETTINGS_SECTION_ICONS = {
 	Voice: Mic,
 	Channels: Radio,
 	Schedules: Clock3,
+	Functions: Sparkles,
 	Import: Import,
 	Remote: Network,
 	Diagnostics: Stethoscope,
@@ -237,13 +239,14 @@ function SettingsSectionNavigation({
 					Settings
 				</p>
 			) : null}
-			{/* Schedules and Customize already have dedicated rows at the top of
+			{/* Schedules, Functions, and Customize already have dedicated rows at the top of
 			    the expanded sidebar (Customize's Installed/Marketplace sub-tabs
 			    render under that row), so the section nav skips them there.
 			    The collapsed sidebar has no action rows and keeps them
 			    reachable. */}
 			{SETTINGS_SECTIONS.filter(
-				(section) => collapsed || section !== "Schedules",
+				(section) =>
+					collapsed || (section !== "Schedules" && section !== "Functions"),
 			).map(renderSectionButton)}
 			{collapsed ? (
 				<>
@@ -944,6 +947,26 @@ export function AgentSidebar({
 						>
 							<Clock3 className="size-4 shrink-0" />
 							<span className="truncate">Schedule</span>
+						</Button>
+						<Button
+							aria-current={
+								view === "settings" && settingsSection === "Functions"
+									? "page"
+									: undefined
+							}
+							aria-label="Functions"
+							className={cn(
+								view === "settings" &&
+									settingsSection === "Functions" &&
+									"bg-surface-hover text-sidebar-foreground",
+							)}
+							onClick={() => openSettingsSection("Functions")}
+							title="Run focused AI functions without changing normal chat"
+							type="button"
+							variant="sidebarItem"
+						>
+							<Sparkles className="size-4 shrink-0" />
+							<span className="truncate">Functions</span>
 						</Button>
 						<Button
 							aria-label="Customize"

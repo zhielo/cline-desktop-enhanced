@@ -41,6 +41,7 @@ import { WelcomeScreen } from "@/components/views/chat/welcome-chat";
 import { WelcomeSetupNotice } from "@/components/views/chat/welcome-setup-notice";
 import type { OnboardingStep } from "@/components/views/onboarding/onboarding-view";
 import type { SettingsSection } from "@/components/views/settings/sections";
+import type { FunctionLaunchRequest } from "@/components/views/settings/functions-view";
 import {
 	WindowTitleBar,
 	WindowTitleBarContent,
@@ -480,17 +481,36 @@ export default function Home() {
 	useEffect(() => watchDesktopNotifications(), []);
 	useEffect(() => watchBuiltInBrowser(), []);
 
-	const createThreadForEnvironment = useCallback((environmentId: string) => {
-		dispatchApp({
-			type: "new-thread",
-			threadId: makeThreadId(),
-			environmentId,
-		});
-		requestPromptInputFocus();
-	}, []);
+	const createThreadForEnvironment = useCallback(
+		(
+			environmentId: string,
+			initialPromptDraft?: string,
+			notionFunctionTitle?: string,
+		) => {
+			dispatchApp({
+				type: "new-thread",
+				threadId: makeThreadId(),
+				environmentId,
+				initialPromptDraft,
+				notionFunctionTitle,
+			});
+			requestPromptInputFocus();
+		},
+		[],
+	);
 	const handleNewThread = useCallback(() => {
 		createThreadForEnvironment(activeEnvironmentId);
 	}, [activeEnvironmentId, createThreadForEnvironment]);
+	const handleLaunchFunction = useCallback(
+		(request: FunctionLaunchRequest) => {
+			createThreadForEnvironment(
+				activeEnvironmentId,
+				request.prompt,
+				request.title,
+			);
+		},
+		[activeEnvironmentId, createThreadForEnvironment],
+	);
 	const selectEnvironmentDraft = useCallback((environmentId: string) => {
 		dispatchApp({
 			type: "select-environment-draft",
@@ -995,6 +1015,7 @@ export default function Home() {
 														historySession={thread.historySession}
 														liveHistoryStatus={liveHistoryStatus}
 														initialPromptDraft={thread.initialPromptDraft}
+														notionFunctionTitle={thread.notionFunctionTitle}
 														knownWorkspacePaths={knownWorkspacePaths}
 														onInitialPromptDraftConsumed={
 															handleInitialPromptDraftConsumed
@@ -1043,6 +1064,7 @@ export default function Home() {
 								{view === "settings" ? (
 									<div className="absolute inset-0 z-30 bg-background text-foreground">
 										<SettingsView
+											onLaunchFunction={handleLaunchFunction}
 											onNavigateSection={handleSettingsSectionChange}
 											onOpenSession={handleOpenSessionById}
 											section={settingsSection}
@@ -1103,6 +1125,7 @@ function ChatThreadPane({
 	historySession,
 	liveHistoryStatus,
 	initialPromptDraft,
+	notionFunctionTitle,
 	knownWorkspacePaths,
 	onInitialPromptDraftConsumed,
 	onUpdateSessionMetadata,
@@ -1128,6 +1151,7 @@ function ChatThreadPane({
 	historySession?: SessionHistoryItem;
 	liveHistoryStatus?: SessionHistoryItem["status"];
 	initialPromptDraft?: string;
+	notionFunctionTitle?: string;
 	knownWorkspacePaths: string[];
 	onInitialPromptDraftConsumed?: (threadId: string) => void;
 	onUpdateSessionMetadata?: (
@@ -1189,6 +1213,27 @@ function ChatThreadPane({
 		abort,
 		hydrateSession,
 	} = useChatSession(environmentId);
+	useEffect(() => {
+		if (!notionFunctionTitle || sessionId) {
+			return;
+		}
+		setConfig((previous) => {
+			if (
+				previous.permissionProfile === "notion-functions" &&
+				previous.autoApproveTools === false &&
+				previous.mode === "act"
+			) {
+				return previous;
+			}
+			return {
+				...previous,
+				permissionProfile: "notion-functions",
+				autoApproveTools: false,
+				mode: "act",
+			};
+		});
+	}, [notionFunctionTitle, sessionId, setConfig]);
+
 	// Bind the runtime session to the thread so deleting it elsewhere (e.g.
 	// the sidebar) can close this pane even when it was not opened from history.
 	useEffect(() => {
@@ -1804,6 +1849,20 @@ function ChatThreadPane({
 		threadId,
 		setPromptInput,
 		setPendingAttachments,
+	]);
+
+	useEffect(() => {
+		if (historySession || initialPromptDraft === undefined) {
+			return;
+		}
+		setPromptInput(initialPromptDraft);
+		onInitialPromptDraftConsumed?.(threadId);
+	}, [
+		historySession,
+		initialPromptDraft,
+		onInitialPromptDraftConsumed,
+		setPromptInput,
+		threadId,
 	]);
 
 	useEffect(() => {
@@ -2467,43 +2526,57 @@ function ChatThreadPane({
 	}
 
 	const composer = (
-		<ChatInputBar
-			readOnly={isCloudSessionExpired}
-			attachments={attachmentList}
-			environmentId={environmentId}
-			hasRunningAgents={agentActivity.running > 0}
-			onAbort={handleAbort}
-			onAttachFiles={handleAttachFiles}
-			onListGitBranches={listGitBranches}
-			onRemoveAttachment={handleRemoveAttachment}
-			onSwitchGitBranch={switchGitBranch}
-			onModelChange={handleModelChange}
-			onPromptInputChange={handlePromptInputChange}
-			onOpenModelSettings={onOpenModelSettings}
-			onPermissionProfileChange={handlePermissionProfileChange}
-			onReasoningChange={handleReasoningChange}
-			onSteerPromptInQueue={steerPromptInQueue}
-			onEditPromptInQueue={updatePromptInQueue}
-			onRemovePromptInQueue={handleRemoveQueuedPrompt}
-			onProviderChange={handleProviderChange}
-			onSend={handleSendPrompt}
-			gitBranch={gitBranch}
-			cloudBranch={config.branch}
-			executionTarget={isCloudSession ? "cloud" : "local"}
-			hasActiveSession={Boolean(sessionId)}
-			repoUrl={config.repoUrl}
-			model={config.model}
-			modelContextWindow={modelContextWindow}
-			promptsInQueue={promptsInQueue}
-			promptDraft={promptDraft}
-			provider={config.provider}
-			permissionProfile={config.permissionProfile ?? "full-access"}
-			reasoningEffort={config.reasoningEffort}
-			status={status}
-			summary={summary}
-			thinking={config.thinking}
-			variant={isWelcomeState ? "welcome" : "conversation"}
-		/>
+		<>
+			{notionFunctionTitle ? (
+				<div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
+					<span className="font-medium text-foreground">
+						Notion Function · {notionFunctionTitle}
+					</span>
+					<span className="text-muted-foreground">
+						Only official Notion MCP tools are enabled
+					</span>
+				</div>
+			) : null}
+			<ChatInputBar
+				readOnly={isCloudSessionExpired}
+				attachments={attachmentList}
+				environmentId={environmentId}
+				hasRunningAgents={agentActivity.running > 0}
+				onAbort={handleAbort}
+				onAttachFiles={handleAttachFiles}
+				onListGitBranches={listGitBranches}
+				onRemoveAttachment={handleRemoveAttachment}
+				onSwitchGitBranch={switchGitBranch}
+				onModelChange={handleModelChange}
+				onPromptInputChange={handlePromptInputChange}
+				onOpenModelSettings={onOpenModelSettings}
+				onPermissionProfileChange={
+				notionFunctionTitle ? undefined : handlePermissionProfileChange
+				}
+				onReasoningChange={handleReasoningChange}
+				onSteerPromptInQueue={steerPromptInQueue}
+				onEditPromptInQueue={updatePromptInQueue}
+				onRemovePromptInQueue={handleRemoveQueuedPrompt}
+				onProviderChange={handleProviderChange}
+				onSend={handleSendPrompt}
+				gitBranch={gitBranch}
+				cloudBranch={config.branch}
+				executionTarget={isCloudSession ? "cloud" : "local"}
+				hasActiveSession={Boolean(sessionId)}
+				repoUrl={config.repoUrl}
+				model={config.model}
+				modelContextWindow={modelContextWindow}
+				promptsInQueue={promptsInQueue}
+				promptDraft={promptDraft}
+				provider={config.provider}
+				permissionProfile={config.permissionProfile ?? "full-access"}
+				reasoningEffort={config.reasoningEffort}
+				status={status}
+				summary={summary}
+				thinking={config.thinking}
+				variant={isWelcomeState ? "welcome" : "conversation"}
+			/>
+		</>
 	);
 
 	const cloudConnectUrl =

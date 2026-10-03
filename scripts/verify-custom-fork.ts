@@ -7,6 +7,7 @@ const requiredMarkers: Array<{
 	{
 		path: "CUSTOMIZATIONS.md",
 		markers: [
+			"Separate Notion-assisted Functions",
 			"AI task execution UI",
 			"Permanent Custom AI Instructions",
 			"Windows reliability",
@@ -322,6 +323,33 @@ const requiredMarkers: Array<{
 		markers: ["mergeDesktopAiInstructions", "taskToolStepIds"],
 	},
 	{
+		path: "sdk/packages/core/src/runtime/orchestration/runtime-builder.ts",
+		markers: [
+			"OFFICIAL_NOTION_MCP_URL",
+			"isOfficialNotionRegistration",
+			"officialNotionOnly",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",
+		markers: [
+			"Notion-assisted functions",
+			"Uses your current Cline model",
+			"https://mcp.notion.com/mcp",
+			"No special database",
+			"Open in new session",
+			"Local function audit",
+			"Create reusable function",
+			"Pinned Notion context",
+			"Prepare Notion Agent handoff",
+			"Import Notion Agent review",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/desktop-app-state.ts",
+		markers: ["initialPromptDraft?: string", 'type: "new-thread"'],
+	},
+	{
 		path: "apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx",
 		markers: [
 			"Custom AI instructions",
@@ -415,6 +443,8 @@ const requiredMarkers: Array<{
 			'"read-only"',
 			'"workspace-network"',
 			'"full-access"',
+			'"notion-functions"',
+			"only the official Notion MCP tools",
 			"unclassified plugin or MCP tool",
 			"not an operating-system sandbox",
 			"desktop computer control is disabled",

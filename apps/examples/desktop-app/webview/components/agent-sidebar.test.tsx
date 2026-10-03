@@ -1159,6 +1159,7 @@ describe("AgentSidebar session organization", () => {
 		expect(rows.map((row) => row.textContent)).toEqual([
 			"Session",
 			"Schedule",
+			"Functions",
 			"Customize",
 		]);
 		for (const row of rows) {

@@ -16,6 +16,7 @@ export type DesktopThread = {
 	sessionId?: string;
 	hasStarted?: boolean;
 	initialPromptDraft?: string;
+	notionFunctionTitle?: string;
 };
 
 export type DesktopAppLocation<SettingsSection extends string> = {
@@ -33,7 +34,13 @@ export type DesktopAppAction<SettingsSection extends string> =
 	| { type: "navigate"; destination: DesktopAppLocation<SettingsSection> }
 	| { type: "back" }
 	| { type: "forward" }
-	| { type: "new-thread"; threadId: string; environmentId: string }
+	| {
+			type: "new-thread";
+			threadId: string;
+			environmentId: string;
+			initialPromptDraft?: string;
+			notionFunctionTitle?: string;
+	  }
 	| { type: "bind-unstarted-thread"; threadId: string; environmentId: string }
 	| {
 			type: "select-environment-draft";
@@ -115,7 +122,12 @@ export function desktopAppReducer<SettingsSection extends string>(
 			return {
 				threads: [
 					...state.threads,
-					{ id: action.threadId, environmentId: action.environmentId },
+					{
+						id: action.threadId,
+						environmentId: action.environmentId,
+						initialPromptDraft: action.initialPromptDraft,
+						notionFunctionTitle: action.notionFunctionTitle,
+					},
 				],
 				navigation: navigationHistoryReducer(state.navigation, {
 					type: "navigate",

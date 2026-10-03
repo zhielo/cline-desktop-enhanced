@@ -122,6 +122,21 @@ describe("permission profile guard", () => {
 		expect(result?.reason).toContain("unclassified plugin or MCP tool");
 	});
 
+	it("isolates Notion function sessions to Notion MCP tools", async () => {
+		expect(
+			await before("notion-functions", "Notion__search"),
+		).toBeUndefined();
+		expect(
+			await before("notion-functions", "notion__create_page"),
+		).toBeUndefined();
+		expect(await before("notion-functions", "ask_question")).toBeUndefined();
+		expect((await before("notion-functions", "read_files"))?.skip).toBe(true);
+		expect((await before("notion-functions", "run_commands"))?.skip).toBe(true);
+		expect((await before("notion-functions", "github__search"))?.skip).toBe(
+			true,
+		);
+	});
+
 	it("supports explicit custom allow and deny rules", async () => {
 		const profile = {
 			kind: "custom" as const,

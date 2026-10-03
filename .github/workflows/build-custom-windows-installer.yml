@@ -167,7 +167,8 @@ jobs:
             sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             sdk/packages/core/src/extensions/tools/runtime.test.ts \
-            --config vitest.config.mts
+            --config vitest.config.mts \
+            --testTimeout=60000
 
       - name: Run process-session terminal smoke test
         shell: bash

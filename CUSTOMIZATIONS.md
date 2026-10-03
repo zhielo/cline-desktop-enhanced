@@ -12,6 +12,26 @@ This file is the durable customization ledger for this repository. The source on
 
 ## Preserved customizations
 
+### Separate Notion-assisted Functions
+
+- A dedicated **Functions** sidebar page is separate from normal Cline chat and from Customize. It does not replace the selected provider or automatically route ordinary prompts to Notion.
+- Every function opens a new, editable chat draft powered by the user's current Cline model. The existing thread remains preserved and unchanged.
+- Official Notion MCP OAuth status and connection are available in the feature. Notion workspace tools are requested only by explicitly selected templates and remain subject to the existing MCP and permission boundaries.
+- Read templates are non-mutating. Write-oriented page, report, and action-plan templates require the model to show the destination and proposed content before making changes.
+- The only setup requirement is a Notion account authorized through OAuth. No dedicated database, automation, integration token, or Custom Agent configuration is required, and no private Notion AI model API is claimed.
+- Function sessions use the host-enforced `notion-functions` profile: only tools from the exact official `Notion` Streamable HTTP registration at `https://mcp.notion.com/mcp` plus user-coordination tools are available. Agent-plugin servers and similarly named or substituted endpoints are excluded. Normal sessions keep their existing profile, provider, and capabilities.
+- Function sessions disable tool auto-approval, display a persistent Notion Function banner, and preserve proposed writes in the chat transcript for explicit review.
+- The hub stores optional default destinations, reusable custom templates, and a bounded local launch audit in browser-local storage. Recent functions can be run again; actual tool calls remain visible in their separate session transcripts.
+- A device-local context basket pins existing Notion page names or URLs to function drafts. Manual Notion Agent handoff publishes an approved project-analysis page and returns a copyable Agent instruction; review import reads the resulting page back into a read-only Cline planning session without pretending to invoke the private Agent API.
+
+Primary files:
+
+- `apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx`
+- `apps/examples/desktop-app/webview/components/views/settings/sections.ts`
+- `apps/examples/desktop-app/webview/components/agent-sidebar.tsx`
+- `apps/examples/desktop-app/webview/app/page.tsx`
+- `apps/examples/desktop-app/webview/lib/desktop-app-state.ts`
+
 ### AI task execution UI
 
 - Polished sticky AI task report with progress, repair, verification, and execution states.
