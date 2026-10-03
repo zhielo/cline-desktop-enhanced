@@ -324,6 +324,7 @@ describe("FunctionsView project intelligence", () => {
           branch: "notion-agent/review",
           previousBranch: "main",
           appliedHashes: { "src/index.ts": "def456" },
+          originalHashes: { "src/index.ts": "abc123" },
         };
       }
       return {

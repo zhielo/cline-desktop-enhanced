@@ -121,6 +121,7 @@ export type AppliedNotionAgentPatch = NotionAgentPatchPreview & {
 	branch: string;
 	previousBranch: string;
 	appliedHashes: Record<string, string | null>;
+	originalHashes: Record<string, string | null>;
 };
 
 function git(root: string, args: string[], input?: string): string {
@@ -376,6 +377,9 @@ export function applyNotionAgentPatch(
 				hashFile(preview.root, file.path),
 			]),
 		),
+		originalHashes: Object.fromEntries(
+			preview.files.map((file) => [file.path, file.originalHash]),
+		),
 	};
 }
 
@@ -385,6 +389,7 @@ export function rollbackNotionAgentPatch(options: {
 	branch: string;
 	previousBranch: string;
 	appliedHashes: Record<string, string | null>;
+	originalHashes: Record<string, string | null>;
 	confirm: boolean;
 }): { rolledBack: true; branchDeleted: string; currentBranch: string } {
 	if (options.confirm !== true)
@@ -406,6 +411,18 @@ export function rollbackNotionAgentPatch(options: {
 	}
 	git(root, ["apply", "--reverse", "--check", "-"], options.patch);
 	git(root, ["apply", "--reverse", "-"], options.patch);
+	for (const [path, expected] of Object.entries(options.originalHashes)) {
+		const normalized = normalizePatchPath(root, path);
+		if (hashFile(root, normalized) !== expected)
+			throw new Error(
+				`Reverse patch did not restore the approved original content: ${path}`,
+			);
+		if (expected !== null) {
+			// Normalize platform line endings and file metadata from the branch
+			// index after proving reverse-apply restored the approved bytes.
+			git(root, ["checkout", "--", normalized]);
+		}
+	}
 	if (git(root, ["status", "--porcelain"]) !== "")
 		throw new Error(
 			"Rollback did not restore a clean workspace; branch was preserved",

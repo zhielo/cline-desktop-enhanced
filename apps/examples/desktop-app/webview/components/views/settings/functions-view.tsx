@@ -164,6 +164,7 @@ type AppliedAgentPatch = AgentPatchPreview & {
   branch: string;
   previousBranch: string;
   appliedHashes: Record<string, string | null>;
+  originalHashes: Record<string, string | null>;
 };
 
 const AGENT_TASK_PRESETS: Record<AgentTaskPreset, string> = {
@@ -1148,6 +1149,7 @@ ${bridgePackage.packageMarkdown}
           branch: appliedPatch.branch,
           previousBranch: appliedPatch.previousBranch,
           appliedHashes: appliedPatch.appliedHashes,
+          originalHashes: appliedPatch.originalHashes,
           confirm: true,
         },
         { timeoutMs: 120_000 },
