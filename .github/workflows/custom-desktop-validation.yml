@@ -105,6 +105,7 @@ jobs:
             sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             sdk/packages/core/src/extensions/tools/runtime.test.ts \
+            sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts \
             --config vitest.config.mts
           bun build sdk/packages/core/scripts/process-session-terminal-smoke.ts \
             --compile \

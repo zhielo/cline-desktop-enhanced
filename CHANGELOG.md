@@ -1,5 +1,23 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.2.1
+
+### Added
+
+- Added an explicit Project + Notion execution boundary for combined local-project and Notion Custom Agent requests.
+- Added deterministic intent routing, one-shot pre-session profile overrides, exact official-Notion filtering, and fail-fast MCP preflight.
+- Added read-only local discovery and static reverse-engineering access alongside official Notion Agent session tools.
+
+### Fixed
+
+- Combined requests no longer start a local-only session and discover after lengthy analysis that `search_agents`, `spawn_session`, and agent messaging tools are absent.
+- Active incompatible sessions stop before execution and preserve the prompt instead of creating fake upload bundles or searching local settings for Notion tokens.
+
+### Security
+
+- The bridge blocks local writes, process sessions, computer control, arbitrary network and plugin tools, dynamic target execution, token-based upload fallbacks, and unverified completion.
+- Ordinary Cline chat keeps its existing model, tools, and permissions unless the user explicitly requests both local-project work and a Notion Agent.
+
 ## Cline Enhanced Desktop 0.0.42
 
 ### Added

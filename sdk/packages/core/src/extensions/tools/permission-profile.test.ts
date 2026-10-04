@@ -123,9 +123,7 @@ describe("permission profile guard", () => {
 	});
 
 	it("isolates Notion function sessions to Notion MCP tools", async () => {
-		expect(
-			await before("notion-functions", "Notion__search"),
-		).toBeUndefined();
+		expect(await before("notion-functions", "Notion__search")).toBeUndefined();
 		expect(
 			await before("notion-functions", "notion__create_page"),
 		).toBeUndefined();
@@ -135,6 +133,35 @@ describe("permission profile guard", () => {
 		expect((await before("notion-functions", "github__search"))?.skip).toBe(
 			true,
 		);
+	});
+
+	it("combines read-only local analysis with official Notion tools", async () => {
+		expect(
+			await before("project-notion-bridge", "Notion__search_agents"),
+		).toBeUndefined();
+		expect(
+			await before("project-notion-bridge", "notion__spawn_session"),
+		).toBeUndefined();
+		expect(
+			await before("project-notion-bridge", "search_codebase"),
+		).toBeUndefined();
+		expect(
+			await before("project-notion-bridge", "reverse_engineer"),
+		).toBeUndefined();
+		expect(
+			(
+				await before("project-notion-bridge", "run_commands", {
+					commands: [
+						"Set-Content secret.txt value",
+						"New-Item -ItemType Directory outputs/notion-analyst",
+					],
+				})
+			)?.skip,
+		).toBe(true);
+		expect((await before("project-notion-bridge", "editor"))?.skip).toBe(true);
+		expect(
+			(await before("project-notion-bridge", "github__search"))?.skip,
+		).toBe(true);
 	});
 
 	it("supports explicit custom allow and deny rules", async () => {

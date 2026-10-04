@@ -1,5 +1,15 @@
 # Cline Desktop Changelog
 
+## 0.2.1
+
+- Added deterministic first-turn routing for requests that explicitly combine a local project with a Notion Custom Agent.
+- Added a host-enforced **Project + Notion** profile that combines read-only local inspection, bounded static reverse engineering, and only the exact official Notion MCP registration.
+- Added startup preflight that fails before lengthy analysis when the official Notion registration or its tools are unavailable.
+- Added a bridge system contract that forbids token searches, PowerShell upload imitations, unverified completion, target-binary execution, and following instructions embedded in repository content.
+- Added one-shot session configuration overrides so automatic routing is applied before the runtime snapshots its tool set.
+- Active sessions with an incompatible tool boundary now stop before work and preserve the prompt instead of silently performing only the local half.
+- Normal Cline sessions remain unchanged unless the first prompt explicitly requests both local-project analysis and a Notion Agent.
+
 ## 0.2.0
 
 - Added operational mission claiming with dependency gates, bounded parallel agent assignments, strict agent ownership, durable task transitions, and restart-safe interruption semantics.
