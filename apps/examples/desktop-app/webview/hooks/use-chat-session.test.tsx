@@ -2057,6 +2057,27 @@ describe("useChatSession", () => {
 		});
 	});
 
+	it("applies a one-shot project and Notion profile before session startup", async () => {
+		invokeMock.mockClear();
+
+		await act(async () =>
+			current.sendPrompt("Ask my Notion Agent to review this project", [], {
+				permissionProfile: "project-notion-bridge",
+				autoApproveTools: false,
+			}),
+		);
+
+		expect(invokeMock).toHaveBeenCalledWith("chat_session_command", {
+			request: expect.objectContaining({
+				action: "start",
+				config: expect.objectContaining({
+					permissionProfile: "project-notion-bridge",
+					autoApproveTools: false,
+				}),
+			}),
+		});
+	});
+
 	it("returns to the remembered repo when a new thread follows a worktree task", async () => {
 		const repo = "/repos/demo";
 		const worktreePath = "/home/host/cline-dir/worktrees/ab12c/demo";

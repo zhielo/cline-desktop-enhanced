@@ -27,6 +27,7 @@ export const ChatSessionConfigSchema = z.object({
 			"workspace",
 			"workspace-network",
 			"notion-functions",
+			"project-notion-bridge",
 			"full-access",
 		])
 		.optional(),
