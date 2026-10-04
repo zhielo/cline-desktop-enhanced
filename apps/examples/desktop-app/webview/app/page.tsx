@@ -40,8 +40,8 @@ import { RemoteDirectoryPicker } from "@/components/views/chat/remote-directory-
 import { WelcomeScreen } from "@/components/views/chat/welcome-chat";
 import { WelcomeSetupNotice } from "@/components/views/chat/welcome-setup-notice";
 import type { OnboardingStep } from "@/components/views/onboarding/onboarding-view";
-import type { SettingsSection } from "@/components/views/settings/sections";
 import type { FunctionLaunchRequest } from "@/components/views/settings/functions-view";
+import type { SettingsSection } from "@/components/views/settings/sections";
 import {
 	WindowTitleBar,
 	WindowTitleBarContent,
@@ -161,6 +161,14 @@ const SessionsView = dynamic(
 	() =>
 		import("@/components/views/sessions/sessions-view").then(
 			(module) => module.SessionsView,
+		),
+	{ loading: viewLoading, ssr: false },
+);
+
+const EngineeringWorkspace = dynamic(
+	() =>
+		import("@/components/views/engineering/engineering-workspace").then(
+			(module) => module.EngineeringWorkspace,
 		),
 	{ loading: viewLoading, ssr: false },
 );
@@ -1059,6 +1067,11 @@ export default function Home() {
 											activeSessionId={activeHistorySessionId}
 											history={sessionHistory}
 										/>
+									</div>
+								) : null}
+								{view === "engineering" ? (
+									<div className="absolute inset-0 z-30 bg-background text-foreground">
+										<EngineeringWorkspace />
 									</div>
 								) : null}
 								{view === "settings" ? (
@@ -2551,7 +2564,7 @@ function ChatThreadPane({
 				onPromptInputChange={handlePromptInputChange}
 				onOpenModelSettings={onOpenModelSettings}
 				onPermissionProfileChange={
-				notionFunctionTitle ? undefined : handlePermissionProfileChange
+					notionFunctionTitle ? undefined : handlePermissionProfileChange
 				}
 				onReasoningChange={handleReasoningChange}
 				onSteerPromptInQueue={steerPromptInQueue}

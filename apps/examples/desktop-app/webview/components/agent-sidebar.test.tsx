@@ -1124,7 +1124,7 @@ describe("AgentSidebar session organization", () => {
 		expect(onNavigateForward).toHaveBeenCalledOnce();
 	});
 
-	it("stacks New, Schedule, and Customize as full-width rows below the logo", async () => {
+	it("stacks Session, Schedule, Functions, Engineering, and Customize below the logo", async () => {
 		const onHome = vi.fn();
 		const onSettingsSectionChange = vi.fn();
 		await act(async () => {
@@ -1160,6 +1160,7 @@ describe("AgentSidebar session organization", () => {
 			"Session",
 			"Schedule",
 			"Functions",
+			"Engineering",
 			"Customize",
 		]);
 		for (const row of rows) {

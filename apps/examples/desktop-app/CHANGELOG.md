@@ -1,5 +1,15 @@
 # Cline Desktop Changelog
 
+## 0.1.0
+
+- Added a separate **Engineering Control Center** without changing normal Cline chat, providers, permission profiles, Notion Functions, or the Analysis workbench.
+- Added a durable SQLite/WAL engineering control plane with restart recovery, versioned mission records, bounded project discovery, policy audit events, model outcomes, and dependency-validated mission DAGs.
+- Added hardened execution policy evaluation with denied-by-default networking, worktree requirements for repository writes, runtime/process budgets, protected-path rejection, and sandbox or isolated-VM escalation for untrusted scripts, package installs, debuggers, and unknown binaries.
+- Added project intelligence that detects languages, package managers, build/test scripts, CI providers, Git state, and sensitive root files locally without uploading project content.
+- Added transparent Git review risk scoring and evidence-weighted multi-provider model routing foundations. Model selection remains user-controllable and ordinary chat is never automatically redirected.
+- Added an Engineering sidebar entry and dashboard for security posture, durable health, agent missions, worktree requirements, validation commands, and specialist integration boundaries.
+- Added focused control-plane and UI regression tests and made them required by the private Windows installer workflow.
+
 ## 0.0.37
 
 - Added a separate **Functions** hub for optional Notion-assisted workflows. Each card opens a new draft powered by the currently selected Cline model; normal Cline sessions, providers, permissions, and tools are unchanged

@@ -12,6 +12,22 @@ This file is the durable customization ledger for this repository. The source on
 
 ## Preserved customizations
 
+### Engineering Control Center
+
+- A dedicated **Engineering** sidebar workspace is separate from normal Cline chat, Notion Functions, and the chat Analysis workbench. Opening it never changes the selected provider, permission profile, active session, or tool auto-approval behavior.
+- Its durable control plane stores project profiles, policies, mission DAGs, audit events, and privacy-safe model outcomes in a device-local SQLite database using WAL and foreign-key enforcement.
+- Project discovery is local, bounded, and ignores dependency/build directories. It detects languages, package managers, build/test scripts, CI providers, Git state, and known sensitive root files without sending source content to any model or Notion.
+- Repository-writing mission roles require isolated worktrees. Mission dependencies are validated for missing references, duplicate IDs, self-dependencies, and cycles before persistence. Planning a mission never executes commands, creates a worktree, or merges code.
+- Execution policy evaluation defaults to denied networking, bounded runtime/process counts, and explicit approval. Untrusted scripts and package installation escalate to a sandbox; unknown binaries and debugger work escalate to an isolated VM.
+- Git review scoring is transparent and considers change size, sensitive files, dependencies, APIs, migrations, checks, and tests. Model routing ranks only supplied candidates by capabilities, context, observed success, tool reliability, latency, and cost; the user may still lock a provider/model.
+- These are orchestration and enforcement foundations. They do not claim that the desktop provisions Windows Sandbox, Hyper-V, or a remote VM by itself; dynamic untrusted execution remains blocked until an attested worker is configured.
+
+Primary files:
+
+- `apps/examples/desktop-app/sidecar/engineering-control-plane.ts`
+- `apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.tsx`
+- `docs/ENGINEERING_CONTROL_CENTER.md`
+
 ### Separate Notion-assisted Functions
 
 - A dedicated **Functions** sidebar page is separate from normal Cline chat and from Customize. It does not replace the selected provider or automatically route ordinary prompts to Notion.

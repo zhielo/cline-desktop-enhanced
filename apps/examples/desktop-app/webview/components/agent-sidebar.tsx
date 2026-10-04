@@ -23,8 +23,8 @@ import {
 	Radio,
 	Search,
 	Settings,
-	Sparkles,
 	SlidersHorizontal,
+	Sparkles,
 	Stethoscope,
 	Store,
 	Trash2,
@@ -115,7 +115,7 @@ import { TASK_WORKTREE_DELETE_WARNING } from "@/lib/work-in-selection";
 import { isTaskWorktreePath } from "@/lib/workspace-paths";
 
 type Thread = SessionThread;
-type AppView = "chat" | "sessions" | "settings";
+type AppView = "chat" | "engineering" | "sessions" | "settings";
 
 const filterOptions = ["All", "Running"] as const;
 type FilterOption = (typeof filterOptions)[number];
@@ -967,6 +967,21 @@ export function AgentSidebar({
 						>
 							<Sparkles className="size-4 shrink-0" />
 							<span className="truncate">Functions</span>
+						</Button>
+						<Button
+							aria-current={view === "engineering" ? "page" : undefined}
+							aria-label="Engineering"
+							className={cn(
+								view === "engineering" &&
+									"bg-surface-hover text-sidebar-foreground",
+							)}
+							onClick={() => setView("engineering")}
+							title="Secure agents, Git review, model routing, and analysis"
+							type="button"
+							variant="sidebarItem"
+						>
+							<GitFork className="size-4 shrink-0" />
+							<span className="truncate">Engineering</span>
 						</Button>
 						<Button
 							aria-label="Customize"
