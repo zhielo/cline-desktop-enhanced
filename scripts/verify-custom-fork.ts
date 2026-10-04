@@ -72,6 +72,7 @@ const requiredMarkers: Array<{
       "commands-workbench.test.ts",
       "process-session-manager.test.ts",
       "reverse-engineering.test.ts",
+			"runtime-builder.test.ts",
 			"repository-tool.test.ts",
 			"notion-agent-bridge.test.ts",
 			"notion-agent-patch.test.ts",
@@ -445,6 +446,24 @@ const requiredMarkers: Array<{
 			"OFFICIAL_NOTION_MCP_URL",
 			"isOfficialNotionRegistration",
 			"officialNotionOnly",
+			"Notion session preflight failed",
+			'"project-notion-bridge"',
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/notion-agent-routing.ts",
+		markers: [
+			"requestsProjectNotionBridge",
+			"NOTION_AGENT_TARGET",
+			"LOCAL_PROJECT_CONTEXT",
+		],
+	},
+	{
+		path: "docs/PROJECT_NOTION_BRIDGE.md",
+		markers: [
+			"Project + Notion Agent runtime",
+			"fails session startup",
+			"never represent a local file as an upload",
 		],
 	},
 	{
@@ -597,7 +616,9 @@ const requiredMarkers: Array<{
 			'"workspace-network"',
 			'"full-access"',
 			'"notion-functions"',
+			'"project-notion-bridge"',
 			"only the official Notion MCP tools",
+			"only read-only local inspection",
 			"unclassified plugin or MCP tool",
 			"not an operating-system sandbox",
 			"desktop computer control is disabled",

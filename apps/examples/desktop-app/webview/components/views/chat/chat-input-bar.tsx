@@ -1671,6 +1671,9 @@ function ChatInputBarImpl({
 								Workspace + network
 							</SelectItem>
 							<SelectItem value="notion-functions">Notion only</SelectItem>
+							<SelectItem value="project-notion-bridge">
+								Project + Notion
+							</SelectItem>
 							<SelectItem value="full-access">Full access</SelectItem>
 						</SelectContent>
 					</Select>

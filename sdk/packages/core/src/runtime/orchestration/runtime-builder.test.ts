@@ -20,7 +20,10 @@ import { createUserInstructionConfigService } from "../../extensions/config";
 import { PLAN_MODE_COMMAND_GUARD_EXTENSION_NAME } from "../../extensions/tools/command-guard-extension";
 import { TelemetryService } from "../../services/telemetry/TelemetryService";
 import type { CoreSessionConfig } from "../../types/config";
-import { DefaultRuntimeBuilder } from "./runtime-builder";
+import {
+	DefaultRuntimeBuilder,
+	missingMcpToolSuffixes,
+} from "./runtime-builder";
 
 function makeSpawnTool(): AgentTool {
 	return {
@@ -83,6 +86,25 @@ describe("DefaultRuntimeBuilder", () => {
 		const names = runtime.tools.map((tool) => tool.name);
 		expect(names.length).toBeGreaterThan(0);
 		expect(names).not.toContain("spawn_agent");
+	});
+
+	it("checks required MCP capabilities with or without server prefixes", () => {
+		expect(
+			missingMcpToolSuffixes(
+				[
+					{ name: "Notion__search_agents" },
+					{ name: "spawn_session" },
+					{ name: "Notion__send_message_to_session" },
+				],
+				["search_agents", "spawn_session", "send_message_to_session"],
+			),
+		).toEqual([]);
+		expect(
+			missingMcpToolSuffixes(
+				[{ name: "Notion__search_agents" }],
+				["search_agents", "spawn_session"],
+			),
+		).toEqual(["spawn_session"]);
 	});
 
 	it("enables provider web search by default without a local executor", async () => {
@@ -811,6 +833,29 @@ process.stdin.on("data", (chunk) => {
 				"mock__echo",
 			);
 			await runtime.shutdown("test");
+		} finally {
+			process.env.CLINE_MCP_SETTINGS_PATH = previousSettingsPath;
+		}
+	});
+
+	it("fails bridge sessions before analysis when official Notion is unavailable", async () => {
+		const tempRoot = mkdtempSync(
+			join(tmpdir(), "runtime-builder-notion-preflight-"),
+		);
+		const previousSettingsPath = process.env.CLINE_MCP_SETTINGS_PATH;
+		process.env.CLINE_MCP_SETTINGS_PATH = join(
+			tempRoot,
+			"missing-mcp-settings.json",
+		);
+		try {
+			await expect(
+				new DefaultRuntimeBuilder().build({
+					config: makeBaseConfig({
+						permissionProfile: "project-notion-bridge",
+						disableMcpSettingsTools: true,
+					}),
+				}),
+			).rejects.toThrow(/Notion session preflight failed/);
 		} finally {
 			process.env.CLINE_MCP_SETTINGS_PATH = previousSettingsPath;
 		}

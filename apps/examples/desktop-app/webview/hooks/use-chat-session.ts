@@ -2690,6 +2690,10 @@ export function useChatSession(environmentId: string) {
 			options?: {
 				/** Start the session in a fresh git worktree of the current workspace. */
 				inNewWorktree?: boolean;
+				/** One-shot profile selected before a new runtime is constructed. */
+				permissionProfile?: ChatSessionConfig["permissionProfile"];
+				/** Bridge sessions always keep native tool confirmations enabled. */
+				autoApproveTools?: boolean;
 			},
 		): Promise<boolean> => {
 			if (isCloudSessionExpired) return false;
@@ -2704,7 +2708,16 @@ export function useChatSession(environmentId: string) {
 			let activeSessionId = sessionId ?? activeSessionIdRef.current;
 
 			const validation = validateConfig(
-				{ ...config, environmentId },
+				{
+					...config,
+					environmentId,
+					...(options?.permissionProfile
+						? { permissionProfile: options.permissionProfile }
+						: {}),
+					...(options?.autoApproveTools !== undefined
+						? { autoApproveTools: options.autoApproveTools }
+						: {}),
+				},
 				{
 					hasActiveSession: Boolean(activeSessionId),
 				},

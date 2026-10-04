@@ -55,6 +55,8 @@ Primary files:
 - The separate **Notion Agent review-to-patch pipeline** accepts only reviewable unified Git diffs, verifies approved evidence hashes and citations, performs a local `git apply --check`, requires explicit application approval, writes only to an isolated `notion-agent/*` branch, and provides hash-guarded rollback. It never commits, pushes, merges, or runs Agent-supplied commands automatically.
 - Bridge modes support exact published-Custom-Agent discovery and session launch, automatic manual-handoff fallback, same-session follow-ups, temporary-page retention, persistent incremental project memory, and narrowly scoped cleanup. Agent identity is never guessed, and unavailable session capabilities stop safely.
 - Approved snapshot hashes are stored locally to show added, changed, unchanged, and removed evidence on later packages. The bridge never schedules background synchronization and never turns Notion into the provider for ordinary Cline chat.
+- Explicit first-turn requests that combine a local project with a Notion Agent are routed before session creation into the host-enforced `project-notion-bridge` profile. This profile exposes read-only local inspection, static reverse engineering, and tools from only the exact official Notion MCP registration. It fails session startup when Notion is unavailable, keeps native confirmations enabled, forbids token searches and shell-based upload imitations, and never changes unrelated Cline chats.
+- A combined request submitted to an already-running incompatible session is stopped before further work and its prompt is preserved. Tool boundaries are never silently widened in place.
 
 Primary files:
 
@@ -62,7 +64,10 @@ Primary files:
 - `apps/examples/desktop-app/webview/components/views/settings/sections.ts`
 - `apps/examples/desktop-app/webview/components/agent-sidebar.tsx`
 - `apps/examples/desktop-app/webview/app/page.tsx`
+- `apps/examples/desktop-app/webview/lib/notion-agent-routing.ts`
 - `apps/examples/desktop-app/webview/lib/desktop-app-state.ts`
+- `sdk/packages/core/src/extensions/tools/permission-profile.ts`
+- `sdk/packages/core/src/runtime/orchestration/runtime-builder.ts`
 
 ### AI task execution UI
 

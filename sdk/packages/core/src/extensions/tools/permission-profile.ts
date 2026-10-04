@@ -24,6 +24,7 @@ export type PermissionProfileName =
 	| "workspace"
 	| "workspace-network"
 	| "notion-functions"
+	| "project-notion-bridge"
 	| "full-access";
 
 export interface CustomPermissionProfile {
@@ -141,6 +142,22 @@ function builtInProfile(
 				allowedToolNames: new Set(),
 				deniedToolNames: new Set(),
 			};
+		case "project-notion-bridge":
+			return {
+				name: profile,
+				// The bridge may inspect the workspace and run bounded read-only
+				// discovery commands, but it may not edit local files.
+				allowFileWrites: false,
+				allowCommands: true,
+				allowProcessSessions: false,
+				allowComputerUse: false,
+				allowNetwork: false,
+				// `reverse_engineer` is static-only and separately guarded.
+				allowExternalTools: true,
+				allowUnknownTools: false,
+				allowedToolNames: new Set(),
+				deniedToolNames: new Set(),
+			};
 		case "full-access":
 			return {
 				name: profile,
@@ -225,6 +242,30 @@ function evaluateTool(
 			profile.name,
 			"only the official Notion MCP tools and user coordination are enabled.",
 		);
+	}
+	if (profile.name === "project-notion-bridge") {
+		const normalizedToolName = toolName.toLowerCase();
+		if (normalizedToolName.startsWith("notion__")) {
+			return undefined;
+		}
+		if (
+			toolName === "ask_question" ||
+			toolName === "submit_and_exit" ||
+			toolName === "read_files" ||
+			toolName === "search_codebase" ||
+			toolName === "skills" ||
+			toolName === "run_commands" ||
+			toolName === "reverse_engineer"
+		) {
+			// Continue through the common guards. In particular, run_commands
+			// is checked below for file-editing syntax because this profile has
+			// allowFileWrites=false.
+		} else {
+			return blockedReason(
+				profile.name,
+				"only read-only local inspection, static reverse engineering, and official Notion MCP tools are enabled.",
+			);
+		}
 	}
 	const explicitlyAllowed = profile.allowedToolNames.has(toolName);
 	if (!isKnownTool(toolName) && !isCoordinationTool(toolName)) {

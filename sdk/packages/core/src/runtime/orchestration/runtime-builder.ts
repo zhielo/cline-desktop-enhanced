@@ -242,6 +242,7 @@ async function loadConfiguredMcpTools(options: {
 	includeSettings: boolean;
 	agentPluginServers?: ReadonlyArray<AgentPluginPackageMcpServer>;
 	officialNotionOnly?: boolean;
+	requiredToolSuffixes?: readonly string[];
 }): Promise<{
 	tools: AgentTool[];
 	shutdown?: () => Promise<void>;
@@ -250,6 +251,11 @@ async function loadConfiguredMcpTools(options: {
 	const hasSettings =
 		options.includeSettings && hasMcpSettingsFile({ filePath: settingsPath });
 	if (!hasSettings && !options.agentPluginServers?.length) {
+		if (options.officialNotionOnly) {
+			throw new Error(
+				`Notion session preflight failed: connect and enable the official "Notion" MCP server at ${OFFICIAL_NOTION_MCP_URL}.`,
+			);
+		}
 		return { tools: [] };
 	}
 
@@ -317,9 +323,8 @@ async function loadConfiguredMcpTools(options: {
 				isOfficialNotionRegistration(registration)),
 	);
 	if (options.officialNotionOnly && enabled.length === 0) {
-		options.logger?.log(
-			`[mcp] Notion function session requires the official ${OFFICIAL_NOTION_MCP_URL} registration named "Notion".`,
-			{ severity: "error" },
+		throw new Error(
+			`Notion session preflight failed: connect and enable the official "Notion" MCP server at ${OFFICIAL_NOTION_MCP_URL}.`,
 		);
 	}
 	const results = await Promise.allSettled(
@@ -347,6 +352,22 @@ async function loadConfiguredMcpTools(options: {
 			);
 		}
 	}
+	if (options.officialNotionOnly && tools.length === 0) {
+		await manager.dispose().catch(() => {});
+		throw new Error(
+			"Notion session preflight failed: the official Notion MCP server exposed no usable tools. Reconnect Notion and try again.",
+		);
+	}
+	const missingRequiredTools = missingMcpToolSuffixes(
+		tools,
+		options.requiredToolSuffixes ?? [],
+	);
+	if (missingRequiredTools.length > 0) {
+		await manager.dispose().catch(() => {});
+		throw new Error(
+			`Notion session preflight failed: the connected account does not expose required tool(s): ${missingRequiredTools.join(", ")}. Confirm that Custom Agent sessions are available, then reconnect Notion.`,
+		);
+	}
 
 	return {
 		tools,
@@ -354,6 +375,19 @@ async function loadConfiguredMcpTools(options: {
 			await manager.dispose();
 		},
 	};
+}
+
+export function missingMcpToolSuffixes(
+	tools: ReadonlyArray<Pick<AgentTool, "name">>,
+	requiredSuffixes: readonly string[],
+): string[] {
+	const available = tools.map((tool) => tool.name.toLowerCase());
+	return requiredSuffixes.filter((suffix) => {
+		const normalized = suffix.toLowerCase();
+		return !available.some(
+			(name) => name === normalized || name.endsWith(`__${normalized}`),
+		);
+	});
 }
 
 function shutdownTeamRuntime(
@@ -633,19 +667,26 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 			const agentPluginMcpServers = pluginsEnabled
 				? input.agentPluginMcpServers
 				: undefined;
+			const requiresOfficialNotion =
+				config.permissionProfile === "notion-functions" ||
+				config.permissionProfile === "project-notion-bridge";
 			if (
 				!normalized.disableMcpSettingsTools ||
-				agentPluginMcpServers?.length
+				agentPluginMcpServers?.length ||
+				requiresOfficialNotion
 			) {
 				const mcpRuntime = await loadConfiguredMcpTools({
 					logger: config.logger,
-					includeSettings: !normalized.disableMcpSettingsTools,
-					agentPluginServers:
-						config.permissionProfile === "notion-functions"
-							? undefined
-							: agentPluginMcpServers,
-					officialNotionOnly:
-						config.permissionProfile === "notion-functions",
+					includeSettings:
+						requiresOfficialNotion || !normalized.disableMcpSettingsTools,
+					agentPluginServers: requiresOfficialNotion
+						? undefined
+						: agentPluginMcpServers,
+					officialNotionOnly: requiresOfficialNotion,
+					requiredToolSuffixes:
+						config.permissionProfile === "project-notion-bridge"
+							? ["search_agents", "spawn_session", "send_message_to_session"]
+							: undefined,
 				});
 				tools.push(...mcpRuntime.tools);
 				mcpShutdown = mcpRuntime.shutdown;

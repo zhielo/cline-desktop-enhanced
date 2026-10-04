@@ -86,6 +86,7 @@ import {
 	isUnsupportedImageAttachment,
 } from "@/lib/image-attachments";
 import { createLatestSuccessfulRequestGate } from "@/lib/latest-successful-request";
+import { requestsProjectNotionBridge } from "@/lib/notion-agent-routing";
 import {
 	hasCompletedOnboarding,
 	markOnboardingCompleted,
@@ -1956,6 +1957,31 @@ function ChatThreadPane({
 			if (isCloudSession && !sessionId && !config.repoUrl?.trim()) {
 				return;
 			}
+			const requestsBridge = requestsProjectNotionBridge(trimmed);
+			if (requestsBridge && isCloudSession) {
+				setPromptInput(trimmed);
+				toast({
+					variant: "destructive",
+					title: "Project + Notion requires Local execution",
+					description:
+						"Switch this draft to Local so the official desktop Notion connection and local project can be preflighted together.",
+				});
+				return;
+			}
+			if (
+				requestsBridge &&
+				!isNewThread &&
+				config.permissionProfile !== "project-notion-bridge"
+			) {
+				setPromptInput(trimmed);
+				toast({
+					variant: "destructive",
+					title: "Start a new Project + Notion session",
+					description:
+						"An active session cannot safely change its tool boundary. Create a new session and resend this preserved prompt.",
+				});
+				return;
+			}
 			onThreadStarted?.(threadId);
 			// Also clear the injected draft: the composer cleared its local copy,
 			// but a stale non-empty draft would repopulate the input if the
@@ -1963,8 +1989,29 @@ function ChatThreadPane({
 			setPromptInput("");
 			const toSend = [...pendingAttachments];
 			setPendingAttachments([]);
+			const routeToProjectNotionBridge =
+				isNewThread && !notionFunctionTitle && requestsBridge;
+			if (routeToProjectNotionBridge) {
+				setConfig((previous) => ({
+					...previous,
+					permissionProfile: "project-notion-bridge",
+					autoApproveTools: false,
+					mode: "act",
+				}));
+				toast({
+					title: "Project + Notion bridge enabled",
+					description:
+						"Read-only local inspection and the official Notion MCP will be preflighted before this session starts.",
+				});
+			}
 			const promptTaken = await sendPrompt(trimmed, toSend, {
 				inNewWorktree: workIn === "worktree" && isNewThread,
+				...(routeToProjectNotionBridge
+					? {
+							permissionProfile: "project-notion-bridge" as const,
+							autoApproveTools: false,
+						}
+					: {}),
 			});
 			// The prompt never reached the runtime (e.g. the provider connection
 			// failed): hand it back so the user can fix the provider and resend
@@ -1976,14 +2023,17 @@ function ChatThreadPane({
 		},
 		[
 			config.repoUrl,
+			config.permissionProfile,
 			handleAttachFiles,
 			isCloudSession,
 			isNewThread,
+			notionFunctionTitle,
 			onThreadStarted,
 			pendingAttachments,
 			sendPrompt,
 			sessionId,
 			setPendingAttachments,
+			setConfig,
 			setPromptInput,
 			threadId,
 			workIn,
@@ -2547,6 +2597,15 @@ function ChatThreadPane({
 					</span>
 					<span className="text-muted-foreground">
 						Only official Notion MCP tools are enabled
+					</span>
+				</div>
+			) : config.permissionProfile === "project-notion-bridge" ? (
+				<div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
+					<span className="font-medium text-foreground">
+						Project + Notion Agent
+					</span>
+					<span className="text-muted-foreground">
+						Read-only local analysis · official Notion MCP preflight
 					</span>
 				</div>
 			) : null}
