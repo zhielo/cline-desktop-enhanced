@@ -106,4 +106,67 @@ describe("EngineeringWorkspace", () => {
 			expect.objectContaining({ cwd: "C:\\work\\app" }),
 		);
 	});
+
+	it("claims dependency-ready work and opens isolated agent drafts", async () => {
+		const onLaunchTask = vi.fn();
+		const mission = {
+			id: "mission-1",
+			title: "Ship safely",
+			status: "planned",
+			tasks: [
+				{
+					id: "plan",
+					label: "Plan repository",
+					role: "planner",
+					status: "queued",
+					requiresWorktree: false,
+				},
+			],
+		};
+		mocks.invoke.mockImplementation(async (command: string) => {
+			if (command === "get_engineering_workspace")
+				return { ...snapshot, missions: [mission] };
+			if (command === "claim_engineering_tasks")
+				return {
+					...mission,
+					status: "running",
+					tasks: [
+						{
+							...mission.tasks[0],
+							status: "running",
+							ownerAgentId: "desktop-agent-123-1",
+						},
+					],
+				};
+			return snapshot;
+		});
+		vi.spyOn(Date, "now").mockReturnValue(123);
+		await act(async () => {
+			root.render(<EngineeringWorkspace onLaunchTask={onLaunchTask} />);
+			await Promise.resolve();
+		});
+		await vi.waitFor(() =>
+			expect(container.textContent).toContain("Prepare next agent drafts"),
+		);
+		const button = [...container.querySelectorAll("button")].find((item) =>
+			item.textContent?.includes("Prepare next agent drafts"),
+		);
+		await act(async () => {
+			button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+			await Promise.resolve();
+		});
+		expect(mocks.invoke).toHaveBeenCalledWith(
+			"claim_engineering_tasks",
+			expect.objectContaining({
+				missionId: "mission-1",
+				agentIds: expect.arrayContaining(["desktop-agent-123-1"]),
+			}),
+		);
+		expect(onLaunchTask).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Ship safely: Plan repository",
+				prompt: expect.stringContaining("do not merge"),
+			}),
+		);
+	});
 });

@@ -170,6 +170,8 @@ import {
 	routeEngineeringModel,
 	scoreReviewRisk,
 } from "./engineering-control-plane";
+import { buildEngineeringGitReview } from "./engineering-git-review";
+import { EngineeringWorktreeManager } from "./engineering-worktree-manager";
 import { clearLegacyProviderCredentials } from "./legacy-provider-credentials";
 import {
 	installMarketplaceEntryForDesktopCommand,
@@ -2589,6 +2591,9 @@ const desktopWorkspaceProcessManager = new ProcessSessionManager({
 const desktopEngineeringControlPlane = new EngineeringControlPlane(
 	join(resolveClineDir(), "db", "engineering-control-plane.db"),
 );
+const desktopEngineeringWorktreeManager = new EngineeringWorktreeManager(
+	join(resolveClineDir(), "engineering-worktrees"),
+);
 const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor();
 const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
 
@@ -4832,7 +4837,12 @@ export async function handleCommand(
 		command === "evaluate_engineering_execution" ||
 		command === "score_engineering_review" ||
 		command === "route_engineering_model" ||
-		command === "record_engineering_model_outcome"
+		command === "record_engineering_model_outcome" ||
+		command === "claim_engineering_tasks" ||
+		command === "update_engineering_task" ||
+		command === "inspect_engineering_worktree" ||
+		command === "release_engineering_worktree"
+		|| command === "get_engineering_git_review"
 	) {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
 			throw new Error(
@@ -4873,6 +4883,95 @@ export async function handleCommand(
 		}
 		if (command === "route_engineering_model") {
 			return routeEngineeringModel(args?.task, args?.candidates);
+		}
+		if (command === "claim_engineering_tasks") {
+			const missionId = String(args?.missionId ?? "").trim();
+			const agentIds = Array.isArray(args?.agentIds)
+				? args.agentIds.map(String)
+				: [];
+			const claimed = desktopEngineeringControlPlane.claimReadyTasks(
+				baseDir,
+				missionId,
+				agentIds,
+			);
+			for (const task of claimed.claimed) {
+				if (!task.requiresWorktree || !task.ownerAgentId) continue;
+				try {
+					const lease = desktopEngineeringWorktreeManager.create({
+						workspaceRoot: baseDir,
+						missionId,
+						taskId: task.id,
+						agentId: task.ownerAgentId,
+					});
+					desktopEngineeringControlPlane.setTaskWorktree(
+						baseDir,
+						missionId,
+						task.id,
+						task.ownerAgentId,
+						{ path: lease.path, branch: lease.branch },
+					);
+				} catch (error) {
+					desktopEngineeringControlPlane.updateMissionTask(
+						baseDir,
+						missionId,
+						{
+							taskId: task.id,
+							agentId: task.ownerAgentId,
+							status: "failed",
+							resultSummary:
+								error instanceof Error ? error.message : String(error),
+						},
+					);
+				}
+			}
+			return desktopEngineeringControlPlane.getMission(baseDir, missionId);
+		}
+		if (command === "update_engineering_task") {
+			return desktopEngineeringControlPlane.updateMissionTask(
+				baseDir,
+				String(args?.missionId ?? "").trim(),
+				{
+					taskId: String(args?.taskId ?? "").trim(),
+					agentId: String(args?.agentId ?? "").trim(),
+					status: String(args?.status ?? "") as
+						| "completed"
+						| "failed"
+						| "blocked"
+						| "cancelled",
+					resultSummary:
+						typeof args?.resultSummary === "string"
+							? args.resultSummary
+							: undefined,
+					worktreePath:
+						typeof args?.worktreePath === "string"
+							? args.worktreePath
+							: undefined,
+					worktreeBranch:
+						typeof args?.worktreeBranch === "string"
+							? args.worktreeBranch
+							: undefined,
+				},
+			);
+		}
+		if (command === "inspect_engineering_worktree") {
+			return desktopEngineeringWorktreeManager.inspect(
+				String(args?.path ?? "").trim(),
+			);
+		}
+		if (command === "release_engineering_worktree") {
+			return desktopEngineeringWorktreeManager.release(
+				String(args?.path ?? "").trim(),
+				{
+					confirmDiscard: args?.confirmDiscard === true,
+					keep: args?.keep === true,
+				},
+			);
+		}
+		if (command === "get_engineering_git_review") {
+			return buildEngineeringGitReview(
+				baseDir,
+				typeof args?.base === "string" ? args.base : "HEAD",
+			);
 		}
 		const modelId = String(args?.modelId ?? "").trim();
 		const taskKind = String(args?.taskKind ?? "").trim();

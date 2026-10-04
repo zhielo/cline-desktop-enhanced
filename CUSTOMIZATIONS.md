@@ -20,11 +20,17 @@ This file is the durable customization ledger for this repository. The source on
 - Repository-writing mission roles require isolated worktrees. Mission dependencies are validated for missing references, duplicate IDs, self-dependencies, and cycles before persistence. Planning a mission never executes commands, creates a worktree, or merges code.
 - Execution policy evaluation defaults to denied networking, bounded runtime/process counts, and explicit approval. Untrusted scripts and package installation escalate to a sandbox; unknown binaries and debugger work escalate to an isolated VM.
 - Git review scoring is transparent and considers change size, sensitive files, dependencies, APIs, migrations, checks, and tests. Model routing ranks only supplied candidates by capabilities, context, observed success, tool reliability, latency, and cost; the user may still lock a provider/model.
+- Dependency-ready mission tasks can be claimed by bounded agent IDs. Only the claiming agent can transition a running task, and writer completion requires managed-worktree evidence.
+- Managed writer worktrees use dedicated `cline/engineering/*` branches rooted under the Cline data directory. Metadata binds mission, task, agent, repository, base revision, path, and branch. Cleanup refuses to discard dirty or committed work without explicit confirmation.
+- **Prepare next agent drafts** creates separate normal-Cline drafts for ready work; it does not submit prompts automatically, replace the user's model, bypass the permission profile, merge, push, or contact Notion.
+- The local Git review engine validates the comparison revision and produces deterministic file, line, category, sensitive-path, and bounded symbol evidence. Risk reasons stay visible and are not represented as an AI security review.
 - These are orchestration and enforcement foundations. They do not claim that the desktop provisions Windows Sandbox, Hyper-V, or a remote VM by itself; dynamic untrusted execution remains blocked until an attested worker is configured.
 
 Primary files:
 
 - `apps/examples/desktop-app/sidecar/engineering-control-plane.ts`
+- `apps/examples/desktop-app/sidecar/engineering-git-review.ts`
+- `apps/examples/desktop-app/sidecar/engineering-worktree-manager.ts`
 - `apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.tsx`
 - `docs/ENGINEERING_CONTROL_CENTER.md`
 

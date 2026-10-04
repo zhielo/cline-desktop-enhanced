@@ -61,6 +61,41 @@ describe("EngineeringControlPlane", () => {
 		).toThrow("cycle");
 		plane.close();
 	});
+
+	it("claims only dependency-ready tasks and enforces agent ownership", () => {
+		const root = fixture();
+		const plane = new EngineeringControlPlane(join(root, "state.db"));
+		const mission = plane.planMission(root, { title: "Operational mission" });
+		const first = plane.claimReadyTasks(root, mission.id, ["planner-agent"]);
+		expect(first.claimed.map((task) => task.id)).toEqual(["plan"]);
+		expect(() =>
+			plane.updateMissionTask(root, mission.id, {
+				taskId: "plan",
+				agentId: "different-agent",
+				status: "completed",
+			}),
+		).toThrow("claimed the task");
+		plane.updateMissionTask(root, mission.id, {
+			taskId: "plan",
+			agentId: "planner-agent",
+			status: "completed",
+			resultSummary: "Plan verified",
+		});
+		const second = plane.claimReadyTasks(root, mission.id, ["writer-agent"]);
+		expect(second.claimed[0]).toMatchObject({
+			id: "implement",
+			requiresWorktree: true,
+			ownerAgentId: "writer-agent",
+		});
+		expect(() =>
+			plane.updateMissionTask(root, mission.id, {
+				taskId: "implement",
+				agentId: "writer-agent",
+				status: "completed",
+			}),
+		).toThrow("worktree evidence");
+		plane.close();
+	});
 });
 
 describe("engineering policies", () => {
