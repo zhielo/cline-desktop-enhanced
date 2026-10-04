@@ -164,6 +164,12 @@ import {
 	isCloudAgentsEnabled,
 	refreshDesktopFeatureFlags,
 } from "./feature-flags";
+import {
+	EngineeringControlPlane,
+	evaluateExecutionPolicy,
+	routeEngineeringModel,
+	scoreReviewRisk,
+} from "./engineering-control-plane";
 import { clearLegacyProviderCredentials } from "./legacy-provider-credentials";
 import {
 	installMarketplaceEntryForDesktopCommand,
@@ -2580,6 +2586,9 @@ const desktopWorkspaceProcessManager = new ProcessSessionManager({
 		"desktop-workspace.json",
 	),
 });
+const desktopEngineeringControlPlane = new EngineeringControlPlane(
+	join(resolveClineDir(), "db", "engineering-control-plane.db"),
+);
 const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor();
 const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
 
@@ -4815,6 +4824,70 @@ export async function handleCommand(
 			files: listWorkspaceFiles(baseDir, args?.query),
 			limit: WORKSPACE_FILE_LIMIT,
 		};
+	}
+	if (
+		command === "get_engineering_workspace" ||
+		command === "update_engineering_policy" ||
+		command === "plan_engineering_mission" ||
+		command === "evaluate_engineering_execution" ||
+		command === "score_engineering_review" ||
+		command === "route_engineering_model" ||
+		command === "record_engineering_model_outcome"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
+			throw new Error(
+				"The Engineering workspace control plane is local-only in this build.",
+			);
+		}
+		const baseDir = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		if (!existsSync(baseDir) || !statSync(baseDir).isDirectory()) {
+			throw new Error(`Workspace directory not found: ${baseDir}`);
+		}
+		if (command === "get_engineering_workspace") {
+			desktopEngineeringControlPlane.recoverInterrupted();
+			return desktopEngineeringControlPlane.getWorkspace(baseDir);
+		}
+		if (command === "update_engineering_policy") {
+			return desktopEngineeringControlPlane.updatePolicy(
+				baseDir,
+				args?.policy,
+			);
+		}
+		if (command === "plan_engineering_mission") {
+			return desktopEngineeringControlPlane.planMission(baseDir, {
+				title: args?.title,
+				objective: args?.objective,
+				tasks: args?.tasks,
+			});
+		}
+		if (command === "evaluate_engineering_execution") {
+			const snapshot = desktopEngineeringControlPlane.getWorkspace(baseDir);
+			return evaluateExecutionPolicy(snapshot.policy, args?.request);
+		}
+		if (command === "score_engineering_review") {
+			return scoreReviewRisk(args?.change);
+		}
+		if (command === "route_engineering_model") {
+			return routeEngineeringModel(args?.task, args?.candidates);
+		}
+		const modelId = String(args?.modelId ?? "").trim();
+		const taskKind = String(args?.taskKind ?? "").trim();
+		if (!modelId || !taskKind) {
+			throw new Error("modelId and taskKind are required");
+		}
+		desktopEngineeringControlPlane.recordModelOutcome(baseDir, {
+			modelId,
+			taskKind,
+			success: args?.success === true,
+			durationMs:
+				typeof args?.durationMs === "number" ? args.durationMs : undefined,
+			costUsd: typeof args?.costUsd === "number" ? args.costUsd : undefined,
+		});
+		return { recorded: true };
 	}
 	if (command === "open_workspace_terminal") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
