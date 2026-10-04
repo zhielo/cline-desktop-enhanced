@@ -18,6 +18,14 @@ Device-local state is stored in `engineering-control-plane.db` under the normal 
 
 A sidecar restart marks a running mission interrupted rather than claiming it completed. Mission planning rejects duplicate or empty task IDs, missing dependencies, self-dependencies, and cycles. Repository-writing tasks are marked as requiring isolated worktrees.
 
+## Operational mission handoff
+
+Mission work is unlocked only when every declared dependency is complete. A bounded set of agent IDs may claim ready tasks; ownership is persisted, and another agent cannot complete, fail, block, or cancel that task. Repository-writing tasks cannot be reported complete without managed-worktree evidence.
+
+**Prepare next agent drafts** claims the next ready tasks and creates separate, editable normal-Cline drafts. It does not submit those prompts. The user retains the current model, permission profile, approval settings, and final decision to start each task.
+
+Writer drafts receive a dedicated worktree under the Cline data directory and a `cline/engineering/*` branch. The lease binds the repository, base revision, mission, task, agent, path, and branch. Inspection reports dirty files and commits ahead of the base. Cleanup requires explicit discard confirmation whenever either exists; keeping a worktree preserves it for manual review.
+
 ## Trust boundary
 
 The control plane evaluates a request before an execution backend is selected. The default policy is:
@@ -72,6 +80,8 @@ The initial risk engine is transparent and deterministic. It scores:
 - absence of new tests.
 
 The result includes the exact reasons and a conservative merge decision. It is a merge-gate input, not a substitute for tests or human review.
+
+The Review Changes action also records per-file additions/deletions, file category, sensitive-path classification, and a bounded set of source symbols. The comparison revision is strictly validated before it reaches Git. This deterministic evidence does not claim to be a semantic compiler analysis or an independent AI review council.
 
 ## Model routing
 

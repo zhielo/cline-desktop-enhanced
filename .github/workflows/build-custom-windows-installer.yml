@@ -160,6 +160,8 @@ jobs:
             apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts \
             apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts \
             apps/examples/desktop-app/sidecar/engineering-control-plane.test.ts \
+            apps/examples/desktop-app/sidecar/engineering-git-review.test.ts \
+            apps/examples/desktop-app/sidecar/engineering-worktree-manager.test.ts \
             apps/examples/desktop-app/sidecar/browser-manager.test.ts \
             apps/examples/desktop-app/sidecar/commands-workbench.test.ts \
             apps/examples/desktop-app/sidecar/repository-tool.test.ts \

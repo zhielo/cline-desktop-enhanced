@@ -4,6 +4,7 @@ import {
 	Bot,
 	CheckCircle2,
 	GitBranch,
+	GitCompare,
 	Loader2,
 	RefreshCw,
 	Route,
@@ -37,6 +38,31 @@ type Mission = {
 		role: string;
 		status: string;
 		requiresWorktree: boolean;
+		ownerAgentId?: string;
+		worktreePath?: string;
+		worktreeBranch?: string;
+	}>;
+};
+type GitReview = {
+	branch: string;
+	summary: {
+		filesChanged: number;
+		changedLines: number;
+		added: number;
+		deleted: number;
+		sensitiveFiles: number;
+	};
+	risk: {
+		score: number;
+		level: string;
+		reasons: string[];
+		mergeAllowed: boolean;
+	};
+	files: Array<{
+		path: string;
+		category: string;
+		sensitive: boolean;
+		symbols: string[];
 	}>;
 };
 type Snapshot = {
@@ -95,8 +121,13 @@ const PILLARS = [
 	],
 ] as const;
 
-export function EngineeringWorkspace() {
+export function EngineeringWorkspace({
+	onLaunchTask,
+}: {
+	onLaunchTask?: (request: { title: string; prompt: string }) => void;
+}) {
 	const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+	const [review, setReview] = useState<GitReview | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const selection = readWorkspaceSelectionFromWindow(
@@ -145,6 +176,68 @@ export function EngineeringWorkspace() {
 		}
 	}, [cwd, refresh]);
 
+	const refreshReview = useCallback(async () => {
+		if (!cwd) return;
+		setLoading(true);
+		setError(null);
+		try {
+			setReview(
+				await desktopClient.invoke<GitReview>("get_engineering_git_review", {
+					cwd,
+					base: "HEAD",
+				}),
+			);
+		} catch (value) {
+			setError(value instanceof Error ? value.message : String(value));
+		} finally {
+			setLoading(false);
+		}
+	}, [cwd]);
+
+	const prepareAgentDrafts = useCallback(
+		async (mission: Mission) => {
+			if (!cwd || !onLaunchTask) return;
+			setLoading(true);
+			setError(null);
+			const agentIds = Array.from(
+				{ length: 4 },
+				(_, index) => `desktop-agent-${Date.now()}-${index + 1}`,
+			);
+			try {
+				const updated = await desktopClient.invoke<Mission>(
+					"claim_engineering_tasks",
+					{ cwd, missionId: mission.id, agentIds },
+				);
+				const claimed = updated.tasks.filter(
+					(task) =>
+						task.status === "running" &&
+						task.ownerAgentId &&
+						agentIds.includes(task.ownerAgentId),
+				);
+				for (const task of claimed) {
+					const executionRoot = task.worktreePath || cwd;
+					onLaunchTask({
+						title: `${mission.title}: ${task.label}`,
+						prompt: `You are the ${task.role} assigned to engineering mission ${mission.id}.
+
+Task: ${task.label}
+Project root: ${executionRoot}
+${task.worktreeBranch ? `Managed worktree branch: ${task.worktreeBranch}` : "This is a read-only or coordination task; do not modify repository files unless the user explicitly changes the task."}
+
+Follow the current Cline permission profile and all tool approval boundaries. Work only on this assigned task. Run focused validation, report exact evidence, and do not merge, push, contact Notion, or operate outside the project without explicit approval.
+
+When finished, summarize changed files, commands/tests, remaining risk, and whether the task is ready for independent review.`,
+					});
+				}
+				await refresh();
+			} catch (value) {
+				setError(value instanceof Error ? value.message : String(value));
+				setLoading(false);
+			}
+		},
+		[cwd, onLaunchTask, refresh],
+	);
+
 	return (
 		<div className="h-full overflow-y-auto bg-background">
 			<div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
@@ -164,6 +257,14 @@ export function EngineeringWorkspace() {
 						</p>
 					</div>
 					<div className="flex gap-2">
+						<Button
+							disabled={loading || !cwd || !snapshot?.profile.isGitRepository}
+							onClick={() => void refreshReview()}
+							variant="outline"
+						>
+							<GitCompare className="size-4" />
+							Review changes
+						</Button>
 						<Button
 							disabled={loading || !cwd}
 							onClick={() => void refresh()}
@@ -288,6 +389,67 @@ export function EngineeringWorkspace() {
 								</Card>
 							))}
 						</section>
+						{review ? (
+							<Card>
+								<CardHeader>
+									<div className="flex flex-wrap items-center justify-between gap-3">
+										<div>
+											<CardTitle>Git review evidence</CardTitle>
+											<CardDescription>
+												Deterministic local evidence for{" "}
+												{review.branch || "detached HEAD"}.
+											</CardDescription>
+										</div>
+										<Badge
+											variant={
+												review.risk.mergeAllowed ? "secondary" : "destructive"
+											}
+										>
+											{review.risk.level} risk · {review.risk.score}/100
+										</Badge>
+									</div>
+								</CardHeader>
+								<CardContent className="space-y-3">
+									<div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+										<span>{review.summary.filesChanged} files</span>
+										<span>+{review.summary.added}</span>
+										<span>−{review.summary.deleted}</span>
+										<span>{review.summary.sensitiveFiles} sensitive</span>
+									</div>
+									{review.risk.reasons.length ? (
+										<ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+											{review.risk.reasons.map((reason) => (
+												<li key={reason}>{reason}</li>
+											))}
+										</ul>
+									) : (
+										<p className="text-sm text-muted-foreground">
+											No deterministic risk flags detected.
+										</p>
+									)}
+									<div className="grid gap-2 md:grid-cols-2">
+										{review.files.slice(0, 12).map((file) => (
+											<div
+												className="rounded-md border p-2 text-sm"
+												key={file.path}
+											>
+												<div className="flex items-center justify-between gap-2">
+													<span className="truncate font-medium">
+														{file.path}
+													</span>
+													<Badge variant="outline">{file.category}</Badge>
+												</div>
+												{file.symbols.length ? (
+													<p className="mt-1 truncate text-xs text-muted-foreground">
+														{file.symbols.slice(0, 5).join(" · ")}
+													</p>
+												) : null}
+											</div>
+										))}
+									</div>
+								</CardContent>
+							</Card>
+						) : null}
 						<section className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
 							<Card>
 								<CardHeader>
@@ -323,6 +485,22 @@ export function EngineeringWorkspace() {
 														</Badge>
 													))}
 												</div>
+												<Button
+													className="mt-3"
+													disabled={
+														loading ||
+														!onLaunchTask ||
+														!["planned", "running", "interrupted"].includes(
+															mission.status,
+														)
+													}
+													onClick={() => void prepareAgentDrafts(mission)}
+													size="sm"
+													variant="outline"
+												>
+													<Bot className="size-4" />
+													Prepare next agent drafts
+												</Button>
 											</div>
 										))
 									)}

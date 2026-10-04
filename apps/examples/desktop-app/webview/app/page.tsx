@@ -1071,7 +1071,7 @@ export default function Home() {
 								) : null}
 								{view === "engineering" ? (
 									<div className="absolute inset-0 z-30 bg-background text-foreground">
-										<EngineeringWorkspace />
+										<EngineeringWorkspace onLaunchTask={handleLaunchFunction} />
 									</div>
 								) : null}
 								{view === "settings" ? (

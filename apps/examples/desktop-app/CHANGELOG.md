@@ -1,5 +1,14 @@
 # Cline Desktop Changelog
 
+## 0.2.0
+
+- Added operational mission claiming with dependency gates, bounded parallel agent assignments, strict agent ownership, durable task transitions, and restart-safe interruption semantics.
+- Added managed Git worktree leases for every repository-writing task. Worktrees receive dedicated `cline/engineering/*` branches, retain base-revision evidence, reject paths outside the managed root, and require explicit discard confirmation when changes or commits exist.
+- Added **Prepare next agent drafts** to create separate normal-Cline task drafts for dependency-ready mission work. Each draft is scoped to its assigned worktree and preserves the user's current model, permission profile, and approval controls.
+- Added deterministic local Git review evidence with per-file change counts, categories, sensitive-path flags, bounded symbol discovery, risk reasons, and conservative merge eligibility.
+- Added a Review Changes surface inside Engineering Control Center. It does not invoke an AI reviewer, modify Git state, merge, push, or contact Notion.
+- Added regression coverage for mission ownership, dependency unlocking, worktree creation/cleanup, dirty-worktree retention, Git revision validation, review evidence, and safe agent-draft preparation.
+
 ## 0.1.0
 
 - Added a separate **Engineering Control Center** without changing normal Cline chat, providers, permission profiles, Notion Functions, or the Analysis workbench.

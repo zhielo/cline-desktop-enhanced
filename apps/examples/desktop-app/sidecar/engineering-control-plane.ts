@@ -84,6 +84,12 @@ export type EngineeringTask = {
 		| "failed"
 		| "cancelled"
 		| "interrupted";
+	ownerAgentId?: string;
+	worktreePath?: string;
+	worktreeBranch?: string;
+	startedAt?: string;
+	completedAt?: string;
+	resultSummary?: string;
 };
 
 export type EngineeringMission = {
@@ -575,6 +581,159 @@ export class EngineeringControlPlane {
 		return mission;
 	}
 
+	getMission(workspaceRoot: string, missionId: string): EngineeringMission {
+		const mission = this.getWorkspace(workspaceRoot).missions.find(
+			(candidate) => candidate.id === missionId,
+		);
+		if (!mission)
+			throw new Error(`Engineering mission not found: ${missionId}`);
+		return mission;
+	}
+
+	claimReadyTasks(
+		workspaceRoot: string,
+		missionId: string,
+		agentIds: string[],
+	): { mission: EngineeringMission; claimed: EngineeringTask[] } {
+		const mission = this.getMission(workspaceRoot, missionId);
+		if (!["planned", "running", "interrupted"].includes(mission.status)) {
+			throw new Error(`Mission cannot be started from ${mission.status}`);
+		}
+		const availableAgents = agentIds
+			.map((value) => value.trim())
+			.filter(Boolean)
+			.slice(0, 16);
+		if (availableAgents.length === 0) {
+			throw new Error("At least one agent id is required");
+		}
+		const completed = new Set(
+			mission.tasks
+				.filter((task) => task.status === "completed")
+				.map((task) => task.id),
+		);
+		const ready = mission.tasks.filter(
+			(task) =>
+				task.status === "queued" &&
+				task.dependsOn.every((dependency) => completed.has(dependency)),
+		);
+		const now = new Date().toISOString();
+		const claimed: EngineeringTask[] = [];
+		for (const [index, task] of ready
+			.slice(0, availableAgents.length)
+			.entries()) {
+			task.status = "running";
+			task.ownerAgentId = availableAgents[index];
+			task.startedAt = now;
+			claimed.push(task);
+		}
+		if (claimed.length === 0) {
+			return { mission, claimed };
+		}
+		mission.status = "running";
+		mission.updatedAt = now;
+		this.persistMission(mission);
+		this.recordEvent(workspaceKey(workspaceRoot), mission.id, "tasks.claimed", {
+			tasks: claimed.map((task) => ({
+				id: task.id,
+				agentId: task.ownerAgentId,
+				requiresWorktree: task.requiresWorktree,
+			})),
+		});
+		return { mission, claimed };
+	}
+
+	updateMissionTask(
+		workspaceRoot: string,
+		missionId: string,
+		input: {
+			taskId: string;
+			agentId: string;
+			status: "completed" | "failed" | "blocked" | "cancelled";
+			resultSummary?: string;
+			worktreePath?: string;
+			worktreeBranch?: string;
+		},
+	): EngineeringMission {
+		if (
+			!["completed", "failed", "blocked", "cancelled"].includes(input.status)
+		) {
+			throw new Error("Unsupported engineering task transition");
+		}
+		const mission = this.getMission(workspaceRoot, missionId);
+		const task = mission.tasks.find(
+			(candidate) => candidate.id === input.taskId,
+		);
+		if (!task) throw new Error(`Mission task not found: ${input.taskId}`);
+		if (task.status !== "running" && input.status !== "cancelled") {
+			throw new Error(`Task cannot transition from ${task.status}`);
+		}
+		if (!task.ownerAgentId || task.ownerAgentId !== input.agentId.trim()) {
+			throw new Error("Only the agent that claimed the task may update it");
+		}
+		if (
+			task.requiresWorktree &&
+			input.status === "completed" &&
+			!(input.worktreePath?.trim() || task.worktreePath)
+		) {
+			throw new Error("Repository-writing tasks require worktree evidence");
+		}
+		task.status = input.status;
+		task.resultSummary = input.resultSummary?.trim().slice(0, 4_000);
+		task.worktreePath = input.worktreePath?.trim() || task.worktreePath;
+		task.worktreeBranch = input.worktreeBranch?.trim() || task.worktreeBranch;
+		task.completedAt = new Date().toISOString();
+		const statuses = new Set(
+			mission.tasks.map((candidate) => candidate.status),
+		);
+		mission.status = statuses.has("failed")
+			? "failed"
+			: mission.tasks.every((candidate) =>
+						["completed", "cancelled"].includes(candidate.status),
+					)
+				? "review"
+				: "running";
+		mission.updatedAt = task.completedAt;
+		this.persistMission(mission);
+		this.recordEvent(workspaceKey(workspaceRoot), mission.id, "task.updated", {
+			taskId: task.id,
+			agentId: input.agentId,
+			status: task.status,
+		});
+		return mission;
+	}
+
+	setTaskWorktree(
+		workspaceRoot: string,
+		missionId: string,
+		taskId: string,
+		agentId: string,
+		worktree: { path: string; branch: string },
+	): EngineeringMission {
+		const mission = this.getMission(workspaceRoot, missionId);
+		const task = mission.tasks.find((candidate) => candidate.id === taskId);
+		if (!task) throw new Error(`Mission task not found: ${taskId}`);
+		if (
+			task.status !== "running" ||
+			task.ownerAgentId !== agentId ||
+			!task.requiresWorktree
+		) {
+			throw new Error(
+				"Worktree assignment does not match a claimed writer task",
+			);
+		}
+		task.worktreePath = worktree.path;
+		task.worktreeBranch = worktree.branch;
+		mission.updatedAt = new Date().toISOString();
+		this.persistMission(mission);
+		this.recordEvent(
+			workspaceKey(workspaceRoot),
+			mission.id,
+			"task.worktree-assigned",
+			{ taskId, agentId, branch: worktree.branch },
+		);
+		return mission;
+	}
+
 	recoverInterrupted(): number {
 		const db = this.database();
 		const rows = db
@@ -634,6 +793,20 @@ export class EngineeringControlPlane {
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};
+	}
+
+	private persistMission(mission: EngineeringMission): void {
+		this.database()
+			.prepare(
+				"UPDATE engineering_missions SET status = ?, tasks_json = ?, updated_at = ? WHERE id = ? AND workspace_key = ?",
+			)
+			.run(
+				mission.status,
+				JSON.stringify(mission.tasks),
+				mission.updatedAt,
+				mission.id,
+				workspaceKey(mission.workspaceRoot),
+			);
 	}
 	private recordEvent(
 		key: string,
