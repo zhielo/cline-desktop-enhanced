@@ -406,11 +406,19 @@ class StdioMcpClient implements McpServerClient {
 		this.stderrBuffer = "";
 		this.protocolMode = protocolMode;
 
+		// Native Windows executables should be spawned directly. Routing an
+		// absolute .exe/.com path through cmd.exe can reinterpret or drop
+		// arguments (notably temporary MCP server script paths), which makes a
+		// healthy stdio server appear to expose no tools. Keep the shell fallback
+		// for command shims and batch files such as npx.cmd.
+		const useWindowsShell =
+			process.platform === "win32" &&
+			!/\.(?:exe|com)$/i.test(transport.command);
 		const platformOptions =
 			process.platform === "win32"
 				? {
 						windowsHide: true,
-						shell: true,
+						...(useWindowsShell ? { shell: true } : {}),
 					}
 				: {};
 		const child = spawn(transport.command, transport.args ?? [], {
