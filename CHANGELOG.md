@@ -1,5 +1,17 @@
 # Changelog
 
+## Cline Enhanced Desktop 0.3.0
+
+- Upgraded the Project + Notion runtime into an evidence-grounded review loop
+  for repositories containing many files and documents.
+- Added full project manifests, typed evidence, bounded transfer batches,
+  same-session follow-up requests, checkpoint summaries, consensus reporting,
+  and optional persistent Notion project memory.
+- Added Quick, Deep, and Forensic review depths with binary-safe
+  metadata-only evidence.
+- Hardened long-running Notion Agent sessions with status polling, resumable
+  session URLs, and a host-owned five-minute MCP timeout floor.
+
 ## Cline Enhanced Desktop 0.2.1
 
 ### Added

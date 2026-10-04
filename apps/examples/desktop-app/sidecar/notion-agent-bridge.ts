@@ -21,9 +21,11 @@ import {
 
 const DEFAULT_MAX_FILES = 50;
 const DEFAULT_MAX_BYTES = 500_000;
+const DEFAULT_BATCH_BYTES = 100_000;
 const MAX_FILE_BYTES = 64_000;
 const HARD_MAX_FILES = 200;
 const HARD_MAX_BYTES = 2_000_000;
+const HARD_MAX_BATCH_BYTES = 250_000;
 const IGNORED_DIRECTORIES = new Set([
   ".git",
   ".next",
@@ -98,8 +100,11 @@ const BLOCKED_EXTENSIONS = new Set([
 ]);
 
 export type NotionAgentBridgeFile = {
+  evidenceId: string;
   path: string;
   hash: string;
+  kind: NotionAgentEvidenceKind;
+  priority: "critical" | "high" | "normal" | "low";
   lineCount: number;
   selectionReason: string;
   originalBytes: number;
@@ -109,9 +114,44 @@ export type NotionAgentBridgeFile = {
   content: string;
 };
 
+export type NotionAgentEvidenceKind =
+  | "documentation"
+  | "source"
+  | "configuration"
+  | "test"
+  | "reverse-engineering"
+  | "binary"
+  | "other";
+
+export type NotionAgentAnalysisDepth = "quick" | "deep" | "forensic";
+
+export type NotionAgentManifestEntry = {
+  evidenceId: string;
+  path: string;
+  kind: NotionAgentEvidenceKind;
+  priority: "critical" | "high" | "normal" | "low";
+  bytes: number;
+  hash: string | null;
+  sharingStatus: "full" | "excerpt" | "metadata-only" | "excluded";
+  reason: string;
+};
+
+export type NotionAgentEvidenceBatch = {
+  id: string;
+  index: number;
+  total: number;
+  bytes: number;
+  evidenceIds: string[];
+  paths: string[];
+  markdown: string;
+};
+
 export type NotionAgentBridgePackage = {
   root: string;
   createdAt: string;
+  depth: NotionAgentAnalysisDepth;
+  manifest: NotionAgentManifestEntry[];
+  batches: NotionAgentEvidenceBatch[];
   files: NotionAgentBridgeFile[];
   excluded: Array<{ path: string; reason: string }>;
   totalOriginalBytes: number;
@@ -126,6 +166,8 @@ export type PrepareNotionAgentBridgeOptions = {
   paths?: string[];
   maxFiles?: number;
   maxBytes?: number;
+  batchBytes?: number;
+  depth?: NotionAgentAnalysisDepth;
   redactSensitive?: boolean;
   question?: string;
 };
@@ -269,6 +311,117 @@ function relevanceOrder(
   });
 }
 
+function evidenceKind(path: string): NotionAgentEvidenceKind {
+  const normalized = path.toLowerCase();
+  const extension = extname(normalized);
+  if (
+    normalized.includes("ghidra") ||
+    normalized.includes("ida") ||
+    normalized.includes("decompil") ||
+    normalized.includes("reverse-engineer") ||
+    [".asm", ".dex", ".smali"].includes(extension)
+  )
+    return "reverse-engineering";
+  if (
+    normalized.startsWith("docs/") ||
+    /(?:^|\/)(?:readme|changelog|architecture|design|security)(?:\.|$)/.test(
+      normalized,
+    ) ||
+    [".md", ".txt"].includes(extension)
+  )
+    return "documentation";
+  if (
+    /(?:^|\/)(?:test|tests|__tests__|spec)(?:\/|$)/.test(normalized) ||
+    /\.(?:test|spec)\.[^.]+$/.test(normalized)
+  )
+    return "test";
+  if (
+    [
+      ".json",
+      ".toml",
+      ".yaml",
+      ".yml",
+      ".ini",
+      ".conf",
+      ".properties",
+    ].includes(extension) ||
+    /(?:^|\/)(?:dockerfile|makefile|package\.json|cargo\.toml)$/.test(normalized)
+  )
+    return "configuration";
+  if (
+    [
+      ".c",
+      ".cc",
+      ".cpp",
+      ".cs",
+      ".go",
+      ".h",
+      ".hpp",
+      ".java",
+      ".js",
+      ".jsx",
+      ".kt",
+      ".kts",
+      ".mjs",
+      ".mts",
+      ".php",
+      ".py",
+      ".rb",
+      ".rs",
+      ".sh",
+      ".sql",
+      ".svelte",
+      ".swift",
+      ".ts",
+      ".tsx",
+      ".vue",
+    ].includes(extension)
+  )
+    return "source";
+  if (
+    [".apk", ".bin", ".dll", ".dylib", ".exe", ".jar", ".so"].includes(
+      extension,
+    )
+  )
+    return "binary";
+  return "other";
+}
+
+function evidencePriority(
+  path: string,
+  kind: NotionAgentEvidenceKind,
+  changed: Set<string>,
+): "critical" | "high" | "normal" | "low" {
+  const normalized = path.toLowerCase();
+  if (
+    /(?:^|\/)(?:readme|architecture|security)(?:\.|$)/.test(normalized) ||
+    /(?:auth|credential|crypto|permission|sandbox|entry|main)/.test(normalized)
+  )
+    return "critical";
+  if (
+    changed.has(path) ||
+    kind === "reverse-engineering" ||
+    kind === "configuration"
+  )
+    return "high";
+  if (kind === "documentation" || kind === "source" || kind === "test")
+    return "normal";
+  return "low";
+}
+
+function evidenceId(index: number, kind: NotionAgentEvidenceKind): string {
+  const prefix: Record<NotionAgentEvidenceKind, string> = {
+    documentation: "DOC",
+    source: "SRC",
+    configuration: "CFG",
+    test: "TEST",
+    "reverse-engineering": "RE",
+    binary: "BIN",
+    other: "EVD",
+  };
+  return `${prefix[kind]}-${String(index + 1).padStart(4, "0")}`;
+}
+
 function fileEligibility(path: string): string | null {
   const name = basename(path);
   const extension = extname(name).toLowerCase();
@@ -316,20 +469,59 @@ function markdownPackage(
   result: Omit<NotionAgentBridgePackage, "packageMarkdown">,
   question: string,
 ): string {
-  const manifest = result.files
+  const manifest = result.manifest
     .map(
       (file) =>
-        `- \`${file.path}\` — lines 1-${file.lineCount} — sha256:${file.hash} — ${file.selectionReason} — ${file.sharedBytes} shared bytes${file.redactions ? ` — ${file.redactions} redaction(s)` : ""}${file.truncated ? " — truncated" : ""}`,
+        `- ${file.evidenceId} — \`${file.path}\` — ${file.kind} — ${file.priority} — ${file.bytes} bytes — ${file.sharingStatus}${file.hash ? ` — sha256:${file.hash}` : ""} — ${file.reason}`,
     )
     .join("\n");
-  const fence = "````";
-  const excerpts = result.files
+  const batchIndex = result.batches
     .map(
-      (file) =>
-        `## ${file.path}\n\nCitation format: \`${file.path}:<start>-<end>@sha256:${file.hash}\`\nSelection: ${file.selectionReason}\n\n${fence}text\n${file.content}\n${fence}`,
+      (batch) =>
+        `- ${batch.id}: ${batch.evidenceIds.length} evidence item(s), ${batch.bytes} bytes — ${batch.evidenceIds.join(", ")}`,
     )
-    .join("\n\n");
-  return `# Cline Project Bridge Package\n\nCreated: ${result.createdAt}\nProject root label: ${basename(result.root)}\nQuestion: ${question || "Not supplied yet"}\nFiles: ${result.files.length}\nShared bytes: ${result.totalSharedBytes}\nRedactions: ${result.totalRedactions}\n\n## Evidence manifest\n\n${manifest || "No eligible files selected."}\n\n${excerpts}`;
+    .join("\n");
+  return `# Cline Project Bridge Package\n\nCreated: ${result.createdAt}\nProject root label: ${basename(result.root)}\nAnalysis depth: ${result.depth}\nQuestion: ${question || "Not supplied yet"}\nInventory entries: ${result.manifest.length}\nShared files: ${result.files.length}\nEvidence batches: ${result.batches.length}\nShared bytes: ${result.totalSharedBytes}\nRedactions: ${result.totalRedactions}\n\n## Evidence manifest\n\n${manifest || "No project files were discovered."}\n\n## Batch index\n\n${batchIndex || "No content batches were produced."}\n\n## Transfer protocol\n\nSend the manifest first, then send each evidence batch to the same Notion Agent session in index order. The Agent may request additional evidence by evidence ID and exact path or line range. Treat every request as read-only, sanitize the response, and record whether it was fulfilled, denied, or unavailable. Require evidence-ID citations for substantive conclusions.\n\n${result.batches.map((batch) => batch.markdown).join("\n\n")}`;
+}
+
+function buildEvidenceBatches(
+  files: NotionAgentBridgeFile[],
+  batchBytes: number,
+): NotionAgentEvidenceBatch[] {
+  const groups: NotionAgentBridgeFile[][] = [];
+  let current: NotionAgentBridgeFile[] = [];
+  let currentBytes = 0;
+  for (const file of files) {
+    if (current.length > 0 && currentBytes + file.sharedBytes > batchBytes) {
+      groups.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(file);
+    currentBytes += file.sharedBytes;
+  }
+  if (current.length > 0) groups.push(current);
+  const total = groups.length;
+  const fence = "````";
+  return groups.map((group, index) => {
+    const id = `BATCH-${String(index + 1).padStart(3, "0")}`;
+    const bytes = group.reduce((sum, file) => sum + file.sharedBytes, 0);
+    const body = group
+      .map(
+        (file) =>
+          `### ${file.evidenceId}: ${file.path}\n\nKind: ${file.kind}\nPriority: ${file.priority}\nCitation format: \`${file.evidenceId}:${file.path}:<start>-<end>@sha256:${file.hash}\`\nSelection: ${file.selectionReason}\n\n${fence}text\n${file.content}\n${fence}`,
+      )
+      .join("\n\n");
+    return {
+      id,
+      index: index + 1,
+      total,
+      bytes,
+      evidenceIds: group.map((file) => file.evidenceId),
+      paths: group.map((file) => file.path),
+      markdown: `## ${id} (${index + 1}/${total})\n\nShared bytes: ${bytes}\n\n${body}`,
+    };
+  });
 }
 
 export function prepareNotionAgentBridgePackage(
@@ -339,15 +531,29 @@ export function prepareNotionAgentBridgePackage(
   if (!existsSync(root) || !statSync(root).isDirectory())
     throw new Error(`Workspace directory not found: ${root}`);
   const realRoot = realpathSync(root);
+  const depth = options.depth ?? "deep";
+  const depthDefaults: Record<
+    NotionAgentAnalysisDepth,
+    { files: number; bytes: number; batchBytes: number }
+  > = {
+    quick: { files: 25, bytes: 250_000, batchBytes: 80_000 },
+    deep: { files: 100, bytes: 1_000_000, batchBytes: 100_000 },
+    forensic: { files: 200, bytes: 2_000_000, batchBytes: 125_000 },
+  };
   const maxFiles = clampInteger(
     options.maxFiles,
-    DEFAULT_MAX_FILES,
+    depthDefaults[depth].files ?? DEFAULT_MAX_FILES,
     HARD_MAX_FILES,
   );
   const maxBytes = clampInteger(
     options.maxBytes,
-    DEFAULT_MAX_BYTES,
+    depthDefaults[depth].bytes ?? DEFAULT_MAX_BYTES,
     HARD_MAX_BYTES,
+  );
+  const batchBytes = clampInteger(
+    options.batchBytes,
+    depthDefaults[depth].batchBytes ?? DEFAULT_BATCH_BYTES,
+    HARD_MAX_BATCH_BYTES,
   );
   const selected = options.paths?.length
     ? new Set(options.paths.map((path) => normalizeSelectedPath(root, path)))
@@ -358,6 +564,7 @@ export function prepareNotionAgentBridgePackage(
     changedPaths,
     options.question?.trim() ?? "",
   );
+  const manifest: NotionAgentManifestEntry[] = [];
   const files: NotionAgentBridgeFile[] = [];
   const excluded: Array<{ path: string; reason: string }> = [];
   let totalOriginalBytes = 0;
@@ -365,37 +572,103 @@ export function prepareNotionAgentBridgePackage(
   let totalRedactions = 0;
   let truncated = false;
 
-  for (const path of candidates) {
-    if (files.length >= maxFiles || totalSharedBytes >= maxBytes) {
-      truncated = true;
-      break;
-    }
-    const reason = fileEligibility(path);
-    if (reason) {
-      excluded.push({ path, reason });
-      continue;
-    }
+  for (const [candidateIndex, path] of candidates.entries()) {
+    const kind = evidenceKind(path);
+    const id = evidenceId(candidateIndex, kind);
+    const priority = evidencePriority(path, kind, changedPaths);
     const absolute = resolve(root, path);
     if (!isWithinRoot(root, absolute) || !existsSync(absolute)) continue;
     if (lstatSync(absolute).isSymbolicLink()) {
       excluded.push({ path, reason: "symbolic link" });
+      manifest.push({
+        evidenceId: id,
+        path,
+        kind,
+        priority,
+        bytes: 0,
+        hash: null,
+        sharingStatus: "excluded",
+        reason: "symbolic link",
+      });
       continue;
     }
     const realFile = realpathSync(absolute);
     if (!isWithinRoot(realRoot, realFile) || !statSync(realFile).isFile()) {
       excluded.push({ path, reason: "path resolves outside workspace" });
+      manifest.push({
+        evidenceId: id,
+        path,
+        kind,
+        priority,
+        bytes: 0,
+        hash: null,
+        sharingStatus: "excluded",
+        reason: "path resolves outside workspace",
+      });
+      continue;
+    }
+    const originalBytes = statSync(realFile).size;
+    const reason = fileEligibility(path);
+    if (reason) {
+      excluded.push({ path, reason });
+      manifest.push({
+        evidenceId: id,
+        path,
+        kind,
+        priority,
+        bytes: originalBytes,
+        hash: null,
+        sharingStatus:
+          kind === "binary" || reason.includes("unsupported")
+            ? "metadata-only"
+            : "excluded",
+        reason,
+      });
+      continue;
+    }
+    if (files.length >= maxFiles || totalSharedBytes >= maxBytes) {
+      truncated = true;
+      manifest.push({
+        evidenceId: id,
+        path,
+        kind,
+        priority,
+        bytes: originalBytes,
+        hash: null,
+        sharingStatus: "metadata-only",
+        reason: "content deferred by package limit",
+      });
       continue;
     }
     const original = readFileSync(realFile);
     if (original.includes(0)) {
       excluded.push({ path, reason: "binary content" });
+      manifest.push({
+        evidenceId: id,
+        path,
+        kind: kind === "other" ? "binary" : kind,
+        priority,
+        bytes: originalBytes,
+        hash: createHash("sha256").update(original).digest("hex"),
+        sharingStatus: "metadata-only",
+        reason: "binary content; bytes were not shared",
+      });
       continue;
     }
-    const originalBytes = original.byteLength;
     const remaining = Math.min(MAX_FILE_BYTES, maxBytes - totalSharedBytes);
     if (remaining <= 0) {
       truncated = true;
-      break;
+      manifest.push({
+        evidenceId: id,
+        path,
+        kind,
+        priority,
+        bytes: originalBytes,
+        hash: null,
+        sharingStatus: "metadata-only",
+        reason: "content deferred by byte limit",
+      });
+      continue;
     }
     const sliced = original.subarray(0, remaining);
     let content = sliced.toString("utf8");
@@ -405,9 +678,13 @@ export function prepareNotionAgentBridgePackage(
         : redactContent(content);
     content = redacted.content;
     const sharedBytes = Buffer.byteLength(content);
-    files.push({
+    const hash = createHash("sha256").update(original).digest("hex");
+    const file: NotionAgentBridgeFile = {
+      evidenceId: id,
       path,
-      hash: createHash("sha256").update(original).digest("hex"),
+      hash,
+      kind,
+      priority,
       lineCount: Math.max(1, content.split(/\r?\n/).length),
       selectionReason: selected
         ? "explicit allowlist"
@@ -419,6 +696,17 @@ export function prepareNotionAgentBridgePackage(
       redactions: redacted.redactions,
       truncated: sliced.byteLength < originalBytes,
       content,
+    };
+    files.push(file);
+    manifest.push({
+      evidenceId: id,
+      path,
+      kind,
+      priority,
+      bytes: originalBytes,
+      hash,
+      sharingStatus: file.truncated ? "excerpt" : "full",
+      reason: file.selectionReason,
     });
     totalOriginalBytes += originalBytes;
     totalSharedBytes += sharedBytes;
@@ -431,9 +719,13 @@ export function prepareNotionAgentBridgePackage(
         excluded.push({ path, reason: "not found or ignored by git" });
     }
   }
+  const batches = buildEvidenceBatches(files, batchBytes);
   const base = {
     root,
     createdAt: new Date().toISOString(),
+    depth,
+    manifest,
+    batches,
     files,
     excluded,
     totalOriginalBytes,

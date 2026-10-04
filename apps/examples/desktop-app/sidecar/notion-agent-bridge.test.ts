@@ -42,8 +42,27 @@ describe("prepareNotionAgentBridgePackage", () => {
       "sk-abcdefghijklmnopqrstuvwxyz",
     );
     expect(result.totalRedactions).toBe(1);
+    expect(result.depth).toBe("deep");
+    expect(result.manifest).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "README.md",
+          kind: "documentation",
+          sharingStatus: "full",
+        }),
+        expect.objectContaining({
+          path: "asset.bin",
+          sharingStatus: "metadata-only",
+        }),
+      ]),
+    );
+    expect(result.batches).toHaveLength(1);
+    expect(result.batches[0]?.evidenceIds).toEqual(
+      result.files.map((file) => file.evidenceId),
+    );
     expect(result.packageMarkdown).toContain("Review this project");
     expect(result.packageMarkdown).toContain("sha256:");
+    expect(result.packageMarkdown).toContain("Transfer protocol");
     expect(result.excluded).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: ".env", reason: "sensitive filename" }),
@@ -89,5 +108,32 @@ describe("prepareNotionAgentBridgePackage", () => {
     expect(result.files).toHaveLength(1);
     expect(result.totalSharedBytes).toBeLessThanOrEqual(12);
     expect(result.truncated).toBe(true);
+    expect(result.manifest).toHaveLength(4);
+    expect(
+      result.manifest.some(
+        (entry) => entry.reason === "content deferred by package limit",
+      ),
+    ).toBe(true);
+  });
+
+  it("creates stable bounded batches for deep and forensic reviews", () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, "src", "second.ts"),
+      `export const second = "${"x".repeat(80)}";\n`,
+    );
+    const result = prepareNotionAgentBridgePackage({
+      root,
+      depth: "forensic",
+      batchBytes: 60,
+      maxBytes: 10_000,
+    });
+    expect(result.depth).toBe("forensic");
+    expect(result.batches.length).toBeGreaterThan(1);
+    expect(result.batches.map((batch) => batch.index)).toEqual(
+      result.batches.map((_, index) => index + 1),
+    );
+    expect(result.batches.every((batch) => batch.total === result.batches.length))
+      .toBe(true);
   });
 });

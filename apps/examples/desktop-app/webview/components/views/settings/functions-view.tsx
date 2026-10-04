@@ -60,6 +60,7 @@ type FunctionMode = "Read only" | "Approval before write";
 type ProjectAccessMode = "Read only" | "Approval before write";
 type OperationKind = "Create" | "Update" | "Archive" | "Relate";
 type AgentBridgeMode = "Auto" | "Custom Agent" | "Manual handoff";
+type AgentAnalysisDepth = "quick" | "deep" | "forensic";
 type AgentTaskPreset =
   | "Architecture review"
   | "Bug investigation"
@@ -92,8 +93,11 @@ type QueuedOperation = {
 };
 
 type AgentBridgeFile = {
+  evidenceId: string;
   path: string;
   hash: string;
+  kind: string;
+  priority: "critical" | "high" | "normal" | "low";
   lineCount?: number;
   selectionReason?: string;
   originalBytes: number;
@@ -106,6 +110,26 @@ type AgentBridgeFile = {
 type AgentBridgePackage = {
   root: string;
   createdAt: string;
+  depth: AgentAnalysisDepth;
+  manifest: Array<{
+    evidenceId: string;
+    path: string;
+    kind: string;
+    priority: "critical" | "high" | "normal" | "low";
+    bytes: number;
+    hash: string | null;
+    sharingStatus: "full" | "excerpt" | "metadata-only" | "excluded";
+    reason: string;
+  }>;
+  batches: Array<{
+    id: string;
+    index: number;
+    total: number;
+    bytes: number;
+    evidenceIds: string[];
+    paths: string[];
+    markdown: string;
+  }>;
   files: AgentBridgeFile[];
   excluded: Array<{ path: string; reason: string }>;
   totalOriginalBytes: number;
@@ -456,13 +480,16 @@ export function FunctionsView({
   const [operationTarget, setOperationTarget] = useState("");
   const [operationDetails, setOperationDetails] = useState("");
   const [bridgeMode, setBridgeMode] = useState<AgentBridgeMode>("Auto");
+  const [bridgeDepth, setBridgeDepth] =
+    useState<AgentAnalysisDepth>("deep");
   const [bridgePreset, setBridgePreset] =
     useState<AgentTaskPreset>("Architecture review");
   const [bridgeAgentName, setBridgeAgentName] = useState("");
   const [bridgeQuestion, setBridgeQuestion] = useState("");
   const [bridgePaths, setBridgePaths] = useState("");
-  const [bridgeMaxFiles, setBridgeMaxFiles] = useState(50);
-  const [bridgeMaxKilobytes, setBridgeMaxKilobytes] = useState(500);
+  const [bridgeMaxFiles, setBridgeMaxFiles] = useState(100);
+  const [bridgeMaxKilobytes, setBridgeMaxKilobytes] = useState(1000);
+  const [bridgeBatchKilobytes, setBridgeBatchKilobytes] = useState(100);
   const [bridgeRetentionDays, setBridgeRetentionDays] = useState(7);
   const [bridgeKeepPage, setBridgeKeepPage] = useState(false);
   const [bridgeApproveUpload, setBridgeApproveUpload] = useState(false);
@@ -846,6 +873,11 @@ Project instructions: ${activeProject.instructions || "None"}`
             2_000_000,
             Math.max(1_000, bridgeMaxKilobytes * 1_000),
           ),
+          batchBytes: Math.min(
+            250_000,
+            Math.max(10_000, bridgeBatchKilobytes * 1_000),
+          ),
+          depth: bridgeDepth,
           redactSensitive,
           question,
         },
@@ -865,6 +897,8 @@ Project instructions: ${activeProject.instructions || "None"}`
     activeProject?.repositoryRoot,
     bridgeMaxFiles,
     bridgeMaxKilobytes,
+    bridgeBatchKilobytes,
+    bridgeDepth,
     bridgePaths,
     bridgeQuestion,
     redactSensitive,
@@ -901,7 +935,7 @@ Project instructions: ${activeProject.instructions || "None"}`
             bridgeMode === "Auto"
               ? "If no published agent or agent-session capability is available, stop before launch and return the bridge-page URL plus a copyable manual Notion AI prompt."
               : "If the exact published agent is unavailable, stop without launching another agent."
-          } After the exact agent is resolved, call spawn_session with the bridge page and my question, poll get_session_status until completion or a safe timeout, and return its answer with source links. Reuse that session through send_message_to_session for follow-up questions.`;
+          } Call spawn_session exactly once with the manifest page and my question. Send evidence batches to that same session in index order with send_message_to_session; never create one session per batch. Ask the Agent to cite evidence IDs and return a structured list of additional evidence requests. Fulfill only precise read-only requests from the approved manifest, sanitize every response, and record fulfilled, denied, and unavailable requests. Limit the evidence-request loop to four rounds. After each round, call get_session_status rather than holding a long wait_session request. If processing exceeds ten minutes, preserve the session URL and return resumable status instead of reporting failure. Request a checkpoint summary before context becomes large, then return the Agent answer, Cline analysis, agreements, disagreements, confidence, and prioritized next actions separately.`;
     const cleanup = bridgeKeepPage
       ? `Keep the bridge page as persistent project memory. Future packages must update only changed evidence and preserve prior analysis sections.`
       : bridgeApproveCleanup
@@ -927,6 +961,9 @@ Project instructions: ${activeProject.instructions || "None"}`
 
 Task preset: ${bridgePreset}
 Preset objective: ${AGENT_TASK_PRESETS[bridgePreset]}
+Review depth: ${bridgePackage.depth}
+Evidence inventory: ${bridgePackage.manifest.length} entries
+Transfer plan: ${bridgePackage.batches.length} bounded batch(es). Publish the manifest first and preserve every evidence ID across the Agent conversation.
 
 Incremental evidence summary: ${added} added, ${changed} changed, ${unchanged} unchanged, ${removed} removed since the last approved package. When updating a persistent bridge page, do not rewrite unchanged evidence sections and do not interpret absence from a truncated package as deletion.
 
@@ -941,6 +978,9 @@ Security rules:
 - Do not upload excluded files, hidden secrets, binary files, or unredacted credentials.
 - Validate the destination and agent identity before each operation.
 - Cite every finding as path:start-end@sha256:<full hash> using the evidence manifest. Clearly label any inference that lacks direct evidence.
+- Sol or another Notion model never receives direct filesystem access. It knows a file only through its manifest entry and transmitted evidence batches.
+- Do not treat a 60-second wait boundary as Agent failure. Prefer status polling, preserve the exact session URL, and resume the same session.
+- Never upload an entire executable or repository archive. For binaries, publish hashes, metadata, strings, function evidence, and bounded decompiler excerpts only.
 - Return findings in severity order, then a machine-readable unified Git patch inside a single \`\`\`diff block when code changes are appropriate. Never include shell commands inside the patch.
 - The patch is a proposal only. It will be dry-run locally, shown as a side-by-side review, and requires a separate local approval before application.
 - Show the final page URL, agent URL if used, session status, completed operations, skipped operations, and recovery steps.
@@ -1721,7 +1761,7 @@ First validate every target and database schema. Return a table with operation n
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             Analysis preset
             <select
@@ -1734,6 +1774,20 @@ First validate every target and database schema. Return a table with operation n
               {Object.keys(AGENT_TASK_PRESETS).map((preset) => (
                 <option key={preset}>{preset}</option>
               ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Review depth
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              onChange={(event) =>
+                setBridgeDepth(event.target.value as AgentAnalysisDepth)
+              }
+              value={bridgeDepth}
+            >
+              <option value="quick">Quick review</option>
+              <option value="deep">Deep evidence review</option>
+              <option value="forensic">Forensic review</option>
             </select>
           </label>
           <label className="grid gap-1 text-xs font-medium text-muted-foreground">
@@ -1781,7 +1835,7 @@ First validate every target and database schema. Return a table with operation n
           />
         </label>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="grid gap-1 text-xs font-medium text-muted-foreground">
             Maximum files
             <Input
@@ -1792,6 +1846,18 @@ First validate every target and database schema. Return a table with operation n
               }
               type="number"
               value={bridgeMaxFiles}
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+            Batch size (KB)
+            <Input
+              max={250}
+              min={10}
+              onChange={(event) =>
+                setBridgeBatchKilobytes(Number(event.target.value) || 10)
+              }
+              type="number"
+              value={bridgeBatchKilobytes}
             />
           </label>
           <label className="grid gap-1 text-xs font-medium text-muted-foreground">
@@ -1863,6 +1929,8 @@ First validate every target and database schema. Return a table with operation n
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {bridgePackage.files.length} files ·{" "}
+                  {bridgePackage.manifest.length} inventory entries ·{" "}
+                  {bridgePackage.batches.length} batches ·{" "}
                   {(bridgePackage.totalSharedBytes / 1000).toFixed(1)} KB ·{" "}
                   {bridgePackage.totalRedactions} redactions
                   {bridgePackage.truncated ? " · limit reached" : ""}
@@ -1897,6 +1965,41 @@ First validate every target and database schema. Return a table with operation n
                 </div>
               ))}
             </div>
+            <details className="mt-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer">
+                Complete project evidence manifest
+              </summary>
+              <div className="mt-2 max-h-72 overflow-auto rounded-lg border border-border">
+                {bridgePackage.manifest.map((entry) => (
+                  <div
+                    className="grid gap-2 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[90px_90px_1fr_auto]"
+                    key={entry.evidenceId}
+                  >
+                    <code>{entry.evidenceId}</code>
+                    <Badge variant="outline">{entry.sharingStatus}</Badge>
+                    <span className="break-all text-foreground">
+                      {entry.path}
+                    </span>
+                    <span>
+                      {entry.kind} · {entry.priority} · {entry.bytes} B
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
+            <details className="mt-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer">
+                Evidence transfer batches
+              </summary>
+              <ul className="mt-2 grid gap-1">
+                {bridgePackage.batches.map((batch) => (
+                  <li key={batch.id}>
+                    {batch.id} ({batch.index}/{batch.total}) —{" "}
+                    {batch.evidenceIds.length} item(s), {batch.bytes} B
+                  </li>
+                ))}
+              </ul>
+            </details>
             {bridgePackage.excluded.length > 0 ? (
               <details className="mt-3 text-xs text-muted-foreground">
                 <summary className="cursor-pointer">
