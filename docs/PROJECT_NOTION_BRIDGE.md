@@ -53,6 +53,38 @@ The bridge system contract requires the model to:
 - report completion only after tool output verifies the requested Notion
   operation and Agent response.
 
+## Evidence-grounded review loop
+
+Large projects use a deterministic evidence protocol rather than a single
+summary or repository upload:
+
+1. Cline inventories the project with stable evidence IDs, paths, kinds,
+   priorities, byte sizes, hashes when available, and sharing status.
+2. Safe text evidence is split into bounded batches. Binary files remain
+   metadata-only; raw executable bytes and repository archives are never sent.
+3. The manifest is delivered first, followed by every batch in order to one
+   Custom Agent session.
+4. The Agent cites evidence IDs and may request exact paths, line ranges,
+   symbols, tests, or binary regions.
+5. Cline validates, reads, and sanitizes those requests locally for at most
+   four rounds, recording fulfilled, denied, and unavailable evidence.
+6. Before context grows too large, the Agent produces a checkpoint summary.
+7. Completion returns separate Cline and Agent analyses, agreements,
+   disagreements, confidence, missing evidence, and prioritized actions.
+
+The Functions screen exposes Quick, Deep, and Forensic review depths. It can
+persist one visible project-memory page containing the manifest, batch index,
+checkpoint, consensus, and source Agent session URL. A connected Notion
+account is sufficient; no pre-created database is required.
+
+## Long-running Agent sessions
+
+Project + Notion sessions apply a host-owned five-minute MCP request floor and
+use status polling with a ten-minute overall processing budget. A transport
+timeout is treated as an indeterminate running state, not proof that delivery
+failed. The exact Agent session URL is retained so the same session can be
+resumed after a timeout or app restart.
+
 Tool boundaries are immutable after a runtime starts. A combined request
 submitted to an incompatible active session is stopped before execution and
 the prompt remains available for a new session.

@@ -4744,6 +4744,14 @@ export async function handleCommand(
 				: undefined,
 			maxFiles: typeof args?.maxFiles === "number" ? args.maxFiles : undefined,
 			maxBytes: typeof args?.maxBytes === "number" ? args.maxBytes : undefined,
+			batchBytes:
+				typeof args?.batchBytes === "number" ? args.batchBytes : undefined,
+			depth:
+				args?.depth === "quick" ||
+				args?.depth === "deep" ||
+				args?.depth === "forensic"
+					? args.depth
+					: undefined,
 			redactSensitive: args?.redactSensitive !== false,
 			question: typeof args?.question === "string" ? args.question : undefined,
 		});

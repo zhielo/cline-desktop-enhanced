@@ -1,5 +1,21 @@
 # Cline Desktop Changelog
 
+## 0.3.0
+
+- Added Quick, Deep, and Forensic Project + Notion review depths.
+- Added complete project evidence manifests with stable IDs, file
+  classifications, priorities, sizes, hashes, and explicit sharing status.
+- Added bounded evidence batches and a same-session, four-round Agent
+  evidence-request protocol with checkpoint summaries and consensus output.
+- Added metadata-only handling for binaries and files deferred by package
+  limits, so the Notion Agent can know what exists without receiving unsafe
+  bytes.
+- Added visible manifest and transfer-batch previews before Notion publication.
+- Added persistent project-memory page instructions without requiring a
+  pre-created Notion database.
+- Added resilient Agent status polling and a host-owned five-minute MCP timeout
+  floor for Project + Notion sessions.
+
 ## 0.2.1
 
 - Added deterministic first-turn routing for requests that explicitly combine a local project with a Notion Custom Agent.

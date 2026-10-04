@@ -159,10 +159,39 @@ describe("FunctionsView project intelligence", () => {
         return {
           root: "C:\\work\\desktop",
           createdAt: "2026-10-03T00:00:00.000Z",
+          depth: "deep",
+          manifest: [
+            {
+              evidenceId: "SRC-0001",
+              path: "src/index.ts",
+              kind: "source",
+              priority: "high",
+              bytes: 42,
+              hash: "abc123",
+              sharingStatus: "full",
+              reason: "question/path relevance",
+            },
+          ],
+          batches: [
+            {
+              id: "BATCH-001",
+              index: 1,
+              total: 1,
+              bytes: 30,
+              evidenceIds: ["SRC-0001"],
+              paths: ["src/index.ts"],
+              markdown: "## BATCH-001",
+            },
+          ],
           files: [
             {
+              evidenceId: "SRC-0001",
               path: "src/index.ts",
               hash: "abc123",
+              kind: "source",
+              priority: "high",
+              lineCount: 1,
+              selectionReason: "question/path relevance",
               originalBytes: 42,
               sharedBytes: 30,
               redactions: 1,
@@ -206,8 +235,10 @@ describe("FunctionsView project intelligence", () => {
       "prepare_notion_agent_bridge",
       expect.objectContaining({
         question: "Review the architecture",
-        maxFiles: 50,
-        maxBytes: 500000,
+        maxFiles: 100,
+        maxBytes: 1000000,
+        batchBytes: 100000,
+        depth: "deep",
         redactSensitive: true,
       }),
       { timeoutMs: 120000 },
@@ -236,6 +267,8 @@ describe("FunctionsView project intelligence", () => {
     expect(request.title).toBe("Ask Notion Agent about local project");
     expect(request.prompt).toContain("search_agents");
     expect(request.prompt).toContain("spawn_session");
+    expect(request.prompt).toContain("same session");
+    expect(request.prompt).toContain("Evidence inventory: 1 entries");
     expect(request.prompt).toContain("<approved_project_package>");
     expect(request.prompt).toContain("[REDACTED:token]");
     expect(request.prompt).not.toContain("sk-secret");
@@ -254,10 +287,39 @@ describe("FunctionsView project intelligence", () => {
         return {
           root: "C:\\work\\desktop",
           createdAt: "2026-10-03T00:00:00.000Z",
+          depth: "deep",
+          manifest: [
+            {
+              evidenceId: "SRC-0001",
+              path: "src/index.ts",
+              kind: "source",
+              priority: "normal",
+              bytes: 42,
+              hash: "abc123",
+              sharingStatus: "full",
+              reason: "question/path relevance",
+            },
+          ],
+          batches: [
+            {
+              id: "BATCH-001",
+              index: 1,
+              total: 1,
+              bytes: 42,
+              evidenceIds: ["SRC-0001"],
+              paths: ["src/index.ts"],
+              markdown: "## BATCH-001",
+            },
+          ],
           files: [
             {
+              evidenceId: "SRC-0001",
               path: "src/index.ts",
               hash: "abc123",
+              kind: "source",
+              priority: "normal",
+              lineCount: 1,
+              selectionReason: "question/path relevance",
               originalBytes: 42,
               sharedBytes: 42,
               redactions: 0,

@@ -243,6 +243,7 @@ async function loadConfiguredMcpTools(options: {
 	agentPluginServers?: ReadonlyArray<AgentPluginPackageMcpServer>;
 	officialNotionOnly?: boolean;
 	requiredToolSuffixes?: readonly string[];
+	minimumToolTimeoutMs?: number;
 }): Promise<{
 	tools: AgentTool[];
 	shutdown?: () => Promise<void>;
@@ -311,6 +312,30 @@ async function loadConfiguredMcpTools(options: {
 		}
 	}
 
+	if ((options.minimumToolTimeoutMs ?? 0) > 0) {
+		const minimumTimeoutSeconds = Math.ceil(
+			(options.minimumToolTimeoutMs ?? 0) / 1000,
+		);
+		for (const [index, registration] of registrations.entries()) {
+			if (
+				options.officialNotionOnly &&
+				!isOfficialNotionRegistration(registration)
+			)
+				continue;
+			if (
+				resolveMcpTimeoutSeconds(registration.timeoutSeconds) >=
+				minimumTimeoutSeconds
+			)
+				continue;
+			const effectiveRegistration = {
+				...registration,
+				timeoutSeconds: minimumTimeoutSeconds,
+			};
+			await manager.registerServer(effectiveRegistration);
+			registrations[index] = effectiveRegistration;
+		}
+	}
+
 	if (registrations.length === 0) {
 		await manager.dispose().catch(() => {});
 		return { tools: [] };
@@ -333,8 +358,13 @@ async function loadConfiguredMcpTools(options: {
 				serverName: r.name,
 				provider: manager,
 				// Keep the tool wrapper timeout in agreement with the MCP
-				// request timeout: both derive from the server's registration.
-				timeoutMs: resolveMcpTimeoutSeconds(r.timeoutSeconds) * 1000,
+				// request timeout. Project + Notion sessions apply a host-owned
+				// floor so long Agent reasoning does not surface as a misleading
+				// 60-second delivery failure.
+				timeoutMs: Math.max(
+					resolveMcpTimeoutSeconds(r.timeoutSeconds) * 1000,
+					options.minimumToolTimeoutMs ?? 0,
+				),
 			}),
 		),
 	);
@@ -686,6 +716,10 @@ export class DefaultRuntimeBuilder implements RuntimeBuilder {
 					requiredToolSuffixes:
 						config.permissionProfile === "project-notion-bridge"
 							? ["search_agents", "spawn_session", "send_message_to_session"]
+							: undefined,
+					minimumToolTimeoutMs:
+						config.permissionProfile === "project-notion-bridge"
+							? 5 * 60 * 1000
 							: undefined,
 				});
 				tools.push(...mcpRuntime.tools);
