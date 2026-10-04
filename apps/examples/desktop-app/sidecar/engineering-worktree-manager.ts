@@ -52,6 +52,21 @@ function atomicWrite(path: string, value: unknown): void {
 	renameSync(temporary, path);
 }
 
+function canonicalFuturePath(pathValue: string): string {
+	let current = resolve(pathValue);
+	const missing: string[] = [];
+	while (!existsSync(current)) {
+		const parent = dirname(current);
+		if (parent === current) break;
+		missing.unshift(basename(current));
+		current = parent;
+	}
+	const canonicalParent = existsSync(current)
+		? realpathSync.native(current)
+		: current;
+	return resolve(canonicalParent, ...missing);
+}
+
 export class EngineeringWorktreeManager {
 	constructor(private readonly managedRoot: string) {}
 
@@ -168,8 +183,8 @@ export class EngineeringWorktreeManager {
 		return parsed;
 	}
 	private assertManagedPath(path: string): void {
-		const root = resolve(this.managedRoot);
-		const candidate = resolve(path);
+		const root = canonicalFuturePath(this.managedRoot);
+		const candidate = canonicalFuturePath(path);
 		const comparableRoot =
 			process.platform === "win32" ? root.toLowerCase() : root;
 		const comparableCandidate =
