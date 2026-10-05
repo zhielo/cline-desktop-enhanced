@@ -7,6 +7,7 @@ on:
       - 'sdk/**'
       - 'scripts/stage-full-tool-platform-foundation.py'
       - 'scripts/refine-tool-platform-foundation.py'
+      - 'scripts/stage-address-translate.py'
       - '.github/workflows/full-tool-platform-staging.yml'
   workflow_dispatch:
 
@@ -27,7 +28,7 @@ jobs:
     outputs:
       source_sha: ${{ steps.commit.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -42,6 +43,7 @@ jobs:
         run: |
           python3 scripts/stage-full-tool-platform-foundation.py
           python3 scripts/refine-tool-platform-foundation.py
+          python3 scripts/stage-address-translate.py
       - name: Commit bindings on the upgrade branch only
         id: commit
         env:
@@ -53,7 +55,7 @@ jobs:
           git diff --check
           git add sdk/packages/core/src/extensions/tools/types.ts sdk/packages/core/src/extensions/tools/constants.ts sdk/packages/core/src/extensions/tools/permission-profile.ts sdk/packages/core/src/extensions/tools/index.ts sdk/packages/core/src/extensions/tools/presets.ts sdk/packages/core/src/extensions/tools/runtime.ts sdk/packages/core/src/extensions/tools/model-tool-routing.ts sdk/packages/core/src/extensions/tools/helpers.ts sdk/packages/core/src/extensions/tools/definitions.ts sdk/packages/core/src/index.ts CUSTOMIZATIONS.md scripts/verify-custom-fork.ts
           if ! git diff --cached --quiet; then
-            git -c user.name=github-actions[bot] -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m 'feat(core): integrate fresh registry and bounded command deadlines (#98)'
+            git -c user.name=github-actions[bot] -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m 'feat(core): integrate fresh tool-platform source (#98)'
             header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
             echo "::add-mask::$header"
             git -c "http.https://github.com/.extraheader=$header" push origin HEAD:refs/heads/work/full-tool-platform-upgrade
@@ -69,11 +71,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           ref: ${{ needs.stage.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5, Node 24
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: '24.x'
           package-manager-cache: false
@@ -88,7 +90,10 @@ jobs:
         run: bun scripts/verify-custom-fork.ts
       - name: Typecheck core source and tests
         run: bun -F @cline/core typecheck
-      - name: Run full core regression suite including new production contracts
+      - name: Run focused new tool and production integration contracts
+        working-directory: sdk/packages/core
+        run: bun run test:unit --maxWorkers=2 src/extensions/tools/capability-registry.test.ts src/extensions/tools/command-batch.test.ts src/extensions/tools/tool-platform-integration.test.ts src/extensions/tools/address-translate.test.ts
+      - name: Run full core regression suite
         working-directory: sdk/packages/core
         run: bun run test:unit --maxWorkers=2
       - name: Typecheck desktop
@@ -99,5 +104,5 @@ jobs:
         env:
           SOURCE_SHA: ${{ needs.stage.outputs.source_sha }}
         run: |
-          echo "Foundation checks passed for $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Checkpoint checks passed for $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo 'The full adapter catalogue and Windows installer remain pending. This workflow does not package or publish an installer.' >> "$GITHUB_STEP_SUMMARY"
