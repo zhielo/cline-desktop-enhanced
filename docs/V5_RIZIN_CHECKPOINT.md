@@ -1,7 +1,12 @@
-# Bounded Rizin checkpoint
+# Bounded Rizin recovery status
 
-The static recovery module uses a private artifact snapshot with actual copied-byte SHA-256, bounded JSON, deadline/abort and process-tree termination, fixed aaa/iIj/aflj commands, -NN to disable user scripts/plugins and -x to disable executable I/O. Precise 64-bit hex addresses are retained; unsafe JSON-number addresses are rejected. No caller commands or native target execution.
+The original module checkpoint was `ba7d8f30196ce5c086947518a5b11a18b12d863d`. It is now integrated into the static SDK action `native_functions_rizin`, input schema and workbench at tested commit `6f519f55c650cd18663e3284c3b0aeebde8521e9`.
 
-Standalone validation observed 12 passing tests, including actual official Rizin 0.9.1 recovery of an owned compiled ELF; 27 assertions. The 11 portable parsing/boundary tests are retained here without the local-only fixture paths. This is NOT yet wired into the SDK action schema/executor/UI or consolidated CI, and no Windows Rizin execution, managed-pack installation, semantic equivalence or isolation is verified.
+The consolidated source and real-engine job passed:
+https://github.com/zhielo/cline-desktop-enhanced/actions/runs/37308654937
 
-Rizin assembly CFG block counts and Ghidra high-p-code block counts describe different abstractions; differences are not automatically semantic disagreements. No extra installer or validation run is triggered by this module checkpoint. V5 remains incomplete.
+Eleven portable boundary cases are required in the SDK safety group. A separate required Linux corpus compiles an owned ELF and exercises the actual checksum-reviewed Rizin 0.9.1 adapter, including selected function recovery and actual copied-byte artifact hash. Standalone development additionally observed 12 passes/27 assertions; this is separate from the CI evidence.
+
+The adapter uses bounded private snapshots, fixed `aaa;iIj;aflj` queries, `-NN` to disable user scripts/plugins, `-x` to disable executable I/O, precision-safe addresses, literal post-analysis selectors, deadlines, abort and process-tree termination. It does not accept caller commands, launch a target, patch binaries or establish OS/network containment. Configure a host-owned absolute `CLINE_RE_RIZIN` executable; PATH presence alone is not verified execution health.
+
+Rizin assembly block counts and Ghidra high-p-code blocks describe different abstractions. Cross-engine semantic reconciliation, Windows Rizin execution, managed pack installation and installer bundling remain pending. The full V5 roadmap is incomplete.
