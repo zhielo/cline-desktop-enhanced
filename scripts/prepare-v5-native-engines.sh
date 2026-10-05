@@ -30,8 +30,10 @@ printf 'Ghidra 12.1.4 archive verified; provider JDK SHA-256: %s\n' "$digest"
 # Reviewed additional static engine, not a native target executor.
 curl -fL --retry 2 https://github.com/rizinorg/rizin/releases/download/v0.9.1/rizin-v0.9.1-static-x86_64.tar.xz -o "$root/rizin.tar.xz"
 printf '%s  %s\n' 9102249a9f0b6319c5334a2e5cf8d9cc3f2035e1d3def027c41f6a90f647e8cf "$root/rizin.tar.xz" | sha256sum -c -
-mkdir -p "$root/rizin"
-tar -xJf "$root/rizin.tar.xz" -C "$root/rizin"
-test -f "$root/rizin/bin/rizin"
-"$root/rizin/bin/rizin" -v
-if [[ -n "${GITHUB_ENV:-}" ]]; then printf 'CLINE_RE_RIZIN=%s\n' "$root/rizin/bin/rizin" >> "$GITHUB_ENV"; fi
+# Explicit CI-only setup approvals; never a user-PC installation.
+python3 scripts/manage-re-toolpacks.test.py
+python3 scripts/manage-re-toolpacks.py import --root "$root/managed-packs" --pack-id rizin-0.9.1-linux-x64 --archive "$root/rizin.tar.xz" --confirm-install --confirm-reviewed-tool-execution
+python3 scripts/manage-re-toolpacks.py status --root "$root/managed-packs"
+managed_engine="$root/managed-packs/revisions/rizin-0.9.1-linux-x64/payload/bin/rizin"
+test -f "$managed_engine"
+if [[ -n "${GITHUB_ENV:-}" ]]; then printf 'CLINE_RE_RIZIN=%s\nCLINE_RE_TOOLPACK_ROOT=%s\n' "$managed_engine" "$root/managed-packs" >> "$GITHUB_ENV"; fi

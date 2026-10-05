@@ -919,6 +919,8 @@ requiredMarkers.push(
  {path:"sdk/packages/core/scripts/native-crosscheck-engine-smoke.test.ts",markers:["corpus never skips","recoverNativeCrosscheck","entry-location-agreement"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/native-program-script.ts",markers:["getImageBase()","entryAddress","getExecutableFormat()"]},
 );
+requiredMarkers.push({path:"scripts/manage-re-toolpacks.py",markers:["Explicit install and reviewed-tool execution approvals","Archive links and special files forbidden","receiptSha256","ownedStaticBytes","retainedRevisions"]},{path:"sdk/packages/core/src/extensions/tools/executors/managed-rizin-packs.ts",markers:["managedRizinStatus","Managed pack file integrity mismatch","healthIsImportTimeOnly","CLINE_RE_TOOLPACK_ROOT"]});
+requiredMarkers.push({path:"sdk/packages/core/scripts/rizin-program-engine-smoke.test.ts",markers:["managedRizinStatus","resolveRizinTool","Managed pack root required"]},{path:"scripts/prepare-v5-native-engines.sh",markers:["manage-re-toolpacks.test.py","confirm-reviewed-tool-execution","CLINE_RE_TOOLPACK_ROOT"]},{path:"scripts/validate-advanced-build.mjs",markers:["managed-rizin-packs.test.ts"]});
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

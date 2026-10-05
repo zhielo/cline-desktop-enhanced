@@ -37,6 +37,7 @@ export const ADVANCED_ACTIONS = [
 	"notebook_validate",
 	"notebook_run", "cfg_analyze", "trace_slice", "trace_taint",
 	"decrypt_blob",
+	"managed_toolpacks",
 	"native_crosscheck",
 	"native_functions_rizin",
 	"native_program",

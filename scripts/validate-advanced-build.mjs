@@ -86,6 +86,7 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/native-program.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/rizin-program.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/native-crosscheck.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/managed-rizin-packs.test.ts",
       "sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts",
       "sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts",
       "--config", "vitest.config.mts", "--testTimeout=60000"]),
