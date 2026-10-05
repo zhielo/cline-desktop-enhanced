@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, isAbsolute } from "node:path";
 import { z } from "zod";
 import { ADVANCED_ANALYSIS_WORKER } from "./advanced-analysis-worker";
+import { ANDROID_INVESTIGATION_WORKER } from "./android-investigation-worker";
 import {
 	prepareProcessEnvironment,
 	redactSensitiveText,
@@ -34,6 +35,7 @@ export const ADVANCED_ACTIONS = [
 	"notebook_validate",
 	"notebook_run", "cfg_analyze", "trace_slice", "trace_taint",
 	"decrypt_blob",
+	"artifact_discovery", "android_relationships", "android_method", "investigation_query",
 ] as const;
 export type AdvancedAction = (typeof ADVANCED_ACTIONS)[number];
 const LOCAL_ACTIONS = new Set<AdvancedAction>([
@@ -41,6 +43,7 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"lift_native_ir",
 	"deobfuscation_pass",
 	"decrypt_blob",
+	"artifact_discovery", "android_relationships", "android_method",
 ]);
 export const ADVANCED_BACKENDS = [
 	{ id: "cryptography", integration: "host-gated-authenticated-decryption" },
@@ -80,6 +83,8 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
+		discovery?: { max_depth?: number; max_artifacts?: number };
+		method?: { class_descriptor: string; name: string; descriptor: string };
 		architecture?: string;
 		offset?: number;
 		address?: number;
@@ -191,7 +196,7 @@ export async function runAdvancedAnalysis(
 		throw new Error("CLINE_RE_PYTHON must be an absolute interpreter path");
 	const directory = await mkdtemp(join(tmpdir(), "cline-advanced-"));
 	const script = join(directory, "worker.py");
-	await writeFile(script, ADVANCED_ANALYSIS_WORKER, { mode: 0o600 });
+	await writeFile(script, ["artifact_discovery", "android_relationships", "android_method"].includes(request.action) ? ANDROID_INVESTIGATION_WORKER : ADVANCED_ANALYSIS_WORKER, { mode: 0o600 });
 	const policy = prepareProcessEnvironment({
 		overrides: { PYTHONNOUSERSITE: "1" },
 		allowedSensitiveEnvironmentVariables:

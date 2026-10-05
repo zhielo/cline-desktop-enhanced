@@ -49,6 +49,7 @@ async function main() {
   const pkg = JSON.parse(await readFile(path.join(desktop, "package.json"), "utf8"));
   const job = (name, args, cwd = root) => ({ name, args, cwd, timeoutMs: 20 * 60 * 1000 });
   const prerequisites = [
+    job("Check Android worker embed", ["scripts/generate-android-investigation.mjs", "--check"]),
     job("Verify custom fork preservation", ["run", "scripts/verify-custom-fork.ts"]),
     job("Build SDK packages", ["run", "build:sdk"]),
   ];
@@ -86,6 +87,8 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.test.ts",

@@ -128,3 +128,23 @@ describe("AnalysisWorkbench approval flow", () => {
 		);
 	});
 });
+
+it("offers bounded Android investigations through the existing approval flow", async () => {
+	const invoke = vi.spyOn(desktopClient, "invoke").mockImplementation(async (command: string, args?: unknown) => {
+		if (command === "list_analysis_tasks") return [];
+		if (command === "prepare_analysis_task") return { id: "android-plan", kind: "static", operation: "advanced_analysis", target: "C:\\work\\sample.apk", request: (args as { request: unknown }).request, requestHash: "a".repeat(64), permission: "Inspect", status: "awaiting-approval", requirements: [], risk: "low", budget: {}, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now()+60000).toISOString() };
+		return {};
+	});
+	await act(async () => { root.render(<AnalysisWorkbench cwd={"C:\\work"} environmentId="local" />); await Promise.resolve(); });
+	const operation = [...container.querySelectorAll("select")].find(select => [...select.options].some(option => option.value === "advanced_analysis"))!;
+	await act(async () => { operation.value = "advanced_analysis"; operation.dispatchEvent(new Event("change", { bubbles: true })); });
+	const advanced = container.querySelector('select[aria-label="Advanced function"]') as HTMLSelectElement;
+	for (const action of ["artifact_discovery", "android_relationships", "android_method", "investigation_query"]) expect([...advanced.options].some(option => option.value === action)).toBe(true);
+	await act(async () => { advanced.value = "artifact_discovery"; advanced.dispatchEvent(new Event("change", { bubbles: true })); });
+	const target = container.querySelector('input[placeholder="Workspace-relative or absolute path"]') as HTMLInputElement;
+	await setInput(target, "sample.apk");
+	expect(container.textContent).toContain("not verified runtime relationships");
+	await clickText("Prepare static-analysis task");
+	expect(invoke).toHaveBeenCalledWith("prepare_analysis_task", expect.objectContaining({ kind: "static", request: expect.objectContaining({ advanced_action: "artifact_discovery", operation: "advanced_analysis", target: "sample.apk" }) }));
+	expect(invoke.mock.calls.some(([command]) => command === "run_static_analysis")).toBe(false);
+});

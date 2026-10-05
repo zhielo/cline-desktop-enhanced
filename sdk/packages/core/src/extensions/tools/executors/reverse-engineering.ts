@@ -1,5 +1,6 @@
+import { persistInvestigation, queryInvestigation } from "./android-investigation-index";
 import {programEvidenceResult} from "./analysis-program-evidence";
-import { runAdvancedAnalysis, advancedEvidenceBundle } from "./advanced-analysis";
+import { runAdvancedAnalysis, advancedEvidenceBundle, type AdvancedResult } from "./advanced-analysis";
 import { graphResult } from "./analysis-evidence-graph";
 import { readAnalysisJson, prepareNotebook, runAnalysisNotebook } from "./analysis-notebook";
 import { spawn } from "node:child_process";
@@ -2433,8 +2434,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
       if(input.report_format === "html") throw new Error("Advanced evidence supports JSON only");
       const action = input.advanced_action;
       if(action === "decrypt_blob" && input.output_file)throw new Error("Plaintext export is not enabled; decryption returns receipts and structural evidence only");
-      let result;
-      if (["graph_build","graph_query","notebook_validate","notebook_run","cfg_analyze","trace_slice","trace_taint"].includes(action)) {
+      let result: AdvancedResult;
+      if (action === "investigation_query") {
+        if (!input.target) throw new Error("Investigation index target is required");
+        result = context.signal?.aborted ? {protocol:"cline-advanced-analysis/v1" as const,status:"cancelled" as const,engine:"host",engineVersion:"1",evidence:{reason:"Cancelled before execution"},limitations:[]} : await queryInvestigation(input.target,input.advanced_options?.investigation_query);
+      } else if (["graph_build","graph_query","notebook_validate","notebook_run","cfg_analyze","trace_slice","trace_taint"].includes(action)) {
         if(!input.target || !path.isAbsolute(input.target))throw new Error("Absolute analysis document required");
         if(context.signal?.aborted)result={protocol:"cline-advanced-analysis/v1" as const,status:"cancelled" as const,engine:"host",engineVersion:"1",evidence:{reason:"Cancelled before execution"},limitations:[]};
         else if(action === "cfg_analyze" || action === "trace_slice" || action === "trace_taint")result=programEvidenceResult(action,await readAnalysisJson(input.target,8*1024*1024));
@@ -2442,6 +2446,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
         else if(action === "notebook_run")result=await runAnalysisNotebook(input.target,path.join(analysisCacheRoot(),"notebooks"),runAdvancedAnalysis,context.signal,Math.min(input.timeout_ms??300000,300000));
         else {const prepared=await prepareNotebook(input.target);result={protocol:"cline-advanced-analysis/v1" as const,status:"completed" as const,engine:"static-notebook",engineVersion:"static-notebook/v1",evidence:{notebookHash:prepared.notebookHash,totalBytes:prepared.totalBytes,cells:prepared.notebook.cells.map(cell=>({id:cell.id,action:cell.action,dependsOn:cell.dependsOn,...prepared.paths.get(cell.id)}))},limitations:["Validation checks configuration and confined input paths; it does not execute engines or targets."]};}
       } else result=await runAdvancedAnalysis({action,target:input.target,compareTarget:input.compare_target,limit:Math.min(input.max_results??200,1000),timeoutMs:input.timeout_ms,options:input.advanced_options},context.signal);
+      const investigationIndex = !context.signal?.aborted && result.engine === "android-static" ? await persistInvestigation(path.join(analysisCacheRoot(),"investigations"),result) : undefined;
       const bundle=advancedEvidenceBundle(input.advanced_action,result);
       let reportOutputFile:string|undefined;
       if(input.report_output_file){
@@ -2450,7 +2455,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
         reportOutputFile=input.report_output_file;await fs.mkdir(path.dirname(reportOutputFile),{recursive:true});
         await fs.writeFile(reportOutputFile,JSON.stringify(bundle,null,2),{flag:"wx",mode:0o600});
       }
-      return JSON.stringify({operation:input.operation,...bundle,reportOutputFile,durationMs:Date.now()-started},null,2);
+      return JSON.stringify({operation:input.operation,...bundle,investigationIndex,reportOutputFile,durationMs:Date.now()-started},null,2);
     }
 		const pathRefreshed = await refreshProcessPath();
 		if (input.operation === "discover") {
