@@ -1170,3 +1170,5 @@ export type {
 export type { ArtifactStore, SessionStore, TeamStore } from "./types/storage";
 
 export { createToolRegistryTool } from "./extensions/tools/capability-registry";
+
+export { createAddressTranslateTool } from "./extensions/tools/address-translate";

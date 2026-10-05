@@ -280,6 +280,7 @@ export interface ToolExecutors {
  */
 export type DefaultToolName =
 	| "tool_registry"
+	| "address_translate"
 	| "read_files"
 	| "search_codebase"
 	| "reverse_engineer"
@@ -305,6 +306,8 @@ export interface DefaultToolsConfig {
 	enableToolRegistry?: boolean;
 	/** Host-selected independent-command parallelism, integer 1..4. @default 1 */
 	commandConcurrency?: number;
+	/** Pure supplied-table address arithmetic; standard presets opt in. */
+	enableAddressTranslate?: boolean;
 	/**
 	 * Host telemetry service, injected at tool construction time. Tools that
 	 * emit operational telemetry (e.g. run_commands timeouts) close over this

@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{ path: "sdk/packages/core/src/extensions/tools/address-translate.ts", markers: ["createAddressTranslateTool", "user_supplied_segments", "zero_filled", "MAX_ADDRESS"] },
 	{ path: "CUSTOMIZATIONS.md", markers: ["Fresh tool platform foundation (issue #98)", "cleanupUnverified"] },
 	{ path: "sdk/packages/core/src/extensions/tools/capability-registry.ts", markers: ["createToolRegistryTool", "not_probed", "not_evaluated"] },
 	{ path: "sdk/packages/core/src/extensions/tools/command-batch.ts", markers: ["runCommandBatch", "ensureActive", "clearTimeout(timer)"] },

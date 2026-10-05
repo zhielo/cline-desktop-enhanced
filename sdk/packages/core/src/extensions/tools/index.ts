@@ -272,3 +272,5 @@ export function createBuiltinTools(
 		executors,
 	});
 }
+
+export { createAddressTranslateTool } from "./address-translate";

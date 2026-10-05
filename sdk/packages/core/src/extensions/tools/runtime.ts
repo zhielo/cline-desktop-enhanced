@@ -42,6 +42,7 @@ type RuntimeToolCatalogEntry = Omit<ToolCatalogEntry, "defaultEnabled">;
 
 const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 	{ id: "tool_registry", description: "Inspect bounded registered SDK tool metadata without granting permissions or claiming engine readiness.", headlessToolNames: ["tool_registry"] },
+	{ id: "address_translate", description: "BigInt-safe supplied-table VA, RVA and file-offset translation with explicit ambiguity and zero-fill evidence.", headlessToolNames: ["address_translate"] },
 	{
 		id: "web_search",
 		description:
@@ -161,7 +162,8 @@ const TOOL_NAME_TO_FLAG: Partial<
 		string,
 		keyof Pick<
 			DefaultToolsConfig,
-			| "enableToolRegistry"
+			| "enableAddressTranslate"
+		| "enableToolRegistry"
 	| "enableReadFiles"
 			| "enableReverseEngineering"
 			| "enableLiveDebugger"
@@ -181,6 +183,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 		>
 	>
 > = {
+	address_translate: "enableAddressTranslate",
 	tool_registry: "enableToolRegistry",
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
@@ -207,7 +210,8 @@ function resolveContextMode(
 
 type ResolvedToolFlags = Pick<
 	DefaultToolsConfig,
-	| "enableToolRegistry"
+	| "enableAddressTranslate"
+		| "enableToolRegistry"
 	| "enableReadFiles"
 	| "enableReverseEngineering"
 	| "enableLiveDebugger"

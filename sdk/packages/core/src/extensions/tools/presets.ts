@@ -23,6 +23,7 @@ export const ToolPresets = {
 	 * Good for coding assistants and task automation
 	 */
 	act: {
+		enableAddressTranslate: true,
 		enableToolRegistry: true,
 		enableLiveDebugger: false,
 		enableReadFiles: true,
@@ -51,6 +52,7 @@ export const ToolPresets = {
 	 * the plan-mode command-guard hook the runtime builder registers.
 	 */
 	plan: {
+		enableAddressTranslate: true,
 		enableToolRegistry: true,
 		enableLiveDebugger: false,
 		enableReadFiles: true,
@@ -77,6 +79,7 @@ export const ToolPresets = {
 	 * Good for code exploration and analysis agents
 	 */
 	search: {
+		enableAddressTranslate: true,
 		enableToolRegistry: true,
 		enableLiveDebugger: false,
 		enableReadFiles: true,
@@ -102,6 +105,7 @@ export const ToolPresets = {
 	 * Minimal tools for focused tasks
 	 */
 	minimal: {
+		enableAddressTranslate: true,
 		enableToolRegistry: true,
 		enableLiveDebugger: false,
 		enableReadFiles: false,
@@ -128,6 +132,7 @@ export const ToolPresets = {
 	 * Good for trusted local automation workflows.
 	 */
 	yolo: {
+		enableAddressTranslate: true,
 		enableToolRegistry: true,
 		enableLiveDebugger: false,
 		enableReadFiles: true,

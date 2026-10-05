@@ -35,6 +35,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	DefaultToolName,
 	keyof Pick<
 		DefaultToolsConfig,
+		| "enableAddressTranslate"
 		| "enableToolRegistry"
 		| "enableReadFiles"
 		| "enableReverseEngineering"
@@ -54,6 +55,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableSubmitAndExit"
 	>
 > = {
+	address_translate: "enableAddressTranslate",
 	tool_registry: "enableToolRegistry",
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",

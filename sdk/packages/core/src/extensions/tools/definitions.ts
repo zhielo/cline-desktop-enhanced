@@ -4,6 +4,7 @@
  * Factory functions for creating the default tools.
  */
 
+import { createAddressTranslateTool } from "./address-translate";
 import { isAbsolute, join, resolve } from "node:path";
 import { createToolRegistryTool } from "./capability-registry";
 import { type CommandBatchContext, runCommandBatch, waitForCommandResult } from "./command-batch";
@@ -1283,6 +1284,7 @@ export function createDefaultTools(
 ): AgentTool[] {
 	const {
 		executors,
+		enableAddressTranslate = false,
 		enableToolRegistry = false,
 		enableReadFiles = true,
 		enableSearch = true,
@@ -1378,6 +1380,7 @@ export function createDefaultTools(
 		tools.push(createSubmitAndExitTool(submitExecutor, config));
 	}
 
+	if (enableAddressTranslate) tools.push(createAddressTranslateTool());
 	if (enableToolRegistry) {
 		tools.push(createToolRegistryTool(() => tools as unknown as AgentTool[]));
 	}

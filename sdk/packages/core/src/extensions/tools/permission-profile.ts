@@ -61,6 +61,7 @@ export const PERMISSION_PROFILE_EXTENSION_NAME =
 
 const READ_ONLY_TOOLS = new Set([
 	"tool_registry",
+	"address_translate",
 	"read_files",
 	"search_codebase",
 	"skills",

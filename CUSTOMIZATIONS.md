@@ -431,3 +431,9 @@ Do not hide a new regression by weakening assertions or making a required custom
 - Timed-out launched commands report `cleanupUnverified`; cancellation requests and caller timeouts are not proof that descendants terminated. This checkpoint does not introduce Windows Job Objects, verified hostile-code isolation, or a global multi-agent execution limit.
 - Shared timeout wrappers clear their timers when work settles.
 - This is a fresh core foundation, NOT completion of the tool catalogue in issue #98 and NOT an installer release. Optional runtime workers remain subject to the existing fail-closed prerequisites.
+
+### BigInt native address translation
+
+- The registered `address_translate` adapter performs real bounded unsigned-64-bit arithmetic on supplied segment tables. It requires an explicit image base for RVA input, uses half-open ranges, reports ambiguous/unmapped mappings and never invents file offsets for zero-filled memory.
+- Tables and image bases remain user-supplied, not independently verified binary or ASLR evidence. Up to 128 segment records are accepted; matches are capped at 16 with a truthful total and truncation flag. No binary is read or executed.
+- This implements one native arithmetic adapter, not the complete native tool pack or the consolidated Windows release.
