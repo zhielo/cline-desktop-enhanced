@@ -288,6 +288,7 @@ async function executeShellCommands(
 	): Promise<ToolOperationResult> => {
 		const startedAt = Date.now();
 		let launchAttempted = false;
+		let commandSettled = false;
 		const executionMode =
 			typeof command !== "string" && "args" in command ? "direct" : "shell";
 		const query = formatRunCommandQueryPreview(command);
@@ -317,6 +318,7 @@ async function executeShellCommands(
 					...context,
 					signal: batch.signal,
 					emitUpdate: (update) => {
+						if (commandSettled || batch.signal.aborted || batch.remainingMs() <= 0) return;
 						const payload =
 							update && typeof update === "object" && !Array.isArray(update)
 								? (update as Record<string, unknown>)
@@ -335,11 +337,15 @@ async function executeShellCommands(
 								);
 							}
 						}
-						context.emitUpdate?.({
-							...payload,
-							commandIndex,
-							...(!emittedCommandMetadata ? { query } : {}),
-						});
+						try {
+							context.emitUpdate?.({
+								...payload,
+								commandIndex,
+								...(!emittedCommandMetadata ? { query } : {}),
+							});
+						} catch {
+							// A disconnected UI observer must not change process outcome.
+						}
 						emittedCommandMetadata = true;
 					},
 				}
@@ -349,6 +355,7 @@ async function executeShellCommands(
 			launchAttempted = true;
 			const output = await waitForCommandResult(executor(command, cwd, commandContext), batch.signal);
 			batch.ensureActive();
+			commandSettled = true;
 			recordCompletion(true);
 			return {
 				query,
@@ -356,6 +363,7 @@ async function executeShellCommands(
 				success: true,
 			};
 		} catch (error) {
+			commandSettled = true;
 			recordCompletion(false);
 			if (error instanceof TimeoutError) {
 				batch.cancel(error);
@@ -706,6 +714,7 @@ export function createShellTool(
 
 	const tool = createTool<unknown, ToolOperationResult[]>({
 		name: "run_commands",
+		executionMode: "sequential",
 		description: describe(),
 		inputSchema: zodToJsonSchema(RunCommandsInputSchema),
 		timeoutMs: timeoutMs * 2,

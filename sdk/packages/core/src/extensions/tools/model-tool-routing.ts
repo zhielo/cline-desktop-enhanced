@@ -35,6 +35,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	DefaultToolName,
 	keyof Pick<
 		DefaultToolsConfig,
+		| "enableToolRegistry"
 		| "enableReadFiles"
 		| "enableReverseEngineering"
 		| "enableLiveDebugger"
@@ -53,6 +54,7 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableSubmitAndExit"
 	>
 > = {
+	tool_registry: "enableToolRegistry",
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
 	live_debugger: "enableLiveDebugger",
