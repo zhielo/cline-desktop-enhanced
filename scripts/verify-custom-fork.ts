@@ -910,6 +910,7 @@ requiredMarkers.push(
  {path:".github/workflows/validate-semantic-re-v5.yml",markers:["Source gates and owned native fixtures only","--engines --semantic-engines","native-program-engine-smoke.test.ts","include-hidden-files: true"]},
  {path:"scripts/prepare-v5-native-engines.sh",markers:["ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db","sha256sum -c -","GITHUB_ENV"]},
 );
+requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",markers:["max_bytes=None","Invalid transformation byte budget"]});
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

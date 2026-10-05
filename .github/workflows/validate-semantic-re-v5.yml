@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/v5-python"
-          "$RUNNER_TEMP/v5-python/bin/python" -m pip install --disable-pip-version-check -r sdk/packages/core/scripts/requirements-advanced-windows.txt
+          "$RUNNER_TEMP/v5-python/bin/python" -m pip install --disable-pip-version-check -r sdk/packages/core/scripts/requirements-advanced-analysis.txt
           echo "CLINE_RE_PYTHON=$RUNNER_TEMP/v5-python/bin/python" >> "$GITHUB_ENV"
           bash scripts/prepare-v5-native-engines.sh "$RUNNER_TEMP/v5-native" 2>&1 | tee .cline-native-validation/setup.log
       - name: Run all existing source gates and real Python/model corpora

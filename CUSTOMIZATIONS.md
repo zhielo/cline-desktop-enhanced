@@ -483,3 +483,7 @@ Do not hide a new regression by weakening assertions or making a required custom
 ### V5 durable source and native evidence
 
 A Linux-only validation workflow runs all existing consolidated source gates plus pinned Python engine, real Z3 model and real Ghidra SDK-adapter corpora against owned fixtures. It has read-only repository permissions, preserves logs/reports and cannot build/install an NSIS executable, execute targets, publish releases or provision analysis VMs. Its push filter is restricted to the dedicated workflow or explicit V5 validation-request document to avoid checkpoint CI churn. The Corretto archive checksum is checked against its provider endpoint and logged; its latest URL is not a fixed version pin. Runtime isolation and full V5 completion remain unverified.
+
+### V5 Linux engine corpus and live transformation budgets
+
+The Linux source-only workflow installs the full pinned analysis requirements, including Triton and QBinDiff/BinExport, rather than the smaller portable Windows subset. The transform worker resolves its default byte budget at call time and rejects invalid or greater-than-current budgets; unchanged mandatory expansion tests must pass. This fixes a captured-default regression found by the full engine corpus, not a skipped or weakened check. Windows engine requirements and all existing installer gates remain unchanged.
