@@ -1,4 +1,4 @@
-import base64, importlib.util, hashlib, json, tempfile, unittest, threading, http.client, subprocess, sys
+import base64, importlib.util, hashlib, json, tempfile, unittest, threading, http.client, subprocess, sys, sqlite3
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 spec=importlib.util.spec_from_file_location('worker',Path(__file__).with_name('server.py'));w=importlib.util.module_from_spec(spec);spec.loader.exec_module(w)
@@ -47,4 +47,13 @@ class WorkerTest(unittest.TestCase):
     with self.assertRaises(ValueError):w.bounded_collect(process,b'{}',0.2)
     self.assertIsNotNone(process.poll())
   finally:w.MAX_OUTPUT=original
+ def test_database_connections_close_after_success(self):
+  with self.worker.db() as connection:connection.execute('SELECT 1')
+  with self.assertRaises(sqlite3.ProgrammingError):connection.execute('SELECT 1')
+ def test_database_connections_close_and_rollback_after_failure(self):
+  with self.assertRaises(RuntimeError):
+   with self.worker.db() as connection:
+    connection.execute('INSERT INTO jobs VALUES(?,?,?,?,?)',('d'*32,'fixture','running',None,0));raise RuntimeError('Owned rollback fixture')
+  with self.assertRaises(sqlite3.ProgrammingError):connection.execute('SELECT 1')
+  with self.worker.db() as check:self.assertEqual(check.execute('SELECT COUNT(*) FROM jobs WHERE nonce=?',('d'*32,)).fetchone()[0],0)
 if __name__=='__main__':unittest.main()

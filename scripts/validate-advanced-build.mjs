@@ -88,6 +88,7 @@ async function main() {
       "apps/examples/desktop-app/webview/components/views/settings/functions-view.test.tsx",
       "apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.test.tsx",
       "--config", "apps/examples/desktop-app/vitest.config.mts"]),
+    job("Test real Hub shutdown runtime identity", ["x", "vitest", "run", "src/hub/daemon/shutdown.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
     job("Run focused SDK safety tests", ["x", "vitest", "run",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",

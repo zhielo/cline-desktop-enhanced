@@ -59,3 +59,9 @@ test("advanced integration retains worker fixture and compilation gates without 
  const runner=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");for(const file of ["android-runtime-client.test.ts","analysis-investigation-store.test.ts","investigation-workspace.test.tsx"])assert.ok(runner.includes(file));
  const workflow=readFileSync(new URL("../.github/workflows/build-custom-windows-installer.yml",import.meta.url),"utf8");assert.ok(workflow.includes("workers/android-capture/server.test.py"));assert.ok(workflow.includes("Build pinned Android instrumentation bundle"));assert.ok(workflow.includes("not live-device validation"));assert.ok(workflow.includes("Run process-session terminal smoke test"));
 });
+
+test("confirmed CI repairs preserve DB close/rollback and exact launched Bun identity",()=>{
+ const worker=readFileSync(new URL("../workers/android-capture/server.py",import.meta.url),"utf8");assert.ok(worker.includes("with connection:yield connection"));assert.ok(worker.includes("finally:connection.close()"));
+ const shutdown=readFileSync(new URL("../sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",import.meta.url),"utf8");assert.ok(shutdown.includes("probeBunRuntimeVersion(executable)"));assert.equal((shutdown.match(/runtime: bun \$\{daemon.runtimeVersion\}/g)||[]).length,2);assert.ok(!shutdown.includes("runtime: bun 1.3.13"));assert.ok(shutdown.includes("toBeLessThan(5_000)"));assert.ok(shutdown.includes("forced exit:"));
+ const runner=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");assert.ok(runner.includes("Test real Hub shutdown runtime identity"));
+});

@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/android-capture/server.py",markers:["@contextmanager", "with connection:yield connection", "finally:connection.close()"]},
+ {path:"workers/android-capture/server.test.py",markers:["test_database_connections_close_after_success", "test_database_connections_close_and_rollback_after_failure"]},
+ {path:"sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",markers:["probeBunRuntimeVersion", "daemon.runtimeVersion", "forced exit:", "toBeLessThan(5_000)"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["Test real Hub shutdown runtime identity", "vitest.e2e.config.ts"]},
+
  {path:"sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",markers:["ConPTY can deliver trailing data", "setTimeout(resolve, 250)"]},
 
  {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["verifyAndroidCapture", "receipt.json", "Worker capability changed before upload", "Capture directory must not contain symlinks"]},

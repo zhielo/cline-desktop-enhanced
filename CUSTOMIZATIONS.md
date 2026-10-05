@@ -538,3 +538,9 @@ Do not hide a new regression by weakening assertions or making a required custom
 - Consolidated checks require investigation-store, Android client and investigation UI regressions. Windows gates additionally require owned worker protocol fixtures and the pinned Frida bundle build while preserving real portable engines, terminal, unsigned installer and installed-app checks. See docs/ADVANCED_INVESTIGATION_INTEGRATION.md and workers/android-capture/README.md. No merge or release is enabled.
 
 - Terminal process completion keeps the PTY/ConPTY handle open for a bounded 250 ms trailing-output drain after exit notification, without respawning the child. The regression fixture deliberately emits after exit notification and still requires TTY/input/resize evidence. Real Windows terminal smoke remains mandatory; this is not an unlimited EOF-drain guarantee.
+
+## Confirmed CI blocker repair after advanced integration
+
+- The Python Android worker now closes SQLite connections deterministically after both commit and rollback. SQLite's native connection context manager alone does not close a connection; open handles caused Windows fixture cleanup to fail with WinError 32. New regressions require closed handles and rollback on exceptions; no cleanup failure is suppressed.
+- Real Hub shutdown tests probe the exact Bun executable they launch, then require the fixture to report that same runtime version. The obsolete Bun 1.3.13 string assertion is removed, not the exact-version check, authenticated shutdown, forced-exit evidence, discovery cleanup or 5-second exit bound.
+- Real Hub shutdown identity tests are now an additional blocking consolidated validation stage. Existing engine, terminal, installer and installed-app gates stay required. New exact-head Windows results remain necessary; Linux fixtures cannot establish Windows installer success.

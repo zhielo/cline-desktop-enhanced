@@ -2,6 +2,7 @@
 import base64, hashlib, hmac, json, os, re, signal, sqlite3, ssl, subprocess, sys, tempfile, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from contextlib import contextmanager
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 MAX_INPUT=16*1024*1024
@@ -35,7 +36,13 @@ class Worker:
         with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS jobs(nonce TEXT PRIMARY KEY,identity TEXT NOT NULL,status TEXT NOT NULL,result BLOB,created REAL NOT NULL)')
             db.execute("UPDATE jobs SET status='interrupted' WHERE status='running'")
-    def db(self):return sqlite3.connect(self.root/'jobs.sqlite',timeout=5)
+    @contextmanager
+    def db(self):
+        connection=sqlite3.connect(self.root/'jobs.sqlite',timeout=5)
+        try:
+            with connection:yield connection
+        finally:connection.close()
+
     def signed(self,receipt,captures=None):return {'receipt':receipt,'signature':base64.b64encode(self.key.sign(encoded(receipt))).decode(),'captures':captures or []}
     def manifest(self):
         now=time.time();iso=lambda n:time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime(n))

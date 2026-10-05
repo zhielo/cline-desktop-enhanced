@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 
 interface ReadyDaemon {
+	runtimeVersion: string;
 	child: ChildProcess;
 	discoveryPath: string;
 	discovery: {
@@ -51,6 +52,22 @@ function resolveBunExecutable(): string {
 		}
 	}
 	throw new Error(`Bun executable (${executableName}) was not found on PATH`);
+}
+
+function probeBunRuntimeVersion(executable: string): string {
+	const probe = spawnSync(executable, ["--version"], {
+		encoding: "utf8",
+		timeout: 5000,
+		windowsHide: true,
+	});
+	const version = probe.stdout?.trim();
+	if (
+		probe.status !== 0 ||
+		!version ||
+		!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)
+	)
+		throw new Error("Could not determine launched Bun runtime version");
+	return version;
 }
 
 function delay(ms: number): Promise<void> {
@@ -128,23 +145,21 @@ async function startDaemon(): Promise<ReadyDaemon> {
 	const entryPath = fileURLToPath(
 		new URL("./__fixtures__/shutdown-daemon.ts", import.meta.url),
 	);
-	const child = spawn(
-		resolveBunExecutable(),
-		["--conditions=development", entryPath],
-		{
-			cwd: dataDir,
-			env: {
-				...process.env,
-				CLINE_BUILD_ENV: "development",
-				CLINE_DATA_DIR: dataDir,
-				CLINE_HUB_DISCOVERY_PATH: discoveryPath,
-				CLINE_HUB_TEST_PORT: "0",
-				CLINE_NO_INTERACTIVE: "1",
-				NO_COLOR: "1",
-			},
-			stdio: ["ignore", "ignore", "pipe"],
+	const executable = resolveBunExecutable();
+	const runtimeVersion = probeBunRuntimeVersion(executable);
+	const child = spawn(executable, ["--conditions=development", entryPath], {
+		cwd: dataDir,
+		env: {
+			...process.env,
+			CLINE_BUILD_ENV: "development",
+			CLINE_DATA_DIR: dataDir,
+			CLINE_HUB_DISCOVERY_PATH: discoveryPath,
+			CLINE_HUB_TEST_PORT: "0",
+			CLINE_NO_INTERACTIVE: "1",
+			NO_COLOR: "1",
 		},
-	);
+		stdio: ["ignore", "ignore", "pipe"],
+	});
 	children.add(child);
 	let stderr = "";
 	child.stderr?.setEncoding("utf8");
@@ -166,7 +181,14 @@ async function startDaemon(): Promise<ReadyDaemon> {
 		waitForDiscovery(discoveryPath, exit, readStderr),
 		spawnError,
 	]);
-	return { child, discoveryPath, discovery, exit, stderr: readStderr };
+	return {
+		child,
+		discoveryPath,
+		discovery,
+		exit,
+		stderr: readStderr,
+		runtimeVersion,
+	};
 }
 
 async function openAuthenticatedSocket(
@@ -248,7 +270,7 @@ describe("hub daemon shutdown", () => {
 			expect(result).toEqual({ code: 0, signal: null });
 			expect(Date.now() - startedAt).toBeLessThan(5_000);
 			expect(daemon.stderr()).toContain(
-				"[shutdown-fixture] runtime: bun 1.3.13",
+				`[shutdown-fixture] runtime: bun ${daemon.runtimeVersion}`,
 			);
 			expect(daemon.stderr()).toContain("[shutdown-fixture] forced exit:");
 			await expect(
@@ -283,7 +305,7 @@ describe("hub daemon shutdown", () => {
 				expect(result).toEqual({ code: 0, signal: null });
 				expect(Date.now() - startedAt).toBeLessThan(5_000);
 				expect(daemon.stderr()).toContain(
-					"[shutdown-fixture] runtime: bun 1.3.13",
+					`[shutdown-fixture] runtime: bun ${daemon.runtimeVersion}`,
 				);
 				expect(daemon.stderr()).toContain("[shutdown-fixture] forced exit:");
 				await expect(
