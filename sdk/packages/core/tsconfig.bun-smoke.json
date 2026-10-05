@@ -1,0 +1,6 @@
+{
+ "extends": "./tsconfig.smoke.json",
+ "compilerOptions": { "types": ["node", "bun"] },
+ "include": ["scripts/advanced-windows-engine-smoke.test.ts"],
+ "exclude": []
+}

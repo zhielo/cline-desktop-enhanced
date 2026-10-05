@@ -14,5 +14,6 @@
 			"@cline/shared/*": ["../shared/src/*", "../shared/src/*/index.ts"]
 		}
 	},
-	"include": ["scripts/**/*", "src/**/*"]
+	"include": ["scripts/**/*", "src/**/*"],
+	"exclude": ["scripts/advanced-windows-engine-smoke.test.ts"]
 }

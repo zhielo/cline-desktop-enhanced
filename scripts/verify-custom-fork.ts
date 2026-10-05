@@ -4,6 +4,13 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/package.json",markers:["bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit"]},
+
+ {path:"package.json",markers:["bun --sequential -F '*' typecheck"]},
+ {path:"sdk/packages/core/tsconfig.bun-smoke.json",markers:['"types": ["node", "bun"]']},
+ {path:".github/workflows/sdk-test.yml",markers:['bun-version: "1.3.14"', "bun install --frozen-lockfile", "bun run types", "run: bun run lint"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",markers:["const controlPrefix = useId()", "htmlFor={", "field-21"]},
+
 	{
 		path: "scripts/build-windows.ps1",
 		markers: [

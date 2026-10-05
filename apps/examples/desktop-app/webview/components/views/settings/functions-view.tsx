@@ -29,6 +29,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
 } from "react";
@@ -451,6 +452,7 @@ export function FunctionsView({
   onLaunchFunction?: (request: FunctionLaunchRequest) => void;
   onOpenMcpSettings: () => void;
 }) {
+  const controlPrefix = useId();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -1457,34 +1459,34 @@ First validate every target and database schema. Return a table with operation n
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-1`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Project name
-            <Input
+            <Input id={`${controlPrefix}-field-1`}
               onChange={(event) => setProjectName(event.target.value)}
               placeholder="Cline Desktop Enhanced"
               value={projectName}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-2`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Repository root
-            <Input
+            <Input id={`${controlPrefix}-field-2`}
               onChange={(event) => setRepositoryRoot(event.target.value)}
               placeholder="C:\\Projects\\cline-desktop-enhanced"
               value={repositoryRoot}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-3`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Approved Notion sources
-            <Textarea
+            <Textarea id={`${controlPrefix}-field-3`}
               onChange={(event) => setProjectSources(event.target.value)}
               placeholder="One approved page or database name/URL per line"
               rows={3}
               value={projectSources}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-4`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Approved destination
-            <Textarea
+            <Textarea id={`${controlPrefix}-field-4`}
               onChange={(event) => setProjectDestination(event.target.value)}
               placeholder="Page or database name/URL"
               rows={3}
@@ -1492,9 +1494,9 @@ First validate every target and database schema. Return a table with operation n
             />
           </label>
         </div>
-        <label className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${controlPrefix}-field-5`} className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
           Project instructions
-          <Textarea
+          <Textarea id={`${controlPrefix}-field-5`}
             onChange={(event) => setProjectInstructions(event.target.value)}
             placeholder="Project-specific conventions, exclusions, and reporting expectations"
             rows={3}
@@ -1516,9 +1518,9 @@ First validate every target and database schema. Return a table with operation n
               <option>Approval before write</option>
             </select>
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-6`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Maximum operations
-            <Input
+            <Input id={`${controlPrefix}-field-6`}
               max={50}
               min={1}
               onChange={(event) =>
@@ -1528,9 +1530,9 @@ First validate every target and database schema. Return a table with operation n
               value={maxOperations}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-7`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Context cache TTL (hours)
-            <Input
+            <Input id={`${controlPrefix}-field-7`}
               max={168}
               min={1}
               onChange={(event) =>
@@ -1813,9 +1815,9 @@ First validate every target and database schema. Return a table with operation n
               <option>Manual handoff</option>
             </select>
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-8`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Published Custom Agent name
-            <Input
+            <Input id={`${controlPrefix}-field-8`}
               disabled={bridgeMode === "Manual handoff"}
               onChange={(event) => setBridgeAgentName(event.target.value)}
               placeholder="Example: Cline Project Analyst"
@@ -1823,18 +1825,18 @@ First validate every target and database schema. Return a table with operation n
             />
           </label>
         </div>
-        <label className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${controlPrefix}-field-9`} className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
           Question for Notion AI
-          <Textarea
+          <Textarea id={`${controlPrefix}-field-9`}
             onChange={(event) => setBridgeQuestion(event.target.value)}
             placeholder="Analyze this local project's architecture, risks, requirements coverage, and highest-value next actions."
             rows={3}
             value={bridgeQuestion}
           />
         </label>
-        <label className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${controlPrefix}-field-10`} className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
           Optional relative file allowlist
-          <Textarea
+          <Textarea id={`${controlPrefix}-field-10`}
             onChange={(event) => setBridgePaths(event.target.value)}
             placeholder={
               "One repository-relative text file per line. Leave blank for an automatic Git-aware selection."
@@ -1845,9 +1847,9 @@ First validate every target and database schema. Return a table with operation n
         </label>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-11`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Maximum files
-            <Input
+            <Input id={`${controlPrefix}-field-11`}
               max={200}
               min={1}
               onChange={(event) =>
@@ -1857,9 +1859,9 @@ First validate every target and database schema. Return a table with operation n
               value={bridgeMaxFiles}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-12`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Batch size (KB)
-            <Input
+            <Input id={`${controlPrefix}-field-12`}
               max={250}
               min={10}
               onChange={(event) =>
@@ -1869,9 +1871,9 @@ First validate every target and database schema. Return a table with operation n
               value={bridgeBatchKilobytes}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-13`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Maximum package (KB)
-            <Input
+            <Input id={`${controlPrefix}-field-13`}
               max={2000}
               min={1}
               onChange={(event) =>
@@ -1881,9 +1883,9 @@ First validate every target and database schema. Return a table with operation n
               value={bridgeMaxKilobytes}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-14`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Temporary retention (days)
-            <Input
+            <Input id={`${controlPrefix}-field-14`}
               disabled={bridgeKeepPage}
               max={90}
               min={1}
@@ -2126,12 +2128,12 @@ First validate every target and database schema. Return a table with operation n
 
         <label
           className="mt-4 grid gap-1 text-xs font-medium text-muted-foreground"
-          htmlFor="notion-agent-response"
+          htmlFor={`${controlPrefix}-notion-agent-response`}
         >
           Notion Agent response with path:line@sha256 citations
           <Textarea
             disabled={!bridgePackage || Boolean(appliedPatch)}
-            id="notion-agent-response"
+            id={`${controlPrefix}-notion-agent-response`}
             onChange={(event) => {
               setAgentResponse(event.target.value);
               setPatchPreview(null);
@@ -2144,13 +2146,13 @@ First validate every target and database schema. Return a table with operation n
         </label>
         <label
           className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground"
-          htmlFor="notion-agent-patch"
+          htmlFor={`${controlPrefix}-notion-agent-patch`}
         >
           Proposed unified Git patch
           <Textarea
             className="font-mono"
             disabled={!bridgePackage || Boolean(appliedPatch)}
-            id="notion-agent-patch"
+            id={`${controlPrefix}-notion-agent-patch`}
             onChange={(event) => {
               setAgentPatch(event.target.value);
               setPatchPreview(null);
@@ -2166,12 +2168,12 @@ First validate every target and database schema. Return a table with operation n
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
           <label
             className="grid gap-1 text-xs font-medium text-muted-foreground"
-            htmlFor="notion-agent-branch"
+            htmlFor={`${controlPrefix}-notion-agent-branch`}
           >
             Isolated branch suffix
             <Input
               disabled={Boolean(appliedPatch)}
-              id="notion-agent-branch"
+              id={`${controlPrefix}-notion-agent-branch`}
               onChange={(event) => setPatchBranchName(event.target.value)}
               placeholder="review-architecture"
               value={patchBranchName}
@@ -2456,34 +2458,34 @@ First validate every target and database schema. Return a table with operation n
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-15`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Project name
-            <Input
+            <Input id={`${controlPrefix}-field-15`}
               onChange={(event) => setProjectName(event.target.value)}
               placeholder="Cline Desktop Enhanced"
               value={projectName}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-16`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Repository root
-            <Input
+            <Input id={`${controlPrefix}-field-16`}
               onChange={(event) => setRepositoryRoot(event.target.value)}
               placeholder="C:\\Projects\\cline-desktop-enhanced"
               value={repositoryRoot}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-17`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Approved Notion sources
-          <Textarea
+          <Textarea id={`${controlPrefix}-field-17`}
               onChange={(event) => setProjectSources(event.target.value)}
               placeholder="One approved page or database name/URL per line"
             rows={3}
               value={projectSources}
           />
         </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-18`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Approved destination
-            <Textarea
+            <Textarea id={`${controlPrefix}-field-18`}
               onChange={(event) => setProjectDestination(event.target.value)}
               placeholder="Page or database name/URL"
               rows={3}
@@ -2491,9 +2493,9 @@ First validate every target and database schema. Return a table with operation n
             />
           </label>
         </div>
-        <label className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
+        <label htmlFor={`${controlPrefix}-field-19`} className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground">
           Project instructions
-          <Textarea
+          <Textarea id={`${controlPrefix}-field-19`}
             onChange={(event) => setProjectInstructions(event.target.value)}
             placeholder="Project-specific conventions, exclusions, and reporting expectations"
             rows={3}
@@ -2515,9 +2517,9 @@ First validate every target and database schema. Return a table with operation n
               <option>Approval before write</option>
             </select>
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-20`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Maximum operations
-            <Input
+            <Input id={`${controlPrefix}-field-20`}
               max={50}
               min={1}
               onChange={(event) =>
@@ -2527,9 +2529,9 @@ First validate every target and database schema. Return a table with operation n
               value={maxOperations}
             />
           </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+          <label htmlFor={`${controlPrefix}-field-21`} className="grid gap-1 text-xs font-medium text-muted-foreground">
             Context cache TTL (hours)
-            <Input
+            <Input id={`${controlPrefix}-field-21`}
               max={168}
               min={1}
               onChange={(event) =>

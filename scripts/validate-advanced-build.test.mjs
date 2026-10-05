@@ -40,3 +40,17 @@ test("installed Hub smoke never expires before the SDK startup contract", () => 
   assert.ok(smoke.includes("expect(health.ok).toBe(true)"));
   assert.ok(smoke.includes("expect(restartedHealth.ok).toBe(true)"));
 });
+
+test("workspace quality retains complete typecheck scope and Bun smoke declarations",()=>{
+ const pkg=JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8"));
+ assert.equal(pkg.scripts.types,"bun --sequential -F '*' typecheck");
+ const smoke=JSON.parse(readFileSync(new URL("../sdk/packages/core/tsconfig.smoke.json",import.meta.url),"utf8"));
+ assert.deepEqual(smoke.include,["scripts/**/*","src/**/*"]);
+ assert.deepEqual(smoke.exclude,["scripts/advanced-windows-engine-smoke.test.ts"]);
+ const bunSmoke=JSON.parse(readFileSync(new URL("../sdk/packages/core/tsconfig.bun-smoke.json",import.meta.url),"utf8"));
+ assert.deepEqual(bunSmoke.compilerOptions.types,["node","bun"]);assert.deepEqual(bunSmoke.include,smoke.exclude);assert.deepEqual(bunSmoke.exclude,[]);
+ const core=JSON.parse(readFileSync(new URL("../sdk/packages/core/package.json",import.meta.url),"utf8"));
+ assert.equal(core.scripts["typecheck:smoke"],"bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit");
+ const workflow=readFileSync(new URL("../.github/workflows/sdk-test.yml",import.meta.url),"utf8");
+ assert.equal((workflow.match(/bun-version: "1.3.14"/g)||[]).length,2);assert.ok(workflow.includes("bun run types"));assert.ok(workflow.includes("run: bun run lint"));assert.ok(workflow.includes("needs: quality-checks"));
+});

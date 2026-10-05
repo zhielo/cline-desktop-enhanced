@@ -2942,7 +2942,8 @@ describe("SessionRuntime auth retry", () => {
 				onAuthError,
 				initialMessages: history.map((message) => ({
 					id: message.id,
-					role: message.role,
+					// This fixture's history contains only user/assistant messages, not tool-role input.
+					role: message.role === "assistant" ? ("assistant" as const) : ("user" as const),
 					content: [{ type: "text", text: message.id }],
 				})),
 			}),

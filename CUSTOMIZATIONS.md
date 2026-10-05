@@ -2,6 +2,13 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Quality gate reliability
+
+- Full workspace typechecks run sequentially with the same `-F '*'` scope to avoid simultaneously loading every TypeScript graph. No workspace, strict check or failed diagnostic is suppressed.
+- SDK smoke checks use separate Node/Bun projects, both mandatory, so portable-engine tests have Bun declarations without leaking Bun fetch augmentation into Node-only tests. Long-history OAuth fixtures explicitly constrain user/assistant input roles instead of widening them to tool-role messages.
+- SDK CI uses the same pinned Bun 1.3.14 and frozen lockfile as the Windows installer. Downstream lint and test gates remain blocking.
+- Functions custom controls use instance-unique React IDs and explicit label/control associations; duplicate view instances are covered by a DOM regression test.
+
 ## Build policy
 
 - Produce an **unsigned Windows x64 NSIS `setup.exe`** for private use and testing.
