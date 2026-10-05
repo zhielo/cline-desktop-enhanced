@@ -271,6 +271,8 @@ export class InvestigationStore {
 											"processId",
 											"classHandle",
 											"classLoaderIdentity",
+											"classLoaderIdentityBasis",
+											"captureSessionNonce",
 											"nativeArtifactId",
 											"shortName",
 											"longName",
@@ -319,6 +321,7 @@ export class InvestigationStore {
 				provenance: signedWorker
 					? "signed-worker-report-not-hardware-attestation"
 					: "static-or-imported-report",
+				device: signedWorker ? data.device : undefined,
 				artifacts: selected("artifacts"),
 				methods: selected("selectedMethods"),
 				functions: selected("selectedFunctions"),

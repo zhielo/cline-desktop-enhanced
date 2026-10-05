@@ -2,16 +2,21 @@
 import base64, hashlib, json, os, re, struct, subprocess, sys, threading, time, zlib
 from pathlib import Path
 import frida
+import importlib.util
+spec=importlib.util.spec_from_file_location("fixed_capture_support",Path(__file__).with_name("capture_support.py"));support=importlib.util.module_from_spec(spec);spec.loader.exec_module(support)
 MAX_CAPTURE=8*1024*1024
 config=json.load(sys.stdin)
 serial=os.environ.get('CLINE_ANDROID_DEVICE_SERIAL','')
 if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}',serial):raise SystemExit('An explicitly configured Android device ID is required')
 adb=os.environ['CLINE_ANDROID_ADB'];analyzer=os.environ['CLINE_ANDROID_APKANALYZER']
-def run(argv,timeout=30):return subprocess.run(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=timeout).stdout
+def run(argv,timeout=30):return support.bounded_command(argv,limit=65536,timeout=timeout)
 actual=run([analyzer,'manifest','application-id',config['artifact']]).decode().strip()
 if actual!=config['package']:raise SystemExit('APK package does not match approved package')
-run([adb,'-s',serial,'install','-r',config['artifact']])
-device=frida.get_device(serial,timeout=10)
+device_info=support.physical_preflight(adb,serial)
+device=frida.get_device(serial,timeout=10);device.enumerate_processes() # Fail before installation if Frida is unavailable.
+existing=run([adb,'-s',serial,'shell','pm','path',config['package']]).decode().strip()
+if existing:raise SystemExit('Refusing to replace an existing app on a physical device; operator cleanup/review required')
+run([adb,'-s',serial,'install',config['artifact']])
 artifacts=[];captures=[];registrations=[];events=[];limitations=['Signed worker observations are operator reports, not hardware attestation or complete execution coverage.','Only standard DEX from supported loader hooks is captured; encryption/key recovery, anti-instrumentation bypass and complete ART coverage are not claimed.','Native addresses without a captured module hash remain unresolved; no static binary identity is inferred.'];seen=set();total=0;lock=threading.Lock()
 def message(value,data):
     global total
@@ -39,8 +44,13 @@ pid=None;session=None
 try:
     pid=device.spawn([config['package']]);session=device.attach(pid)
     source=Path(__file__).with_name('agent.js').read_text()
-    script=session.create_script(source);script.on('message',message);script.load();script.exports_sync.configure(config['captureDex']);device.resume(pid)
+    script=session.create_script(source);script.on('message',message);script.load();script.exports_sync.configure(config['captureDex'],config['nonce']);device.resume(pid)
     time.sleep(config['timeoutMs']/1000)
+    if config.get('captureNative',False):
+        with lock:
+            native_artifacts,native_captures,native_limits=support.capture_modules(registrations,config['package'],lambda path:support.bounded_command([adb,'-s',serial,'exec-out','su','-c','cat -- '+path]),total)
+            artifacts.extend(native_artifacts);captures.extend(native_captures);limitations.extend(native_limits)
+
 finally:
     if session:
         try:session.detach()
@@ -48,4 +58,4 @@ finally:
     if pid:
         try:device.kill(pid)
         except Exception:pass
-print(json.dumps({'status':'partial','artifacts':artifacts,'captures':captures,'registrations':registrations,'events':events,'limitations':limitations},ensure_ascii=False,separators=(',',':')))
+print(json.dumps({'status':'partial','device':device_info,'artifacts':artifacts,'captures':captures,'registrations':registrations,'events':events,'limitations':limitations},ensure_ascii=False,separators=(',',':')))

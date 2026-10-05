@@ -92,6 +92,8 @@ async function main() {
     job("Run focused SDK safety tests", ["x", "vitest", "run",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
+ "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",
+ "sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",
@@ -108,6 +110,8 @@ async function main() {
   if (flags.includes("--engines")) {
     const python = process.env.CLINE_RE_PYTHON;
     if (!python || !path.isAbsolute(python)) throw new Error("--engines requires an absolute trusted CLINE_RE_PYTHON");
+    for (const corpus of ["server.test.py", "capture_support.test.py", "setup-controller.test.py"])
+      checks.push({ ...job(`Android controller corpus: ${corpus}`, [path.join(root, "workers/android-capture", corpus)]), executable: python });
     for (const corpus of ["advanced-analysis-worker.test.py", "advanced-ir.test.py", "advanced-crypto.test.py"])
       checks.push({ ...job(`Engine corpus: ${corpus}`, [path.join(root, "sdk/packages/core/scripts", corpus)]), executable: python });
   }

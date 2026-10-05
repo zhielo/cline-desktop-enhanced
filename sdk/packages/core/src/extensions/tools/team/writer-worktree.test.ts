@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -38,7 +44,7 @@ describe("writer worktrees", () => {
 		).toMatchObject({
 			version: 1,
 			path: metadata.path,
-			sourceRepo: repo,
+			sourceRepo: realpathSync.native(repo),
 			ownerAgentId: "writer-a",
 		});
 

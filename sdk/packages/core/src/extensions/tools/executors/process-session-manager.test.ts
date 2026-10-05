@@ -462,28 +462,28 @@ describe("ProcessSessionManager", () => {
 			await manager.start({
 				ownerSessionId: OWNER,
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 30_000)"],
+				args: ["-e", "setInterval(() => {}, 1000)"],
 				cwd: process.cwd(),
 			});
 			await expect(
 				manager.start({
 					ownerSessionId: OWNER,
 					executable: process.execPath,
-					args: ["-e", "setTimeout(() => {}, 30_000)"],
+					args: ["-e", "setInterval(() => {}, 1000)"],
 					cwd: process.cwd(),
 				}),
 			).rejects.toThrow("limit reached for owner");
 			await manager.start({
 				ownerSessionId: "second-owner",
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 1000)"],
+				args: ["-e", "setInterval(() => {}, 1000)"],
 				cwd: process.cwd(),
 			});
 			await expect(
 				manager.start({
 					ownerSessionId: "third-owner",
 					executable: process.execPath,
-					args: ["-e", "setTimeout(() => {}, 1000)"],
+					args: ["-e", "setInterval(() => {}, 1000)"],
 					cwd: process.cwd(),
 				}),
 			).rejects.toThrow("2 active sessions");

@@ -11,6 +11,8 @@ export type AnalysisSandboxManifest = {
 	maxArtifactBytes: number;
 	issuedAt: string;
 	expiresAt: string;
+ targetKind?: "physical";
+ deviceSerialSha256?: string;
  operations?: string[];
 };
 

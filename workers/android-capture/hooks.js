@@ -1,7 +1,8 @@
 import Java from 'frida-java-bridge';
 // Fixed hooks. No commands or user-provided JavaScript are accepted.
-let captureDex = false;
-rpc.exports = { configure(flag) { captureDex = flag === true; } };
+let captureDex = false, sessionNonce = "";
+const resolvingThreads = new Set();
+rpc.exports = { configure(flag, nonce) { captureDex = flag === true; if (/^[a-f0-9]{32}$/.test(String(nonce))) sessionNonce = String(nonce); } };
 let eventCount = 0, captureBytes = 0;
 function event(kind, source) { if (eventCount++ < 200) send({kind,source:String(source).slice(0,2048),timestamp:Date.now()}); }
 const attached = new Set();
@@ -13,18 +14,22 @@ Process.attachModuleObserver({onAdded(module) {
   if (!symbol.name.includes('RegisterNatives') || !symbol.name.includes('JNI') || symbol.name.includes('CheckJNI') || attached.has(symbol.address.toString())) continue;
   attached.add(symbol.address.toString());
   Interceptor.attach(symbol.address,{onEnter(args) {
+   if(!sessionNonce)return;
+   const thread=Process.getCurrentThreadId();if(resolvingThreads.has(thread))return;resolvingThreads.add(thread);
    try {
     const count=args[3].toInt32();if(count<0||count>200)return;
     const className=Java.vm.getEnv().getClassName(args[1]).replace(/\./g,'/');
     const classDescriptor=className.startsWith('[')?className:'L'+className+';';
+    let loaderIdentity='unresolved';
+    try{const clazz=Java.cast(args[1],Java.use('java.lang.Class')),loader=clazz.getClassLoader();loaderIdentity=loader===null?'bootstrap':'identity-hash:0x'+(Java.use('java.lang.System').identityHashCode(loader)>>>0).toString(16);}catch(error){}
     for(let i=0;i<count && eventCount++<200;i++){
      const row=args[2].add(i*Process.pointerSize*3),name=row.readPointer().readCString(512),descriptor=row.add(Process.pointerSize).readPointer().readCString(512),address=row.add(Process.pointerSize*2).readPointer(),owner=Process.findModuleByAddress(address);
      if(!name||!descriptor)continue;
-     const record={classDescriptor,name,descriptor,addressHex:address.toString(),processId:Process.id,classHandle:args[1].toString(),classLoaderIdentity:'unresolved',timestamp:Date.now(),kind:'worker-observed-registration'};
+     const record={classDescriptor,name,descriptor,addressHex:address.toString(),processId:Process.id,classHandle:args[1].toString(),classLoaderIdentity:loaderIdentity,classLoaderIdentityBasis:'vm-object-identity-hash-not-global-proof',captureSessionNonce:sessionNonce,timestamp:Date.now(),kind:'worker-observed-registration'};
      if(owner){record.module=owner.path;record.relativeAddress=address.sub(owner.base).toString();}
      send({kind:'registration',record});
     }
-   }catch(error){event('jni-registration-unresolved','Supported JNI hook could not resolve this registration');}
+   }catch(error){event('jni-registration-unresolved','Supported JNI hook could not resolve this registration');}finally{resolvingThreads.delete(thread);}
   }});
  }
 }});

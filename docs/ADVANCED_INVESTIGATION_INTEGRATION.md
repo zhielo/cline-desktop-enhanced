@@ -21,3 +21,7 @@ See `workers/android-capture/README.md`. Capture is opt-in, separately approved,
 ## Required gates and honest release status
 
 Consolidated source validation includes new investigation/capture/UI regressions while preserving every earlier gate. Windows workflow additionally executes owned Python protocol fixtures and builds the pinned instrumentation bundle; then retains process-session, installer and installed-sidecar tests. Exact-head Windows packaging/installed smoke remains necessary, and no auto-merge/release is enabled. Protocol fixtures and compilation do not establish working live Android capture, licensed engines, hardware isolation or general hidden/encrypted-code recovery.
+
+## Physical-device extension
+
+The current runtime adapter targets a dedicated physical Android device through an operator-provisioned isolated Linux controller. It adds separately consented package-scoped native disk capture, nonce/PID/loader-hash correlation, periodic worker retention and authenticated explicit logical removal. See the worker README for exact scope. No physical-device wipe or automatic rooting is performed; existing packages are not replaced. Outer VM provisioning, Frida/Gadget deployment and real hardware validation remain prerequisites, not claimed delivered features.

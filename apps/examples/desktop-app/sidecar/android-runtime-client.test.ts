@@ -22,6 +22,7 @@ function fixture() {
 	vi.stubEnv("CLINE_ANDROID_WORKER_TOKEN", "x".repeat(40));
 	const input = AndroidCaptureInput.parse({
 		operation: "android_capture",
+		capture_dex: true,
 		target: "owned.apk",
 		package_name: "com.example.owned",
 		output_directory: "captures",
@@ -60,6 +61,7 @@ function fixture() {
 		};
 	return {
 		input,
+		privateKey: keys.privateKey,
 		receipt,
 		body: {
 			receipt,
@@ -275,4 +277,90 @@ describe("capture publication and retrieval", () => {
 			await rm(other, { recursive: true, force: true });
 		}
 	});
+});
+
+it("rejects even signed artifact payloads without capture consent", async () => {
+	const f = fixture();
+	await expect(
+		verifyAndroidCapture(
+			f.body,
+			{ ...f.input, capture_dex: false },
+			"b".repeat(64),
+			"c".repeat(64),
+		),
+	).rejects.toThrow("consent");
+});
+it("rejects JNI observations from another capture session", async () => {
+	const f = fixture();
+	const receipt = {
+		...f.receipt,
+		evidence: {
+			...f.receipt.evidence,
+			registrations: [
+				{
+					classDescriptor: "LOwned;",
+					name: "work",
+					descriptor: "()V",
+					addressHex: "0x10",
+					timestamp: 1,
+					kind: "worker-observed-registration",
+					captureSessionNonce: "d".repeat(32),
+					classLoaderIdentity: "identity-hash:0x1234",
+					classLoaderIdentityBasis: "vm-object-identity-hash-not-global-proof",
+				},
+			],
+		},
+	};
+	const body = {
+		...f.body,
+		receipt,
+		signature: sign(
+			null,
+			Buffer.from(JSON.stringify(receipt)),
+			f.privateKey,
+		).toString("base64"),
+	};
+	await expect(
+		verifyAndroidCapture(body, f.input, "b".repeat(64), "c".repeat(64)),
+	).rejects.toThrow("session");
+});
+it("refuses native collection when signed worker capabilities do not advertise it", async () => {
+	const f = fixture(),
+		fetcher = vi.spyOn(globalThis, "fetch");
+	vi.mocked(probeAnalysisSandbox).mockResolvedValue({
+		ready: true,
+		manifest: { workerId: "worker", operations: ["android-runtime-capture"] },
+	} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
+	await expect(
+		runAndroidCapture(
+			{ ...f.input, capture_native: true },
+			Buffer.from("APK"),
+			"b".repeat(64),
+			"/unused",
+		),
+	).rejects.toThrow("native disk capture capability");
+	expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("rejects physical device changes before uploading approved APK", async () => {
+	const f = fixture(),
+		fetcher = vi.spyOn(globalThis, "fetch");
+	vi.mocked(probeAnalysisSandbox).mockResolvedValue({
+		ready: true,
+		manifest: {
+			workerId: "worker",
+			targetKind: "physical",
+			deviceSerialSha256: "e".repeat(64),
+			operations: ["android-runtime-capture"],
+		},
+	} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
+	await expect(
+		runAndroidCapture(
+			{ ...f.input, device_serial_sha256: "f".repeat(64) },
+			Buffer.from("APK"),
+			"b".repeat(64),
+			"/unused",
+		),
+	).rejects.toThrow("device changed");
+	expect(fetcher).not.toHaveBeenCalled();
 });

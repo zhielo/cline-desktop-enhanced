@@ -141,6 +141,7 @@ export function AnalysisWorkbench({
 		"com.example.authorized",
 	);
 	const [captureDex, setCaptureDex] = useState(false);
+	const [captureNative, setCaptureNative] = useState(false);
 	const [recoveryPlanId, setRecoveryPlanId] = useState("");
 	const [runtimeSymbol, setRuntimeSymbol] = useState("main");
 	const [architecture, setArchitecture] = useState("x86_64");
@@ -523,6 +524,15 @@ export function AnalysisWorkbench({
 										Capture sensitive recovered DEX bytes into
 										.cline/android-captures (requires explicit approval)
 									</label>
+									<label>
+										<input
+											type="checkbox"
+											checked={captureNative}
+											onChange={(e) => setCaptureNative(e.target.checked)}
+										/>{" "}
+										Capture authorized app native disk modules (max 4, 2 MiB
+										each; not loaded-memory proof)
+									</label>
 									<p className="text-xs">
 										The isolated worker must enforce reset, denied target egress
 										and cleanup. Supported loader hooks have limited coverage;
@@ -604,6 +614,7 @@ export function AnalysisWorkbench({
 													operation: "android_capture",
 													package_name: androidPackage,
 													capture_dex: captureDex,
+													capture_native: captureNative,
 													output_directory: ".cline/android-captures",
 												}
 											: {

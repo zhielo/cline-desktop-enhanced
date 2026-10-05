@@ -159,6 +159,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Pinned portable engine installation failed" }
           & $python workers/android-capture/server.test.py
           if ($LASTEXITCODE -ne 0) { throw "Owned Android protocol fixtures failed (not live-device validation)" }
+          & $python workers/android-capture/capture_support.test.py
+          if ($LASTEXITCODE -ne 0) { throw "Bounded native module fixtures failed (not live-device validation)" }
+          & $python workers/android-capture/setup-controller.test.py
+          if ($LASTEXITCODE -ne 0) { throw "Controller setup plan fixtures failed (not VM provisioning evidence)" }
           $env:CLINE_RE_PYTHON = $python
           Push-Location sdk
           try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }

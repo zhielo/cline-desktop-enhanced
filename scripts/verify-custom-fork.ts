@@ -4,6 +4,20 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",markers:["tool with spaces.exe", "fs.copyFile(process.execPath", "fixture.args"]},
+ {path:"sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",markers:["sourceRepo: realpathSync.native(repo)"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts"]},
+
+ {path:"workers/android-capture/capture_support.py",markers:["physical_preflight", "Root probe denied", "uid0-reported", "attestation"]},
+ {path:"workers/android-capture/capture.py",markers:["Refusing to replace an existing app", "device.enumerate_processes()", "support.physical_preflight", "'exec-out','su','-c'"]},
+ {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["device_serial_sha256", "Physical device changed", "Physical device observation differs"]},
+
+ {path:"workers/android-capture/capture_support.py",markers:["authorized_module_path", "MAX_MODULE=2*1024*1024", "captured-disk-file-not-loaded-memory-proof", "len(attempted)>=4"]},
+ {path:"workers/android-capture/server.py",markers:["sweep_retention", "PRAGMA secure_delete=ON", "def do_DELETE", "physicalErasure", "confirmPlaintextRemoval"]},
+ {path:"workers/android-capture/setup-controller.py",markers:["ALREADY isolated Linux controller", "--apply", "os.O_EXCL", "No server, VM or target was started"]},
+ {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["capture_native", "without capture consent", "observation session", "android-native-capture"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["capture_support.test.py", "setup-controller.test.py", "not VM provisioning evidence"]},
+
  {path:"workers/android-capture/server.py",markers:["@contextmanager", "with connection:yield connection", "finally:connection.close()"]},
  {path:"workers/android-capture/server.test.py",markers:["test_database_connections_close_after_success", "test_database_connections_close_and_rollback_after_failure"]},
  {path:"sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",markers:["probeBunRuntimeVersion", "daemon.runtimeVersion", "forced exit:", "toBeLessThan(5_000)"]},

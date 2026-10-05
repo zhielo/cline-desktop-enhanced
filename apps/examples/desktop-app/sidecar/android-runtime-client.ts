@@ -14,6 +14,7 @@ export const AndroidCaptureInput = z
 			.regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/)
 			.max(200),
 		capture_dex: z.boolean().default(false),
+		capture_native: z.boolean().default(false),
 		output_directory: z.string().min(1).max(4096),
 		timeout_ms: z.number().int().min(1000).max(120000).default(60000),
 		job_nonce: z
@@ -21,6 +22,7 @@ export const AndroidCaptureInput = z
 			.regex(/^[a-f0-9]{32}$/)
 			.optional(),
 		worker_endpoint: z.string().url().optional(),
+		device_serial_sha256: Hash.optional(),
 		worker_id: z.string().max(128).optional(),
 		worker_key_sha256: Hash.optional(),
 	})
@@ -37,6 +39,16 @@ export const AndroidReceipt = z
 		engine: z.literal("android-frida"),
 		evidence: z
 			.object({
+				device: z
+					.object({
+						kind: z.literal("physical"),
+						deviceSerialSha256: Hash,
+						abi: z.enum(["arm64-v8a", "armeabi-v7a", "x86", "x86_64"]),
+						rootProbe: z.literal("uid0-reported"),
+						attestation: z.literal("not-proven"),
+					})
+					.strict()
+					.optional(),
 				artifacts: z
 					.array(
 						z
@@ -60,7 +72,19 @@ export const AndroidReceipt = z
 									.string()
 									.regex(/^0x[a-f0-9]+$/)
 									.optional(),
-								classLoaderIdentity: z.literal("unresolved").optional(),
+								classLoaderIdentity: z
+									.string()
+									.regex(
+										/^(?:unresolved|bootstrap|identity-hash:0x[a-f0-9]{1,8})$/,
+									)
+									.optional(),
+								classLoaderIdentityBasis: z
+									.literal("vm-object-identity-hash-not-global-proof")
+									.optional(),
+								captureSessionNonce: z
+									.string()
+									.regex(/^[a-f0-9]{32}$/)
+									.optional(),
 								name: z.string().max(512),
 								descriptor: z.string().max(512),
 								addressHex: z.string().regex(/^0x[a-f0-9]+$/),
@@ -123,11 +147,22 @@ export async function bindAndroidCapture(value: unknown) {
 		!health.manifest?.operations?.includes("android-runtime-capture")
 	)
 		throw new Error("No ready signed Android capture worker");
+	if (
+		input.capture_native &&
+		!health.manifest.operations?.includes("android-native-capture")
+	)
+		throw new Error("Worker lacks approved native disk capture capability");
+	if (
+		health.manifest.targetKind === "physical" &&
+		!Hash.safeParse(health.manifest.deviceSerialSha256).success
+	)
+		throw new Error("Physical worker lacks configured device identity");
 	return AndroidCaptureInput.parse({
 		...input,
 		job_nonce: randomBytes(16).toString("hex"),
 		worker_endpoint: c.endpoint,
 		worker_id: health.manifest.workerId,
+		device_serial_sha256: health.manifest.deviceSerialSha256,
 		worker_key_sha256: c.keyHash,
 	});
 }
@@ -186,6 +221,29 @@ export async function verifyAndroidCapture(
 		receipt.artifactSha256 !== artifactSha256
 	)
 		throw new Error("Android receipt does not bind approved request");
+	if (
+		receipt.evidence.registrations.some(
+			(row) =>
+				row.captureSessionNonce && row.captureSessionNonce !== receipt.nonce,
+		)
+	)
+		throw new Error("JNI observation session does not bind signed receipt");
+	if (
+		receipt.evidence.artifacts.some((a) =>
+			a.format === "dex" ? !input.capture_dex : !input.capture_native,
+		)
+	)
+		throw new Error(
+			"Worker returned plaintext artifacts without capture consent",
+		);
+	if (
+		input.device_serial_sha256 &&
+		(receipt.status !== "failed" || receipt.evidence.artifacts.length > 0) &&
+		receipt.evidence.device?.deviceSerialSha256 !== input.device_serial_sha256
+	)
+		throw new Error(
+			"Physical device observation differs from approved identity",
+		);
 	const captures = z
 		.array(
 			z.object({ sha256: Hash, base64: z.string().max(11200000) }).strict(),
@@ -344,6 +402,19 @@ export async function runAndroidCapture(
 	if (!recover && (!artifact?.length || artifact.length > 16777216))
 		throw new Error("APK upload budget exceeded");
 	if (signal?.aborted) throw new Error("Cancelled before Android submission");
+	if (
+		input.capture_native &&
+		!health.manifest.operations?.includes("android-native-capture")
+	)
+		throw new Error("Worker lacks approved native disk capture capability");
+	if (
+		(input.device_serial_sha256 &&
+			health.manifest.deviceSerialSha256 !== input.device_serial_sha256) ||
+		(!recover &&
+			health.manifest.targetKind === "physical" &&
+			!input.device_serial_sha256)
+	)
+		throw new Error("Physical device changed or was not bound before upload");
 	const controller = new AbortController(),
 		abort = () => controller.abort();
 	signal?.addEventListener("abort", abort, { once: true });
@@ -371,6 +442,7 @@ export async function runAndroidCapture(
 								operation: "android_capture",
 								packageName: input.package_name,
 								captureDex: input.capture_dex,
+								captureNative: input.capture_native,
 								timeoutMs: input.timeout_ms,
 								artifactBase64: artifact!.toString("base64"),
 							}),

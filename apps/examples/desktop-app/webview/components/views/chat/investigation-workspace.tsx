@@ -23,6 +23,7 @@ type Case = {
 		metadataCoverage?: unknown;
 		relationships?: Array<Record<string, unknown>>;
 		registrations?: Array<Record<string, unknown>>;
+		device?: unknown;
 		checks?: unknown;
 		engineExecution?: string;
 	}>;
@@ -292,6 +293,11 @@ export function InvestigationWorkspace({
 									{JSON.stringify(e.metadataCoverage, null, 2)}
 								</pre>
 							)}
+							{e.device !== undefined && (
+								<pre className="overflow-auto">
+									{JSON.stringify(e.device, null, 2)}
+								</pre>
+							)}
 							{e.checks !== undefined && (
 								<pre className="overflow-auto">
 									{JSON.stringify(e.checks, null, 2)}
@@ -359,6 +365,18 @@ export function correlateEvidence(evidence: Case["evidence"]) {
 			);
 			return {
 				registration,
+				runtimeCorrelationScope:
+					registration.captureSessionNonce &&
+					registration.processId &&
+					registration.classLoaderIdentity
+						? {
+								session: registration.captureSessionNonce,
+								processId: registration.processId,
+								loader: registration.classLoaderIdentity,
+								basis:
+									registration.classLoaderIdentityBasis ?? "not-established",
+							}
+						: "unresolved-runtime-loader-scope",
 				observation: e.provenance,
 				staticMatches: matches,
 				correlation:

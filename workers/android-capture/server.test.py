@@ -56,4 +56,24 @@ class WorkerTest(unittest.TestCase):
     connection.execute('INSERT INTO jobs VALUES(?,?,?,?,?)',('d'*32,'fixture','running',None,0));raise RuntimeError('Owned rollback fixture')
   with self.assertRaises(sqlite3.ProgrammingError):connection.execute('SELECT 1')
   with self.worker.db() as check:self.assertEqual(check.execute('SELECT COUNT(*) FROM jobs WHERE nonce=?',('d'*32,)).fetchone()[0],0)
+ def test_opt_in_native_capture_validation(self):
+  self.assertEqual(self.worker.job(dict(self.job,captureNative=True))[0],200)
+  with self.assertRaises(ValueError):w.validate_job(dict(self.job,captureNative=1))
+ def test_explicit_purge_is_signed_blocks_replay_and_does_not_claim_disk_erasure(self):
+  self.worker.job(self.job);status,result=self.worker.purge(self.job['nonce']);self.assertEqual(status,200);self.key.public_key().verify(base64.b64decode(result['signature']),w.encoded(result['receipt']));self.assertEqual(result['receipt']['physicalErasure'],'not-proven');self.assertEqual(self.worker.job(self.job)[0],409);self.assertEqual(self.calls,1)
+  with self.worker.db() as db:self.assertIsNone(db.execute('SELECT result FROM jobs WHERE nonce=?',(self.job['nonce'],)).fetchone()[0]);self.assertEqual(db.execute('PRAGMA secure_delete').fetchone()[0],1)
+ def test_retention_sweep_preserves_nonce_tombstones_and_never_executes(self):
+  self.worker.job(self.job)
+  with self.worker.db() as db:db.execute('UPDATE jobs SET created=0 WHERE nonce=?',(self.job['nonce'],))
+  self.assertEqual(self.worker.sweep_retention(),1);self.assertEqual(self.worker.job(self.job)[0],409);self.assertEqual(self.calls,1)
+ def test_running_capture_is_not_purged(self):
+  self.worker.job(self.job)
+  with self.worker.db() as db:db.execute("UPDATE jobs SET status='running' WHERE nonce=?",(self.job['nonce'],))
+  self.assertEqual(self.worker.purge(self.job['nonce'])[0],409)
+ def test_delete_endpoint_requires_auth_and_boolean_confirmation(self):
+  self.worker.job(self.job);server=w.ThreadingHTTPServer(('127.0.0.1',0),w.handler(self.worker));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+  try:
+   for token,body,expected in [('',{'confirmPlaintextRemoval':True},401),('Bearer '+'t'*40,{'confirmPlaintextRemoval':1},400),('Bearer '+'t'*40,{'confirmPlaintextRemoval':True},200)]:
+    conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=5);conn.request('DELETE','/v1/jobs/'+self.job['nonce'],w.encoded(body),{'Authorization':token});response=conn.getresponse();self.assertEqual(response.status,expected);response.read();conn.close()
+  finally:server.shutdown();server.server_close();thread.join(timeout=5)
 if __name__=='__main__':unittest.main()
