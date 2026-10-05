@@ -18,6 +18,7 @@ import {
   resolve,
   sep,
 } from "node:path";
+import { NOTION_AGENT_DEPTH_LIMITS } from "../shared/notion-agent-depth";
 
 const DEFAULT_MAX_FILES = 50;
 const DEFAULT_MAX_BYTES = 500_000;
@@ -252,6 +253,16 @@ function listGitAwareFiles(root: string): string[] {
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
   } catch {
+    for (let directory = root; ; directory = resolve(directory, "..")) {
+      if (
+        existsSync(join(directory, ".git")) ||
+        existsSync(join(directory, ".gitignore"))
+      )
+        throw new Error(
+          "Git-aware bridge inventory is unavailable; refusing an ignore-unsafe filesystem fallback",
+        );
+      if (directory === resolve(directory, "..")) break;
+    }
     return fallbackWorkspaceFiles(root).sort((a, b) => a.localeCompare(b));
   }
 }
@@ -345,7 +356,9 @@ function evidenceKind(path: string): NotionAgentEvidenceKind {
       ".conf",
       ".properties",
     ].includes(extension) ||
-    /(?:^|\/)(?:dockerfile|makefile|package\.json|cargo\.toml)$/.test(normalized)
+    /(?:^|\/)(?:dockerfile|makefile|package\.json|cargo\.toml)$/.test(
+      normalized,
+    )
   )
     return "configuration";
   if (
@@ -409,7 +422,7 @@ function evidencePriority(
   return "low";
 }
 
-function evidenceId(index: number, kind: NotionAgentEvidenceKind): string {
+function evidenceId(path: string, kind: NotionAgentEvidenceKind): string {
   const prefix: Record<NotionAgentEvidenceKind, string> = {
     documentation: "DOC",
     source: "SRC",
@@ -419,7 +432,8 @@ function evidenceId(index: number, kind: NotionAgentEvidenceKind): string {
     binary: "BIN",
     other: "EVD",
   };
-  return `${prefix[kind]}-${String(index + 1).padStart(4, "0")}`;
+  // Identity belongs to the path, not its question-dependent ranking.
+  return `${prefix[kind]}-${createHash("sha256").update(path).digest("hex")}`;
 }
 
 function fileEligibility(path: string): string | null {
@@ -484,42 +498,100 @@ function markdownPackage(
   return `# Cline Project Bridge Package\n\nCreated: ${result.createdAt}\nProject root label: ${basename(result.root)}\nAnalysis depth: ${result.depth}\nQuestion: ${question || "Not supplied yet"}\nInventory entries: ${result.manifest.length}\nShared files: ${result.files.length}\nEvidence batches: ${result.batches.length}\nShared bytes: ${result.totalSharedBytes}\nRedactions: ${result.totalRedactions}\n\n## Evidence manifest\n\n${manifest || "No project files were discovered."}\n\n## Batch index\n\n${batchIndex || "No content batches were produced."}\n\n## Transfer protocol\n\nSend the manifest first, then send each evidence batch to the same Notion Agent session in index order. The Agent may request additional evidence by evidence ID and exact path or line range. Treat every request as read-only, sanitize the response, and record whether it was fulfilled, denied, or unavailable. Require evidence-ID citations for substantive conclusions.\n\n${result.batches.map((batch) => batch.markdown).join("\n\n")}`;
 }
 
+function utf8Prefix(value: string, maxBytes: number): string {
+  const bytes = Buffer.from(value);
+  if (bytes.length <= maxBytes) return value;
+  let end = Math.max(0, maxBytes);
+  // Never decode the leading bytes of an incomplete UTF-8 code point.
+  while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1;
+  return bytes.subarray(0, end).toString("utf8");
+}
+
+function evidenceFence(value: string): string {
+  const runs = value.match(/`+/g) ?? [];
+  return "`".repeat(Math.max(4, ...runs.map((run) => run.length + 1)));
+}
+
 function buildEvidenceBatches(
   files: NotionAgentBridgeFile[],
   batchBytes: number,
 ): NotionAgentEvidenceBatch[] {
-  const groups: NotionAgentBridgeFile[][] = [];
-  let current: NotionAgentBridgeFile[] = [];
-  let currentBytes = 0;
+  type Part = {
+    file: NotionAgentBridgeFile;
+    content: string;
+    startLine: number;
+    offset: number;
+  };
+  const groups: Part[][] = [];
+  let current: Part[] = [];
+  const renderPart = (part: Part): string => {
+    const { file, content, startLine, offset } = part;
+    const endLine = startLine + (content.match(/\n/g)?.length ?? 0);
+    const fence = evidenceFence(content);
+    return `### ${file.evidenceId}: ${JSON.stringify(file.path)}\n\nKind: ${file.kind}\nPriority: ${file.priority}\nCitation format: ${JSON.stringify(`${file.evidenceId}:${file.path}:${startLine}-${endLine}@sha256:${file.hash}`)}\nUTF-8 byte offset in sanitized excerpt: ${offset}\nSelection: ${file.selectionReason}\n\n${fence}text\n${content}\n${fence}`;
+  };
+  const render = (parts: Part[], index: number, total: number): string =>
+    `## BATCH-${String(index).padStart(3, "0")} (${index}/${total})\n\n${parts.map(renderPart).join("\n\n")}`;
+  // There cannot be more content parts than UTF-8 content bytes. Reserve
+  // worst-case header digits up front so final total/index values fit too.
+  const size = (parts: Part[]) =>
+    Buffer.byteLength(render(parts, HARD_MAX_BYTES, HARD_MAX_BYTES));
   for (const file of files) {
-    if (current.length > 0 && currentBytes + file.sharedBytes > batchBytes) {
+    let rest = file.content;
+    let startLine = 1;
+    let offset = 0;
+    do {
+      const part = { file, content: rest, startLine, offset };
+      if (size([...current, part]) <= batchBytes) {
+        current.push(part);
+        break;
+      }
+      if (current.length > 0) {
       groups.push(current);
       current = [];
-      currentBytes = 0;
+        continue;
     }
-    current.push(file);
-    currentBytes += file.sharedBytes;
+      // Split oversized evidence without dropping content. Binary search is
+      // in UTF-8 bytes; the renderer accounts for fences and metadata too.
+      let low = 0;
+      let high = Buffer.byteLength(rest);
+      let accepted = "";
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const content = utf8Prefix(rest, middle);
+        if (size([{ ...part, content }]) <= batchBytes) {
+          accepted = content;
+          low = middle + 1;
+        } else high = middle - 1;
+      }
+      if (!accepted)
+        throw new Error(
+          "Bridge batch byte limit is too small for evidence metadata and a UTF-8 character",
+        );
+      // Prefer a complete line when that still makes progress.
+      const newline = accepted.lastIndexOf("\n");
+      if (newline >= 0) accepted = accepted.slice(0, newline + 1);
+      groups.push([{ ...part, content: accepted }]);
+      offset += Buffer.byteLength(accepted);
+      startLine += accepted.match(/\n/g)?.length ?? 0;
+      rest = rest.slice(accepted.length);
+    } while (rest.length > 0);
   }
   if (current.length > 0) groups.push(current);
   const total = groups.length;
-  const fence = "````";
-  return groups.map((group, index) => {
-    const id = `BATCH-${String(index + 1).padStart(3, "0")}`;
-    const bytes = group.reduce((sum, file) => sum + file.sharedBytes, 0);
-    const body = group
-      .map(
-        (file) =>
-          `### ${file.evidenceId}: ${file.path}\n\nKind: ${file.kind}\nPriority: ${file.priority}\nCitation format: \`${file.evidenceId}:${file.path}:<start>-<end>@sha256:${file.hash}\`\nSelection: ${file.selectionReason}\n\n${fence}text\n${file.content}\n${fence}`,
-      )
-      .join("\n\n");
+  return groups.map((parts, index) => {
+    const markdown = render(parts, index + 1, total);
+    const bytes = Buffer.byteLength(markdown);
+    if (bytes > batchBytes)
+      throw new Error("Bridge serialized batch exceeded its byte limit");
     return {
-      id,
+      id: `BATCH-${String(index + 1).padStart(3, "0")}`,
       index: index + 1,
       total,
       bytes,
-      evidenceIds: group.map((file) => file.evidenceId),
-      paths: group.map((file) => file.path),
-      markdown: `## ${id} (${index + 1}/${total})\n\nShared bytes: ${bytes}\n\n${body}`,
+      evidenceIds: [...new Set(parts.map((part) => part.file.evidenceId))],
+      paths: [...new Set(parts.map((part) => part.file.path))],
+      markdown,
     };
   });
 }
@@ -527,19 +599,14 @@ function buildEvidenceBatches(
 export function prepareNotionAgentBridgePackage(
   options: PrepareNotionAgentBridgeOptions,
 ): NotionAgentBridgePackage {
+  if (options.redactSensitive === false)
+    throw new Error("External bridge evidence requires secret redaction");
   const root = resolve(options.root);
   if (!existsSync(root) || !statSync(root).isDirectory())
     throw new Error(`Workspace directory not found: ${root}`);
   const realRoot = realpathSync(root);
   const depth = options.depth ?? "deep";
-  const depthDefaults: Record<
-    NotionAgentAnalysisDepth,
-    { files: number; bytes: number; batchBytes: number }
-  > = {
-    quick: { files: 25, bytes: 250_000, batchBytes: 80_000 },
-    deep: { files: 100, bytes: 1_000_000, batchBytes: 100_000 },
-    forensic: { files: 200, bytes: 2_000_000, batchBytes: 125_000 },
-  };
+  const depthDefaults = NOTION_AGENT_DEPTH_LIMITS;
   const maxFiles = clampInteger(
     options.maxFiles,
     depthDefaults[depth].files ?? DEFAULT_MAX_FILES,
@@ -572,9 +639,9 @@ export function prepareNotionAgentBridgePackage(
   let totalRedactions = 0;
   let truncated = false;
 
-  for (const [candidateIndex, path] of candidates.entries()) {
+  for (const path of candidates) {
     const kind = evidenceKind(path);
-    const id = evidenceId(candidateIndex, kind);
+    const id = evidenceId(path, kind);
     const priority = evidencePriority(path, kind, changedPaths);
     const absolute = resolve(root, path);
     if (!isWithinRoot(root, absolute) || !existsSync(absolute)) continue;
@@ -670,13 +737,10 @@ export function prepareNotionAgentBridgePackage(
       });
       continue;
     }
-    const sliced = original.subarray(0, remaining);
-    let content = sliced.toString("utf8");
-    const redacted =
-      options.redactSensitive === false
-        ? { content, redactions: 0 }
-        : redactContent(content);
-    content = redacted.content;
+    const originalText = original.toString("utf8");
+    const redacted = redactContent(originalText);
+    const content = utf8Prefix(redacted.content, remaining);
+    const contentTruncated = content.length < redacted.content.length;
     const sharedBytes = Buffer.byteLength(content);
     const hash = createHash("sha256").update(original).digest("hex");
     const file: NotionAgentBridgeFile = {
@@ -694,7 +758,7 @@ export function prepareNotionAgentBridgePackage(
       originalBytes,
       sharedBytes,
       redactions: redacted.redactions,
-      truncated: sliced.byteLength < originalBytes,
+      truncated: contentTruncated,
       content,
     };
     files.push(file);
@@ -711,7 +775,7 @@ export function prepareNotionAgentBridgePackage(
     totalOriginalBytes += originalBytes;
     totalSharedBytes += sharedBytes;
     totalRedactions += redacted.redactions;
-    if (sliced.byteLength < originalBytes) truncated = true;
+    if (contentTruncated) truncated = true;
   }
   if (selected) {
     for (const path of selected) {

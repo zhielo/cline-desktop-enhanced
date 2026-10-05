@@ -1,3 +1,4 @@
+import {programEvidenceResult} from "./analysis-program-evidence";
 import { runAdvancedAnalysis, advancedEvidenceBundle } from "./advanced-analysis";
 import { graphResult } from "./analysis-evidence-graph";
 import { readAnalysisJson, prepareNotebook, runAnalysisNotebook } from "./analysis-notebook";
@@ -2433,9 +2434,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
       const action = input.advanced_action;
       if(action === "decrypt_blob" && input.output_file)throw new Error("Plaintext export is not enabled; decryption returns receipts and structural evidence only");
       let result;
-      if (["graph_build","graph_query","notebook_validate","notebook_run"].includes(action)) {
+      if (["graph_build","graph_query","notebook_validate","notebook_run","cfg_analyze","trace_slice","trace_taint"].includes(action)) {
         if(!input.target || !path.isAbsolute(input.target))throw new Error("Absolute analysis document required");
         if(context.signal?.aborted)result={protocol:"cline-advanced-analysis/v1" as const,status:"cancelled" as const,engine:"host",engineVersion:"1",evidence:{reason:"Cancelled before execution"},limitations:[]};
+        else if(action === "cfg_analyze" || action === "trace_slice" || action === "trace_taint")result=programEvidenceResult(action,await readAnalysisJson(input.target,8*1024*1024));
         else if(action === "graph_build" || action === "graph_query")result=graphResult(action,await readAnalysisJson(input.target,8*1024*1024),input.advanced_options?.graph_query);
         else if(action === "notebook_run")result=await runAnalysisNotebook(input.target,path.join(analysisCacheRoot(),"notebooks"),runAdvancedAnalysis,context.signal,Math.min(input.timeout_ms??300000,300000));
         else {const prepared=await prepareNotebook(input.target);result={protocol:"cline-advanced-analysis/v1" as const,status:"completed" as const,engine:"static-notebook",engineVersion:"static-notebook/v1",evidence:{notebookHash:prepared.notebookHash,totalBytes:prepared.totalBytes,cells:prepared.notebook.cells.map(cell=>({id:cell.id,action:cell.action,dependsOn:cell.dependsOn,...prepared.paths.get(cell.id)}))},limitations:["Validation checks configuration and confined input paths; it does not execute engines or targets."]};}

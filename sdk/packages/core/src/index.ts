@@ -1168,3 +1168,6 @@ export type {
 	SessionRef,
 } from "./types/sessions";
 export type { ArtifactStore, SessionStore, TeamStore } from "./types/storage";
+
+export {validateNotebook} from "./extensions/tools/executors/analysis-notebook";
+export {buildEvidenceGraph,EvidenceGraphSchema} from "./extensions/tools/executors/analysis-evidence-graph";

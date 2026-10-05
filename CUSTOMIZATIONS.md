@@ -456,3 +456,11 @@ Do not hide a new regression by weakening assertions or making a required custom
 - Validation evidence upload explicitly includes the scoped hidden .cline-validation folder and fails if no report is present; it never uploads other hidden repository files.
 
 - Installed-sidecar smoke uses a bounded 45-second Hub bootstrap deadline, covering the SDK's existing 30-second startup contract plus cold-launch overhead. A regression guard prevents reverting to a premature deadline. Readiness, health, restart and database uniqueness assertions remain blocking; no failed startup is accepted or automatically retried.
+
+## V4 program evidence, authoring and worker transport
+
+- cfg_analyze computes bounded imported CFG reachability, dominators/postdominators, natural loops, SCCs and irreducible regions. trace_slice and trace_taint compute explicit-location dependencies and overwrite-aware input influence from imported traces. These are not runtime tracing, semantic proofs, full unflattening or devirtualization.
+- Static notebook and evidence graph document authoring validates strict data-only schemas, DAGs and confined names. Saving requires an explicit write acknowledgment and never silently overwrites a file; hash-guarded updates use cooperative locks. Saving never executes analysis.
+- Isolated-runtime submission is bound to an exact approved worker endpoint, Ed25519 key fingerprint, request and artifact hash. Receipts bind a fresh nonce and matching identity; HTTPS redirects, oversized bodies and undeclared QBDI capability fail closed. Worker egress is disabled. This is a client protocol, not a provisioned QBDI worker or hardware isolation proof.
+- Bridge hardening is reconciled from its durable patch: stable path-bound evidence IDs, serialized UTF-8 budgets, redaction-before-budgeting, collision-safe Markdown fences, fail-closed Git inventory, shared depth presets and a read-only structured Git allowlist.
+- Remaining Remill/JEB/D810, automatic VM provisioning, full native recovery and key recovery are not implemented. No merge or release is authorized by this source update.

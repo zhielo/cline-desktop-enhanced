@@ -890,6 +890,12 @@ const requiredMarkers: Array<{
 	},
 ];
 
+requiredMarkers.push(
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.ts",markers:["analyzeProgramCfg","analyzeProgramTrace","not-proven","output budget"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-document-store.ts",markers:["confirmWrite","validateNotebook","expectedSha256","Document changed since review"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",markers:["bindRuntimeAnalysisRequest","submitAnalysisSandbox","worker_key_sha256","redirect:\"error\"","Receipt does not bind approved job"]},
+ {path:"apps/examples/desktop-app/sidecar/notion-agent-bridge.ts",markers:["evidenceId","serialized","split"]},
+);
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

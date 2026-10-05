@@ -98,7 +98,7 @@ export function createRepositoryExecutor(
 			case "status":
 				return output(await repositorySummary(cwd, context));
 			case "diff": {
-				const args = ["diff", "--no-ext-diff", "--no-color"];
+				const args = ["diff", "--no-ext-diff", "--no-textconv", "--no-color"];
 				if (input.staged) args.push("--cached");
 				if (input.path) args.push("--", cleanPath(input.path));
 				return await run("git", args, cwd, context);

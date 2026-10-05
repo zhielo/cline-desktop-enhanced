@@ -32,7 +32,7 @@ export const ADVANCED_ACTIONS = [
 	"graph_build",
 	"graph_query",
 	"notebook_validate",
-	"notebook_run",
+	"notebook_run", "cfg_analyze", "trace_slice", "trace_taint",
 	"decrypt_blob",
 ] as const;
 export type AdvancedAction = (typeof ADVANCED_ACTIONS)[number];

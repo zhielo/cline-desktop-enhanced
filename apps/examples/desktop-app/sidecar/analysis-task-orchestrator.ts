@@ -184,7 +184,7 @@ function requirementsFor(
 	) {
 		requirements.add("execution-control");
 	}
-	if (kind === "dynamic") requirements.add("isolated-sandbox");
+	if (kind === "dynamic") {requirements.add("isolated-sandbox");requirements.add("artifact-upload");requirements.add("authorized-target-execution");}
 	return [...requirements];
 }
 
@@ -321,7 +321,7 @@ export class AnalysisTaskOrchestrator {
 					Math.max(input.maxOutputBytes ?? 1024 * 1024, 64 * 1024),
 					16 * 1024 * 1024,
 				),
-				network: input.kind === "dynamic" ? "recorded" : "disabled",
+				network: "disabled",
 			},
 			createdAt: new Date(this.now()).toISOString(),
 			expiresAt: new Date(this.now() + this.approvalTtlMs).toISOString(),

@@ -456,3 +456,65 @@ describe("FunctionsView project intelligence", () => {
     );
   });
 });
+
+describe("FunctionsView bridge depth presets", () => {
+  it.each([
+    ["quick", 25, 250_000, 80_000],
+    ["deep", 100, 1_000_000, 100_000],
+    ["forensic", 200, 2_000_000, 125_000],
+  ] as const)("applies %s preset limits to the next preview", async (depth, maxFiles, maxBytes, batchBytes) => {
+    await renderFunctions();
+    const question =
+      container.querySelector<HTMLTextAreaElement>(
+        'textarea[placeholder*="review"]',
+      ) ??
+      [...container.querySelectorAll<HTMLTextAreaElement>("textarea")].find(
+        (element) =>
+          element
+            .closest("label")
+            ?.textContent?.includes("Question for Notion AI"),
+      );
+    expect(question).toBeDefined();
+    if (!question) throw new Error("Question control missing");
+    await changeTextarea(question, "Review this project");
+    const select = [...container.querySelectorAll("select")].find((element) =>
+      [...element.options].some((option) => option.value === "forensic"),
+    );
+    if (!select) throw new Error("Review depth control missing");
+    await act(async () => {
+      select.value = depth;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const prepare = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Prepare secure preview"),
+    );
+    expect(prepare).toBeDefined();
+    if (!prepare) throw new Error("Prepare control missing");
+    invoke.mockResolvedValueOnce({
+      root: "fixture",
+      createdAt: "2026-10-05T00:00:00Z",
+      depth,
+      files: [],
+      manifest: [],
+      batches: [],
+      excluded: [],
+      totalOriginalBytes: 0,
+      totalSharedBytes: 0,
+      totalRedactions: 0,
+      truncated: false,
+      packageMarkdown: "# Empty fixture",
+    });
+    await click(prepare);
+    expect(invoke).toHaveBeenCalledWith(
+      "prepare_notion_agent_bridge",
+      expect.objectContaining({
+        depth,
+        maxFiles,
+        maxBytes,
+        batchBytes,
+        redactSensitive: true,
+      }),
+      { timeoutMs: 120_000 },
+    );
+  });
+});

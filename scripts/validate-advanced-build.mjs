@@ -81,6 +81,7 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.test.ts",
+ "sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.test.ts",
       "sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts",
       "sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts",
       "--config", "vitest.config.mts", "--testTimeout=60000"]),

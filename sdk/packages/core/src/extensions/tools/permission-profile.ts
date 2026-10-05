@@ -94,7 +94,7 @@ function builtInProfile(
 			return {
 				name: profile,
 				allowFileWrites: false,
-				allowCommands: true,
+				allowCommands: false,
 				allowProcessSessions: false,
 				allowComputerUse: false,
 				allowNetwork: false,
@@ -145,10 +145,10 @@ function builtInProfile(
 		case "project-notion-bridge":
 			return {
 				name: profile,
-				// The bridge may inspect the workspace and run bounded read-only
-				// discovery commands, but it may not edit local files.
+				// Arbitrary commands cannot be made read-only by a blacklist.
+				// Use structured repository/file inspection instead.
 				allowFileWrites: false,
-				allowCommands: true,
+				allowCommands: false,
 				allowProcessSessions: false,
 				allowComputerUse: false,
 				allowNetwork: false,
@@ -255,11 +255,11 @@ function evaluateTool(
 			toolName === "search_codebase" ||
 			toolName === "skills" ||
 			toolName === "run_commands" ||
+			toolName === "repository" ||
 			toolName === "reverse_engineer"
 		) {
-			// Continue through the common guards. In particular, run_commands
-			// is checked below for file-editing syntax because this profile has
-			// allowFileWrites=false.
+			// Continue through common guards: all shell execution is denied;
+			// repository actions are constrained to an exhaustive read allowlist.
 		} else {
 			return blockedReason(
 				profile.name,
@@ -317,6 +317,16 @@ function evaluateTool(
 			typeof context.input === "object" && context.input !== null
 				? (context.input as { action?: unknown }).action
 				: undefined;
+		if (
+			(profile.name === "read-only" ||
+				profile.name === "project-notion-bridge") &&
+			(typeof action !== "string" ||
+				!["status", "diff", "log", "branches"].includes(action))
+		)
+			return blockedReason(
+				profile.name,
+				"repository writes are disabled; only status, diff, log, and branches are allowed.",
+			);
 		const writeActions = new Set(["create_branch", "switch_branch", "commit"]);
 		const networkActions = new Set(["fetch", "pull", "push", "github_status"]);
 		if (

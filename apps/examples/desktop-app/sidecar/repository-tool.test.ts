@@ -106,3 +106,16 @@ describe("createRepositoryExecutor", () => {
 		).rejects.toThrow("confirm_remote=true");
 	});
 });
+
+it("disables configured textconv while inspecting diffs", async () => {
+	await writeFile(join(root, ".gitattributes"), "README.md diff=untrusted\n");
+	await git(
+		"config",
+		"diff.untrusted.textconv",
+		"nonexistent-textconv-fixture",
+	);
+	await writeFile(join(root, "README.md"), "changed without textconv\n");
+	const execute = createRepositoryExecutor(() => root);
+	const diff = await execute({ action: "diff", staged: false }, context);
+	expect(diff).toContain("changed without textconv");
+});
