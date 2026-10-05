@@ -1,6 +1,5 @@
 "use client";
 
-import { HUB_SESSION_LIFECYCLE_TIMEOUT_MS } from "@cline/shared/browser";
 import type {
 	AgendaAutomationPolicy,
 	AgendaTaskListInput,
@@ -10,6 +9,7 @@ import type {
 	HubTaskCreateInput,
 	HubTaskUpdateInput,
 } from "@cline/shared";
+import { HUB_SESSION_LIFECYCLE_TIMEOUT_MS } from "@cline/shared/browser";
 import type {
 	DesktopTransportEvent,
 	DesktopTransportMessage,
@@ -17,6 +17,7 @@ import type {
 	DesktopTransportResponse,
 	DesktopTransportState,
 } from "@/lib/desktop-transport";
+import { redactDesktopTransportSecrets } from "./desktop-transport-security";
 
 // Lazily import the Tauri invoke API only when available. When running in
 // sidecar/web mode (without Tauri), this module may not exist or the bridge
@@ -94,6 +95,15 @@ export async function resolveDesktopBackendHttpEndpoint(): Promise<string> {
 	return endpoint.toString().replace(/\/$/, "");
 }
 
+async function desktopHttpAuthorization(): Promise<string> {
+	const values = new URL(
+		await resolveDesktopBackendWsEndpoint(),
+	).searchParams.getAll("approval_token");
+	if (values.length !== 1 || !values[0])
+		throw new Error("Authenticated desktop endpoint unavailable");
+	return `Bearer ${values[0]}`;
+}
+
 type PendingRequest = {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
@@ -153,7 +163,7 @@ const ERROR_REPORT_FIELD_LIMIT = 500;
 
 function boundedReportString(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim()
-		? value.slice(0, ERROR_REPORT_FIELD_LIMIT)
+		? redactDesktopTransportSecrets(value).slice(0, ERROR_REPORT_FIELD_LIMIT)
 		: undefined;
 }
 
@@ -369,10 +379,16 @@ class DesktopClient {
 			const endpoint = await resolveDesktopBackendHttpEndpoint();
 			const response = await fetch(`${endpoint}/telemetry/error`, {
 				method: "POST",
-				headers: { "content-type": "application/json" },
+				headers: {
+					"content-type": "application/json",
+					authorization: await desktopHttpAuthorization(),
+				},
 				body: JSON.stringify({
 					operation: report.operation,
-					errorMessage,
+					errorMessage: redactDesktopTransportSecrets(errorMessage).slice(
+						0,
+						4000,
+					),
 					errorType,
 					handled: report.handled ?? true,
 					command: report.command,
@@ -548,7 +564,9 @@ class DesktopClient {
 					}
 					if (this.transportState !== "connected") {
 						reject(
-							new Error(`Desktop backend transport unavailable at ${endpoint}`),
+							new Error(
+								`Desktop backend transport unavailable at ${redactDesktopTransportSecrets(endpoint)}`,
+							),
 						);
 						return;
 					}

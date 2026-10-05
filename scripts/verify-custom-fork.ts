@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/transport-auth.ts",markers:["timingSafeEqual", "MAX_TOKEN_BYTES", "values.length > 1", "hasSidecarAuthentication"]},
+ {path:"apps/examples/desktop-app/sidecar/server.ts",markers:["hasSidecarAuthentication(req, approvalToken, true)", "authenticated: true", "ws.data?.authenticated !== true", "MAX_ERROR_REPORT_BYTES"]},
+ {path:"apps/examples/desktop-app/webview/lib/desktop-transport-security.ts",markers:["redactDesktopTransportSecrets", "knownToken", "[redacted]"]},
+ {path:"apps/examples/desktop-app/scripts/desktop-startup.test.ts",markers:["Authenticated transport smoke timed out", "shutdownDenied.status", "stale.status"]},
+ {path:"docs/DESKTOP_TRANSPORT_AUTH.md",markers:["all WebSocket commands", "Originless integrations", "No TLS"]},
  {path:"sdk/packages/core/scripts/android-investigation-worker.py",markers:["MAX_WORK", "DEX Adler32 mismatch", "verifiedBinding", "methodsTruncated", "unsafe/duplicate/encrypted ZIP member", "Not evidence of encryption"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.ts",markers:["cline-android-investigation/v1", "content hash mismatch", "await link(stagedFile, file)", "Queries only cover indexed evidence"]},
  {path:"sdk/packages/core/src/extensions/tools/schemas.ts",markers:["artifact_discovery", "android_relationships", "android_method", "investigation_query"]},

@@ -88,12 +88,16 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			stderr,
 		});
 		let endpoint: string | undefined;
+		let wsEndpoint: string | undefined;
 		const deadline = Date.now() + SIDECAR_READY_TIMEOUT_MS;
 		while (Date.now() < deadline) {
 			for (const line of readFileSync(stdoutPath, "utf8").split("\n")) {
 				try {
 					const message = JSON.parse(line);
-					if (message.type === "ready") endpoint = message.endpoint;
+					if (message.type === "ready") {
+						endpoint = message.endpoint;
+						wsEndpoint = message.wsEndpoint;
+					}
 				} catch {
 					/* Ignore other output and incomplete lines. */
 				}
@@ -110,6 +114,53 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 		});
 		expect(health.ok).toBe(true);
 		expect(await health.json()).toMatchObject({ ok: true, pid: child.pid });
+
+		// Installed binaries must deny tokenless commands, not just prompt approvals.
+		expect(typeof wsEndpoint).toBe("string");
+		const privateEndpoint = new URL(wsEndpoint!);
+		const capability = privateEndpoint.searchParams.get("approval_token");
+		expect(Boolean(capability && capability.length >= 16)).toBe(true);
+		const unauthenticated = new URL(privateEndpoint);
+		unauthenticated.protocol = "http:";
+		unauthenticated.search = "";
+		const denied = await fetch(unauthenticated, {
+			signal: AbortSignal.timeout(5000),
+		});
+		expect(denied.status).toBe(401);
+		const shutdownDenied = await fetch(`${endpoint}/shutdown`, {
+			method: "POST",
+			signal: AbortSignal.timeout(5000),
+		});
+		expect(shutdownDenied.status).toBe(401);
+		await new Promise<void>((resolve, reject) => {
+			const socket = new WebSocket(privateEndpoint.toString());
+			const timer = setTimeout(() => {
+				socket.close();
+				reject(new Error("Authenticated transport smoke timed out"));
+			}, 10000);
+			socket.onopen = () =>
+				socket.send(
+					JSON.stringify({
+						type: "command",
+						id: "auth-smoke",
+						command: "get_process_context",
+						args: {},
+					}),
+				);
+			socket.onmessage = (event) => {
+				const message = JSON.parse(String(event.data));
+				if (message.type !== "response" || message.id !== "auth-smoke") return;
+				clearTimeout(timer);
+				socket.close();
+				if (message.ok === true) resolve();
+				else reject(new Error("Authenticated transport command failed"));
+			};
+			socket.onerror = () => {
+				clearTimeout(timer);
+				socket.close();
+				reject(new Error("Authenticated transport handshake failed"));
+			};
+		});
 
 		// The installed backend must initialize the same atomic edit-recovery
 		// constraint used by source builds. This catches packaging drift where an
@@ -195,6 +246,13 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			ok: true,
 			pid: child.pid,
 		});
+		// A restarted process must not accept the old process's capability.
+		const stale = await fetch(
+			`${restartedEndpoint}/transport?approval_token=${encodeURIComponent(capability!)}`,
+			{ signal: AbortSignal.timeout(5000) },
+		);
+		expect(stale.status).toBe(401);
+
 		const restartedDb = new Database(sessionsDbPath, { readonly: true });
 		try {
 			expect(
@@ -257,6 +315,6 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			/* The runner discards its temp directory anyway. */
 		}
 	}
-// Covers bounded source compilation, bootstrap, both ready/health checks,
-// and cleanup. Passing runs still exit as soon as all assertions complete.
+	// Covers bounded source compilation, bootstrap, both ready/health checks,
+	// and cleanup. Passing runs still exit as soon as all assertions complete.
 }, 225_000);

@@ -1,18 +1,20 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { captureSdkError } from "@cline/shared";
 import type { DesktopTransportRequest } from "../webview/lib/desktop-transport";
+import { redactDesktopTransportSecrets } from "../webview/lib/desktop-transport-security";
 import { MAX_DESKTOP_TRANSPORT_PAYLOAD_BYTES } from "../webview/lib/voice-input-limits";
 import { handleCommand } from "./commands";
+import { abandonComposioConnectsForOwner } from "./composio";
 import {
 	cancelSidecarToolApprovalsForOwner,
 	encodeSidecarEvent,
 	sendEvent,
 	syncSidecarApprovalReadiness,
 } from "./context";
-import { abandonComposioConnectsForOwner } from "./composio";
 import { fetchMarketplaceCatalog } from "./marketplace";
 import { cancelMcpOAuthAuthorizationsForOwner } from "./mcp-oauth";
 import { cancelProviderOAuthLoginsForOwner } from "./oauth-login";
+import { hasSidecarAuthentication } from "./transport-auth";
 import {
 	BunRuntime,
 	SIDECAR_HOST,
@@ -26,7 +28,7 @@ type SidecarServer = {
 	port: number;
 	upgrade(
 		req: Request,
-		options?: { data?: { canApproveTools?: boolean } },
+		options?: { data?: { authenticated?: boolean; canApproveTools?: boolean } },
 	): boolean;
 };
 
@@ -50,19 +52,6 @@ const JSON_HEADERS = {
 	"content-type": "application/json",
 };
 
-const APPROVAL_TOKEN_QUERY_PARAM = "approval_token";
-
-function hasValidApprovalToken(url: URL, expectedToken: string): boolean {
-	const candidate = url.searchParams.get(APPROVAL_TOKEN_QUERY_PARAM);
-	if (!candidate) return false;
-	const candidateBytes = Buffer.from(candidate);
-	const expectedBytes = Buffer.from(expectedToken);
-	return (
-		candidateBytes.length === expectedBytes.length &&
-		timingSafeEqual(candidateBytes, expectedBytes)
-	);
-}
-
 function readOrigin(req: Request): string | undefined {
 	const origin = req.headers.get("origin")?.trim();
 	return origin ? origin : undefined;
@@ -76,7 +65,7 @@ function isTrustedRequestOrigin(req: Request): boolean {
 function corsHeaders(req: Request): Record<string, string> {
 	const origin = readOrigin(req);
 	return {
-		"access-control-allow-headers": "accept, content-type",
+		"access-control-allow-headers": "accept, content-type, authorization",
 		"access-control-allow-methods": "GET, POST, OPTIONS",
 		...(origin && TRUSTED_BROWSER_ORIGINS.has(origin)
 			? {
@@ -147,6 +136,33 @@ type DesktopClientErrorReport = {
 // Bound for free-form attribution strings (source URLs, stack traces);
 // matches ERROR_REPORT_FIELD_LIMIT in webview/lib/desktop-client.ts.
 const ERROR_REPORT_FIELD_LIMIT = 500;
+
+const MAX_ERROR_REPORT_BYTES = 64 * 1024;
+async function readBoundedErrorReport(req: Request): Promise<unknown> {
+	const reader = req.body?.getReader();
+	if (!reader) throw new Error("Missing telemetry body");
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			total += value.byteLength;
+			if (total > MAX_ERROR_REPORT_BYTES) {
+				await reader.cancel();
+				throw new Error("Telemetry body limit exceeded");
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+	try {
+		return JSON.parse(Buffer.concat(chunks, total).toString("utf8"));
+	} catch {
+		throw new Error("Invalid telemetry JSON");
+	}
+}
 
 function captureDesktopError(
 	ctx: SidecarContext,
@@ -231,20 +247,24 @@ export function createFetchHandler(
 			);
 		}
 
-		if (
-			url.pathname === "/transport" &&
-			isTrustedRequestOrigin(req) &&
-			server.upgrade(req, {
-				data: {
-					// Originless clients remain supported for local integrations, but only
-					// the browser-hosted desktop UI may receive or resolve approvals.
-					canApproveTools:
-						Boolean(readOrigin(req)) &&
-						hasValidApprovalToken(url, approvalToken),
-				},
-			})
-		) {
-			return undefined;
+		if (url.pathname === "/transport") {
+			if (req.method !== "GET")
+				return createJsonResponse(req, { ok: false }, 405);
+			if (!isTrustedRequestOrigin(req))
+				return createJsonResponse(req, { ok: false }, 403);
+			if (!hasSidecarAuthentication(req, approvalToken, true))
+				return createJsonResponse(req, { ok: false }, 401);
+			if (
+				server.upgrade(req, {
+					data: {
+						authenticated: true,
+						// Authenticated originless integrations can command, but cannot approve.
+						canApproveTools: Boolean(readOrigin(req)),
+					},
+				})
+			)
+				return undefined;
+			return createJsonResponse(req, { ok: false }, 426);
 		}
 
 		if (url.pathname === "/api/marketplace/catalog") {
@@ -266,28 +286,34 @@ export function createFetchHandler(
 			if (!isTrustedRequestOrigin(req)) {
 				return createJsonResponse(req, { ok: false }, 403);
 			}
+			if (!hasSidecarAuthentication(req, approvalToken))
+				return createJsonResponse(req, { ok: false }, 401);
 			try {
-				const report = (await req.json()) as DesktopClientErrorReport;
+				const report = (await readBoundedErrorReport(
+					req,
+				)) as DesktopClientErrorReport;
+				const scrub = (text: string, limit: number) =>
+					redactDesktopTransportSecrets(text, approvalToken).slice(0, limit);
 				const operation =
 					typeof report.operation === "string" && report.operation.trim()
-						? report.operation.trim().slice(0, 100)
+						? scrub(report.operation.trim(), 100)
 						: "webview.unknown";
 				const error = Object.assign(
 					new Error(
 						typeof report.errorMessage === "string"
-							? report.errorMessage
+							? scrub(report.errorMessage, 4000)
 							: "Unknown desktop webview error",
 					),
 					{
 						name:
 							typeof report.errorType === "string"
-								? report.errorType.slice(0, 100)
+								? scrub(report.errorType, 100)
 								: "Error",
 					},
 				);
 				const context: Record<string, string | number | boolean> = {};
 				if (typeof report.command === "string") {
-					context.command = report.command.slice(0, 100);
+					context.command = scrub(report.command, 100);
 				}
 				if (
 					typeof report.timeoutMs === "number" &&
@@ -296,13 +322,10 @@ export function createFetchHandler(
 					context.timeoutMs = report.timeoutMs;
 				}
 				if (typeof report.transportState === "string") {
-					context.transportState = report.transportState.slice(0, 30);
+					context.transportState = scrub(report.transportState, 30);
 				}
 				if (typeof report.sourceUrl === "string" && report.sourceUrl.trim()) {
-					context.sourceUrl = report.sourceUrl.slice(
-						0,
-						ERROR_REPORT_FIELD_LIMIT,
-					);
+					context.sourceUrl = scrub(report.sourceUrl, ERROR_REPORT_FIELD_LIMIT);
 				}
 				if (
 					typeof report.lineno === "number" &&
@@ -314,7 +337,7 @@ export function createFetchHandler(
 					context.colno = report.colno;
 				}
 				if (typeof report.stack === "string" && report.stack.trim()) {
-					context.stack = report.stack.slice(0, ERROR_REPORT_FIELD_LIMIT);
+					context.stack = scrub(report.stack, ERROR_REPORT_FIELD_LIMIT);
 				}
 				captureDesktopError(
 					ctx,
@@ -337,6 +360,8 @@ export function createFetchHandler(
 					headers: jsonHeaders(req),
 				});
 			}
+			if (!hasSidecarAuthentication(req, approvalToken))
+				return createJsonResponse(req, { ok: false }, 401);
 			queueMicrotask(() => {
 				void onShutdown?.("code_sidecar_shutdown_endpoint")
 					.catch((error) => {
@@ -358,6 +383,10 @@ export function createWebSocketHandler(ctx: SidecarContext) {
 	return {
 		maxPayloadLength: MAX_DESKTOP_TRANSPORT_PAYLOAD_BYTES,
 		open(ws: SidecarWebSocketClient) {
+			if (ws.data?.authenticated !== true) {
+				ws.close?.();
+				return;
+			}
 			ctx.wsClients.add(ws);
 			void syncSidecarApprovalReadiness(ctx).catch(() => {});
 			sendEvent(ctx, "host_ready", {
@@ -371,6 +400,13 @@ export function createWebSocketHandler(ctx: SidecarContext) {
 			}
 		},
 		async message(ws: SidecarWebSocketClient, raw: string) {
+			if (ws.data?.authenticated !== true || !ctx.wsClients.has(ws)) {
+				ws.send(
+					jsonResponse("", false, undefined, "Desktop authentication required"),
+				);
+				ws.close?.();
+				return;
+			}
 			let request: DesktopTransportRequest;
 			try {
 				request = JSON.parse(String(raw)) as DesktopTransportRequest;
