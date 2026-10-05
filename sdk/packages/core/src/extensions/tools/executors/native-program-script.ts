@@ -57,7 +57,7 @@ public class ClineNativeProgram extends GhidraScript {
                 item.addProperty("name", bounded(function.getName(), 512));
                 item.addProperty("entry", function.getEntryPoint().toString());
                 JsonArray blocks = new JsonArray(), operations = new JsonArray();
-                item.add("blocks", blocks); item.add("pcode", operations); item.add("entryBlock", JsonNull.INSTANCE);
+                item.add("blocks", blocks); item.add("pcode", operations); item.add("entryBlock", JsonNull.INSTANCE); item.addProperty("entryBlockEvidence", "unresolved");
                 DecompileResults result = decompiler.decompileFunction(function, 15, monitor);
                 if (!result.decompileCompleted() || result.getHighFunction() == null) {
                     item.addProperty("status", "failed"); item.addProperty("error", bounded(result.getErrorMessage(), 512));
@@ -72,13 +72,25 @@ public class ClineNativeProgram extends GhidraScript {
                         functionTruncated = true;
                     } else {
                         for (PcodeBlockBasic block : high.getBasicBlocks()) {
-                            if (block.contains(function.getEntryPoint())) item.addProperty("entryBlock", "b" + block.getIndex());
+                            if (block.contains(function.getEntryPoint())) { item.addProperty("entryBlock", "b" + block.getIndex()); item.addProperty("entryBlockEvidence", "contains-function-entry"); }
                             JsonObject node = new JsonObject(); node.addProperty("id", "b" + block.getIndex());
                             node.addProperty("start", String.valueOf(block.getStart())); node.addProperty("stop", String.valueOf(block.getStop()));
                             JsonArray successors = new JsonArray();
                             if (block.getOutSize() > 32) functionTruncated = true;
                             for (int i = 0; i < Math.min(block.getOutSize(), 32); i++) successors.add("b" + block.getOut(i).getIndex());
                             node.add("successors", successors); blocks.add(node);
+                        }
+                        // Prologue/no-op instructions may be absent from high p-code.
+                        // Never infer entry from array position or lowest address.
+                        if (item.get("entryBlock").isJsonNull()) {
+                            PcodeBlockBasic root = null; int roots = 0;
+                            for (PcodeBlockBasic candidate : high.getBasicBlocks()) {
+                                if (candidate.getInSize() == 0) { root = candidate; roots++; }
+                            }
+                            if (roots == 1) {
+                                item.addProperty("entryBlock", "b" + root.getIndex());
+                                item.addProperty("entryBlockEvidence", "unique-incoming-free-high-block");
+                            }
                         }
                         Iterator<PcodeOpAST> ops = high.getPcodeOps();
                         while (ops.hasNext()) {

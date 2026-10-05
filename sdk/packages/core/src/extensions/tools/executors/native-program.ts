@@ -43,7 +43,8 @@ export const NativeProgramSchema = z
 							.string()
 							.regex(/^b[0-9]+$/)
 							.nullable(),
-						status: z.enum(["recovered", "partial", "failed"]),
+						entryBlockEvidence: z.enum(["contains-function-entry", "unique-incoming-free-high-block", "unresolved"]).optional(),
+                        status: z.enum(["recovered", "partial", "failed"]),
 						error: z.string().max(512).optional(),
 						pseudocode: z.string().max(8192),
 						pseudocodeTruncated: z.boolean(),
@@ -103,6 +104,13 @@ export const NativeProgramSchema = z
 			const blocks = new Set(fn.blocks.map((b) => b.id));
 			if (fn.entryBlock !== null && !blocks.has(fn.entryBlock))
 				fail("Invalid recovered entry block");
+            if (fn.entryBlockEvidence === "unresolved" && fn.entryBlock !== null) fail("Conflicting unresolved entry evidence");
+            if (fn.entryBlockEvidence && fn.entryBlockEvidence !== "unresolved" && fn.entryBlock === null) fail("Missing claimed entry binding");
+            if (fn.entryBlockEvidence === "unique-incoming-free-high-block") {
+                const incoming = new Set(fn.blocks.flatMap(block => block.successors));
+                const roots = fn.blocks.filter(block => !incoming.has(block.id));
+                if (roots.length !== 1 || roots[0].id !== fn.entryBlock) fail("Invalid unique-root entry evidence");
+            }
 			if (blocks.size !== fn.blocks.length) fail("Duplicate CFG block");
 			for (const block of fn.blocks) {
 				if (new Set(block.successors).size !== block.successors.length)
@@ -168,7 +176,8 @@ export function nativeProgramFindings(program: NativeProgram) {
 					})),
 				});
 				return {
-					reachable: cfg.reachable,
+					entryBinding: fn.entryBlockEvidence ?? "imported-unspecified",
+                    reachable: cfg.reachable,
 					unreachable: cfg.unreachable,
 					stronglyConnectedComponents: cfg.stronglyConnectedComponents,
 					naturalLoops: cfg.naturalLoops,
@@ -436,7 +445,7 @@ export async function recoverNativeProgram(
 		return {
 			protocol: "cline-advanced-analysis/v1",
 			status:
-				program.coverage.truncated || program.coverage.failedFunctions
+				program.coverage.truncated || program.coverage.failedFunctions || program.functions.some(fn => fn.entryBlock === null)
 					? "partial"
 					: "completed",
 			engine: "ghidra",

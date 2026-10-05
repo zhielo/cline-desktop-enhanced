@@ -151,3 +151,18 @@ describe("bounded native program evidence", () => {
 		).toBe("cancelled");
 	});
 });
+
+describe("explicit structural entry provenance", () => {
+ it("accepts independently checkable incoming-free roots", () => {
+ const d=doc();expect(validateNativeProgram({...d,functions:[{...d.functions[0],entryBlockEvidence:"unique-incoming-free-high-block"}]}).functions[0].entryBlockEvidence).toBe("unique-incoming-free-high-block");
+ });
+ it("rejects ambiguous roots instead of choosing the first block", () => {
+ const d=doc();d.functions[0].blocks.push({id:"b1",start:"1006",stop:"1007",successors:[]});expect(()=>validateNativeProgram({...d,functions:[{...d.functions[0],entryBlockEvidence:"unique-incoming-free-high-block"}]})).toThrow("unique-root");
+ });
+ it("rejects false root claims inside cycles", () => {
+ const d=doc();d.functions[0].blocks[0].successors.push("b0");expect(()=>validateNativeProgram({...d,functions:[{...d.functions[0],entryBlockEvidence:"unique-incoming-free-high-block"}]})).toThrow("unique-root");
+ });
+ it("rejects resolved-versus-unresolved contradictions", () => {
+ const d=doc();expect(()=>validateNativeProgram({...d,functions:[{...d.functions[0],entryBlockEvidence:"unresolved"}]})).toThrow();
+ });
+});

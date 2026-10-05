@@ -487,3 +487,7 @@ A Linux-only validation workflow runs all existing consolidated source gates plu
 ### V5 Linux engine corpus and live transformation budgets
 
 The Linux source-only workflow installs the full pinned analysis requirements, including Triton and QBinDiff/BinExport, rather than the smaller portable Windows subset. The transform worker resolves its default byte budget at call time and rejects invalid or greater-than-current budgets; unchanged mandatory expansion tests must pass. This fixes a captured-default regression found by the full engine corpus, not a skipped or weakened check. Windows engine requirements and all existing installer gates remain unchanged.
+
+### V5 decompiler entry provenance
+
+High p-code may omit native function-entry instructions. Prefer address containment; otherwise accept only a unique incoming-free root in a complete bounded high CFG and label it structural inference. Ambiguous/cyclic roots remain unresolved and recovery partial. Independently reject false root and contradictory provenance claims. No first-array-block guess or native-entry proof.
