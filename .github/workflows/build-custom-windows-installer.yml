@@ -127,61 +127,50 @@ jobs:
         shell: bash
         run: gitleaks git --redact --no-banner --config .gitleaks.toml
 
-      - name: Verify custom fork preservation
-        run: bun run scripts/verify-custom-fork.ts
+      - name: Run consolidated custom fork validation
+        run: bun run validate:advanced
 
-      - name: Build SDK packages
-        run: bun run build:sdk
-
-      - name: Type-check desktop
-        working-directory: apps/examples/desktop-app
-        run: bun run typecheck
-
-      - name: Run required desktop sidecar regression suite
-        working-directory: apps/examples/desktop-app
-        run: bun run test:sidecar
-
-      - name: Test Windows installer configuration
-        working-directory: apps/examples/desktop-app
-        run: bun run test:windows-installer
-
-      - name: Test AI task report
-        working-directory: apps/examples/desktop-app
-        run: bun x vitest run webview/lib/task-report.test.ts --config vitest.config.mts
-
-      - name: Test desktop chat UI
-        working-directory: apps/examples/desktop-app
-        run: bun run test:chat-ui
-
-      - name: Run desktop customization tests
-        shell: bash
+      - name: Validate portable Windows analysis engines
+        shell: pwsh
         run: |
-          bunx vitest run \
-            apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts \
-            apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts \
-            apps/examples/desktop-app/sidecar/engineering-control-plane.test.ts \
-            apps/examples/desktop-app/sidecar/engineering-git-review.test.ts \
-            apps/examples/desktop-app/sidecar/engineering-worktree-manager.test.ts \
-            apps/examples/desktop-app/sidecar/browser-manager.test.ts \
-            apps/examples/desktop-app/sidecar/commands-workbench.test.ts \
-            apps/examples/desktop-app/sidecar/repository-tool.test.ts \
-            apps/examples/desktop-app/sidecar/notion-agent-bridge.test.ts \
-            apps/examples/desktop-app/sidecar/notion-agent-patch.test.ts \
-            apps/examples/desktop-app/webview/components/views/settings/functions-view.test.tsx \
-            apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.test.tsx \
-            --config apps/examples/desktop-app/vitest.config.mts
+          # Miasm uses clang-cl plus the first link.exe on PATH. Import the
+          # supported x64 VS environment so Git's Unix link cannot be selected.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw 'vswhere was not found' }
+          $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsRoot) { throw 'Required x64 Visual C++ tools were not found' }
+          $vsRoot = $vsRoot.Trim()
+          $devCmd = Join-Path $vsRoot 'Common7/Tools/VsDevCmd.bat'
+          if (-not (Test-Path $devCmd)) { throw 'Visual Studio developer command script was not found' }
+          $vsEnvironment = & $env:COMSPEC /d /s /c "`"$devCmd`" -no_logo -arch=amd64 -host_arch=amd64 && set"
+          if ($LASTEXITCODE -ne 0) { throw 'Visual Studio x64 environment initialization failed' }
+          foreach ($line in $vsEnvironment) {
+            $separator = $line.IndexOf('=')
+            if ($separator -gt 0) { [Environment]::SetEnvironmentVariable($line.Substring(0, $separator), $line.Substring($separator + 1), 'Process') }
+          }
+          $linker = (Get-Command link.exe -CommandType Application -ErrorAction Stop).Source
+          if (-not $linker.StartsWith($vsRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Expected Microsoft linker, resolved: $linker" }
+          Write-Host "Verified Microsoft linker: $linker"
+          $engineRoot = Join-Path $env:RUNNER_TEMP 'cline-portable-engines'
+          py -3.13 -m venv $engineRoot
+          if ($LASTEXITCODE -ne 0) { throw "Python 3.13 environment creation failed" }
+          $python = Join-Path $engineRoot 'Scripts/python.exe'
+          & $python -m pip install --disable-pip-version-check -r sdk/packages/core/scripts/requirements-advanced-windows.txt
+          if ($LASTEXITCODE -ne 0) { throw "Pinned portable engine installation failed" }
+          $env:CLINE_RE_PYTHON = $python
+          Push-Location sdk
+          try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }
+          finally { Pop-Location }
 
-      - name: Run focused SDK safety tests
-        shell: bash
-        run: |
-          bunx vitest run \
-            sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
-            sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts \
-            sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
-            sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts \
-            sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts \
-            --config vitest.config.mts \
-            --testTimeout=60000
+      - name: Upload consolidated validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: consolidated-validation-${{ github.run_id }}
+          path: .cline-validation/**
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Run process-session terminal smoke test
         shell: bash

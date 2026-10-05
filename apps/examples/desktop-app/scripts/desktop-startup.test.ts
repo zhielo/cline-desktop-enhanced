@@ -18,6 +18,11 @@ import { fileURLToPath } from "node:url";
 // otherwise valid installer had already built and installed successfully.
 const SIDECAR_READY_TIMEOUT_MS = 30_000;
 
+// The SDK itself allows 30 seconds for Hub startup. Do not terminate its
+// bootstrap subprocess after 20 seconds before that contract can complete.
+// Include bounded cold executable/antivirus startup overhead on Windows.
+const HUB_BOOTSTRAP_TIMEOUT_MS = 45_000;
+
 // Exercise the actual compiled entrypoint: source-only tests miss mixed SDK
 // build identities between the desktop client and its embedded Hub daemon.
 test("compiled desktop backend publishes its endpoint with its own Hub", async () => {
@@ -67,7 +72,7 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 		const bootstrap = spawnSync(
 			binary,
 			["--remote-hub-ensure", "--discovery-path", discoveryPath, "--cwd", root],
-			{ cwd: root, env, encoding: "utf8", timeout: 20_000 },
+			{ cwd: root, env, encoding: "utf8", timeout: HUB_BOOTSTRAP_TIMEOUT_MS },
 		);
 		expect(bootstrap.status, bootstrap.stderr || String(bootstrap.error)).toBe(
 			0,
@@ -252,4 +257,6 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			/* The runner discards its temp directory anyway. */
 		}
 	}
-}, 100_000);
+// Covers bounded source compilation, bootstrap, both ready/health checks,
+// and cleanup. Passing runs still exit as soon as all assertions complete.
+}, 225_000);

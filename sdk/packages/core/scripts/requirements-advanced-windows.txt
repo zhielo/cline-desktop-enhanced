@@ -1,0 +1,6 @@
+lief==1.0.0
+capstone==5.0.9
+z3-solver==5.1.0.0
+androguard==4.1.4
+miasm==0.1.5
+cryptography==50.0.2

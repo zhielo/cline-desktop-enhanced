@@ -22,7 +22,7 @@ runtime and permission profile.
 The `project-notion-bridge` profile allows:
 
 - read-only local file and codebase inspection;
-- bounded read-only discovery commands;
+- structured repository status, diff, log, and branch inspection (no arbitrary shell commands);
 - the structured static `reverse_engineer` tool;
 - user coordination and terminal completion; and
 - tools exposed by the exact official `Notion` Streamable HTTP registration at

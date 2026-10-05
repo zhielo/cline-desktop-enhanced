@@ -64,10 +64,12 @@ describe("permission profile guard", () => {
 	it("allows read-only investigation and blocks writes", async () => {
 		expect(await before("read-only", "read_files")).toBeUndefined();
 		expect(
+			(
 			await before("read-only", "run_commands", {
 				commands: ["git status", "rg TODO src"],
-			}),
-		).toBeUndefined();
+				})
+			)?.skip,
+		).toBe(true);
 		expect((await before("read-only", "editor"))?.skip).toBe(true);
 		expect(
 			(
@@ -75,7 +77,7 @@ describe("permission profile guard", () => {
 					commands: ["echo secret > output.txt"],
 				})
 			)?.reason,
-		).toContain("output redirection");
+		).toContain("command execution is disabled");
 		expect((await before("read-only", "process_session"))?.skip).toBe(true);
 		expect((await before("read-only", "computer_use"))?.skip).toBe(true);
 	});
@@ -186,5 +188,51 @@ describe("permission profile guard", () => {
 	it("preserves coordination tools while enforcing child tool calls", async () => {
 		expect(await before("read-only", "spawn_agent")).toBeUndefined();
 		expect(await before("read-only", "team_status")).toBeUndefined();
+	});
+});
+
+describe("restricted profiles fail closed for arbitrary execution", () => {
+	for (const profile of ["read-only", "project-notion-bridge"] as const) {
+		it.each([
+			{ commands: ["python -c 'print(1)'"] },
+			{ commands: ["bash -c 'echo inspection'"] },
+			{ commands: ["curl https://example.invalid"] },
+			{ commands: [{ command: "node", args: ["-e", "console.log(1)"] }] },
+			{ commands: [{ command: "unknown.exe", args: [] }] },
+			{},
+		])(`${profile} denies shell, interpreter, network, unknown and malformed commands: %j`, async (input) => {
+			expect((await before(profile, "run_commands", input))?.skip).toBe(true);
+		});
+		it("allows only exhaustive structured repository reads", async () => {
+			for (const action of ["status", "diff", "log", "branches"]) {
+				expect(await before(profile, "repository", { action })).toBeUndefined();
+			}
+			for (const action of [
+				"commit",
+				"fetch",
+				"pull",
+				"push",
+				"create_branch",
+				"switch_branch",
+				"github_status",
+				"future_action",
+				undefined,
+			]) {
+				expect((await before(profile, "repository", { action }))?.skip).toBe(
+					true,
+				);
+			}
+		});
+	}
+	it("does not weaken workspace or full-access command execution", async () => {
+		for (const profile of [
+			"workspace",
+			"workspace-network",
+			"full-access",
+		] as const) {
+			expect(
+				await before(profile, "run_commands", { commands: ["node --version"] }),
+			).toBeUndefined();
+		}
 	});
 });

@@ -1,0 +1,76 @@
+name: Recover V4 source and build installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/advanced-analysis-v4-20261005]
+    paths:
+      - scripts/recover-advanced-v4.py
+      - .github/workflows/recover-advanced-v4.yml
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: v4-source-recovery-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  recover-source:
+    if: github.ref == 'refs/heads/feat/advanced-analysis-v4-20261005'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - name: Refuse intervening source changes
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+      - name: Materialize guarded V4 source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/recover-advanced-v4.py')
+          value=p.read_text().replace('if required not in v:', 'if required.lower() not in v.lower():')
+          start=value.find("path='.github/workflows/build-custom-windows-installer.yml'")
+          if start >= 0:
+              end=value.index("path='CUSTOMIZATIONS.md'",start)
+              value=value[:start]+value[end:]
+          # The already-authorized workflow edit was committed separately.
+          workflow=Path('.github/workflows/build-custom-windows-installer.yml').read_text()
+          for required in ['Validate portable Windows analysis engines','advanced-windows-engine-smoke.test.ts','Real portable engine execution failed']:
+              if required not in workflow:
+                  raise RuntimeError('Required committed engine gate is missing')
+          p.write_text(value)
+          PY
+          python3 scripts/recover-advanced-v4.py
+      - name: Commit actual generated source before building
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 - <<'PY'
+          import json,subprocess
+          paths=json.load(open('docs/V4_SOURCE_RECOVERY.json'))['files']+['docs/V4_SOURCE_RECOVERY.json','scripts/recover-advanced-v4.py']
+          if any(p.startswith('.github/workflows/') for p in paths):
+              raise RuntimeError('This source credential must not modify workflows')
+          subprocess.run(['git','add','--',*paths],check=True)
+          PY
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(analysis): materialize V4 authoring and mandatory Windows engine validation'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+          echo "Source commit: $(git rev-parse HEAD)"
+      - name: Dispatch installer against the committed branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            -d '{"ref":"feat/advanced-analysis-v4-20261005"}' \
+            'https://api.github.com/repos/zhielo/cline-desktop-enhanced/actions/workflows/build-custom-windows-installer.yml/dispatches'

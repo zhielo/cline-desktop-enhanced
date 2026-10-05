@@ -164,9 +164,18 @@ function requirementsFor(
 	kind: AnalysisTaskKind,
 	operation: string,
 	externalTarget: boolean,
+	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
 	if (externalTarget) requirements.add("external-target");
+	if (
+		kind === "static" &&
+		operation === "advanced_analysis" &&
+		request?.advanced_action === "decrypt_blob"
+	) {
+		requirements.add("authorized-decryption");
+		requirements.add("sensitive-plaintext-processing");
+	}
 	if (kind === "debugger") requirements.add("authorized-target");
 	if (
 		kind === "gui" ||
@@ -175,7 +184,7 @@ function requirementsFor(
 	) {
 		requirements.add("execution-control");
 	}
-	if (kind === "dynamic") requirements.add("isolated-sandbox");
+	if (kind === "dynamic") {requirements.add("isolated-sandbox");requirements.add("artifact-upload");requirements.add("authorized-target-execution");}
 	return [...requirements];
 }
 
@@ -289,11 +298,18 @@ export class AnalysisTaskOrchestrator {
 			requestHash: sha256(canonicalJson(request)),
 			permission,
 			status: "awaiting-approval",
-			requirements: requirementsFor(input.kind, operation, externalTarget),
+			requirements: requirementsFor(
+				input.kind,
+				operation,
+				externalTarget,
+				request,
+			),
 			risk:
 				input.kind === "dynamic" || permission === "Execute" || externalTarget
 					? "high"
-					: permission === "Debug"
+					: permission === "Debug" ||
+							(operation === "advanced_analysis" &&
+								request.advanced_action === "decrypt_blob")
 						? "moderate"
 						: "low",
 			budget: {
@@ -305,7 +321,7 @@ export class AnalysisTaskOrchestrator {
 					Math.max(input.maxOutputBytes ?? 1024 * 1024, 64 * 1024),
 					16 * 1024 * 1024,
 				),
-				network: input.kind === "dynamic" ? "recorded" : "disabled",
+				network: "disabled",
 			},
 			createdAt: new Date(this.now()).toISOString(),
 			expiresAt: new Date(this.now() + this.approvalTtlMs).toISOString(),

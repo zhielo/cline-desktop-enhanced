@@ -4,6 +4,14 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/scripts/desktop-startup.test.ts",markers:["HUB_BOOTSTRAP_TIMEOUT_MS","timeout: HUB_BOOTSTRAP_TIMEOUT_MS","SIDECAR_READY_TIMEOUT_MS","expect(health.ok).toBe(true)","expect(restartedHealth.ok).toBe(true)","duplicate session fork operation id"]},
+
+ {path:"scripts/validate-advanced-build.mjs",markers:["Test desktop chat UI","Run desktop customization tests","analysis-task-orchestrator.test.ts","analysis-sandbox-client.test.ts","engineering-control-plane.test.ts","engineering-git-review.test.ts","engineering-worktree-manager.test.ts","engineering-workspace.test.tsx","commands-workbench.test.ts","process-session-manager.test.ts","reverse-engineering.test.ts","runtime-builder.test.ts","repository-tool.test.ts","notion-agent-bridge.test.ts","notion-agent-patch.test.ts","functions-view.test.tsx","notion-provenance.test.ts","permission-profile.test.ts","Verify custom fork preservation","Build SDK packages","Run required desktop sidecar regression suite","Test Windows installer configuration","Test AI task report","Test desktop chat UI","Run desktop customization tests","Run focused SDK safety tests","--testTimeout=60000","runValidation","runJobs","timeoutMs","summary.json"]},
+
+ {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["CLINE_RE_ALLOW_DECRYPTION","CLINE_RE_PRIVATE_KEY_FILE","host-gated-authenticated-decryption"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.ts",markers:["buildEvidenceGraph","queryEvidenceGraph","content-identity-not-authentication"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-notebook.ts",markers:["prepareNotebook","runAnalysisNotebook","Input changed during analysis","Checkpoint budget exceeded"]},
+  {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["cline-advanced-analysis/v1","prepareProcessEnvironment","external-adapter-required","killTree","advancedEvidenceBundle"]},
 	{
 		path: "CUSTOMIZATIONS.md",
 		markers: [
@@ -48,37 +56,16 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: ".github/workflows/build-custom-windows-installer.yml",
-		markers: [
+		markers: ["Run consolidated custom fork validation", "validate:advanced", "include-hidden-files: true",
 			"Build custom Windows installer",
-			"Verify custom fork preservation",
 			"Get-AuthenticodeSignature",
 			"Upload verified setup.exe",
 			"CUSTOMIZATIONS.md",
 			"BUILD-INFO.txt",
 			"CLINE_TEST_SIDECAR_BIN",
-			"scripts/desktop-startup.test.ts",
+            "scripts/desktop-startup.test.ts",
 			"Record installer smoke-test result",
-			"Run required desktop sidecar regression suite",
-			"Test desktop chat UI",
-			"Run desktop customization tests",
-      "Run focused SDK safety tests",
 			"Run process-session terminal smoke test",
-      "analysis-task-orchestrator.test.ts",
-      "analysis-sandbox-client.test.ts",
-      "engineering-control-plane.test.ts",
-      "engineering-git-review.test.ts",
-      "engineering-worktree-manager.test.ts",
-      "engineering-workspace.test.tsx",
-      "commands-workbench.test.ts",
-      "process-session-manager.test.ts",
-      "reverse-engineering.test.ts",
-			"runtime-builder.test.ts",
-			"repository-tool.test.ts",
-			"notion-agent-bridge.test.ts",
-			"notion-agent-patch.test.ts",
-			"functions-view.test.tsx",
-			"notion-provenance.test.ts",
-			"permission-profile.test.ts",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
 			'BUN_VERSION: "1.3.14"',
@@ -903,6 +890,14 @@ const requiredMarkers: Array<{
 	},
 ];
 
+requiredMarkers.push(
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.ts",markers:["analyzeProgramCfg","analyzeProgramTrace","not-proven","output budget"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-document-store.ts",markers:["confirmWrite","validateNotebook","expectedSha256","Document changed since review"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",markers:["bindRuntimeAnalysisRequest","submitAnalysisSandbox","worker_key_sha256","redirect:\"error\"","Receipt does not bind approved job"]},
+ {path:"apps/examples/desktop-app/sidecar/notion-agent-bridge.ts",markers:["evidenceId","serialized","split"]},
+);
+requiredMarkers.push({path:"apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx",markers:["expectedSha256","Saving never executes analysis","graph_query"]},{path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate portable Windows analysis engines","advanced-windows-engine-smoke.test.ts","Real portable engine execution failed"]});
+requiredMarkers.push({path:"apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",markers:["bounded atomic analysis document publication","bounds serialized bytes","allows exactly one concurrent","never deletes another caller"]},{path:"apps/examples/desktop-app/sidecar/analysis-document-store.ts",markers:["Serialized document byte budget exceeded","await link(stage,path)"]});
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

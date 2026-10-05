@@ -1,0 +1,8 @@
+lief==1.0.0
+capstone==5.0.9
+z3-solver==5.1.0.0
+triton-library==1.0.0rc4
+androguard==4.1.4
+qbindiff==1.2.3
+miasm==0.1.5
+cryptography==50.0.2

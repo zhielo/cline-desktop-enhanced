@@ -399,6 +399,30 @@ Primary files:
 - `evals/parity/codex-parity.test.ts`
 - `evals/parity/README.md`
 
+## Advanced analysis release candidate
+
+- The existing approval-gated Analysis workbench supports a fixed embedded Python worker for structural APK/DEX/ELF inventory, DEX indexing, native range disassembly, Z3/Triton expression analysis, QBinDiff BinExport matching and data-only transformation receipts.
+- Credentials are filtered, output/time/input budgets enforced, reports are hash-bound and exclusive-create, targets never executed. Optional dependencies are installed separately through a host-owned absolute CLINE_RE_PYTHON path.
+- Distribution discovery is not functional verification. QBDI, FlowDroid, Remill and advanced CFG passes, licensed JEB/IDA and research recovery actions remain blocked. The complete recommendation set is not delivered by these contracts.
+- No universal decryption, whole-function equivalence, confirmed JNI graph, notebook platform, runtime-worker provisioning or Windows containment is claimed. Windows installer validation remains mandatory.
+
+## Evidence graph and durable static notebooks
+
+- Advanced graph_build and graph_query operations construct artifact/class/method/native-symbol/member graphs from bounded imported evidence, with stable content-derived IDs, provenance hashes, candidate edges and explicit unresolved calls. Imported reports remain untrusted data, not authenticated facts or instructions.
+- notebook_validate preflights a strict static-cell DAG and confines canonical inputs to the approved notebook folder. notebook_run checkpoints serial execution in the managed private analysis cache, validates input hashes, blocks dependent failures and resumes unchanged completed cells using engine/configuration/dependency fingerprints.
+- No notebook executes scripts, target binaries or runtime actions. No graph infers verified JNI bindings, lifecycle taint or whole-program semantics. Hashes do not authenticate reports against privileged local tampering.
+
+## Bounded Miasm static IR
+
+- Advanced lift_native_ir and deobfuscation_pass use Miasm for bounded one-basic-block IR lifting and expression simplification. Explicit architecture/range, instruction/generated-block caps, original/simplified IR and limited coverage are preserved. No target executes or native patch is applied. This does not implement Remill, IDA microcode passes or full devirtualization.
+
+## Host-gated authenticated decryption
+
+- Advanced decrypt_blob uses cryptography AEAD for AES-256-GCM and ChaCha20-Poly1305 with an existing host-owned raw 256-bit key, explicit nonce/tag/AAD, optional bounded prefix transforms and recovered-content structural analysis.
+- CLINE_RE_ALLOW_DECRYPTION=1, an absolute trusted CLINE_RE_PYTHON and absolute CLINE_RE_PRIVATE_KEY_FILE are required. Key material never enters tool parameters, command-line arguments, reports or persisted notebook cells. POSIX ownership/mode and raw key length are checked; Windows ACLs remain a host responsibility.
+- Desktop plans require authorized-decryption and sensitive-plaintext-processing acknowledgments with moderate risk. Auth failures retain no recovered plaintext. Successful reports contain provenance/structure only, not binary plaintext exports; temporary parser inputs are privately created and deleted without a secure-erasure claim.
+- Decryption is not exposed as a notebook cell. No key guessing, protected-service access, target execution or encryption bypass is implemented.
+
 ## Required validation
 
 Before an installer build, preserve and run the checks encoded by `.github/workflows/build-custom-windows-installer.yml`:
@@ -422,3 +446,29 @@ Do not hide a new regression by weakening assertions or making a required custom
 5. Update this ledger and `scripts/verify-custom-fork.ts` in the same commit when adding, replacing, renaming, or intentionally removing custom behavior.
 6. Run the relevant focused tests, desktop type-check, repository lint, and custom-fork verifier.
 7. Keep the personal installer unsigned and artifact-only; do not create a release unless the user explicitly changes that policy.
+
+## Consolidated blocking validation
+
+- `bun run validate:advanced` verifies preservation and builds SDK prerequisites before running all previously required desktop/core checks with bounded parallelism (default 2; maximum 4). It never counts a blocked prerequisite as passed and collects every required check failure in a machine-readable summary and separate logs.
+- Required sidecar, installer configuration, task report, chat UI, customization and focused SDK safety suites remain blocking. The Windows workflow then performs its existing process smoke, NSIS build, installation/startup smoke and verified artifact upload. No release or merge is enabled.
+- `bun run validate:advanced --engines` additionally requires a trusted absolute CLINE_RE_PYTHON and runs the real static engine, Miasm and cryptography fixture corpora. Default CI reports these optional engines as not requested, not validated. A passed consolidated source test is not proof of installer or whole-platform completion.
+
+- Validation evidence upload explicitly includes the scoped hidden .cline-validation folder and fails if no report is present; it never uploads other hidden repository files.
+
+- Installed-sidecar smoke uses a bounded 45-second Hub bootstrap deadline, covering the SDK's existing 30-second startup contract plus cold-launch overhead. A regression guard prevents reverting to a premature deadline. Readiness, health, restart and database uniqueness assertions remain blocking; no failed startup is accepted or automatically retried.
+
+## V4 program evidence, authoring and worker transport
+
+- cfg_analyze computes bounded imported CFG reachability, dominators/postdominators, natural loops, SCCs and irreducible regions. trace_slice and trace_taint compute explicit-location dependencies and overwrite-aware input influence from imported traces. These are not runtime tracing, semantic proofs, full unflattening or devirtualization.
+- Static notebook and evidence graph document authoring validates strict data-only schemas, DAGs and confined names. Saving requires an explicit write acknowledgment and never silently overwrites a file; hash-guarded updates use cooperative locks. Saving never executes analysis.
+- Isolated-runtime submission is bound to an exact approved worker endpoint, Ed25519 key fingerprint, request and artifact hash. Receipts bind a fresh nonce and matching identity; HTTPS redirects, oversized bodies and undeclared QBDI capability fail closed. Worker egress is disabled. This is a client protocol, not a provisioned QBDI worker or hardware isolation proof.
+- Bridge hardening is reconciled from its durable patch: stable path-bound evidence IDs, serialized UTF-8 budgets, redaction-before-budgeting, collision-safe Markdown fences, fail-closed Git inventory, shared depth presets and a read-only structured Git allowlist.
+- Remaining Remill/JEB/D810, automatic VM provisioning, full native recovery and key recovery are not implemented. No merge or release is authorized by this source update.
+
+- V4 document authoring uses separate save/run approval, a 1 MiB limit and hash-guarded updates. Runtime submission has independent upload/execution acknowledgments, exact worker/artifact binding, strict Ed25519 keys and bounded signed receipts.
+- Installer packaging requires six real portable-engine SDK-to-worker tests, not merely package presence. Python and these dependencies are CI-only and not bundled in the installer. No live QBDI backend, licensed adapter, full unflattening or VM provisioning is claimed.
+
+### V4 publication and responsive authoring validation
+- New notebook/graph documents are fully staged, synced, and published atomically without overwrite using a same-directory hard link. This requires a hard-link-capable filesystem (normally NTFS on Windows); unsupported filesystems fail closed. This does not claim protection against privileged or non-cooperating actors, Windows reparse races, or stronger ACLs than the workspace provides.
+- Both input and pretty-printed saved documents must fit the 1 MiB UTF-8 byte budget. Nine required document-store regressions cover complete publication, no-overwrite, explicit approval, reviewed hash updates, stale content, path confinement, graph integrity, serialized expansion, concurrent publication and foreign-lock preservation.
+- Notebook preparation actions wrap with an explicit gap at narrow widths. The authoring tests require that container while preserving separate file-write and exact analysis approvals. All previous source, real Windows engine, terminal, installer and installed-app gates remain mandatory.

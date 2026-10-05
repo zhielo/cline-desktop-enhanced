@@ -1,5 +1,6 @@
+import {saveAnalysisDocument} from "./analysis-document-store";
 import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import {
 	existsSync,
@@ -129,7 +130,7 @@ import {
 	parseComposioToolkitSlug,
 } from "./composio";
 import { readComputerUseMetrics } from "./computer-use-metrics";
-import { probeAnalysisSandbox } from "./analysis-sandbox-client";
+import {probeAnalysisSandbox,RuntimeAnalysisInputSchema,bindRuntimeAnalysisRequest,submitAnalysisSandbox} from "./analysis-sandbox-client";
 import {
   type AnalysisTaskKind,
   desktopAnalysisTaskOrchestrator,
@@ -5097,7 +5098,9 @@ export async function handleCommand(
     command === "list_analysis_tasks" ||
     command === "get_analysis_diagnostics" ||
 		command === "discover_analysis_tools" ||
-		command === "run_static_analysis" ||
+		command === "save_analysis_document" ||
+ command === "run_dynamic_analysis" ||
+ command === "run_static_analysis" ||
 		command === "open_analysis_gui" ||
 		command === "run_debugger_action"
 	) {
@@ -5109,6 +5112,7 @@ export async function handleCommand(
 				? args.cwd.trim()
 				: ctx.localWorkspaceRoot,
 		);
+    if(command === "save_analysis_document"){const {cwd:_cwd,environmentId:_environmentId,...input}=args??{};return await saveAnalysisDocument(baseDir,input);}
 		const owner = workspaceProcessOwner(baseDir);
 		const toolContext = desktopToolContext(owner);
     if (command === "prepare_analysis_task") {
@@ -5132,7 +5136,7 @@ export async function handleCommand(
       if (kind === "debugger") {
         request = LiveDebuggerInputSchema.parse(suppliedRequest);
       } else if (kind === "dynamic") {
-        request = suppliedRequest;
+        request = await bindRuntimeAnalysisRequest(RuntimeAnalysisInputSchema.parse(suppliedRequest));
       } else {
         if (kind === "gui") suppliedRequest.operation = "open_gui";
         request = ReverseEngineeringInputSchema.parse(suppliedRequest);
@@ -5245,6 +5249,13 @@ export async function handleCommand(
         throw error;
       }
 		}
+    if(command === "run_dynamic_analysis"){
+      if(args?.confirmExecution!==true||args?.confirmArtifactUpload!==true)throw new Error("Explicit authorized execution and artifact upload confirmation required");
+      const input=RuntimeAnalysisInputSchema.parse(args?.input),planId=String(args?.planId??""),executionToken=String(args?.executionToken??"");
+      const plan=await desktopAnalysisTaskOrchestrator.consume({planId,executionToken,workspaceRoot:baseDir,kind:"dynamic",request:input});
+      try{const fs=await import("node:fs/promises"),file=await fs.open(plan.target!,"r");let artifact:Buffer;try{const info=await file.stat();if(!info.isFile()||info.size>16777216)throw new Error("Runtime upload budget exceeded");const buffer=Buffer.alloc(16777217);let n=0;while(n<buffer.length){const {bytesRead}=await file.read(buffer,n,buffer.length-n,n);if(!bytesRead)break;n+=bytesRead;}if(n>16777216)throw new Error("Artifact grew beyond budget");artifact=buffer.subarray(0,n);}finally{await file.close();}
+      if(!plan.targetIdentity?.sha256||createHash("sha256").update(artifact).digest("hex")!==plan.targetIdentity.sha256)throw new Error("Artifact changed since approval");const result=await submitAnalysisSandbox(input,artifact,plan.requestHash,desktopAnalysisTaskOrchestrator.signal(planId));return {result,plan:result.status==="failed"?desktopAnalysisTaskOrchestrator.fail(planId,"Worker failed"):desktopAnalysisTaskOrchestrator.complete(planId,result,"isolated-qbdi-worker")};}catch(error){desktopAnalysisTaskOrchestrator.fail(planId,error);throw error;}
+    }
 		const rawInput = {
 			...(typeof args?.input === "object" && args.input ? args.input : {}),
 		} as Record<string, unknown>;
@@ -5273,6 +5284,7 @@ export async function handleCommand(
 			if (
 				![
 					"inspect",
+          "advanced_analysis",
 					"forensic_report",
 					"apk_security_report",
 					"compare_apks",
@@ -5311,6 +5323,10 @@ export async function handleCommand(
     }
     try {
       const parsed = JSON.parse(result);
+      if(input.operation === "advanced_analysis" && ["blocked","failed","cancelled"].includes(parsed?.result?.status)) {
+        const plan=desktopAnalysisTaskOrchestrator.fail(planId,`Advanced analysis ${parsed.result.status}; inspect evidence for details.`);
+        return {kind:"reverse-engineering",result:parsed,plan};
+      }
       const outputPaths =
         parsed && typeof parsed === "object"
           ? [

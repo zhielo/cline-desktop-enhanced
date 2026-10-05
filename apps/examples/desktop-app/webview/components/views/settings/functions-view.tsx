@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { desktopClient } from "@/lib/desktop-client";
+import { NOTION_AGENT_DEPTH_LIMITS } from "../../../../shared/notion-agent-depth";
 import { PageFrame, PageHeader } from "../page-layout";
 
 const NOTION_SERVER_NAME = "Notion";
@@ -878,7 +879,7 @@ Project instructions: ${activeProject.instructions || "None"}`
             Math.max(10_000, bridgeBatchKilobytes * 1_000),
           ),
           depth: bridgeDepth,
-          redactSensitive,
+          redactSensitive: true,
           question,
         },
         { timeoutMs: 120_000 },
@@ -901,7 +902,6 @@ Project instructions: ${activeProject.instructions || "None"}`
     bridgeDepth,
     bridgePaths,
     bridgeQuestion,
-    redactSensitive,
     repositoryRoot,
   ]);
 
@@ -1780,9 +1780,18 @@ First validate every target and database schema. Return a table with operation n
             Review depth
             <select
               className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-              onChange={(event) =>
-                setBridgeDepth(event.target.value as AgentAnalysisDepth)
-              }
+              onChange={(event) => {
+                const depth = event.target.value as AgentAnalysisDepth;
+                const limits = NOTION_AGENT_DEPTH_LIMITS[depth];
+                setBridgeDepth(depth);
+                setBridgeMaxFiles(limits.files);
+                setBridgeMaxKilobytes(limits.bytes / 1_000);
+                setBridgeBatchKilobytes(limits.batchBytes / 1_000);
+                setBridgePackage(null);
+                setBridgeApproveUpload(false);
+                setBridgeApproveLaunch(false);
+                setBridgeApproveCleanup(false);
+              }}
               value={bridgeDepth}
             >
               <option value="quick">Quick review</option>

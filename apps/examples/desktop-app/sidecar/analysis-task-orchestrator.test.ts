@@ -218,3 +218,37 @@ describe("AnalysisTaskOrchestrator", () => {
 		).rejects.toThrow("HTTPS endpoint");
 	});
 });
+
+describe("known-key decryption review", () => {
+	it("requires authorized decryption and sensitive-plaintext acknowledgments", async () => {
+		const orchestrator = new AnalysisTaskOrchestrator();
+		const root = workspace();
+		writeFileSync(join(root, "owned.bin"), "ciphertext");
+		const plan = await orchestrator.prepare({
+			workspaceRoot: root,
+			kind: "static",
+			request: {
+				operation: "advanced_analysis",
+				advanced_action: "decrypt_blob",
+				target: "owned.bin",
+				advanced_options: {
+					decrypt: { algorithm: "aes-256-gcm", nonce_hex: "0".repeat(24) },
+				},
+			},
+		});
+		expect(plan.risk).toBe("moderate");
+		expect(plan.requirements).toEqual(
+			expect.arrayContaining([
+				"authorized-decryption",
+				"sensitive-plaintext-processing",
+			]),
+		);
+		expect(() => orchestrator.approve(plan.id, [], plan.requestHash)).toThrow(
+			"Missing required approvals",
+		);
+		expect(
+			orchestrator.approve(plan.id, plan.requirements, plan.requestHash)
+				.executionToken,
+		).toBeTruthy();
+	});
+});

@@ -1,0 +1,26 @@
+{
+  "generatorSha256": "c0af87082d413bc7b51fbf8e227fb6974f795e11205c66f9323d450eaf7d7e0b",
+  "base": "28463aae8554504337a026ff610c016d84a84d15",
+  "files": [
+    "apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx",
+    "apps/examples/desktop-app/webview/components/views/chat/analysis-workbench.tsx",
+    "apps/examples/desktop-app/package.json",
+    "apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.test.tsx",
+    "apps/examples/desktop-app/sidecar/analysis-document-store.ts",
+    "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",
+    "CUSTOMIZATIONS.md",
+    "scripts/verify-custom-fork.ts",
+    "docs/V4_IMPLEMENTATION_STATUS.md"
+  ],
+  "hashes": {
+    "apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx": "06a236a4cb82d27970c607085626ab844077dedd85e40c2f89e1e07d8923439a",
+    "apps/examples/desktop-app/webview/components/views/chat/analysis-workbench.tsx": "c3a2fbb5897242bb4fdac4763749deda1c5683a0553115559cc17037df33e758",
+    "apps/examples/desktop-app/package.json": "8a743d08b3ac34d53f99f124abf6289acda522edbee3ba860e0aa75c5061ef52",
+    "apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.test.tsx": "3f6eb40fe59a0dc8cda1ff39439a5160dcf321eeb210c56370e3140e4c39109a",
+    "apps/examples/desktop-app/sidecar/analysis-document-store.ts": "1457401db09f6a7f05ba2be06b51fe3d2d7f6bdd2e2fb676938f76e8d1905c82",
+    "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts": "94b50953504b6b156bba02d9c87ed0ef8115eef88df931e63bdf82d6e513779a",
+    "CUSTOMIZATIONS.md": "d8b25d63b28c282efd58eeddc73c388e94e1c14274d52402e24f4cd5715ac250",
+    "scripts/verify-custom-fork.ts": "c441d9d57e80e5fda7b0e5aa300a5d05d3762c6ca1765f87dba9ba6ecda6cc3d",
+    "docs/V4_IMPLEMENTATION_STATUS.md": "5b12dcabb22ac12260bed773782d4cde9e482643cf899649e287168267a7eca7"
+  }
+}

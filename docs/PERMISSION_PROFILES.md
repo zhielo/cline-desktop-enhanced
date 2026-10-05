@@ -3,8 +3,8 @@
 Cline Enhanced supports optional host-enforced capability profiles in local
 session configuration:
 
-- `read-only`: repository reads, search, skills, questions, coordination, and
-  commands that pass the existing file-editing command guard.
+- `read-only`: structured repository reads, file inspection, search, skills,
+  questions, and coordination. Arbitrary shell and interpreter execution is denied.
 - `workspace`: local workspace reads, edits, commands, and process sessions;
   network, device, debugger, reverse-engineering, and unclassified plugin/MCP
   tools are denied.
@@ -31,9 +31,11 @@ host-selected behavior.
 ## Security boundary
 
 These are capability profiles, not an operating-system sandbox. They constrain
-which registered tools may run and reuse the command guard to reject known
-file-editing commands in `read-only`. An allowed command still has the OS
-permissions of the Cline process. Native filesystem and network isolation must
+which registered tools may run. `read-only` and `project-notion-bridge` deny
+`run_commands` entirely instead of relying on a bypassable command blacklist.
+Structured repository reads accept only status, diff, log, and branches; Git
+diffs disable external diff and textconv execution. Commands in profiles that
+allow execution still have the OS permissions of the Cline process. Native filesystem and network isolation must
 be added by the host when containment against arbitrary shell behavior is
 required.
 
