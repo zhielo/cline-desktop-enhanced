@@ -1,5 +1,5 @@
 # V5 source validation request
 
-Validate explicit native entry provenance against unchanged full source/Python corpora and the real Ghidra adapter. Address containment and unique incoming-free high-CFG inference are separately labeled. Ambiguous roots remain unresolved. This triggers one Linux evidence job, not an installer, merge or release.
+Validate integrated native_functions_rizin, eleven SDK boundary cases and mandatory owned-ELF Rizin 0.9.1 adapter recovery with all existing source, Python, Z3 and Ghidra gates. One Linux evidence job, not a Windows installer.
 
-V5 remains incomplete: managed packs, Rizin reconciliation, isolated tracing/teardown, Android/JNI, advanced investigation UI and the final Windows candidate are pending.
+The broader V5 roadmap remains incomplete: semantic reconciliation, managed packs, measured VM isolation/teardown, trace semantics, Android/JNI and investigation UI are pending. No merge or release.

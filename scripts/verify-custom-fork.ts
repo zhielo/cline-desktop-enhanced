@@ -912,6 +912,7 @@ requiredMarkers.push(
 );
 requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",markers:["max_bytes=None","Invalid transformation byte budget"]});
 requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/native-program.ts",markers:["entryBlockEvidence","Invalid unique-root entry evidence","imported-unspecified"]});
+requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/rizin-program.ts",markers:["RizinProgramSchema","Function address lost precision","-NN","No target execution"]});
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

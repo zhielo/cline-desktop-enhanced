@@ -491,3 +491,7 @@ The Linux source-only workflow installs the full pinned analysis requirements, i
 ### V5 decompiler entry provenance
 
 High p-code may omit native function-entry instructions. Prefer address containment; otherwise accept only a unique incoming-free root in a complete bounded high CFG and label it structural inference. Ambiguous/cyclic roots remain unresolved and recovery partial. Independently reject false root and contradictory provenance claims. No first-array-block guess or native-entry proof.
+
+### V5 bounded Rizin action
+
+The native_functions_rizin static action is exposed in SDK schema/executor and workbench using a host-owned absolute CLINE_RE_RIZIN executable. Private snapshots and actual copied-byte hashes, disabled user scripts/plugins and executable I/O, precision-safe addresses, bounded output/functions and cancellation/deadlines are preserved. Eleven boundary cases join the SDK gate, plus required owned-ELF recovery in Linux CI with the reviewed 0.9.1 checksum. Not semantic equivalence, isolated tracing, a managed Windows pack or an installer-bundled engine.

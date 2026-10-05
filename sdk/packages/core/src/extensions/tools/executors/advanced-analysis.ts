@@ -37,6 +37,7 @@ export const ADVANCED_ACTIONS = [
 	"notebook_validate",
 	"notebook_run", "cfg_analyze", "trace_slice", "trace_taint",
 	"decrypt_blob",
+	"native_functions_rizin",
 	"native_program",
 	"native_semantics",
 ] as const;
@@ -49,6 +50,7 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"native_semantics",
 ]);
 export const ADVANCED_BACKENDS = [
+	{ id: "rizin", integration: "bounded-static-function-recovery" },
 	{ id: "cryptography", integration: "host-gated-authenticated-decryption" },
 	{ id: "z3", integration: "local-fixed-worker" },
 	{ id: "triton", integration: "expression-only-worker" },
