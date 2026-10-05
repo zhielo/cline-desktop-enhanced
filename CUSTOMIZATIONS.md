@@ -422,3 +422,12 @@ Do not hide a new regression by weakening assertions or making a required custom
 5. Update this ledger and `scripts/verify-custom-fork.ts` in the same commit when adding, replacing, renaming, or intentionally removing custom behavior.
 6. Run the relevant focused tests, desktop type-check, repository lint, and custom-fork verifier.
 7. Keep the personal installer unsigned and artifact-only; do not create a release unless the user explicitly changes that policy.
+
+### Fresh tool platform foundation (issue #98)
+
+- `tool_registry` reports bounded registered SDK metadata, not the final permission-filtered tool roster. Installation, licensing, health and effective permission remain unverified. It does not invoke tools, descriptor getters, external discovery or MCP, and never exposes schema defaults.
+- Normal tool presets enable registry introspection; the SDK factory also supports an explicit host opt-in/out. Existing permission and Plan-mode guards remain authoritative.
+- `run_commands` executes in input order by default, with host-only independent-command concurrency bounded to 1..4. One monotonic batch deadline covers queued commands; cancellation or expiry prevents later launches and is forwarded to the executor.
+- Timed-out launched commands report `cleanupUnverified`; cancellation requests and caller timeouts are not proof that descendants terminated. This checkpoint does not introduce Windows Job Objects, verified hostile-code isolation, or a global multi-agent execution limit.
+- Shared timeout wrappers clear their timers when work settles.
+- This is a fresh core foundation, NOT completion of the tool catalogue in issue #98 and NOT an installer release. Optional runtime workers remain subject to the existing fail-closed prerequisites.

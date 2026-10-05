@@ -4,6 +4,9 @@
  * This module provides a set of configurable default tools for agents.
  */
 
+export { createToolRegistryTool } from "./capability-registry";
+export type { ToolRegistryEntry, ToolRegistryInput, ToolRegistryResult } from "./capability-registry";
+
 // Zod Utilities
 export { validateWithZod, zodToJsonSchema } from "@cline/shared";
 export {

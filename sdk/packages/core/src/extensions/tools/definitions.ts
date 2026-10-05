@@ -5,6 +5,8 @@
  */
 
 import { isAbsolute, join, resolve } from "node:path";
+import { createToolRegistryTool } from "./capability-registry";
+import { type CommandBatchContext, runCommandBatch, waitForCommandResult } from "./command-batch";
 import {
 	type AgentTool,
 	type AgentToolContext,
@@ -273,111 +275,122 @@ async function executeShellCommands(
 		timeoutMs: number;
 		timeoutSource: "default_setting" | "configured_setting";
 		telemetry?: ITelemetryService;
+		concurrency?: number;
 	},
 ): Promise<ToolOperationResult[]> {
 	const { executor, cwd, context, timeoutMs, timeoutSource, telemetry } =
 		options;
 
-	return Promise.all(
-		commands.map(
-			async (command, commandIndex): Promise<ToolOperationResult> => {
-				const startedAt = Date.now();
-				const executionMode =
-					typeof command !== "string" && "args" in command ? "direct" : "shell";
-				const query = formatRunCommandQueryPreview(command);
-				let emittedCommandMetadata = false;
-				let recordedFirstOutput = false;
-				let timeToFirstOutputMs: number | undefined;
-				let outputChunkCount = 0;
-				let outputChars = 0;
-				const recordCompletion = (success: boolean) => {
-					const durationMs = Date.now() - startedAt;
-					recordRunCommandsCompletionMetrics(
-						telemetry,
-						{ durationMs, outputChunkCount, outputChars },
-						{ executionMode, success, timeoutSource },
-					);
-					recordWindowsCommandLatencyObservation({
-						executionMode,
-						durationMs,
-						timeToFirstOutputMs,
-						outputChunkCount,
-						outputChars,
-						success,
-					});
-				};
-				const commandContext: AgentToolContext = context.emitUpdate
-					? {
-							...context,
-							emitUpdate: (update) => {
-								const payload =
-									update && typeof update === "object" && !Array.isArray(update)
-										? (update as Record<string, unknown>)
-										: { update };
-								const chunk = payload.chunk;
-								if (typeof chunk === "string" && chunk.length > 0) {
-									outputChunkCount += 1;
-									outputChars += chunk.length;
-									if (!recordedFirstOutput) {
-										recordedFirstOutput = true;
-										timeToFirstOutputMs = Date.now() - startedAt;
-										recordRunCommandsFirstOutput(
-											telemetry,
-											timeToFirstOutputMs,
-											{ executionMode, timeoutSource },
-										);
-									}
-								}
-								context.emitUpdate?.({
-									...payload,
-									commandIndex,
-									...(!emittedCommandMetadata ? { query } : {}),
-								});
-								emittedCommandMetadata = true;
-							},
+	const runCommand = async (
+		command: string | StructuredCommandInput,
+		commandIndex: number,
+		batch: CommandBatchContext,
+	): Promise<ToolOperationResult> => {
+		const startedAt = Date.now();
+		let launchAttempted = false;
+		const executionMode =
+			typeof command !== "string" && "args" in command ? "direct" : "shell";
+		const query = formatRunCommandQueryPreview(command);
+		let emittedCommandMetadata = false;
+		let recordedFirstOutput = false;
+		let timeToFirstOutputMs: number | undefined;
+		let outputChunkCount = 0;
+		let outputChars = 0;
+		const recordCompletion = (success: boolean) => {
+			const durationMs = Date.now() - startedAt;
+			recordRunCommandsCompletionMetrics(
+				telemetry,
+				{ durationMs, outputChunkCount, outputChars },
+				{ executionMode, success, timeoutSource },
+			);
+			recordWindowsCommandLatencyObservation({
+				executionMode,
+				durationMs,
+				timeToFirstOutputMs,
+				outputChunkCount,
+				outputChars,
+				success,
+			});
+		};
+		const commandContext: AgentToolContext = context.emitUpdate
+			? {
+					...context,
+					signal: batch.signal,
+					emitUpdate: (update) => {
+						const payload =
+							update && typeof update === "object" && !Array.isArray(update)
+								? (update as Record<string, unknown>)
+								: { update };
+						const chunk = payload.chunk;
+						if (typeof chunk === "string" && chunk.length > 0) {
+							outputChunkCount += 1;
+							outputChars += chunk.length;
+							if (!recordedFirstOutput) {
+								recordedFirstOutput = true;
+								timeToFirstOutputMs = Date.now() - startedAt;
+								recordRunCommandsFirstOutput(
+									telemetry,
+									timeToFirstOutputMs,
+									{ executionMode, timeoutSource },
+								);
+							}
 						}
-					: context;
-				try {
-					const output = await withTimeout(
-						executor(command, cwd, commandContext),
-						timeoutMs,
-						`Command timed out after ${timeoutMs}ms`,
-					);
-					recordCompletion(true);
-					return {
-						query,
-						result: output,
-						success: true,
-					};
-				} catch (error) {
-					recordCompletion(false);
-					if (error instanceof TimeoutError) {
-						captureRunCommandsTimeoutFromContext(telemetry, context, {
-							effectiveTimeoutMs: error.timeoutMs,
-							timeoutSource,
-							commandCount: commands.length,
-							durationMs: Date.now() - startedAt,
+						context.emitUpdate?.({
+							...payload,
+							commandIndex,
+							...(!emittedCommandMetadata ? { query } : {}),
 						});
-					}
-					if (error instanceof CommandExitError) {
-						return {
-							query,
-							result: error.output,
-							error: error.message,
-							success: false,
-						};
-					}
-					const msg = formatError(error);
-					return {
-						query,
-						result: "",
-						error: `Command failed: ${msg}`,
-						success: false,
-					};
+						emittedCommandMetadata = true;
+					},
 				}
-			},
-		),
-	);
+			: { ...context, signal: batch.signal };
+		try {
+			batch.ensureActive();
+			launchAttempted = true;
+			const output = await waitForCommandResult(executor(command, cwd, commandContext), batch.signal);
+			batch.ensureActive();
+			recordCompletion(true);
+			return {
+				query,
+				result: output,
+				success: true,
+			};
+		} catch (error) {
+			recordCompletion(false);
+			if (error instanceof TimeoutError) {
+				batch.cancel(error);
+				captureRunCommandsTimeoutFromContext(telemetry, context, {
+					effectiveTimeoutMs: error.timeoutMs,
+					timeoutSource,
+					commandCount: commands.length,
+					durationMs: Date.now() - startedAt,
+				});
+			}
+			if (error instanceof CommandExitError) {
+				return {
+					query,
+					result: error.output,
+					error: error.message,
+					success: false,
+					...(launchAttempted && batch.signal.aborted ? { cleanupUnverified: true } : {}),
+				};
+			}
+			const msg = formatError(error);
+			return {
+				query,
+				result: "",
+				error: `Command failed: ${msg}`,
+				success: false,
+				...(launchAttempted && batch.signal.aborted ? { cleanupUnverified: true } : {}),
+			};
+		}
+	};
+	return runCommandBatch(commands, runCommand, {
+		timeoutMs,
+		concurrency: options.concurrency,
+		signal: context.signal,
+		onSkipped: runCommand,
+	});
 }
 
 // =============================================================================
@@ -673,7 +686,7 @@ export function buildRunCommandsDescription(
  */
 export function createShellTool(
 	executor: ShellExecutor,
-	config: Pick<DefaultToolsConfig, "cwd" | "bashTimeoutMs" | "telemetry"> & {
+	config: Pick<DefaultToolsConfig, "cwd" | "bashTimeoutMs" | "telemetry" | "commandConcurrency"> & {
 		shell?: string | (() => string);
 	} = {},
 ): AgentTool<unknown, ToolOperationResult[]> {
@@ -710,6 +723,7 @@ export function createShellTool(
 				timeoutMs,
 				timeoutSource,
 				telemetry: config.telemetry,
+				concurrency: config.commandConcurrency,
 			});
 		},
 	});
@@ -1260,6 +1274,7 @@ export function createDefaultTools(
 ): AgentTool[] {
 	const {
 		executors,
+		enableToolRegistry = false,
 		enableReadFiles = true,
 		enableSearch = true,
 		enableReverseEngineering = true,
@@ -1354,5 +1369,8 @@ export function createDefaultTools(
 		tools.push(createSubmitAndExitTool(submitExecutor, config));
 	}
 
+	if (enableToolRegistry) {
+		tools.push(createToolRegistryTool(() => tools as unknown as AgentTool[]));
+	}
 	return tools as unknown as AgentTool[];
 }

@@ -41,6 +41,7 @@ export interface BuiltinToolAvailabilityContext {
 type RuntimeToolCatalogEntry = Omit<ToolCatalogEntry, "defaultEnabled">;
 
 const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
+	{ id: "tool_registry", description: "Inspect bounded registered SDK tool metadata without granting permissions or claiming engine readiness.", headlessToolNames: ["tool_registry"] },
 	{
 		id: "web_search",
 		description:
@@ -160,7 +161,8 @@ const TOOL_NAME_TO_FLAG: Partial<
 		string,
 		keyof Pick<
 			DefaultToolsConfig,
-			| "enableReadFiles"
+			| "enableToolRegistry"
+	| "enableReadFiles"
 			| "enableReverseEngineering"
 			| "enableLiveDebugger"
 			| "enableAndroidDevice"
@@ -179,6 +181,7 @@ const TOOL_NAME_TO_FLAG: Partial<
 		>
 	>
 > = {
+	tool_registry: "enableToolRegistry",
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
 	live_debugger: "enableLiveDebugger",
@@ -204,6 +207,7 @@ function resolveContextMode(
 
 type ResolvedToolFlags = Pick<
 	DefaultToolsConfig,
+	| "enableToolRegistry"
 	| "enableReadFiles"
 	| "enableReverseEngineering"
 	| "enableLiveDebugger"

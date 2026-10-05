@@ -10,6 +10,7 @@ import type { DefaultToolName } from "./types";
  * Constants for default tool names
  */
 export const DefaultToolNames = {
+	TOOL_REGISTRY: "tool_registry",
 	READ_FILES: "read_files",
 	SEARCH_CODEBASE: "search_codebase",
 	REVERSE_ENGINEER: "reverse_engineer",
@@ -32,6 +33,7 @@ export const DefaultToolNames = {
  * Array of all default tool names
  */
 export const ALL_DEFAULT_TOOL_NAMES: DefaultToolName[] = [
+	DefaultToolNames.TOOL_REGISTRY,
 	DefaultToolNames.READ_FILES,
 	DefaultToolNames.SEARCH_CODEBASE,
 	DefaultToolNames.REVERSE_ENGINEER,

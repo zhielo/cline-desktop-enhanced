@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{ path: "CUSTOMIZATIONS.md", markers: ["Fresh tool platform foundation (issue #98)", "cleanupUnverified"] },
+	{ path: "sdk/packages/core/src/extensions/tools/capability-registry.ts", markers: ["createToolRegistryTool", "not_probed", "not_evaluated"] },
+	{ path: "sdk/packages/core/src/extensions/tools/command-batch.ts", markers: ["runCommandBatch", "ensureActive", "clearTimeout(timer)"] },
+	{ path: "sdk/packages/core/src/extensions/tools/definitions.ts", markers: ["runCommandBatch(commands, runCommand", "createToolRegistryTool", "cleanupUnverified"] },
 	{
 		path: "CUSTOMIZATIONS.md",
 		markers: [

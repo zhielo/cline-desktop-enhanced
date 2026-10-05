@@ -60,6 +60,7 @@ export const PERMISSION_PROFILE_EXTENSION_NAME =
 	"core.permission-profile-guard";
 
 const READ_ONLY_TOOLS = new Set([
+	"tool_registry",
 	"read_files",
 	"search_codebase",
 	"skills",

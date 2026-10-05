@@ -50,12 +50,13 @@ export function withTimeout<T>(
 	ms: number,
 	message: string,
 ): Promise<T> {
-	return Promise.race([
-		promise,
-		new Promise<never>((_, reject) => {
-			setTimeout(() => reject(new TimeoutError(message, ms)), ms);
-		}),
-	]);
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new TimeoutError(message, ms)), ms);
+		Promise.resolve(promise).then(
+			(value) => { clearTimeout(timer); resolve(value); },
+			(error: unknown) => { clearTimeout(timer); reject(error); },
+		);
+	});
 }
 
 export function formatReadFileQuery(request: ReadFileRequest): string {

@@ -32,6 +32,8 @@ import type {
  * Result from a single tool operation
  */
 export interface ToolOperationResult {
+	/** Cancellation was requested; physical process cleanup was not verified. */
+	cleanupUnverified?: boolean;
 	/** The query/input that was executed */
 	query: string;
 	/** The result content (if successful) */
@@ -277,6 +279,7 @@ export interface ToolExecutors {
  * Names of available default tools
  */
 export type DefaultToolName =
+	| "tool_registry"
 	| "read_files"
 	| "search_codebase"
 	| "reverse_engineer"
@@ -298,6 +301,10 @@ export type DefaultToolName =
  * Configuration for enabling/disabling default tools
  */
 export interface DefaultToolsConfig {
+	/** Registry metadata only; standard presets opt in. @default false */
+	enableToolRegistry?: boolean;
+	/** Host-selected independent-command parallelism, integer 1..4. @default 1 */
+	commandConcurrency?: number;
 	/**
 	 * Host telemetry service, injected at tool construction time. Tools that
 	 * emit operational telemetry (e.g. run_commands timeouts) close over this
