@@ -2879,6 +2879,91 @@ describe("SessionRuntime.run — tracker wiring (P1 #3)", () => {
 // ---------------------------------------------------------------------------
 
 describe("SessionRuntime auth retry", () => {
+	it("keeps long history when ClinePass credentials require a new sign-in", async () => {
+		const history = Array.from({ length: 420 }, (_, index) =>
+			makeAgentMessage(`saved-${index}`, index % 2 ? "assistant" : "user", `saved-${index}`),
+		);
+		const failed = makeFakeAgentRuntime({
+			result: {
+				status: "failed",
+				error: new Error("Unauthorized: re-authenticate your Cline account."),
+				messages: history,
+			},
+		});
+		const onAuthError = vi.fn(async () => false);
+		const createRuntime = vi.fn(() => failed.runtime);
+		const session = new SessionRuntime(
+			makeAgentConfig({ providerId: "cline-pass", onAuthError }),
+			{ createAgentRuntimeImpl: createRuntime },
+		);
+		const result = await session.run("continue");
+		expect(result.finishReason).toBe("error");
+		expect(onAuthError).toHaveBeenCalledOnce();
+		expect(createRuntime).toHaveBeenCalledOnce();
+		expect(session.getMessages().filter((message) => message.id?.startsWith("saved-"))).toHaveLength(history.length);
+	});
+
+	it("preserves long history and completed tool results across ClinePass auth recovery", async () => {
+		const history = Array.from({ length: 420 }, (_, index) =>
+			makeAgentMessage(`history-${index}`, index % 2 ? "assistant" : "user", `history-${index}`),
+		);
+		const toolCall: AgentMessage = {
+			id: "completed-call",
+			role: "assistant",
+			createdAt: 421,
+			content: [{
+				type: "tool-call",
+				toolCallId: "already-executed",
+				toolName: "run_commands",
+				input: { command: "fixture-only" },
+			}],
+		};
+		const toolResult: AgentMessage = {
+			id: "completed-result",
+			role: "tool",
+			createdAt: 422,
+			content: [{
+				type: "tool-result",
+				toolCallId: "already-executed",
+				toolName: "run_commands",
+				output: "completed before token expiry",
+			}],
+		};
+		const trail = [...history, makeAgentMessage("new-prompt", "user", "continue work"), toolCall, toolResult];
+		const failed = makeFakeAgentRuntime({
+			result: { status: "failed", error: new Error("401 Unauthorized"), messages: trail },
+		});
+		const recovered = makeFakeAgentRuntime({ result: { outputText: "recovered" } });
+		const configs: AgentRuntimeConfig[] = [];
+		const onAuthError = vi.fn(async () => true);
+		const session = new SessionRuntime(
+			makeAgentConfig({
+				providerId: "cline-pass",
+				onAuthError,
+				initialMessages: history.map((message) => ({
+					id: message.id,
+					role: message.role,
+					content: [{ type: "text", text: message.id }],
+				})),
+			}),
+			{
+				createAgentRuntimeImpl: (config) => {
+					configs.push(config);
+					return configs.length === 1 ? failed.runtime : recovered.runtime;
+				},
+			},
+		);
+		const result = await session.continue("continue work");
+		expect(result.finishReason).toBe("completed");
+		expect(onAuthError).toHaveBeenCalledOnce();
+		expect(failed.calls.continue).toHaveLength(1);
+		expect(recovered.calls.run).toHaveLength(0);
+		expect(recovered.calls.continue).toHaveLength(1);
+		expect(configs[1]?.initialMessages).toHaveLength(trail.length);
+		expect(configs[1]?.initialMessages?.filter((message) => message.id === "new-prompt")).toHaveLength(1);
+		expect(configs[1]?.initialMessages?.at(-1)?.content).toEqual(toolResult.content);
+	});
+
 	const authFailure = {
 		status: "failed",
 		error: new Error(

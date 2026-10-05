@@ -150,6 +150,14 @@ The frontend `desktop-client.ts` connects directly to the sidecar WebSocket:
 - No Tauri dependency needed
 - Same `invoke()` / `subscribe()` API
 
+Session lifecycle calls use action-specific deadlines: the Hub permits ten
+minutes for creation/checkpoint restoration, and the desktop waiter adds a
+thirty-second response grace period. Lightweight control/status calls retain
+their ordinary deadlines; model sends represent complete runs. Edit forks
+reconcile lost/expired replies through their stable operation ID, never by
+blindly replaying arbitrary prompts. Failed same-session hydration retains its
+visible transcript. See `docs/LONG_SESSION_RECOVERY.md`.
+
 ## Command Map
 
 The model picker first uses `list_provider_catalog`, which reads the bundled and

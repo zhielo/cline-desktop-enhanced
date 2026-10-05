@@ -57,6 +57,40 @@ it.each([
 
 describe("fork transport recovery", () => {
 	it.each([
+		"Desktop command timed out waiting for chat_session_command",
+		"Hub command session.create timed out after 600000ms (hub=local)",
+		"Hub command session.restore timed out after 600000ms (hub=local)",
+	])("reconciles an ambiguous lifecycle timeout: %s", (detail) => {
+		expect(isRecoverableForkTransportError(new Error(detail))).toBe(true);
+	});
+
+	it.each([
+		"Unauthorized: Please re-authenticate your Cline account.",
+		"Hub connection closed (code=1008, reason=Unauthorized)",
+		"Hub command session.send_input timed out after 30000ms",
+		"Desktop command timed out waiting for delete_chat_session",
+	])("does not retry an unauthorized or unrelated operation: %s", async (detail) => {
+		let calls = 0;
+		await expect(
+			retryRecoverableFork(async () => {
+				calls += 1;
+				throw new Error(detail);
+			}, 0),
+		).rejects.toThrow(detail);
+		expect(calls).toBe(1);
+	});
+
+	it("uses the completed fork after a timeout instead of creating another one", async () => {
+		let calls = 0;
+		const result = await retryRecoverableFork(async () => {
+			calls += 1;
+			throw new Error("Desktop command timed out waiting for chat_session_command");
+		}, 0, async () => ({ sessionId: "already-restored" }));
+		expect(result).toEqual({ sessionId: "already-restored" });
+		expect(calls).toBe(1);
+	});
+
+	it.each([
 		"Hub connection closed (code=1006, reason=Connection ended)",
 		"Capability owner client core-example disconnected before request was resolved.",
 		"Desktop backend transport closed",

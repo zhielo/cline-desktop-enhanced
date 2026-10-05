@@ -12,6 +12,28 @@ This file is the durable customization ledger for this repository. The source on
 
 ## Preserved customizations
 
+### Long-session edit and recovery reliability
+
+- Hub session creation and checkpoint restoration use a bounded ten-minute
+  lifecycle deadline instead of the thirty-second metadata deadline. The
+  desktop lifecycle waiter has a thirty-second response grace period.
+- Desktop command deadlines are selected centrally by action, covering direct
+  history-attachment callers as well as chat hooks. Explicit caller deadlines
+  still take precedence, ordinary control/status calls remain bounded, and
+  model-turn sends remain unbounded until their runtime completion or disconnect.
+- Message-edit forks reconcile ambiguous lifecycle timeouts using the existing
+  stable operation ID before one bounded retry. Provider authentication failures
+  and arbitrary send failures are not classified as retryable edits.
+- A failed re-attachment preserves visible messages for the same session without
+  mixing another thread's transcript into it.
+- Mandatory installer validation includes desktop transport/recovery tests, Hub
+  lifecycle-deadline tests, and long-history ClinePass OAuth continuation coverage.
+  OAuth recovery retains completed tool evidence rather than replaying the user
+  turn. These tests do not claim that revoked credentials can be repaired without
+  signing in again.
+
+See `docs/LONG_SESSION_RECOVERY.md`.
+
 ### Engineering Control Center
 
 - A dedicated **Engineering** sidebar workspace is separate from normal Cline chat, Notion Functions, and the chat Analysis workbench. Opening it never changes the selected provider, permission profile, active session, or tool auto-approval behavior.

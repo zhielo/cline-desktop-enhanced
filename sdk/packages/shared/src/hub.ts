@@ -606,11 +606,17 @@ export type HubCommandName =
 
 export const HUB_DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 export const HUB_COMMAND_SLOW_LOG_MS = 5_000;
+// Lifecycle commands may hydrate a long transcript, initialize MCP servers,
+// and restore a Git checkpoint. They are not lightweight metadata reads.
+export const HUB_SESSION_LIFECYCLE_TIMEOUT_MS = 10 * 60_000;
 
 export function getDefaultHubCommandTimeoutMs(
 	command: HubCommandName,
 ): number | null {
 	switch (command) {
+		case "session.create":
+		case "session.restore":
+			return HUB_SESSION_LIFECYCLE_TIMEOUT_MS;
 		case "run.start":
 		case "session.send_input":
 			return null;

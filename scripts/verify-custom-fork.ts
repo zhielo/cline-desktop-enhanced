@@ -905,6 +905,25 @@ const forbiddenPaths = [
 ];
 const failures: string[] = [];
 
+requiredMarkers.push(
+	{
+		path: "sdk/packages/shared/src/hub.ts",
+		markers: ["HUB_SESSION_LIFECYCLE_TIMEOUT_MS", 'case "session.create":', 'case "session.restore":'],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/desktop-client.ts",
+		markers: ["HUB_SESSION_LIFECYCLE_TIMEOUT_MS", "defaultCommandTimeoutMs", "SESSION_LIFECYCLE_TIMEOUT_MS"],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: ["Test desktop transport recovery", "Test Hub lifecycle deadlines", "session-runtime-orchestrator.test.ts"],
+	},
+	{
+		path: "docs/LONG_SESSION_RECOVERY.md",
+		markers: ["Authentication is separate", "No automatic replay of sends", "ten minutes"],
+	},
+);
+
 for (const forbiddenPath of forbiddenPaths) {
 	if (existsSync(forbiddenPath)) {
 		failures.push(`${forbiddenPath}: obsolete file must remain deleted`);

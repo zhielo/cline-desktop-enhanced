@@ -111,6 +111,52 @@ afterEach(() => {
 });
 
 describe("DesktopClient command deadlines", () => {
+	it.each(["start", "attach", "fork", "restore_checkpoint"])(
+		"does not expire a long-session %s at the ordinary two-minute deadline",
+		async (action) => {
+			const { desktopClient } = await import("./desktop-client");
+			let settled = false;
+			const invocation = desktopClient
+				.invoke("chat_session_command", { request: { action } })
+				.finally(() => {
+					settled = true;
+				});
+			const socket = await connectLatestSocket();
+			await vi.advanceTimersByTimeAsync(120_001);
+			expect(settled).toBe(false);
+			socket.respond({ sessionId: "restored-long-session" });
+			await expect(invocation).resolves.toEqual({
+				sessionId: "restored-long-session",
+			});
+		},
+	);
+
+	it("still bounds lifecycle commands when the backend stops responding", async () => {
+		const { desktopClient } = await import("./desktop-client");
+		const invocation = desktopClient.invoke("chat_session_command", {
+			request: { action: "start" },
+		});
+		await connectLatestSocket();
+		const rejection = expect(invocation).rejects.toThrow(
+			"Desktop command timed out waiting for chat_session_command",
+		);
+		await vi.advanceTimersByTimeAsync(630_000);
+		await rejection;
+	});
+
+	it("honors an explicit short deadline even for a lifecycle command", async () => {
+		const { desktopClient } = await import("./desktop-client");
+		const invocation = desktopClient.invoke(
+			"chat_session_command",
+			{ request: { action: "fork" } },
+			{ timeoutMs: 500 },
+		);
+		await connectLatestSocket();
+		const rejection = expect(invocation).rejects.toThrow("timed out");
+		await vi.advanceTimersByTimeAsync(500);
+		await rejection;
+	});
+
 	it("sends the displayed revision for Agenda approval, cancellation, and run", async () => {
 		const { desktopClient } = await import("./desktop-client");
 		const approval = desktopClient.approveAgendaTask({
@@ -571,6 +617,8 @@ describe("writeDesktopDebugLog", () => {
 		"info",
 		"error",
 	] as const)("prints valid %s sidecar diagnostics with a static format string", (level) => {
+		// Production logging is opt-in; tests must opt in too.
+		window.localStorage.setItem("cline.debugLogs", "1");
 		const consoleSpy = vi.spyOn(console, level).mockImplementation(() => {});
 
 		writeDesktopDebugLog({

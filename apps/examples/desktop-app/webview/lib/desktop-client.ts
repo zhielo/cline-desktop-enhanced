@@ -1,5 +1,6 @@
 "use client";
 
+import { HUB_SESSION_LIFECYCLE_TIMEOUT_MS } from "@cline/shared/browser";
 import type {
 	AgendaAutomationPolicy,
 	AgendaTaskListInput,
@@ -179,6 +180,9 @@ function raceDeadline<T>(
 }
 
 const REQUEST_TIMEOUT_MS = 120_000;
+// The desktop waiter must outlive the Hub's bounded lifecycle deadline so
+// slow restores return their actual result/error instead of a false UI timeout.
+const SESSION_LIFECYCLE_TIMEOUT_MS = HUB_SESSION_LIFECYCLE_TIMEOUT_MS + 30_000;
 const RECONNECT_BASE_DELAY_MS = 400;
 const RECONNECT_MAX_DELAY_MS = 4_000;
 /**
@@ -208,6 +212,28 @@ export function isTauriAvailable(): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function defaultCommandTimeoutMs(
+	command: string,
+	args?: Record<string, unknown>,
+): number | null {
+	if (command !== "chat_session_command" || !isRecord(args?.request)) {
+		return REQUEST_TIMEOUT_MS;
+	}
+	switch (args.request.action) {
+		case "send":
+			// The reply represents a whole model/tool turn, not an acknowledgement.
+			return null;
+		case "start":
+		case "attach":
+		case "fork":
+		case "restore_checkpoint":
+			return SESSION_LIFECYCLE_TIMEOUT_MS;
+		default:
+			// Status, queue and control calls still fail promptly.
+			return REQUEST_TIMEOUT_MS;
+	}
 }
 
 function parseDesktopDebugLogPayload(
@@ -672,7 +698,7 @@ class DesktopClient {
 		return await new Promise<T>((resolve, reject) => {
 			const timeoutMs =
 				options?.timeoutMs === undefined
-					? REQUEST_TIMEOUT_MS
+					? defaultCommandTimeoutMs(command, args)
 					: options.timeoutMs;
 			const timeoutId =
 				timeoutMs === null

@@ -59,6 +59,12 @@ async function main() {
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),
     job("Test Windows installer configuration", ["-F", "@cline/code", "test:windows-installer"]),
     job("Test AI task report", ["x", "vitest", "run", "webview/lib/task-report.test.ts", "--config", "vitest.config.mts"], desktop),
+    job("Test desktop transport recovery", ["x", "vitest", "run",
+      "webview/lib/desktop-client.test.ts",
+      "webview/lib/run-error.test.ts",
+      "--config", "vitest.config.mts"], desktop),
+    job("Test Hub lifecycle deadlines", ["x", "vitest", "run",
+      "sdk/packages/shared/src/hub.test.ts", "--config", "vitest.config.mts"]),
     job("Test desktop chat UI", ["x", ...pkg.scripts["test:chat-ui"].split(/\s+/)], desktop),
     job("Run desktop customization tests", ["x", "vitest", "run",
       "apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts",
@@ -85,6 +91,7 @@ async function main() {
  "sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.test.ts",
       "sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts",
       "sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts",
+      "sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.test.ts",
       "--config", "vitest.config.mts", "--testTimeout=60000"]),
   ];
   if (flags.includes("--engines")) {
