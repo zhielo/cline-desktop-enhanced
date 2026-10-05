@@ -62,6 +62,7 @@ async function main() {
     job("Test desktop chat UI", ["x", ...pkg.scripts["test:chat-ui"].split(/\s+/)], desktop),
     job("Run desktop customization tests", ["x", "vitest", "run",
       "apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts",
+      "apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts",
       "apps/examples/desktop-app/sidecar/engineering-control-plane.test.ts",
       "apps/examples/desktop-app/sidecar/engineering-git-review.test.ts",

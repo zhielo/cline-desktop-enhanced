@@ -467,3 +467,8 @@ Do not hide a new regression by weakening assertions or making a required custom
 
 - V4 document authoring uses separate save/run approval, a 1 MiB limit and hash-guarded updates. Runtime submission has independent upload/execution acknowledgments, exact worker/artifact binding, strict Ed25519 keys and bounded signed receipts.
 - Installer packaging requires six real portable-engine SDK-to-worker tests, not merely package presence. Python and these dependencies are CI-only and not bundled in the installer. No live QBDI backend, licensed adapter, full unflattening or VM provisioning is claimed.
+
+### V4 publication and responsive authoring validation
+- New notebook/graph documents are fully staged, synced, and published atomically without overwrite using a same-directory hard link. This requires a hard-link-capable filesystem (normally NTFS on Windows); unsupported filesystems fail closed. This does not claim protection against privileged or non-cooperating actors, Windows reparse races, or stronger ACLs than the workspace provides.
+- Both input and pretty-printed saved documents must fit the 1 MiB UTF-8 byte budget. Nine required document-store regressions cover complete publication, no-overwrite, explicit approval, reviewed hash updates, stale content, path confinement, graph integrity, serialized expansion, concurrent publication and foreign-lock preservation.
+- Notebook preparation actions wrap with an explicit gap at narrow widths. The authoring tests require that container while preserving separate file-write and exact analysis approvals. All previous source, real Windows engine, terminal, installer and installed-app gates remain mandatory.
