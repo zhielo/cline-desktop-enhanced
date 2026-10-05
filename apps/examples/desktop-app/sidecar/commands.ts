@@ -5273,6 +5273,7 @@ export async function handleCommand(
 			if (
 				![
 					"inspect",
+          "advanced_analysis",
 					"forensic_report",
 					"apk_security_report",
 					"compare_apks",
@@ -5311,6 +5312,10 @@ export async function handleCommand(
     }
     try {
       const parsed = JSON.parse(result);
+      if(input.operation === "advanced_analysis" && ["blocked","failed","cancelled"].includes(parsed?.result?.status)) {
+        const plan=desktopAnalysisTaskOrchestrator.fail(planId,`Advanced analysis ${parsed.result.status}; inspect evidence for details.`);
+        return {kind:"reverse-engineering",result:parsed,plan};
+      }
       const outputPaths =
         parsed && typeof parsed === "object"
           ? [

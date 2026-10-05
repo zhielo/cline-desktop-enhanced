@@ -53,6 +53,7 @@ type TaskPlan = {
 };
 type Discovery = { reverseEngineering?: unknown; debugger?: unknown };
 type AnalysisOperation =
+  | "advanced_analysis"
 	| "inspect"
 	| "scan_strings"
 	| "forensic_report"
@@ -107,6 +108,7 @@ export function AnalysisWorkbench({
 	const [target, setTarget] = useState("");
 	const [operation, setOperation] = useState<AnalysisOperation>("inspect");
 	const [engine, setEngine] = useState("auto");
+  const [advancedAction,setAdvancedAction]=useState("suite");
 	const [debugOperation, setDebugOperation] =
 		useState<DebugOperation>("inspect_dump");
 	const [pid, setPid] = useState("");
@@ -246,7 +248,8 @@ export function AnalysisWorkbench({
 		const request = {
 			engine,
 			operation: kind === "gui" ? "open_gui" : operation,
-			target: target.trim(),
+      ...(kind === "static" && operation === "advanced_analysis" ? {advanced_action:advancedAction} : {}),
+			...(target.trim()?{target:target.trim()}:{}),
 			reuse_analysis: true,
 			report_format: "json",
 			timeout_ms: 120_000,
@@ -388,6 +391,7 @@ export function AnalysisWorkbench({
 										value={operation}
 									>
 										<option value="inspect">Inspect</option>
+                    <option value="advanced_analysis">Advanced suite</option>
 										<option value="scan_strings">Scan strings</option>
 										<option value="forensic_report">Forensic report</option>
 										<option value="apk_security_report">APK security</option>
@@ -411,6 +415,11 @@ export function AnalysisWorkbench({
 									</select>
 								</label>
 							</div>
+              {operation === "advanced_analysis" && <label className="block text-xs font-medium">Advanced function
+                <select aria-label="Advanced function" className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-2 text-xs" value={advancedAction} onChange={(event)=>setAdvancedAction(event.target.value)}>
+                  <option value="suite">Structural suite</option><option value="toolchain">Optional engine inventory</option><option value="dex_index">DEX methods and invoke operands</option><option value="apk_inventory">APK / multidex inventory</option><option value="native_inventory">ELF / JNI export candidates</option><option value="simplify_expression">Z3 expression simplification</option><option value="triton_expression">Triton expression simplification</option><option value="compare_expressions">Expression equivalence</option><option value="triage">Blob triage</option>
+                </select><p className="mt-2 text-xs font-normal text-muted-foreground">Optional engines are installed separately. Missing engines are blocked. Runtime and licensed adapters are not enabled here.</p>
+              </label>}
 							<label className="flex items-start gap-2 text-xs">
 								<input
 									checked={allowExternalTarget}
@@ -427,7 +436,7 @@ export function AnalysisWorkbench({
 							{formButton(
 								"Prepare static-analysis task",
 								() => void prepareStatic("static"),
-								!target.trim(),
+								!target.trim() && !(operation === "advanced_analysis" && advancedAction === "toolchain"),
 							)}
 							<button
 								className="w-full rounded-md border border-border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50"

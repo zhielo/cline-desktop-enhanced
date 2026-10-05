@@ -109,9 +109,12 @@ export const ReadFilesInputUnionSchema = z.union([
  * Schema for supervised reverse-engineering operations.
  */
 export const ReverseEngineeringInputSchema = z.object({
+  advanced_action: z.enum(["toolchain", "suite", "triage", "apk_inventory", "dex_index", "native_inventory", "native_disassemble", "simplify_expression", "compare_expressions", "transform_blob", "triton_expression", "match_native_functions", "trace_native_region", "trace_input_influence", "trace_android_dataflow", "lift_native_ir", "deobfuscation_pass", "jeb_analysis", "virtual_dispatch", "graph_build", "graph_query", "notebook_validate", "notebook_run", "decrypt_blob"]).optional(),
+  advanced_options: z.object({decrypt:z.object({algorithm:z.enum(["aes-256-gcm","chacha20-poly1305"]),nonce_hex:z.string().regex(/^[a-fA-F0-9]{24}$/),aad_hex:z.string().regex(/^(?:[a-fA-F0-9]{2})*$/).max(8192).optional(),analysis:z.enum(["triage","structured"]).optional()}).strict().optional(),architecture:z.enum(["arm64","arm","thumb","x86","x86_64"]).optional(),offset:z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),address:z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),bytes:z.number().int().min(1).max(65536).optional(),steps:z.array(z.enum(["base64","hex","zlib","gzip"])).min(1).max(8).optional(), graph_query:z.object({kind:z.enum(["artifact","dex-class","dex-method","native-symbol","archive-member","unresolved-call"]).optional(),text:z.string().max(512).optional(),startId:z.string().max(80).optional(),depth:z.number().int().min(0).max(8).optional(),limit:z.number().int().min(1).max(1000).optional()}).strict().optional()}).strict().optional(),
 	engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
 	operation: z.enum([
 		"discover",
+    "advanced_analysis",
 		"inspect",
 		"forensic_report",
 		"apk_security_report",

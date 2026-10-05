@@ -399,6 +399,30 @@ Primary files:
 - `evals/parity/codex-parity.test.ts`
 - `evals/parity/README.md`
 
+## Advanced analysis release candidate
+
+- The existing approval-gated Analysis workbench supports a fixed embedded Python worker for structural APK/DEX/ELF inventory, DEX indexing, native range disassembly, Z3/Triton expression analysis, QBinDiff BinExport matching and data-only transformation receipts.
+- Credentials are filtered, output/time/input budgets enforced, reports are hash-bound and exclusive-create, targets never executed. Optional dependencies are installed separately through a host-owned absolute CLINE_RE_PYTHON path.
+- Distribution discovery is not functional verification. QBDI, FlowDroid, Remill and advanced CFG passes, licensed JEB/IDA and research recovery actions remain blocked. The complete recommendation set is not delivered by these contracts.
+- No universal decryption, whole-function equivalence, confirmed JNI graph, notebook platform, runtime-worker provisioning or Windows containment is claimed. Windows installer validation remains mandatory.
+
+## Evidence graph and durable static notebooks
+
+- Advanced graph_build and graph_query operations construct artifact/class/method/native-symbol/member graphs from bounded imported evidence, with stable content-derived IDs, provenance hashes, candidate edges and explicit unresolved calls. Imported reports remain untrusted data, not authenticated facts or instructions.
+- notebook_validate preflights a strict static-cell DAG and confines canonical inputs to the approved notebook folder. notebook_run checkpoints serial execution in the managed private analysis cache, validates input hashes, blocks dependent failures and resumes unchanged completed cells using engine/configuration/dependency fingerprints.
+- No notebook executes scripts, target binaries or runtime actions. No graph infers verified JNI bindings, lifecycle taint or whole-program semantics. Hashes do not authenticate reports against privileged local tampering.
+
+## Bounded Miasm static IR
+
+- Advanced lift_native_ir and deobfuscation_pass use Miasm for bounded one-basic-block IR lifting and expression simplification. Explicit architecture/range, instruction/generated-block caps, original/simplified IR and limited coverage are preserved. No target executes or native patch is applied. This does not implement Remill, IDA microcode passes or full devirtualization.
+
+## Host-gated authenticated decryption
+
+- Advanced decrypt_blob uses cryptography AEAD for AES-256-GCM and ChaCha20-Poly1305 with an existing host-owned raw 256-bit key, explicit nonce/tag/AAD, optional bounded prefix transforms and recovered-content structural analysis.
+- CLINE_RE_ALLOW_DECRYPTION=1, an absolute trusted CLINE_RE_PYTHON and absolute CLINE_RE_PRIVATE_KEY_FILE are required. Key material never enters tool parameters, command-line arguments, reports or persisted notebook cells. POSIX ownership/mode and raw key length are checked; Windows ACLs remain a host responsibility.
+- Desktop plans require authorized-decryption and sensitive-plaintext-processing acknowledgments with moderate risk. Auth failures retain no recovered plaintext. Successful reports contain provenance/structure only, not binary plaintext exports; temporary parser inputs are privately created and deleted without a secure-erasure claim.
+- Decryption is not exposed as a notebook cell. No key guessing, protected-service access, target execution or encryption bypass is implemented.
+
 ## Required validation
 
 Before an installer build, preserve and run the checks encoded by `.github/workflows/build-custom-windows-installer.yml`:
@@ -422,3 +446,9 @@ Do not hide a new regression by weakening assertions or making a required custom
 5. Update this ledger and `scripts/verify-custom-fork.ts` in the same commit when adding, replacing, renaming, or intentionally removing custom behavior.
 6. Run the relevant focused tests, desktop type-check, repository lint, and custom-fork verifier.
 7. Keep the personal installer unsigned and artifact-only; do not create a release unless the user explicitly changes that policy.
+
+## Consolidated blocking validation
+
+- `bun run validate:advanced` verifies preservation and builds SDK prerequisites before running all previously required desktop/core checks with bounded parallelism (default 2; maximum 4). It never counts a blocked prerequisite as passed and collects every required check failure in a machine-readable summary and separate logs.
+- Required sidecar, installer configuration, task report, chat UI, customization and focused SDK safety suites remain blocking. The Windows workflow then performs its existing process smoke, NSIS build, installation/startup smoke and verified artifact upload. No release or merge is enabled.
+- `bun run validate:advanced --engines` additionally requires a trusted absolute CLINE_RE_PYTHON and runs the real static engine, Miasm and cryptography fixture corpora. Default CI reports these optional engines as not requested, not validated. A passed consolidated source test is not proof of installer or whole-platform completion.

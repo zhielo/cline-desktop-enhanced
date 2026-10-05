@@ -164,9 +164,18 @@ function requirementsFor(
 	kind: AnalysisTaskKind,
 	operation: string,
 	externalTarget: boolean,
+	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
 	if (externalTarget) requirements.add("external-target");
+	if (
+		kind === "static" &&
+		operation === "advanced_analysis" &&
+		request?.advanced_action === "decrypt_blob"
+	) {
+		requirements.add("authorized-decryption");
+		requirements.add("sensitive-plaintext-processing");
+	}
 	if (kind === "debugger") requirements.add("authorized-target");
 	if (
 		kind === "gui" ||
@@ -289,11 +298,18 @@ export class AnalysisTaskOrchestrator {
 			requestHash: sha256(canonicalJson(request)),
 			permission,
 			status: "awaiting-approval",
-			requirements: requirementsFor(input.kind, operation, externalTarget),
+			requirements: requirementsFor(
+				input.kind,
+				operation,
+				externalTarget,
+				request,
+			),
 			risk:
 				input.kind === "dynamic" || permission === "Execute" || externalTarget
 					? "high"
-					: permission === "Debug"
+					: permission === "Debug" ||
+							(operation === "advanced_analysis" &&
+								request.advanced_action === "decrypt_blob")
 						? "moderate"
 						: "low",
 			budget: {
