@@ -104,7 +104,7 @@ public class ClineNativeProgram extends GhidraScript {
         coverage.addProperty("failedFunctions", failed); coverage.addProperty("pcodeOperations", opCount);
         coverage.addProperty("truncated", truncated); coverage.addProperty("externalAndThunkFunctionsExcluded", true);
         document.add("coverage", coverage);
-        byte[] bytes = new Gson().toJson(document).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = new GsonBuilder().serializeNulls().create().toJson(document).getBytes(StandardCharsets.UTF_8);
         if (bytes.length > 1048576) throw new IllegalStateException("Program evidence byte budget exceeded");
         Files.write(Path.of(args[0]), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
     }

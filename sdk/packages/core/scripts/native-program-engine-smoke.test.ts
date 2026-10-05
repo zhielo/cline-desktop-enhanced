@@ -32,6 +32,7 @@ describe("real native adapter on an owned compiled fixture",()=>{
    expect(fn.entryBlock).not.toBeNull();
    expect(fn.blocks.some(b=>b.id===fn.entryBlock)).toBe(true);
    expect(fn.pcode.length).toBeGreaterThan(0);
+   expect(fn.pcode.some(op=>op.output===null)).toBe(true);
    expect(program.coverage.pcodeOperations).toBe(fn.pcode.length);
    expect(result.limitations.join(" ")).toContain("No target execution");
   }finally{await rm(directory,{recursive:true,force:true});}

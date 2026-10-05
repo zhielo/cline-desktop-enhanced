@@ -905,6 +905,11 @@ requiredMarkers.push(
 );
 requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/native-program.test.ts",markers:["bounded native program evidence","rejects duplicate operations","withholds inherited JVM"]});
 requiredMarkers.push({path:"sdk/packages/core/scripts/semantic-pcode-engine-smoke.test.ts",markers:["corpus never skips","not claim a memory load","duplicate SSA"]});
+requiredMarkers.push(
+ {path:"sdk/packages/core/scripts/native-program-engine-smoke.test.ts",markers:["corpus never skips","recoverNativeProgram","pcode.length).toBeGreaterThan(0)","sha256"]},
+ {path:".github/workflows/validate-semantic-re-v5.yml",markers:["Source gates and owned native fixtures only","--engines --semantic-engines","native-program-engine-smoke.test.ts","include-hidden-files: true"]},
+ {path:"scripts/prepare-v5-native-engines.sh",markers:["ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db","sha256sum -c -","GITHUB_ENV"]},
+);
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",
