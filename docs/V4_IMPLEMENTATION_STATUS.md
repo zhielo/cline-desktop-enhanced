@@ -1,9 +1,9 @@
-# Advanced-analysis V4 implementation status
+# V4 capability status
 
-This is an in-progress dedicated branch, not a completed implementation of every recommendation. No V4 installer has been built or verified yet. Main, tags and releases remain unchanged.
+Implemented source: imported CFG dominance/loops/SCCs; explicit-location trace slices and overwrite-aware influence; data-only notebook/graph authoring; immutable worker/artifact-bound approval and signed submission receipts; bridge hardening; mandatory portable Windows engine execution.
 
-The portable engine corpus requires an explicitly configured absolute Python interpreter and pinned dependencies; missing engines fail rather than skip. It exercises the real SDK-to-worker path for Capstone disassembly, Z3 expression equivalence, Miasm bounded lifting, LIEF ELF parsing, Androguard DEX indexing, AES-GCM decryption and authentication failure. The owned fixtures never execute target code. The six-engine portable subset does not include Triton, QBinDiff, QBDI or licensed tools. Dependencies are not bundled into the desktop installer.
+Source tests and source recovery are not installer proof. Verify the dedicated-branch GitHub Actions installer run, installed-app/sidecar smoke and verified artifact before treating packaging as successful. CI commits materialized source before starting the installer workflow.
 
-Local recovery work previously passed the full blocking source suite, 31 focused program-evidence/authoring/transport tests and the portable corpus (19 assertions). An unexpected local workspace reset occurred before those source changes were committed. Those historical passes do not certify this branch or a Windows installer. Source recovery, fresh validation, visual QA and installer packaging are still required.
+The six-engine corpus executes LIEF ELF parsing, Capstone disassembly, Z3 expression equivalence, Miasm bounded IR, Androguard DEX indexing and authenticated AES-GCM decryption/failure. Missing engines fail. These dependencies are CI-only, not bundled into the installer, and do not validate Triton/QBinDiff, QBDI or licensed tools.
 
-Remaining scope includes an actual isolated QBDI worker, real Android lifecycle/dataflow integration, Remill, licensed JEB/IDA-D810 integration, full control-flow recovery and automatic VM provisioning. Client transport, imported dependency analysis and package presence must not be represented as real runtime execution or semantic equivalence.
+Not implemented: real QBDI worker/deployment, FlowDroid lifecycle analysis, Remill, JEB/IDA-D810, full unflattening/devirtualization, key recovery and automatic/measured VM provisioning. Imported dependencies are not opcode-semantic taint or actual trace acquisition. Signed capabilities are operator claims, not hardware attestation; local cancellation does not prove remote teardown. Full recommendations remain unfinished. No automatic merge, tag or release.

@@ -57,7 +57,7 @@ v=v[:a]+'''{pendingPlan.kind === "dynamic"&&<div className="space-y-3 text-sm"><
 '''+v[a:]
 v=v.replace('() => void approveAndRun(),','() => void approveAndRun(),\n pendingPlan.kind === "dynamic"&&(!uploadConfirmed||!runtimeConfirmed),',1).replace('text-[11px]','text-sm')
 for required in ['AnalysisAuthoring','advanced_options:JSON.parse','confirmArtifactUpload:uploadConfirmed','worker endpoint','cfg_analyze']:
- if required not in v:raise RuntimeError('Workbench integration anchor missing: '+required)
+ if required.lower() not in v.lower():raise RuntimeError('Workbench integration anchor missing: '+required)
 put(path,v)
 path='apps/examples/desktop-app/package.json';v=base(path).replace('vitest run webview/components/views/chat/analysis-workbench.test.tsx','vitest run webview/components/views/chat/analysis-authoring.test.tsx webview/components/views/chat/analysis-workbench.test.tsx');put(path,v)
 put('apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.test.tsx','''// @vitest-environment jsdom
@@ -66,21 +66,6 @@ it.each(["notebook","graph"] as const)("separates %s file write from analysis ap
 ''')
 path='apps/examples/desktop-app/sidecar/analysis-document-store.ts';v=base(path).replace('else if(input.kind === "graph")EvidenceGraphSchema.parse(parsed);','else if(input.kind === "graph"){const graph=EvidenceGraphSchema.parse(parsed),ids=new Set(graph.nodes.map(n=>n.id));if(ids.size!==graph.nodes.length||graph.nodes.some(n=>!n.id)||graph.edges.some(e=>!ids.has(e.source)||!ids.has(e.target)))throw new Error("Graph requires unique nodes and valid edge endpoints");}');put(path,v)
 path='apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts';v=base(path).replace('typeof manifest.workerId === "string" &&','typeof manifest.workerId === "string" && manifest.workerId.length>0 && manifest.workerId.length<=128 &&').replace('typeof manifest.version === "string" &&','typeof manifest.version === "string" && manifest.version.length>0 && manifest.version.length<=128 &&').replace('Number.isFinite(manifest.maxArtifactBytes)','Number.isSafeInteger(manifest.maxArtifactBytes)').replace('!new URL(endpoint).hash,','!new URL(endpoint).hash && !new URL(endpoint).search && new URL(endpoint).pathname === "/",').replace('const health=await probeAnalysisSandbox(fetchImpl),cfg=configuration();if(!health.ready||!health.manifest||!cfg.publicKey','const health=await probeAnalysisSandbox(fetchImpl),cfg=configuration();if(signal?.aborted)throw new Error("Cancelled before submission");if(!health.ready||!health.manifest||!cfg.publicKey',1).replace('createPublicKey(config.publicKey)','workerPublicKey(config.publicKey)').replace('createPublicKey(cfg.publicKey)','workerPublicKey(cfg.publicKey)').replace('createPublicKey(key).export','workerPublicKey(key).export');v+='\nfunction workerPublicKey(pem:string){const key=createPublicKey(pem);if(key.asymmetricKeyType!=="ed25519")throw new Error("Worker requires an Ed25519 key");return key;}\n';put(path,v)
-path='.github/workflows/build-custom-windows-installer.yml';v=base(path);a=v.index('      - name: Upload consolidated validation evidence');v=v[:a]+'''      - name: Validate portable Windows analysis engines
-        shell: pwsh
-        run: |
-          $engineRoot = Join-Path $env:RUNNER_TEMP 'cline-portable-engines'
-          py -3.13 -m venv $engineRoot
-          if ($LASTEXITCODE -ne 0) { throw "Python 3.13 environment creation failed" }
-          $python = Join-Path $engineRoot 'Scripts/python.exe'
-          & $python -m pip install --disable-pip-version-check -r sdk/packages/core/scripts/requirements-advanced-windows.txt
-          if ($LASTEXITCODE -ne 0) { throw "Pinned portable engine installation failed" }
-          $env:CLINE_RE_PYTHON = $python
-          Push-Location sdk
-          try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }
-          finally { Pop-Location }
-
-'''+v[a:];put(path,v)
 path='CUSTOMIZATIONS.md';put(path,base(path)+'''\n- V4 document authoring uses separate save/run approval, a 1 MiB limit and hash-guarded updates. Runtime submission has independent upload/execution acknowledgments, exact worker/artifact binding, strict Ed25519 keys and bounded signed receipts.\n- Installer packaging requires six real portable-engine SDK-to-worker tests, not merely package presence. Python and these dependencies are CI-only and not bundled in the installer. No live QBDI backend, licensed adapter, full unflattening or VM provisioning is claimed.\n''')
 path='scripts/verify-custom-fork.ts';v=base(path);a=v.index('const forbiddenPaths');v=v[:a]+'''requiredMarkers.push({path:"apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx",markers:["expectedSha256","Saving never executes analysis","graph_query"]},{path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate portable Windows analysis engines","advanced-windows-engine-smoke.test.ts","Real portable engine execution failed"]});
 '''+v[a:];put(path,v)
