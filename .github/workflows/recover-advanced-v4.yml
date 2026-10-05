@@ -32,6 +32,15 @@ jobs:
           from pathlib import Path
           p=Path('scripts/recover-advanced-v4.py')
           value=p.read_text().replace('if required not in v:', 'if required.lower() not in v.lower():')
+          start=value.find("path='.github/workflows/build-custom-windows-installer.yml'")
+          if start >= 0:
+              end=value.index("path='CUSTOMIZATIONS.md'",start)
+              value=value[:start]+value[end:]
+          # The already-authorized workflow edit was committed separately.
+          workflow=Path('.github/workflows/build-custom-windows-installer.yml').read_text()
+          for required in ['Validate portable Windows analysis engines','advanced-windows-engine-smoke.test.ts','Real portable engine execution failed']:
+              if required not in workflow:
+                  raise RuntimeError('Required committed engine gate is missing')
           p.write_text(value)
           PY
           python3 scripts/recover-advanced-v4.py
@@ -43,6 +52,8 @@ jobs:
           python3 - <<'PY'
           import json,subprocess
           paths=json.load(open('docs/V4_SOURCE_RECOVERY.json'))['files']+['docs/V4_SOURCE_RECOVERY.json','scripts/recover-advanced-v4.py']
+          if any(p.startswith('.github/workflows/') for p in paths):
+              raise RuntimeError('This source credential must not modify workflows')
           subprocess.run(['git','add','--',*paths],check=True)
           PY
           git diff --cached --check
