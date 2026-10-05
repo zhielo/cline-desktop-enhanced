@@ -45,7 +45,7 @@ function canonicalName(name: string) {
 function relative(address: string, base: string, bits: number): string | null {
 	const a = BigInt(`0x${address}`),
 		b = BigInt(`0x${base}`);
-	const ceiling = 1n << BigInt(bits);
+	const ceiling = BigInt(1) << BigInt(bits);
 	return a >= b && a < ceiling && b < ceiling ? (a - b).toString(16) : null;
 }
 /** Compare bounded reports, not trusted assertions. Engine-produced hashes bind bytes, not semantic truth. */
