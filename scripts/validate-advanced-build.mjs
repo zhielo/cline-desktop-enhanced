@@ -40,7 +40,7 @@ export async function runValidation(prerequisites, checks, parallel, run) {
 
 async function main() {
   const flags = process.argv.slice(2).filter(x => x !== "--");
-  if (flags.some(x => !["--engines"].includes(x))) throw new Error("Only --engines is supported");
+  if (flags.some(x => !["--engines", "--semantic-engines"].includes(x))) throw new Error("Only --engines and --semantic-engines are supported");
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const output = path.join(root, ".cline-validation", `${Date.now()}-${process.pid}`);
   await mkdir(output, { recursive: true });
@@ -83,10 +83,16 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/native-program.test.ts",
       "sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts",
       "sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts",
       "--config", "vitest.config.mts", "--testTimeout=60000"]),
   ];
+  if (flags.includes("--semantic-engines")) {
+    const python = process.env.CLINE_RE_PYTHON;
+    if (!python || !path.isAbsolute(python)) throw new Error("--semantic-engines requires an absolute trusted Python with real Z3");
+    checks.push(job("Real p-code Z3 SDK corpus", ["test", "packages/core/scripts/semantic-pcode-engine-smoke.test.ts"], path.join(root,"sdk")));
+  }
   if (flags.includes("--engines")) {
     const python = process.env.CLINE_RE_PYTHON;
     if (!python || !path.isAbsolute(python)) throw new Error("--engines requires an absolute trusted CLINE_RE_PYTHON");
@@ -134,6 +140,7 @@ async function main() {
   process.removeListener("SIGINT", abort); process.removeListener("SIGTERM", abort);
   await writeFile(path.join(output, "summary.json"), JSON.stringify({
     schemaVersion: 1, started, finished: new Date().toISOString(), sourceCommit, parallel,
+    semanticEngineValidation: flags.includes("--semantic-engines") ? "requested-see-corpus-results" : "not-requested",
     engineValidation: flags.includes("--engines") ? "requested-see-corpus-results" : "not-requested",
     windowsInstallerBuilt: false, ...report,
   }, null, 2) + "\n");

@@ -57,7 +57,7 @@ public class ClineNativeProgram extends GhidraScript {
                 item.addProperty("name", bounded(function.getName(), 512));
                 item.addProperty("entry", function.getEntryPoint().toString());
                 JsonArray blocks = new JsonArray(), operations = new JsonArray();
-                item.add("blocks", blocks); item.add("pcode", operations);
+                item.add("blocks", blocks); item.add("pcode", operations); item.add("entryBlock", JsonNull.INSTANCE);
                 DecompileResults result = decompiler.decompileFunction(function, 15, monitor);
                 if (!result.decompileCompleted() || result.getHighFunction() == null) {
                     item.addProperty("status", "failed"); item.addProperty("error", bounded(result.getErrorMessage(), 512));
@@ -72,6 +72,7 @@ public class ClineNativeProgram extends GhidraScript {
                         functionTruncated = true;
                     } else {
                         for (PcodeBlockBasic block : high.getBasicBlocks()) {
+                            if (block.contains(function.getEntryPoint())) item.addProperty("entryBlock", "b" + block.getIndex());
                             JsonObject node = new JsonObject(); node.addProperty("id", "b" + block.getIndex());
                             node.addProperty("start", String.valueOf(block.getStart())); node.addProperty("stop", String.valueOf(block.getStop()));
                             JsonArray successors = new JsonArray();
@@ -81,7 +82,7 @@ public class ClineNativeProgram extends GhidraScript {
                         }
                         Iterator<PcodeOpAST> ops = high.getPcodeOps();
                         while (ops.hasNext()) {
-                            monitor.checkCancelled(); PcodeOp op = ops.next(); if (op.isDead()) continue;
+                            monitor.checkCancelled(); PcodeOp op = ops.next(); if (op.getParent() == null) continue;
                             if (opCount >= opLimit) { functionTruncated = true; break; }
                             if (op.getNumInputs() > 64) { functionTruncated = true; continue; }
                             JsonObject record = new JsonObject(); record.addProperty("id", op.getSeqnum().toString());

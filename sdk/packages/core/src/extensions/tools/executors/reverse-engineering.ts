@@ -1,3 +1,4 @@
+import { recoverNativeProgram } from "./native-program";
 import {programEvidenceResult} from "./analysis-program-evidence";
 import { runAdvancedAnalysis, advancedEvidenceBundle } from "./advanced-analysis";
 import { graphResult } from "./analysis-evidence-graph";
@@ -2434,7 +2435,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
       const action = input.advanced_action;
       if(action === "decrypt_blob" && input.output_file)throw new Error("Plaintext export is not enabled; decryption returns receipts and structural evidence only");
       let result;
-      if (["graph_build","graph_query","notebook_validate","notebook_run","cfg_analyze","trace_slice","trace_taint"].includes(action)) {
+      if(action === "native_program") {
+        if(!input.target)throw new Error("Native target is required");
+        result=await recoverNativeProgram(await discover("ghidra"),input.target,input.advanced_options?.native,input.timeout_ms??120000,context.signal);
+      } else if (["graph_build","graph_query","notebook_validate","notebook_run","cfg_analyze","trace_slice","trace_taint"].includes(action)) {
         if(!input.target || !path.isAbsolute(input.target))throw new Error("Absolute analysis document required");
         if(context.signal?.aborted)result={protocol:"cline-advanced-analysis/v1" as const,status:"cancelled" as const,engine:"host",engineVersion:"1",evidence:{reason:"Cancelled before execution"},limitations:[]};
         else if(action === "cfg_analyze" || action === "trace_slice" || action === "trace_taint")result=programEvidenceResult(action,await readAnalysisJson(input.target,8*1024*1024));

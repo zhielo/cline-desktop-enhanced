@@ -898,6 +898,13 @@ requiredMarkers.push(
 );
 requiredMarkers.push({path:"apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx",markers:["expectedSha256","Saving never executes analysis","graph_query"]},{path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate portable Windows analysis engines","advanced-windows-engine-smoke.test.ts","Real portable engine execution failed"]});
 requiredMarkers.push({path:"apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",markers:["bounded atomic analysis document publication","bounds serialized bytes","allows exactly one concurrent","never deletes another caller"]},{path:"apps/examples/desktop-app/sidecar/analysis-document-store.ts",markers:["Serialized document byte budget exceeded","await link(stage,path)"]});
+requiredMarkers.push(
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-program.ts",markers:["recoverNativeProgram","Combined native evidence byte budget exceeded","nativeEngineEnvironment","O_NOFOLLOW"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-program-script.ts",markers:["ClineNativeProgram","getHighFunction","getBasicBlocks","getPcodeOps","Program evidence byte budget exceeded"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/semantic-pcode-worker.ts",markers:["pcode-dag-overapproximation","model-equivalent","unconstrained inputs","solver.set(timeout=250)"]},
+);
+requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/native-program.test.ts",markers:["bounded native program evidence","rejects duplicate operations","withholds inherited JVM"]});
+requiredMarkers.push({path:"sdk/packages/core/scripts/semantic-pcode-engine-smoke.test.ts",markers:["corpus never skips","not claim a memory load","duplicate SSA"]});
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

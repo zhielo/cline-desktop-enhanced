@@ -1,3 +1,6 @@
+import { SEMANTIC_PCODE_WORKER } from "./semantic-pcode-worker";
+import { validateNativeProgram } from "./native-program";
+import { readAnalysisJson } from "./analysis-notebook";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, writeFile, rm, stat, realpath } from "node:fs/promises";
@@ -34,6 +37,8 @@ export const ADVANCED_ACTIONS = [
 	"notebook_validate",
 	"notebook_run", "cfg_analyze", "trace_slice", "trace_taint",
 	"decrypt_blob",
+	"native_program",
+	"native_semantics",
 ] as const;
 export type AdvancedAction = (typeof ADVANCED_ACTIONS)[number];
 const LOCAL_ACTIONS = new Set<AdvancedAction>([
@@ -41,6 +46,7 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"lift_native_ir",
 	"deobfuscation_pass",
 	"decrypt_blob",
+	"native_semantics",
 ]);
 export const ADVANCED_BACKENDS = [
 	{ id: "cryptography", integration: "host-gated-authenticated-decryption" },
@@ -80,6 +86,7 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
+		native?: { functionName?: string; maxFunctions?: number; maxPcodeOps?: number };
 		architecture?: string;
 		offset?: number;
 		address?: number;
@@ -189,9 +196,12 @@ export async function runAdvancedAnalysis(
 		(process.platform === "win32" ? "python.exe" : "python3");
 	if (process.env.CLINE_RE_PYTHON && !isAbsolute(executable))
 		throw new Error("CLINE_RE_PYTHON must be an absolute interpreter path");
+	if (request.action === "native_semantics" && (!process.env.CLINE_RE_PYTHON || !isAbsolute(executable))) return outcome("blocked", "Semantic analysis requires a trusted absolute Python interpreter");
+	const nativeDocument = request.action === "native_semantics" ? validateNativeProgram(await readAnalysisJson(request.target!,1048576)) : undefined;
 	const directory = await mkdtemp(join(tmpdir(), "cline-advanced-"));
 	const script = join(directory, "worker.py");
-	await writeFile(script, ADVANCED_ANALYSIS_WORKER, { mode: 0o600 });
+	await writeFile(script, request.action === "native_semantics" ? SEMANTIC_PCODE_WORKER : ADVANCED_ANALYSIS_WORKER, { mode: 0o600 });
+	if (nativeDocument) await writeFile(join(directory,"program.json"),JSON.stringify(nativeDocument),{flag:"wx",mode:0o600});
 	const policy = prepareProcessEnvironment({
 		overrides: { PYTHONNOUSERSITE: "1" },
 		allowedSensitiveEnvironmentVariables:
@@ -208,7 +218,7 @@ export async function runAdvancedAnalysis(
 						script,
 						JSON.stringify({
 							action: request.action,
-							target: request.target,
+							target: nativeDocument ? join(directory,"program.json") : request.target,
 							compare_target: request.compareTarget,
 							limit: request.limit ?? 200,
 							options: request.options,
