@@ -1,3 +1,6 @@
+import { resolveClineDataDir } from "@cline/shared/storage";
+import { InvestigationStore } from "./analysis-investigation-store";
+import { AndroidCaptureInput, bindAndroidCapture, runAndroidCapture } from "./android-runtime-client";
 import {saveAnalysisDocument} from "./analysis-document-store";
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -2328,6 +2331,10 @@ async function openArtifactWithSystem(filePath: string): Promise<string> {
 	}
 	return "system default";
 }
+
+let investigationStore: InvestigationStore | undefined;
+function investigations(){return investigationStore ??= new InvestigationStore(join(resolveClineDataDir(),"analysis","investigations.sqlite"));}
+function recordInvestigation(args:Record<string,unknown>|undefined,root:string,plan:Parameters<InvestigationStore["record"]>[2],result:unknown,signed=false){if(typeof args?.investigationId!=="string")return;try{investigations().record(root,args.investigationId,plan,result,signed);}catch{console.warn("Investigation metadata recording failed; completed execution must not be replayed to repair metadata.");return "Analysis finished, but investigation metadata was not saved. Reload/export evidence; do not replay execution to repair metadata.";}}
 
 export function windowsExplorerRevealArgs(
 	filePath: string,
@@ -5099,6 +5106,7 @@ export async function handleCommand(
     command === "get_analysis_diagnostics" ||
 		command === "discover_analysis_tools" ||
 		command === "save_analysis_document" ||
+        command === "list_investigations" || command === "get_investigation" || command === "mutate_investigation" || command === "recover_android_capture" ||
  command === "run_dynamic_analysis" ||
  command === "run_static_analysis" ||
 		command === "open_analysis_gui" ||
@@ -5112,6 +5120,18 @@ export async function handleCommand(
 				? args.cwd.trim()
 				: ctx.localWorkspaceRoot,
 		);
+    if(command === "list_investigations")return investigations().list(baseDir);
+    if(command === "get_investigation"){const c=investigations().get(baseDir,String(args?.id??""));return {...c,jobCurrentStatuses:Object.fromEntries(desktopAnalysisTaskOrchestrator.list(baseDir).map(p=>[p.id,p.status]))};}
+    if(command === "mutate_investigation")return investigations().mutate(baseDir,args?.input);
+    if(command === "recover_android_capture"){
+      if(args?.confirmCaptureWrite!==true)throw new Error("Explicit captured-plaintext write confirmation required");
+      const plan=desktopAnalysisTaskOrchestrator.list(baseDir).find(p=>p.id===args?.planId);
+      if(!plan||plan.kind!=="dynamic"||plan.operation!=="android_capture"||!plan.approvedAt||!plan.targetIdentity?.sha256)throw new Error("Previously approved Android job required");
+      // GET retrieves a previously authorized job; it cannot upload or execute an APK again.
+      const result=await runAndroidCapture(plan.request,undefined,plan.requestHash,baseDir,undefined,true,plan.targetIdentity.sha256);
+      if(typeof args?.investigationId==="string"){const recovered={...plan,status:"completed" as const,evidence:{requestHash:plan.requestHash,resultHash:createHash("sha256").update(JSON.stringify(result)).digest("hex"),tool:"recovered-android-worker-report",outputPaths:result.outputPaths}};recordInvestigation(args,baseDir,recovered,result,true);}
+      return result;
+    }
     if(command === "save_analysis_document"){const {cwd:_cwd,environmentId:_environmentId,...input}=args??{};return await saveAnalysisDocument(baseDir,input);}
 		const owner = workspaceProcessOwner(baseDir);
 		const toolContext = desktopToolContext(owner);
@@ -5136,18 +5156,20 @@ export async function handleCommand(
       if (kind === "debugger") {
         request = LiveDebuggerInputSchema.parse(suppliedRequest);
       } else if (kind === "dynamic") {
-        request = await bindRuntimeAnalysisRequest(RuntimeAnalysisInputSchema.parse(suppliedRequest));
+        request = suppliedRequest.operation === "android_capture" ? await bindAndroidCapture(suppliedRequest) : await bindRuntimeAnalysisRequest(RuntimeAnalysisInputSchema.parse(suppliedRequest));
       } else {
         if (kind === "gui") suppliedRequest.operation = "open_gui";
         request = ReverseEngineeringInputSchema.parse(suppliedRequest);
       }
-      return await desktopAnalysisTaskOrchestrator.prepare({
+      const prepared = await desktopAnalysisTaskOrchestrator.prepare({
         workspaceRoot: baseDir,
         kind,
         request,
         allowExternalTarget: args?.allowExternalTarget === true,
-        timeoutMs: Number(suppliedRequest.timeout_ms),
+        timeoutMs: kind === "dynamic" && operation === "android_capture" ? Math.min(300000,Number(suppliedRequest.timeout_ms)+180000) : Number(suppliedRequest.timeout_ms),
       });
+      if(typeof args?.investigationId==="string")investigations().bind(baseDir,args.investigationId,prepared);
+      return prepared;
     }
     if (command === "approve_analysis_task") {
       const planId = String(args?.planId ?? "").trim();
@@ -5251,10 +5273,10 @@ export async function handleCommand(
 		}
     if(command === "run_dynamic_analysis"){
       if(args?.confirmExecution!==true||args?.confirmArtifactUpload!==true)throw new Error("Explicit authorized execution and artifact upload confirmation required");
-      const input=RuntimeAnalysisInputSchema.parse(args?.input),planId=String(args?.planId??""),executionToken=String(args?.executionToken??"");
+      const input=(args?.input as {operation?:string})?.operation==="android_capture"?AndroidCaptureInput.parse(args?.input):RuntimeAnalysisInputSchema.parse(args?.input),planId=String(args?.planId??""),executionToken=String(args?.executionToken??"");
       const plan=await desktopAnalysisTaskOrchestrator.consume({planId,executionToken,workspaceRoot:baseDir,kind:"dynamic",request:input});
       try{const fs=await import("node:fs/promises"),file=await fs.open(plan.target!,"r");let artifact:Buffer;try{const info=await file.stat();if(!info.isFile()||info.size>16777216)throw new Error("Runtime upload budget exceeded");const buffer=Buffer.alloc(16777217);let n=0;while(n<buffer.length){const {bytesRead}=await file.read(buffer,n,buffer.length-n,n);if(!bytesRead)break;n+=bytesRead;}if(n>16777216)throw new Error("Artifact grew beyond budget");artifact=buffer.subarray(0,n);}finally{await file.close();}
-      if(!plan.targetIdentity?.sha256||createHash("sha256").update(artifact).digest("hex")!==plan.targetIdentity.sha256)throw new Error("Artifact changed since approval");const result=await submitAnalysisSandbox(input,artifact,plan.requestHash,desktopAnalysisTaskOrchestrator.signal(planId));return {result,plan:result.status==="failed"?desktopAnalysisTaskOrchestrator.fail(planId,"Worker failed"):desktopAnalysisTaskOrchestrator.complete(planId,result,"isolated-qbdi-worker")};}catch(error){desktopAnalysisTaskOrchestrator.fail(planId,error);throw error;}
+      if(!plan.targetIdentity?.sha256||createHash("sha256").update(artifact).digest("hex")!==plan.targetIdentity.sha256)throw new Error("Artifact changed since approval");const result=input.operation==="android_capture"?await runAndroidCapture(input,artifact,plan.requestHash,baseDir,desktopAnalysisTaskOrchestrator.signal(planId)):await submitAnalysisSandbox(input,artifact,plan.requestHash,desktopAnalysisTaskOrchestrator.signal(planId));const finished=result.status==="failed"?desktopAnalysisTaskOrchestrator.fail(planId,"Worker failed"):desktopAnalysisTaskOrchestrator.complete(planId,result,input.operation==="android_capture"?"isolated-android-worker":"isolated-qbdi-worker",input.operation==="android_capture"?(result as {outputPaths?:string[]}).outputPaths??[]:[]);const investigationWarning=recordInvestigation(args,baseDir,finished,result,input.operation==="android_capture");return {result,plan:finished,investigationWarning};}catch(error){desktopAnalysisTaskOrchestrator.fail(planId,error);throw error;}
     }
 		const rawInput = {
 			...(typeof args?.input === "object" && args.input ? args.input : {}),
@@ -5343,7 +5365,8 @@ export async function handleCommand(
           : "reverse-engineering",
         outputPaths,
       );
-      return { kind: "reverse-engineering", result: parsed, plan };
+      const investigationWarning=recordInvestigation(args,baseDir,plan,parsed);
+      return { kind: "reverse-engineering", result: parsed, plan, investigationWarning };
 		} catch {
       const plan = desktopAnalysisTaskOrchestrator.complete(
         planId,

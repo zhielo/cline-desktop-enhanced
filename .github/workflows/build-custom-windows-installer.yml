@@ -157,10 +157,21 @@ jobs:
           $python = Join-Path $engineRoot 'Scripts/python.exe'
           & $python -m pip install --disable-pip-version-check -r sdk/packages/core/scripts/requirements-advanced-windows.txt
           if ($LASTEXITCODE -ne 0) { throw "Pinned portable engine installation failed" }
+          & $python workers/android-capture/server.test.py
+          if ($LASTEXITCODE -ne 0) { throw "Owned Android protocol fixtures failed (not live-device validation)" }
           $env:CLINE_RE_PYTHON = $python
           Push-Location sdk
           try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }
           finally { Pop-Location }
+
+      - name: Build pinned Android instrumentation bundle
+        working-directory: workers/android-capture
+        shell: pwsh
+        run: |
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Android agent dependency installation failed" }
+          bun run build
+          if ($LASTEXITCODE -ne 0) { throw "Android instrumentation compilation failed (not live-device validation)" }
 
       - name: Upload consolidated validation evidence
         if: ${{ always() }}

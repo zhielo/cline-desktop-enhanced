@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { writeDesktopDebugLog } from "./desktop-client";
+import {
+	writeDesktopDebugLog,
+	defaultCommandTimeoutMs,
+} from "./desktop-client";
 
 type SentDesktopRequest = {
 	id: string;
@@ -700,4 +703,23 @@ describe("DesktopClient authenticated telemetry", () => {
 		await vi.advanceTimersByTimeAsync(20);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
+});
+
+it("runtime capture deadlines include bounded cleanup grace without changing chat send semantics", () => {
+	expect(
+		defaultCommandTimeoutMs("run_dynamic_analysis", {
+			input: { timeout_ms: 60000 },
+		}),
+	).toBe(240000);
+	expect(defaultCommandTimeoutMs("recover_android_capture")).toBe(300000);
+	expect(
+		defaultCommandTimeoutMs("run_dynamic_analysis", {
+			input: { timeout_ms: Infinity },
+		}),
+	).toBe(300000);
+	expect(
+		defaultCommandTimeoutMs("chat_session_command", {
+			request: { action: "send" },
+		}),
+	).toBeNull();
 });

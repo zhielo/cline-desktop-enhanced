@@ -1,4 +1,5 @@
-"use client";
+import { InvestigationWorkspace } from "./investigation-workspace";
+("use client");
 import { AnalysisAuthoring } from "./analysis-authoring";
 
 import {
@@ -22,6 +23,7 @@ import { desktopClient } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
 
 type WorkbenchMode =
+	| "investigation"
 	| "tasks"
 	| "notebook"
 	| "graph"
@@ -82,6 +84,7 @@ const modes: Array<{
 	icon: typeof Activity;
 	label: string;
 }> = [
+	{ id: "investigation", icon: ListChecks, label: "Investigation" },
 	{ id: "tasks", icon: ListChecks, label: "Tasks" },
 	{ id: "analyze", icon: Binary, label: "Analyze" },
 	{ id: "notebook", icon: ListChecks, label: "Notebook" },
@@ -118,6 +121,27 @@ export function AnalysisWorkbench({
 	const [engine, setEngine] = useState("auto");
 	const [advancedAction, setAdvancedAction] = useState("suite");
 	const [advancedOptions, setAdvancedOptions] = useState("{}");
+	const workspaceKey = `${cwd}\0${environmentId}`;
+	const [investigationSelection, setInvestigationSelection] = useState({
+		workspaceKey,
+		id: "",
+	});
+	const investigationId =
+		investigationSelection.workspaceKey === workspaceKey
+			? investigationSelection.id
+			: "";
+	const setInvestigationId = useCallback(
+		(id: string) => setInvestigationSelection({ workspaceKey, id }),
+		[workspaceKey],
+	);
+	const [runtimeOperation, setRuntimeOperation] = useState(
+		"trace_native_region",
+	);
+	const [androidPackage, setAndroidPackage] = useState(
+		"com.example.authorized",
+	);
+	const [captureDex, setCaptureDex] = useState(false);
+	const [recoveryPlanId, setRecoveryPlanId] = useState("");
 	const [runtimeSymbol, setRuntimeSymbol] = useState("main");
 	const [architecture, setArchitecture] = useState("x86_64");
 	const [uploadConfirmed, setUploadConfirmed] = useState(false);
@@ -132,8 +156,12 @@ export function AnalysisWorkbench({
 	const [busy, setBusy] = useState(false);
 	const [result, setResult] = useState<unknown>(null);
 	const common = useMemo(
-		() => ({ environmentId, ...(cwd?.trim() ? { cwd } : {}) }),
-		[cwd, environmentId],
+		() => ({
+			environmentId,
+			...(cwd?.trim() ? { cwd } : {}),
+			...(investigationId ? { investigationId } : {}),
+		}),
+		[cwd, environmentId, investigationId],
 	);
 
 	const refreshLedger = useCallback(async () => {
@@ -224,7 +252,11 @@ export function AnalysisWorkbench({
 				requirements: pendingPlan.requirements,
 				requestHash: pendingPlan.requestHash,
 			});
-			let response: { result: unknown; plan?: TaskPlan };
+			let response: {
+				result: unknown;
+				plan?: TaskPlan;
+				investigationWarning?: string;
+			};
 			if (pendingPlan.kind === "debugger") {
 				response = await desktopClient.invoke("run_debugger_action", {
 					...common,
@@ -256,6 +288,12 @@ export function AnalysisWorkbench({
 					},
 				);
 			}
+			if (response.investigationWarning)
+				toast({
+					variant: "destructive",
+					title: "Investigation metadata needs attention",
+					description: response.investigationWarning,
+				});
 			setResult(response.result);
 			setPendingPlan(null);
 			await refreshLedger();
@@ -433,16 +471,96 @@ export function AnalysisWorkbench({
 							onPrepare={(request) => prepare("static", request)}
 						/>
 					)}
+					{mode === "investigation" && (
+						<InvestigationWorkspace
+							cwd={cwd}
+							environmentId={environmentId}
+							onSelect={setInvestigationId}
+							selectedId={investigationId}
+						/>
+					)}
 					{mode === "runtime" && (
 						<section className="space-y-4">
 							<h3 className="text-base font-semibold">
-								Isolated QBDI submission
+								Isolated native / Android capture
 							</h3>
 							<p className="text-sm text-muted-foreground">
 								Requires an operator-provisioned disposable VM and compatible
 								signed worker. The desktop does not execute a native sample.
 								Signed operator claims are not hardware attestation.
 							</p>
+							<label htmlFor="runtime-operation">
+								Runtime operation
+								<select
+									id="runtime-operation"
+									value={runtimeOperation}
+									onChange={(e) => setRuntimeOperation(e.target.value)}
+								>
+									<option value="trace_native_region">
+										Existing QBDI native trace
+									</option>
+									<option value="android_capture">
+										Authorized Android loader / JNI capture
+									</option>
+								</select>
+							</label>
+							{runtimeOperation === "android_capture" && (
+								<>
+									<label htmlFor="android-package">
+										Exact APK package
+										<Input
+											id="android-package"
+											value={androidPackage}
+											onChange={(e) => setAndroidPackage(e.target.value)}
+										/>
+									</label>
+									<label>
+										<input
+											type="checkbox"
+											checked={captureDex}
+											onChange={(e) => setCaptureDex(e.target.checked)}
+										/>{" "}
+										Capture sensitive recovered DEX bytes into
+										.cline/android-captures (requires explicit approval)
+									</label>
+									<p className="text-xs">
+										The isolated worker must enforce reset, denied target egress
+										and cleanup. Supported loader hooks have limited coverage;
+										no key recovery or anti-instrumentation bypass. Native
+										hashes may remain unresolved.
+									</p>
+									<label htmlFor="android-recovery">
+										Previously approved Android plan ID
+										<Input
+											id="android-recovery"
+											value={recoveryPlanId}
+											onChange={(e) => setRecoveryPlanId(e.target.value)}
+										/>
+									</label>
+									<Button
+										disabled={!recoveryPlanId}
+										onClick={() =>
+											void desktopClient
+												.invoke("recover_android_capture", {
+													...common,
+													planId: recoveryPlanId,
+													confirmCaptureWrite: true,
+												})
+												.then(setResult)
+												.catch((e) =>
+													toast({
+														variant: "destructive",
+														title: "Recovery did not complete",
+														description: e.message,
+													}),
+												)
+										}
+									>
+										Retrieve captured plaintext from approved job — no
+										re-execution
+									</Button>
+								</>
+							)}
 							<label htmlFor="runtime-artifact-path" className="block text-sm">
 								Artifact path
 								<Input
@@ -481,11 +599,20 @@ export function AnalysisWorkbench({
 								"Prepare isolated-runtime task",
 								() =>
 									void prepare("dynamic", {
-										operation: "trace_native_region",
+										...(runtimeOperation === "android_capture"
+											? {
+													operation: "android_capture",
+													package_name: androidPackage,
+													capture_dex: captureDex,
+													output_directory: ".cline/android-captures",
+												}
+											: {
+													operation: "trace_native_region",
+													symbol: runtimeSymbol,
+													architecture,
+													instruction_limit: 10000,
+												}),
 										target: target.trim(),
-										symbol: runtimeSymbol,
-										architecture,
-										instruction_limit: 10000,
 										timeout_ms: 60000,
 									}),
 								!target.trim(),

@@ -224,10 +224,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function defaultCommandTimeoutMs(
+export function defaultCommandTimeoutMs(
 	command: string,
 	args?: Record<string, unknown>,
 ): number | null {
+	if (
+		command === "run_dynamic_analysis" ||
+		command === "recover_android_capture"
+	) {
+		// Bounded worker execution plus reset/cleanup grace. A timeout is not permission to replay.
+		const input = isRecord(args?.input) ? args.input : {};
+		return Math.min(
+			300000,
+			Math.max(
+				1000,
+				typeof input.timeout_ms === "number" &&
+					Number.isFinite(input.timeout_ms)
+					? input.timeout_ms
+					: 120000,
+			) + 180000,
+		);
+	}
 	if (command !== "chat_session_command" || !isRecord(args?.request)) {
 		return REQUEST_TIMEOUT_MS;
 	}

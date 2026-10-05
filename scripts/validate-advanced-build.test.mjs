@@ -54,3 +54,8 @@ test("workspace quality retains complete typecheck scope and Bun smoke declarati
  const workflow=readFileSync(new URL("../.github/workflows/sdk-test.yml",import.meta.url),"utf8");
  assert.equal((workflow.match(/bun-version: "1.3.14"/g)||[]).length,2);assert.ok(workflow.includes("bun run types"));assert.ok(workflow.includes("run: bun run lint"));assert.ok(workflow.includes("needs: quality-checks"));
 });
+
+test("advanced integration retains worker fixture and compilation gates without implying device validation",()=>{
+ const runner=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");for(const file of ["android-runtime-client.test.ts","analysis-investigation-store.test.ts","investigation-workspace.test.tsx"])assert.ok(runner.includes(file));
+ const workflow=readFileSync(new URL("../.github/workflows/build-custom-windows-installer.yml",import.meta.url),"utf8");assert.ok(workflow.includes("workers/android-capture/server.test.py"));assert.ok(workflow.includes("Build pinned Android instrumentation bundle"));assert.ok(workflow.includes("not live-device validation"));assert.ok(workflow.includes("Run process-session terminal smoke test"));
+});

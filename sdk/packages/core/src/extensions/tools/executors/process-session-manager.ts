@@ -890,7 +890,10 @@ export class ProcessSessionManager {
 		const terminalProcess = session.terminalProcess;
 		if (!terminalProcess) return;
 		void terminalProcess.exited.then(
-			(exitCode) => {
+            async (exitCode) => {
+                // ConPTY can deliver trailing data after process exit notification.
+                // Keep its handle alive for a bounded drain window; never respawn the process.
+                await new Promise<void>((resolve) => setTimeout(resolve, 250));
 				this.flushOutput(session, false);
 				this.complete(
 					session,

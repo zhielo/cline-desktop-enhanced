@@ -4,6 +4,18 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",markers:["ConPTY can deliver trailing data", "setTimeout(resolve, 250)"]},
+
+ {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["verifyAndroidCapture", "receipt.json", "Worker capability changed before upload", "Capture directory must not contain symlinks"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-investigation-store.ts",markers:["BEGIN IMMEDIATE", "Investigation changed; reload before writing", "metadataCoverage", "equivalent-under-expression-model-only", "forked-with-inherited-evidence"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/investigation-workspace.tsx",markers:["Fork without replay", "correlateEvidence", "ambiguous-static-descriptor-matches", "unresolved-module-hash"]},
+ {path:"workers/android-capture/server.py",markers:["Nonce identity conflict", "expired", "bounded_collect", "get_all('Authorization'", "operator-enforced-disposable-android-and-denied-egress"]},
+ {path:"workers/android-capture/hooks.js",markers:["RegisterNatives", "InMemoryDexClassLoader", "rpc.exports"]},
+ {path:"workers/android-capture/README.md",markers:["NOT hardware attestation", "GET-only", "No such live-device result"]},
+ {path:"docs/ADVANCED_INVESTIGATION_INTEGRATION.md",markers:["No original binary is rewritten", "Exact-head", "not a token-refresh implementation"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["analysis-investigation-store.test.ts", "android-runtime-client.test.ts", "investigation-workspace.test.tsx"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["server.test.py", "Build pinned Android instrumentation bundle", "bun install --frozen-lockfile"]},
+
  {path:"sdk/packages/core/package.json",markers:["bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit"]},
 
  {path:"package.json",markers:["bun --sequential -F '*' typecheck"]},
