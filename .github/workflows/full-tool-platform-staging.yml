@@ -1,0 +1,97 @@
+name: Full tool platform source staging and validation
+
+on:
+  push:
+    branches: [work/full-tool-platform-upgrade]
+    paths:
+      - 'sdk/**'
+      - 'scripts/stage-full-tool-platform-foundation.py'
+      - '.github/workflows/full-tool-platform-staging.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-tool-platform-source-staging
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.repository == 'zhielo/cline-desktop-enhanced' && github.ref == 'refs/heads/work/full-tool-platform-upgrade'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      source_sha: ${{ steps.commit.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the fresh source branch
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 2e4f41342e50d7599b686c7173e8d9eb7859e380 HEAD
+          test "$(git ls-remote origin refs/heads/work/full-tool-platform-upgrade | cut -f1)" = "$EXPECTED_SHA"
+      - name: Integrate the committed fresh source modules
+        run: python3 scripts/stage-full-tool-platform-foundation.py
+      - name: Commit bindings on the upgrade branch only
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = zhielo/cline-desktop-enhanced
+          test "$GITHUB_REF" = refs/heads/work/full-tool-platform-upgrade
+          git diff --check
+          git add sdk/packages/core/src/extensions/tools/types.ts sdk/packages/core/src/extensions/tools/constants.ts sdk/packages/core/src/extensions/tools/permission-profile.ts sdk/packages/core/src/extensions/tools/index.ts sdk/packages/core/src/extensions/tools/presets.ts sdk/packages/core/src/extensions/tools/runtime.ts sdk/packages/core/src/extensions/tools/helpers.ts sdk/packages/core/src/extensions/tools/definitions.ts sdk/packages/core/src/index.ts CUSTOMIZATIONS.md scripts/verify-custom-fork.ts
+          if ! git diff --cached --quiet; then
+            git -c user.name=github-actions[bot] -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m 'feat(core): integrate fresh registry and bounded command deadlines (#98)'
+            header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+            echo "::add-mask::$header"
+            git -c "http.https://github.com/.extraheader=$header" push origin HEAD:refs/heads/work/full-tool-platform-upgrade
+          fi
+          sha="$(git rev-parse HEAD)"
+          test "$(git ls-remote origin refs/heads/work/full-tool-platform-upgrade | cut -f1)" = "$sha"
+          echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Integrated source revision: $sha" >> "$GITHUB_STEP_SUMMARY"
+  validate:
+    needs: stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.stage.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.13'
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Build SDK packages
+        run: bun run build:sdk
+      - name: Verify all custom fork preservation contracts
+        run: bun scripts/verify-custom-fork.ts
+      - name: Run full core regression suite including new production contracts
+        working-directory: sdk/packages/core
+        run: bun run test:unit --maxWorkers=2
+      - name: Typecheck desktop
+        run: bun -F @cline/code typecheck
+      - name: Run existing desktop sidecar suite
+        run: bun -F @cline/code test:sidecar
+      - name: Record checkpoint evidence, not a release
+        env:
+          SOURCE_SHA: ${{ needs.stage.outputs.source_sha }}
+        run: |
+          echo "Foundation checks passed for $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'The full adapter catalogue and Windows installer remain pending. This workflow does not package or publish an installer.' >> "$GITHUB_STEP_SUMMARY"
