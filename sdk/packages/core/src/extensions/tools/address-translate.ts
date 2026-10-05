@@ -14,8 +14,9 @@ const InputSchema = z.strictObject({
 		memory_size: UInt64,
 	})).min(1).max(128),
 });
-const MAX_ADDRESS = (1n << 64n) - 1n;
-const ADDRESS_END = 1n << 64n;
+// Constructors preserve precision while supporting the desktop's TS emit target.
+const ADDRESS_END = BigInt("18446744073709551616");
+const MAX_ADDRESS = ADDRESS_END - BigInt(1);
 function integer(value: string): bigint {
 	const parsed = BigInt(value);
 	if (parsed > MAX_ADDRESS) throw new Error("Value exceeds unsigned 64-bit range");
@@ -56,7 +57,7 @@ export function createAddressTranslateTool() {
 			const supplied = integer(parsed.address);
 			const base = parsed.image_base === undefined ? undefined : integer(parsed.image_base);
 			if (parsed.input_kind === "rva" && base === undefined) throw new Error("RVA translation requires image_base");
-			const address = parsed.input_kind === "rva" ? supplied + (base ?? 0n) : supplied;
+			const address = parsed.input_kind === "rva" ? supplied + (base ?? BigInt(0)) : supplied;
 			if (address > MAX_ADDRESS) throw new Error("RVA plus image_base overflows unsigned 64-bit VA");
 			const ids = new Set<string>();
 			const matches: AddressTranslation[] = [];
