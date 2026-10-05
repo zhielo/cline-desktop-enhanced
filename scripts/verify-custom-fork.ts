@@ -54,7 +54,7 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: ".github/workflows/build-custom-windows-installer.yml",
-		markers: ["Run consolidated custom fork validation", "validate:advanced",
+		markers: ["Run consolidated custom fork validation", "validate:advanced", "include-hidden-files: true",
 			"Build custom Windows installer",
 			"Get-AuthenticodeSignature",
 			"Upload verified setup.exe",

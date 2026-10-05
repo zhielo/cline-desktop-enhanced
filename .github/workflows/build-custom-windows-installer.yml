@@ -136,7 +136,8 @@ jobs:
         with:
           name: consolidated-validation-${{ github.run_id }}
           path: .cline-validation/**
-          if-no-files-found: warn
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
       - name: Run process-session terminal smoke test
