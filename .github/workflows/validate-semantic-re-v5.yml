@@ -52,6 +52,11 @@ jobs:
         run: |
           set -euo pipefail
           bun test packages/core/scripts/rizin-program-engine-smoke.test.ts 2>&1 | tee ../.cline-native-validation/rizin.log
+      - name: Require both static engines on the same owned ELF
+        working-directory: sdk
+        run: |
+          set -euo pipefail
+          bun test packages/core/scripts/native-crosscheck-engine-smoke.test.ts 2>&1 | tee ../.cline-native-validation/crosscheck.log
       - name: Preserve source and real-engine evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f

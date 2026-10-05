@@ -33,12 +33,16 @@ export const NativeProgramSchema = z
 		producer: z.literal("ghidra-high-pcode"),
 		engineVersion: z.string().min(1).max(128),
 		language: z.string().min(1).max(128),
+        imageBase: z.string().regex(/^[a-f0-9]{1,16}$/).nullable().optional(),
+        addressSpace: z.string().min(1).max(128).optional(),
+        executableFormat: z.string().min(1).max(128).optional(),
 		functions: z
 			.array(
 				z
 					.object({
 						name: z.string().max(512),
 						entry: Id,
+                        entryAddress: z.object({space:z.string().min(1).max(128),offsetHex:z.string().regex(/^[a-f0-9]{1,16}$/)}).strict().optional(),
 						entryBlock: z
 							.string()
 							.regex(/^b[0-9]+$/)
@@ -313,6 +317,7 @@ export async function recoverNativeProgram(
 		throw new Error("Absolute target and bounded timeout required");
 	if (signal?.aborted)
 		return result("cancelled", "Cancelled before static recovery");
+	const deadline = Date.now() + timeoutMs;
 	const directory = await mkdtemp(join(tmpdir(), "cline-native-"));
 	try {
 		const canonical = await realpath(target);
@@ -337,6 +342,7 @@ export async function recoverNativeProgram(
 				for (;;) {
 					if (signal?.aborted)
 						return result("cancelled", "Cancelled while snapshotting input");
+                    if (Date.now() >= deadline) throw new Error("Static recovery deadline exhausted during input acquisition");
 					const chunk = await source.read(buffer, 0, buffer.length, null);
 					if (!chunk.bytesRead) break;
 					bytes += chunk.bytesRead;
@@ -379,6 +385,8 @@ export async function recoverNativeProgram(
 			mode: 0o600,
 		});
 		const output = join(directory, "program.json");
+        const remaining = deadline - Date.now();
+        if (remaining < 1) return result("failed", "Static recovery deadline exhausted before engine launch");
 		const outcome = await execute(
 			command,
 			[
@@ -387,7 +395,7 @@ export async function recoverNativeProgram(
 				"-import",
 				join(directory, "artifact.bin"),
 				"-analysisTimeoutPerFile",
-				String(Math.max(1, Math.floor(timeoutMs / 1000) - 10)),
+				String(Math.max(1, Math.floor(remaining / 1000) - 10)),
 				"-max-cpu",
 				"2",
 				"-scriptPath",
@@ -399,7 +407,7 @@ export async function recoverNativeProgram(
 				"-deleteProject",
 			],
 			directory,
-			timeoutMs,
+			remaining,
 			signal,
 		);
 		if (outcome !== "ok")

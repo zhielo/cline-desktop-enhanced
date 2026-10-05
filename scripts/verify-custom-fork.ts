@@ -913,6 +913,12 @@ requiredMarkers.push(
 requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",markers:["max_bytes=None","Invalid transformation byte budget"]});
 requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/native-program.ts",markers:["entryBlockEvidence","Invalid unique-root entry evidence","imported-unspecified"]});
 requiredMarkers.push({path:"sdk/packages/core/src/extensions/tools/executors/rizin-program.ts",markers:["RizinProgramSchema","Function address lost precision","-NN","No target execution"]});
+requiredMarkers.push(
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-crosscheck.ts",markers:["compareNativeLocations","Artifact identity mismatch","Duplicate normalized function entry","blockCountsComparable: false","Shared crosscheck deadline"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["native-crosscheck.test.ts"]},
+ {path:"sdk/packages/core/scripts/native-crosscheck-engine-smoke.test.ts",markers:["corpus never skips","recoverNativeCrosscheck","entry-location-agreement"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-program-script.ts",markers:["getImageBase()","entryAddress","getExecutableFormat()"]},
+);
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",

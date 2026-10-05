@@ -495,3 +495,7 @@ High p-code may omit native function-entry instructions. Prefer address containm
 ### V5 bounded Rizin action
 
 The native_functions_rizin static action is exposed in SDK schema/executor and workbench using a host-owned absolute CLINE_RE_RIZIN executable. Private snapshots and actual copied-byte hashes, disabled user scripts/plugins and executable I/O, precision-safe addresses, bounded output/functions and cancellation/deadlines are preserved. Eleven boundary cases join the SDK gate, plus required owned-ELF recovery in Linux CI with the reviewed 0.9.1 checksum. Not semantic equivalence, isolated tracing, a managed Windows pack or an installer-bundled engine.
+
+### V5 conservative cross-engine entry reconciliation
+
+The native_crosscheck action runs the existing fixed Ghidra and Rizin static adapters under one shared deadline, then refuses different artifact hashes or byte counts. Ghidra exports explicit address-space/base/entry coordinates and executable format; Rizin retains byte order. Explicit compatible x86 ELF coordinates are normalized with exact 64-bit integer arithmetic. Location agreement, unique names-only candidates, unmatched selections and unresolved coordinates remain separate; names never establish agreement. Block counts are not compared and native equivalence is not proved. Unit and real same-owned-ELF corpora are required. Unknown/legacy coordinates, overlays, other architectures, incomplete reports and runtime analysis remain unverified. No installer or target execution.

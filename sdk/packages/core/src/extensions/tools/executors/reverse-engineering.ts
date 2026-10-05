@@ -1,3 +1,4 @@
+import { recoverNativeCrosscheck } from "./native-crosscheck";
 import { recoverRizinProgram } from "./rizin-program";
 import { recoverNativeProgram } from "./native-program";
 import {programEvidenceResult} from "./analysis-program-evidence";
@@ -2436,7 +2437,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
       const action = input.advanced_action;
       if(action === "decrypt_blob" && input.output_file)throw new Error("Plaintext export is not enabled; decryption returns receipts and structural evidence only");
       let result;
-      if(action === "native_functions_rizin") {
+      if(action === "native_crosscheck") {
+        if(!input.target)throw new Error("Native target is required");
+        result=await recoverNativeCrosscheck({ghidra:await discover("ghidra"),rizin:process.env.CLINE_RE_RIZIN},input.target,input.advanced_options?.native,input.timeout_ms??120000,context.signal);
+      } else if(action === "native_functions_rizin") {
         if(!input.target)throw new Error("Native target is required");
         result=await recoverRizinProgram(process.env.CLINE_RE_RIZIN,input.target,input.advanced_options?.native,input.timeout_ms??120000,context.signal);
       } else if(action === "native_program") {

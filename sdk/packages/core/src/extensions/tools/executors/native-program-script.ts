@@ -38,6 +38,9 @@ public class ClineNativeProgram extends GhidraScript {
         document.addProperty("producer", "ghidra-high-pcode");
         document.addProperty("engineVersion", Application.getApplicationVersion());
         document.addProperty("language", currentProgram.getLanguageID().toString());
+        document.addProperty("imageBase", Long.toUnsignedString(currentProgram.getImageBase().getOffset(), 16));
+        document.addProperty("addressSpace", currentProgram.getImageBase().getAddressSpace().getName());
+        document.addProperty("executableFormat", bounded(currentProgram.getExecutableFormat(), 128));
         JsonArray functions = new JsonArray(); document.add("functions", functions);
         int opCount = 0, failed = 0, considered = 0;
         boolean truncated = false;
@@ -56,6 +59,10 @@ public class ClineNativeProgram extends GhidraScript {
                 JsonObject item = new JsonObject();
                 item.addProperty("name", bounded(function.getName(), 512));
                 item.addProperty("entry", function.getEntryPoint().toString());
+                JsonObject entryAddress = new JsonObject();
+                entryAddress.addProperty("space", function.getEntryPoint().getAddressSpace().getName());
+                entryAddress.addProperty("offsetHex", Long.toUnsignedString(function.getEntryPoint().getOffset(), 16));
+                item.add("entryAddress", entryAddress);
                 JsonArray blocks = new JsonArray(), operations = new JsonArray();
                 item.add("blocks", blocks); item.add("pcode", operations); item.add("entryBlock", JsonNull.INSTANCE); item.addProperty("entryBlockEvidence", "unresolved");
                 DecompileResults result = decompiler.decompileFunction(function, 15, monitor);

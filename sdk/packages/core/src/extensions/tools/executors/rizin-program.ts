@@ -9,11 +9,11 @@ import { prepareProcessEnvironment } from "./process-environment-policy";
 import type { AdvancedResult } from "./advanced-analysis";
 const MAX_INPUT=128*1024*1024, MAX_OUTPUT=1048576;
 const Hex=z.string().regex(/^[a-f0-9]{1,16}$/);
-export const RizinProgramSchema=z.object({schemaVersion:z.literal(1),producer:z.literal("rizin-function-inventory"),engineVersion:z.string().min(1).max(128),imageBase:Hex.nullable(),architecture:z.string().max(128),bits:z.number().int().min(1).max(128),format:z.string().max(128),functions:z.array(z.object({name:z.string().max(512),entry:Hex,size:z.number().int().min(0).max(MAX_INPUT),assemblyBlockCount:z.number().int().min(0).max(1000000).nullable()}).strict()).max(64),coverage:z.object({reportedFunctions:z.number().int().min(0).max(10000),selectedFunctions:z.number().int().min(0).max(10000),truncated:z.boolean()}).strict()}).strict().superRefine((v,c)=>{if(new Set(v.functions.map(f=>f.entry)).size!==v.functions.length)c.addIssue({code:"custom",message:"Duplicate Rizin function entry"});if(v.functions.length>v.coverage.selectedFunctions||v.coverage.selectedFunctions>v.coverage.reportedFunctions)c.addIssue({code:"custom",message:"Invalid function coverage"});});
+export const RizinProgramSchema=z.object({schemaVersion:z.literal(1),producer:z.literal("rizin-function-inventory"),engineVersion:z.string().min(1).max(128),imageBase:Hex.nullable(),byteOrder:z.enum(["LE","BE"]).nullable().optional(),architecture:z.string().max(128),bits:z.number().int().min(1).max(128),format:z.string().max(128),functions:z.array(z.object({name:z.string().max(512),entry:Hex,size:z.number().int().min(0).max(MAX_INPUT),assemblyBlockCount:z.number().int().min(0).max(1000000).nullable()}).strict()).max(64),coverage:z.object({reportedFunctions:z.number().int().min(0).max(10000),selectedFunctions:z.number().int().min(0).max(10000),truncated:z.boolean()}).strict()}).strict().superRefine((v,c)=>{if(new Set(v.functions.map(f=>f.entry)).size!==v.functions.length)c.addIssue({code:"custom",message:"Duplicate Rizin function entry"});if(v.functions.length>v.coverage.selectedFunctions||v.coverage.selectedFunctions>v.coverage.reportedFunctions)c.addIssue({code:"custom",message:"Invalid function coverage"});});
 export type RizinProgram=z.infer<typeof RizinProgramSchema>;
 export function safeRizinAddress(value:unknown):string|null{
  if(typeof value==="number")return Number.isSafeInteger(value)&&value>=0?value.toString(16):null;
- if(typeof value==="string"&&/^(?:0x)?[a-fA-F0-9]{1,16}$/.test(value))return value.replace(/^0x/,"").toLowerCase();
+ if(typeof value==="string"&&/^(?:0x)?[a-fA-F0-9]{1,16}$/.test(value))return BigInt(`0x${value.replace(/^0x/,"")}`).toString(16);
  return null;
 }
 export function parseRizinProgram(stdout:string,version:string,options:{functionName?:string;maxFunctions?:number}={}):RizinProgram{
@@ -21,11 +21,11 @@ export function parseRizinProgram(stdout:string,version:string,options:{function
  const limit=options.maxFunctions??16;if(!Number.isInteger(limit)||limit<1||limit>64)throw Error("Invalid function budget");
  if(options.functionName!==undefined&&(typeof options.functionName!=="string"||options.functionName.length>512))throw Error("Invalid function selector");
  const lines=stdout.trim().split(/\r?\n/);if(lines.length!==2)throw Error("Expected two bounded Rizin JSON documents");
- const info=z.object({baddr:z.unknown(),arch:z.string().max(128),bits:z.number().int().min(1).max(128),bintype:z.string().max(128)}).parse(JSON.parse(lines[0]));
+ const info=z.object({baddr:z.unknown(),arch:z.string().max(128),bits:z.number().int().min(1).max(128),bintype:z.string().max(128),endian:z.enum(["LE","BE"]).optional()}).parse(JSON.parse(lines[0]));
  const all=z.array(z.object({offset:z.unknown(),name:z.string().max(512),size:z.number().int().min(0).max(MAX_INPUT),nbbs:z.number().int().min(0).max(1000000).optional()})).max(10000).parse(JSON.parse(lines[1]));
  const selected=all.filter(f=>!options.functionName||f.name===options.functionName||f.name===`dbg.${options.functionName}`||f.name===`sym.${options.functionName}`);
  const functions=selected.slice(0,limit).map(f=>{const entry=safeRizinAddress(f.offset);if(entry===null)throw Error("Function address lost precision or is invalid");return {name:f.name,entry,size:f.size,assemblyBlockCount:f.nbbs??null};});
- return RizinProgramSchema.parse({schemaVersion:1,producer:"rizin-function-inventory",engineVersion:version,imageBase:safeRizinAddress(info.baddr),architecture:info.arch,bits:info.bits,format:info.bintype,functions,coverage:{reportedFunctions:all.length,selectedFunctions:selected.length,truncated:selected.length>limit}});
+ return RizinProgramSchema.parse({schemaVersion:1,producer:"rizin-function-inventory",engineVersion:version,imageBase:safeRizinAddress(info.baddr),byteOrder:info.endian??null,architecture:info.arch,bits:info.bits,format:info.bintype,functions,coverage:{reportedFunctions:all.length,selectedFunctions:selected.length,truncated:selected.length>limit}});
 }
 function killTree(child:ChildProcess){if(!child.pid)return;if(process.platform==="win32"){const killer=spawn(join(process.env.SystemRoot??"C:\\Windows","System32","taskkill.exe"),["/pid",String(child.pid),"/t","/f"],{stdio:"ignore",windowsHide:true});killer.on("error",()=>child.kill());killer.unref();}else{try{process.kill(-child.pid,"SIGKILL");}catch{child.kill();}}}
 async function invoke(engine:string,args:string[],cwd:string,deadline:number,signal?:AbortSignal):Promise<string>{
