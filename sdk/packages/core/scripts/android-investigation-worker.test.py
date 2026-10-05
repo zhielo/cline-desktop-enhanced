@@ -62,6 +62,31 @@ def archive(entries, compressed=False):
     return buf.getvalue()
 
 
+def elf_fixture(machine=62, code=b"\x90\xc3"):
+    base=0x400000
+    text=192
+    data=bytearray(text)+code
+    names=b'\0Java_Fixture_native_1work\0'
+    strings=len(data);data+=names
+    while len(data)%8:data+=b'\0'
+    symbols=len(data);data+=bytes(24)+struct.pack('<IBBHQQ',1,0x12,0,1,base+text,len(code))
+    hashes=len(data);data+=struct.pack('<IIIII',1,2,1,0,0)
+    while len(data)%8:data+=b'\0'
+    dynamic=len(data)
+    for tag,value in [(5,base+strings),(10,len(names)),(6,base+symbols),(11,24),(4,base+hashes),(0,0)]:data+=struct.pack('<QQ',tag,value)
+    shnames=b'\0.text\0.dynstr\0.dynsym\0.hash\0.dynamic\0.shstrtab\0'
+    stringtable=len(data);data+=shnames
+    while len(data)%8:data+=b'\0'
+    sectionoff=len(data);data+=bytes(64)
+    for name,kind,flags,address,offset,size,link,align,entsize in [(1,1,6,base+text,text,len(code),0,16,0),(7,3,2,base+strings,strings,len(names),0,1,0),(15,11,2,base+symbols,symbols,48,2,8,24),(23,5,2,base+hashes,hashes,20,3,4,4),(29,6,3,base+dynamic,dynamic,96,2,8,16),(38,3,0,0,stringtable,len(shnames),0,1,0)]:
+        data+=struct.pack('<IIQQQQIIQQ',name,kind,flags,address,offset,size,link,0,align,entsize)
+    data[:16]=b'\x7fELF\x02\x01\x01'+bytes(9)
+    struct.pack_into('<HHIQQQIHHHHHH',data,16,3,machine,1,0,64,sectionoff,0,64,56,2,64,7,6)
+    struct.pack_into('<IIQQQQQQ',data,64,1,5,0,base,base,len(data),len(data),4096)
+    struct.pack_into('<IIQQQQQQ',data,120,2,4,dynamic,base+dynamic,base+dynamic,96,96,8)
+    return bytes(data)
+
+
 class AndroidTests(unittest.TestCase):
     def setUp(self):self.temp=tempfile.TemporaryDirectory();self.path=Path(self.temp.name)/'input'
     def tearDown(self):self.temp.cleanup()
@@ -181,5 +206,42 @@ class AndroidTests(unittest.TestCase):
     def test_signature_with_invalid_declared_size_not_valid(self):
         result=self.run_action(b'prefix'+b'dex\n035\0'+b'\0'*112)
         self.assertEqual(len(result['evidence']['artifacts']),1);self.assertTrue(result['evidence']['warnings'])
+
+
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_exact_native_entry_maps_virtual_to_file(self):
+        self.path.write_bytes(elf_fixture())
+        result=w.native_selection({'target':str(self.path),'options':{'function':{'address':'0x4000c0'}}})
+        method=result['evidence']['selectedFunctions'][0]
+        self.assertEqual(method['fileOffset'],192);self.assertEqual([i['mnemonic'] for i in method['disassembly']['instructions']],['nop','ret'])
+        self.assertEqual(result['status'],'completed')
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_arm64_native_entry(self):
+        self.path.write_bytes(elf_fixture(183,bytes.fromhex('c0035fd6')))
+        result=w.native_selection({'target':str(self.path),'options':{'function':{'address':'0x4000c0'}}})
+        self.assertEqual(result['evidence']['selectedFunctions'][0]['architecture'],'arm64')
+        self.assertEqual(result['evidence']['selectedFunctions'][0]['disassembly']['instructions'][0]['mnemonic'],'ret')
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_partial_native_range_explicit(self):
+        self.path.write_bytes(elf_fixture());r=w.native_selection({'target':str(self.path),'options':{'function':{'symbol':'Java_Fixture_native_1work','max_bytes':1}}})
+        self.assertEqual(r['status'],'partial');self.assertEqual(r['evidence']['selectedFunctions'][0]['disassembly']['decodedBytes'],1)
+    @unittest.skipUnless(importlib.util.find_spec('lief'),'optional LIEF not configured')
+    def test_jni_export_matches_remain_candidates(self):
+        result=self.run_action(archive([('classes.dex',dex_fixture()),('lib/x86_64/a.so',elf_fixture())]),'android_relationships')
+        matches=[r for r in result['evidence']['relationships'] if r['kind']=='jni-export-match-candidate']
+        self.assertEqual(result['evidence']['relationshipCount'],len(result['evidence']['relationships']));self.assertEqual(result['evidence']['exportMatchCount'],1)
+        self.assertEqual(len(matches),1);self.assertFalse(matches[0]['verifiedBinding']);self.assertEqual(matches[0]['confidence'],'static-export-name-match')
+    @unittest.skipUnless(importlib.util.find_spec('lief'),'optional LIEF not configured')
+    def test_native_budget_and_invalid_extent_do_not_execute(self):
+        data=bytearray(elf_fixture());struct.pack_into('<Q',data,64+32,len(data)+100)
+        with self.assertRaises(ValueError):w.native_metadata(bytes(data),'owned',20)
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_exact_defined_dex_bytecode(self):
+        result=self.run_action(dex_fixture(True),'android_method_code',options={'method':{'class_descriptor':'LFixture;','name':'native_work','descriptor':'()V'}})
+        code=result['evidence']['selectedCode'][0];self.assertEqual(code['methods'][0]['instructions'][0]['name'],'return-void')
+        self.assertEqual(code['coverage'],'selected-defined-method-bytecode-not-recovered-source-or-runtime-execution')
+    def test_readiness_never_confuses_missing_engine_with_verified_execution(self):
+        result=w.analysis_readiness()
+        for check in result['evidence']['checks']:self.assertEqual(check['executionVerified'],check['status']=='completed')
 
 if __name__=='__main__':unittest.main()

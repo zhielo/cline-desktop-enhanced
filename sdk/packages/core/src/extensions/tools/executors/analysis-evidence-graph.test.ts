@@ -93,3 +93,107 @@ describe("bounded evidence graph", () => {
 		).toContain("untrusted");
 	});
 });
+
+it("maps Android JNI export names as candidate edges, never execution proofs", () => {
+	const input = {
+		...result,
+		engine: "android-static",
+		engineVersion: "android-static/v2",
+		evidence: {
+			artifacts: [
+				{
+					id: "dex",
+					sha256: "a".repeat(64),
+					format: "dex",
+					dex: {
+						methods: [
+							{
+								id: "method",
+								defined: true,
+								classDescriptor: "LFixture;",
+								name: "native_work",
+								descriptor: "()V",
+							},
+						],
+						loaderReferences: [
+							{
+								id: "loader",
+								classDescriptor: "Ljava/lang/System;",
+								name: "loadLibrary",
+							},
+						],
+					},
+				},
+				{
+					id: "lib",
+					sha256: "b".repeat(64),
+					format: "elf",
+					native: {
+						functions: [
+							{
+								id: "symbol",
+								name: "Java_Fixture_native_1work",
+								addressHex: "0x4000c0",
+							},
+						],
+					},
+				},
+			],
+			relationships: [
+				{
+					kind: "jni-export-match-candidate",
+					methodId: "method",
+					nativeSymbolId: "symbol",
+					verifiedBinding: false,
+				},
+			],
+		},
+	};
+	const graph = buildEvidenceGraph({ schemaVersion: 1, results: [input] });
+	expect(
+		graph.edges.filter((e) => e.relation === "jni-export-name-candidate"),
+	).toEqual([expect.objectContaining({ confidence: "candidate" })]);
+	expect(graph.edges.some((e) => e.relation === "references-candidate")).toBe(
+		true,
+	);
+	expect(
+		graph.nodes.filter((n) => n.kind === "native-symbol")[0].artifactSha256,
+	).toBe("b".repeat(64));
+});
+
+it("includes exact selections outside truncated inventory with original artifact provenance", () => {
+	const graph = buildEvidenceGraph({
+		schemaVersion: 1,
+		results: [
+			{
+				...result,
+				engine: "android-static",
+				evidence: {
+					artifacts: [
+						{
+							id: "lib",
+							sha256: "b".repeat(64),
+							format: "elf",
+							native: { functions: [] },
+						},
+					],
+					selectedFunctions: [
+						{
+							id: "selected",
+							artifactId: "lib",
+							name: "outside_listing",
+							addressHex: "0x1000",
+						},
+					],
+					relationships: [],
+				},
+			},
+		],
+	});
+	expect(graph.nodes.find((n) => n.kind === "native-symbol")).toEqual(
+		expect.objectContaining({
+			artifactSha256: "b".repeat(64),
+			label: expect.stringContaining("outside_listing"),
+		}),
+	);
+});

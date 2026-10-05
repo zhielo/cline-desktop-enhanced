@@ -760,3 +760,115 @@ printf 'dex-output' > "$output"`,
 		).rejects.toThrow();
 	});
 });
+
+describe("targeted adapter routing (mock engines, not real decompilation)", () => {
+	it("passes exact Ghidra selector as separate base64 data and invalidates reuse on change", async () => {
+		if (process.platform === "win32") return;
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "target-adapter-"));
+		temporaryDirectories.push(dir);
+		const home = path.join(dir, "ghidra");
+		await executable(
+			path.join(home, "support"),
+			"analyzeHeadless",
+			`mkdir -p "$1"; touch "$1/$2.gpr"
+while [ "$#" -gt 0 ]; do
+ if [ "$1" = "-postScript" ]; then shift 2; printf '/* mock selected */' > "$1"; break; else shift; fi
+done`,
+		);
+		process.env.GHIDRA_HOME = home;
+		const target = path.join(dir, "owned.bin");
+		await fs.writeFile(target, "owned");
+		const execute = createReverseEngineeringExecutor();
+		const run = async (symbol: string) =>
+			JSON.parse(
+				await execute(
+					{
+						engine: "ghidra",
+						operation: "decompile",
+						target,
+						output_directory: path.join(dir, "out"),
+						function_selector: { symbol },
+					},
+					{} as never,
+				),
+			);
+		const first = await run("chosen");
+		expect(first.args).toEqual(
+			expect.arrayContaining([
+				"ClineDecompileSelected.java",
+				"symbol",
+				Buffer.from("chosen").toString("base64"),
+			]),
+		);
+		expect(first.succeeded).toBe(true);
+		const same = await run("chosen");
+		expect(same.reusedAnalysis).toBe(true);
+		const changed = await run("different");
+		expect(changed.reusedAnalysis).toBe(false);
+	});
+	it("writes exact IDA selector into a fixed script without enabling arbitrary scripts", async () => {
+		if (process.platform === "win32") return;
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ida-selected-"));
+		temporaryDirectories.push(dir);
+		const bin = path.join(dir, "bin");
+		await executable(bin, "idat64", 'printf "%s\\n" "$@"');
+		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+		const target = path.join(dir, "owned.bin");
+		await fs.writeFile(target, "owned");
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "ida",
+					operation: "decompile",
+					target,
+					output_directory: path.join(dir, "out"),
+					function_selector: { address: "0x1000" },
+				},
+				{} as never,
+			),
+		);
+		const arg = result.args.find((a: string) => a.startsWith("-S"));
+		const source = await fs.readFile(
+			arg.slice(2).replace(/^"|"$/g, ""),
+			"utf8",
+		);
+		expect(source).toContain('SELECTOR = {"address":"0x1000"}');
+		expect(source).toContain("function.start_ea==address");
+		expect(result.succeeded).toBe(false);
+	});
+	it("separates cached JADX analyses by selected class", async () => {
+		if (process.platform === "win32") return;
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "jadx-class-cache-"));
+		temporaryDirectories.push(dir);
+		const bin = path.join(dir, "bin");
+		await executable(
+			bin,
+			"jadx",
+			`while [ "$#" -gt 0 ]; do
+ if [ "$1" = "-d" ]; then mkdir -p "$2"; printf '/* mock class */' > "$2/decompiled.c"; fi
+ shift
+done`,
+		);
+		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+		const target = path.join(dir, "owned.apk");
+		await fs.writeFile(target, "owned");
+		const execute = createReverseEngineeringExecutor();
+		const out = path.join(dir, "out");
+		const run = async (name: string) => {
+			await execute(
+				{
+					engine: "jadx",
+					operation: "decompile",
+					target,
+					output_directory: out,
+					jadx_single_class: name,
+				},
+				{} as never,
+			);
+			return JSON.parse(
+				await fs.readFile(path.join(out, "cline-analysis.json"), "utf8"),
+			).analysisOptionsHash;
+		};
+		expect(await run("example.First")).not.toBe(await run("example.Second"));
+	});
+});

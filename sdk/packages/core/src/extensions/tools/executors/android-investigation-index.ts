@@ -39,7 +39,13 @@ const Manifest = z
 	})
 	.strict();
 export type InvestigationQuery = {
-	kind?: "artifact" | "method" | "loader-reference" | "jni-name-candidate";
+	kind?:
+		| "artifact"
+		| "method"
+		| "loader-reference"
+		| "jni-name-candidate"
+		| "native-symbol"
+		| "jni-export-match-candidate";
 	text?: string;
 	id?: string;
 	offset?: number;
@@ -166,11 +172,27 @@ export async function queryInvestigation(
 	)
 		throw new Error("Investigation evidence collections missing");
 	for (const artifact of evidence.artifacts) {
-		const { dex: nestedDex, ...summary } = artifact as Record<string, unknown>;
+		const {
+			dex: nestedDex,
+			native: nestedNative,
+			...summary
+		} = artifact as Record<string, unknown>;
 		const details = nestedDex as Record<string, unknown> | undefined;
 		add(
 			{
 				...summary,
+				...(nestedNative
+					? {
+							nativeSummary: {
+								architecture: (nestedNative as Record<string, unknown>)
+									.architecture,
+								functionCount: (nestedNative as Record<string, unknown>)
+									.functionCount,
+								functionsTruncated: (nestedNative as Record<string, unknown>)
+									.functionsTruncated,
+							},
+						}
+					: {}),
 				...(details
 					? {
 							dexSummary: {
@@ -192,6 +214,9 @@ export async function queryInvestigation(
 		for (const method of dex?.methods ?? []) add(method, "method");
 		for (const reference of dex?.loaderReferences ?? [])
 			add(reference, "loader-reference");
+		for (const fn of (nestedNative as { functions?: unknown[] } | undefined)
+			?.functions ?? [])
+			add(fn, "native-symbol");
 	}
 	for (const method of (evidence.selectedMethods as unknown[] | undefined) ??
 		[]) {
@@ -203,8 +228,22 @@ export async function queryInvestigation(
 		)
 			add(method, "method");
 	}
+	for (const selected of (evidence.selectedFunctions as
+		| Record<string, unknown>[]
+		| undefined) ?? []) {
+		const { disassembly: _disassembly, ...summary } = selected;
+		if (
+			!rows.some((row) => row.kind === "native-symbol" && row.id === summary.id)
+		)
+			add(summary, "native-symbol");
+	}
 	for (const relationship of evidence.relationships)
-		add(relationship, "jni-name-candidate");
+		add(
+			relationship,
+			(relationship as { kind?: string }).kind === "jni-export-match-candidate"
+				? "jni-export-match-candidate"
+				: "jni-name-candidate",
+		);
 	const offset = Math.max(0, Math.min(query.offset ?? 0, 10000));
 	const limit = Math.max(1, Math.min(query.limit ?? 50, 200));
 	const text = query.text?.toLowerCase();
@@ -240,4 +279,10 @@ export async function queryInvestigation(
 			"Queries only cover indexed evidence; no missing edges or runtime bindings are inferred. The hash detects corruption, not maliciously forged evidence.",
 		],
 	};
+}
+
+export async function readInvestigationResult(
+	target: string,
+): Promise<AdvancedResult> {
+	return (await readManifest(target)).result;
 }

@@ -91,6 +91,7 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/targeted-decompiler-scripts.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.test.ts",

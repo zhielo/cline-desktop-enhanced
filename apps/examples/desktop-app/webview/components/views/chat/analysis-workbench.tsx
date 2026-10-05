@@ -1,5 +1,5 @@
 "use client";
-import {AnalysisAuthoring} from "./analysis-authoring";
+import { AnalysisAuthoring } from "./analysis-authoring";
 
 import {
 	Activity,
@@ -23,7 +23,10 @@ import { cn } from "@/lib/utils";
 
 type WorkbenchMode =
 	| "tasks"
-	| "notebook" | "graph" | "runtime" | "analyze"
+	| "notebook"
+	| "graph"
+	| "runtime"
+	| "analyze"
 	| "debug"
 	| "terminal"
 	| "approvals"
@@ -54,7 +57,7 @@ type TaskPlan = {
 };
 type Discovery = { reverseEngineering?: unknown; debugger?: unknown };
 type AnalysisOperation =
-  | "advanced_analysis"
+	| "advanced_analysis"
 	| "inspect"
 	| "scan_strings"
 	| "forensic_report"
@@ -81,7 +84,9 @@ const modes: Array<{
 }> = [
 	{ id: "tasks", icon: ListChecks, label: "Tasks" },
 	{ id: "analyze", icon: Binary, label: "Analyze" },
- {id:"notebook",icon:ListChecks,label:"Notebook"}, {id:"graph",icon:Activity,label:"Graph"}, {id:"runtime",icon:ShieldAlert,label:"Isolated runtime"},
+	{ id: "notebook", icon: ListChecks, label: "Notebook" },
+	{ id: "graph", icon: Activity, label: "Graph" },
+	{ id: "runtime", icon: ShieldAlert, label: "Isolated runtime" },
 	{ id: "debug", icon: Bug, label: "Debug" },
 	{ id: "terminal", icon: Terminal, label: "Terminal" },
 	{ id: "approvals", icon: ShieldCheck, label: "Approvals" },
@@ -108,10 +113,15 @@ export function AnalysisWorkbench({
 	const [pendingPlan, setPendingPlan] = useState<TaskPlan | null>(null);
 	const [loadingDiscovery, setLoadingDiscovery] = useState(false);
 	const [target, setTarget] = useState("");
+	const [decompilerOptions, setDecompilerOptions] = useState("{}");
 	const [operation, setOperation] = useState<AnalysisOperation>("inspect");
 	const [engine, setEngine] = useState("auto");
-  const [advancedAction,setAdvancedAction]=useState("suite");
- const [advancedOptions,setAdvancedOptions]=useState("{}");const [runtimeSymbol,setRuntimeSymbol]=useState("main");const [architecture,setArchitecture]=useState("x86_64");const [uploadConfirmed,setUploadConfirmed]=useState(false);const [runtimeConfirmed,setRuntimeConfirmed]=useState(false);
+	const [advancedAction, setAdvancedAction] = useState("suite");
+	const [advancedOptions, setAdvancedOptions] = useState("{}");
+	const [runtimeSymbol, setRuntimeSymbol] = useState("main");
+	const [architecture, setArchitecture] = useState("x86_64");
+	const [uploadConfirmed, setUploadConfirmed] = useState(false);
+	const [runtimeConfirmed, setRuntimeConfirmed] = useState(false);
 	const [debugOperation, setDebugOperation] =
 		useState<DebugOperation>("inspect_dump");
 	const [pid, setPid] = useState("");
@@ -179,7 +189,9 @@ export function AnalysisWorkbench({
 					allowExternalTarget,
 				},
 			);
-			setPendingPlan(plan);setUploadConfirmed(false);setRuntimeConfirmed(false);
+			setPendingPlan(plan);
+			setUploadConfirmed(false);
+			setRuntimeConfirmed(false);
 			await refreshLedger();
 			setMode("approvals");
 		} catch (error) {
@@ -196,7 +208,11 @@ export function AnalysisWorkbench({
 
 	const approveAndRun = async () => {
 		if (!pendingPlan) return;
- if(pendingPlan.kind === "dynamic"&&(!uploadConfirmed||!runtimeConfirmed))return;
+		if (
+			pendingPlan.kind === "dynamic" &&
+			(!uploadConfirmed || !runtimeConfirmed)
+		)
+			return;
 		setBusy(true);
 		setResult(null);
 		try {
@@ -217,7 +233,16 @@ export function AnalysisWorkbench({
 					confirmAuthorized: true,
 					input: pendingPlan.request,
 				});
-			} else if(pendingPlan.kind === "dynamic"){response=await desktopClient.invoke("run_dynamic_analysis",{...common,planId:pendingPlan.id,executionToken:approved.executionToken,confirmExecution:runtimeConfirmed,confirmArtifactUpload:uploadConfirmed,input:pendingPlan.request});} else {
+			} else if (pendingPlan.kind === "dynamic") {
+				response = await desktopClient.invoke("run_dynamic_analysis", {
+					...common,
+					planId: pendingPlan.id,
+					executionToken: approved.executionToken,
+					confirmExecution: runtimeConfirmed,
+					confirmArtifactUpload: uploadConfirmed,
+					input: pendingPlan.request,
+				});
+			} else {
 				response = await desktopClient.invoke(
 					pendingPlan.kind === "gui"
 						? "open_analysis_gui"
@@ -249,12 +274,51 @@ export function AnalysisWorkbench({
 	};
 
 	const prepareStatic = (kind: "static" | "gui") => {
- if(kind === "static"&&operation === "advanced_analysis")try{JSON.parse(advancedOptions);}catch{toast({variant:"destructive",title:"Invalid advanced options JSON"});return;}
+		if (kind === "static" && operation === "advanced_analysis")
+			try {
+				JSON.parse(advancedOptions);
+			} catch {
+				toast({
+					variant: "destructive",
+					title: "Invalid advanced options JSON",
+				});
+				return;
+			}
+		let selectedOptions: Record<string, unknown> = {};
+		if (kind === "static" && operation === "decompile") {
+			try {
+				selectedOptions = JSON.parse(decompilerOptions);
+				if (
+					!selectedOptions ||
+					Array.isArray(selectedOptions) ||
+					typeof selectedOptions !== "object" ||
+					Object.keys(selectedOptions).some(
+						(key) =>
+							!["function_selector", "jadx_single_class", "jadx_mode"].includes(
+								key,
+							),
+					)
+				)
+					throw new Error();
+			} catch {
+				toast({
+					variant: "destructive",
+					title: "Invalid targeted decompiler options",
+				});
+				return;
+			}
+		}
 		const request = {
+			...selectedOptions,
 			engine,
 			operation: kind === "gui" ? "open_gui" : operation,
-      ...(kind === "static" && operation === "advanced_analysis" ? {advanced_action:advancedAction,advanced_options:JSON.parse(advancedOptions)} : {}),
-			...(target.trim()?{target:target.trim()}:{}),
+			...(kind === "static" && operation === "advanced_analysis"
+				? {
+						advanced_action: advancedAction,
+						advanced_options: JSON.parse(advancedOptions),
+					}
+				: {}),
+			...(target.trim() ? { target: target.trim() } : {}),
 			reuse_analysis: true,
 			report_format: "json",
 			timeout_ms: 120_000,
@@ -361,8 +425,73 @@ export function AnalysisWorkbench({
 			</div>
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
-{(mode==="notebook"||mode==="graph")&&<AnalysisAuthoring key={mode} kind={mode} common={common} onPrepare={request=>prepare("static",request)}/>}
-{mode==="runtime"&&<section className="space-y-4"><h3 className="text-base font-semibold">Isolated QBDI submission</h3><p className="text-sm text-muted-foreground">Requires an operator-provisioned disposable VM and compatible signed worker. The desktop does not execute a native sample. Signed operator claims are not hardware attestation.</p><label htmlFor="runtime-artifact-path" className="block text-sm">Artifact path<Input id="runtime-artifact-path" aria-label="Runtime artifact path" value={target} onChange={e=>setTarget(e.target.value)}/></label><label htmlFor="runtime-symbol" className="block text-sm">Exported function symbol<Input id="runtime-symbol" aria-label="Runtime symbol" value={runtimeSymbol} onChange={e=>setRuntimeSymbol(e.target.value)}/></label><label className="block text-sm">Architecture<select className="min-h-11 w-full rounded-md border border-input bg-background px-3" value={architecture} onChange={e=>setArchitecture(e.target.value)}><option value="x86_64">x86-64</option><option value="arm64">ARM64</option></select></label><p className="text-sm text-muted-foreground">Worker endpoint, key fingerprint and artifact identity are bound to approval. Upload and authorized execution require separate acknowledgments. Worker egress stays disabled.</p>{formButton("Prepare isolated-runtime task",()=>void prepare("dynamic",{operation:"trace_native_region",target:target.trim(),symbol:runtimeSymbol,architecture,instruction_limit:10000,timeout_ms:60000}),!target.trim())}</section>}
+					{(mode === "notebook" || mode === "graph") && (
+						<AnalysisAuthoring
+							key={mode}
+							kind={mode}
+							common={common}
+							onPrepare={(request) => prepare("static", request)}
+						/>
+					)}
+					{mode === "runtime" && (
+						<section className="space-y-4">
+							<h3 className="text-base font-semibold">
+								Isolated QBDI submission
+							</h3>
+							<p className="text-sm text-muted-foreground">
+								Requires an operator-provisioned disposable VM and compatible
+								signed worker. The desktop does not execute a native sample.
+								Signed operator claims are not hardware attestation.
+							</p>
+							<label htmlFor="runtime-artifact-path" className="block text-sm">
+								Artifact path
+								<Input
+									id="runtime-artifact-path"
+									aria-label="Runtime artifact path"
+									value={target}
+									onChange={(e) => setTarget(e.target.value)}
+								/>
+							</label>
+							<label htmlFor="runtime-symbol" className="block text-sm">
+								Exported function symbol
+								<Input
+									id="runtime-symbol"
+									aria-label="Runtime symbol"
+									value={runtimeSymbol}
+									onChange={(e) => setRuntimeSymbol(e.target.value)}
+								/>
+							</label>
+							<label className="block text-sm">
+								Architecture
+								<select
+									className="min-h-11 w-full rounded-md border border-input bg-background px-3"
+									value={architecture}
+									onChange={(e) => setArchitecture(e.target.value)}
+								>
+									<option value="x86_64">x86-64</option>
+									<option value="arm64">ARM64</option>
+								</select>
+							</label>
+							<p className="text-sm text-muted-foreground">
+								Worker endpoint, key fingerprint and artifact identity are bound
+								to approval. Upload and authorized execution require separate
+								acknowledgments. Worker egress stays disabled.
+							</p>
+							{formButton(
+								"Prepare isolated-runtime task",
+								() =>
+									void prepare("dynamic", {
+										operation: "trace_native_region",
+										target: target.trim(),
+										symbol: runtimeSymbol,
+										architecture,
+										instruction_limit: 10000,
+										timeout_ms: 60000,
+									}),
+								!target.trim(),
+							)}
+						</section>
+					)}
 					{mode === "analyze" && (
 						<div className="space-y-4">
 							<div>
@@ -398,7 +527,7 @@ export function AnalysisWorkbench({
 										value={operation}
 									>
 										<option value="inspect">Inspect</option>
-                    <option value="advanced_analysis">Advanced suite</option>
+										<option value="advanced_analysis">Advanced suite</option>
 										<option value="scan_strings">Scan strings</option>
 										<option value="forensic_report">Forensic report</option>
 										<option value="apk_security_report">APK security</option>
@@ -422,11 +551,118 @@ export function AnalysisWorkbench({
 									</select>
 								</label>
 							</div>
-              {operation === "advanced_analysis" && <label className="block text-xs font-medium">Advanced function
-                <select aria-label="Advanced function" className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-2 text-xs" value={advancedAction} onChange={(event)=>setAdvancedAction(event.target.value)}>
-                  <option value="artifact_discovery">Bounded hidden DEX / container discovery</option><option value="android_relationships">DEX loader references / JNI name candidates</option><option value="android_method">Exact DEX method metadata</option><option value="investigation_query">Query saved investigation index</option><option value="suite">Structural suite</option><option value="toolchain">Optional engine inventory</option><option value="dex_index">DEX methods and invoke operands</option><option value="apk_inventory">APK / multidex inventory</option><option value="native_inventory">ELF / JNI export candidates</option><option value="simplify_expression">Z3 expression simplification</option><option value="triton_expression">Triton expression simplification</option><option value="compare_expressions">Expression equivalence</option><option value="triage">Blob triage</option><option value="cfg_analyze">CFG dominance and loops</option><option value="trace_slice">Imported trace slice</option><option value="trace_taint">Imported trace influence</option><option value="lift_native_ir">Miasm bounded IR</option><option value="deobfuscation_pass">Miasm expression pass</option><option value="native_disassemble">Native range disassembly</option><option value="decrypt_blob">Known-key authenticated decryption</option><option value="graph_build">Build graph from result manifest</option>
-                </select><span className="mt-3 block">Advanced options JSON</span><textarea aria-label="Advanced options JSON" className="mt-2 min-h-24 w-full rounded-md border border-input bg-background p-3 font-mono text-sm" value={advancedOptions} onChange={e=>setAdvancedOptions(e.target.value)}/><p className="mt-2 text-xs font-normal text-muted-foreground">Discovery and exact-method lookup use the fixed stdlib Python worker (Python must be available). Successful investigations save a private index; use its returned file as the query target. JNI names and loader references are not verified runtime relationships. Optional engines are installed separately. Missing engines are blocked. Runtime and licensed adapters are not enabled here.</p>
-              </label>}
+							{operation === "decompile" && (
+								<label className="block text-xs">
+									Targeted decompiler options JSON
+									<textarea
+										aria-label="Targeted decompiler options JSON"
+										className="mt-2 min-h-24 w-full rounded-md border border-input bg-background p-3 font-mono text-sm"
+										value={decompilerOptions}
+										onChange={(event) =>
+											setDecompilerOptions(event.target.value)
+										}
+									/>
+									<span className="mt-2 block text-muted-foreground">
+										Ghidra/IDA: function_selector with one symbol or hex entry
+										address. JADX: jadx_single_class. Requires an installed
+										compatible engine; no target execution or license bypass.
+									</span>
+								</label>
+							)}
+							{operation === "advanced_analysis" && (
+								<label className="block text-xs font-medium">
+									Advanced function
+									<select
+										aria-label="Advanced function"
+										className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+										value={advancedAction}
+										onChange={(event) => setAdvancedAction(event.target.value)}
+									>
+										<option value="artifact_discovery">
+											Bounded hidden DEX / container discovery
+										</option>
+										<option value="android_relationships">
+											DEX loader references / JNI name candidates
+										</option>
+										<option value="android_method">
+											Exact DEX method metadata
+										</option>
+										<option value="android_method_code">
+											Exact DEX bytecode / operands
+										</option>
+										<option value="native_function">
+											Exact native symbol / entry disassembly
+										</option>
+										<option value="analysis_readiness">
+											Static engine fixture self-tests
+										</option>
+										<option value="investigation_graph">
+											Graph from saved investigation index
+										</option>
+										<option value="investigation_query">
+											Query saved investigation index
+										</option>
+										<option value="suite">Structural suite</option>
+										<option value="toolchain">Optional engine inventory</option>
+										<option value="dex_index">
+											DEX methods and invoke operands
+										</option>
+										<option value="apk_inventory">
+											APK / multidex inventory
+										</option>
+										<option value="native_inventory">
+											ELF / JNI export candidates
+										</option>
+										<option value="simplify_expression">
+											Z3 expression simplification
+										</option>
+										<option value="triton_expression">
+											Triton expression simplification
+										</option>
+										<option value="compare_expressions">
+											Expression equivalence
+										</option>
+										<option value="triage">Blob triage</option>
+										<option value="cfg_analyze">CFG dominance and loops</option>
+										<option value="trace_slice">Imported trace slice</option>
+										<option value="trace_taint">
+											Imported trace influence
+										</option>
+										<option value="lift_native_ir">Miasm bounded IR</option>
+										<option value="deobfuscation_pass">
+											Miasm expression pass
+										</option>
+										<option value="native_disassemble">
+											Native range disassembly
+										</option>
+										<option value="decrypt_blob">
+											Known-key authenticated decryption
+										</option>
+										<option value="graph_build">
+											Build graph from result manifest
+										</option>
+									</select>
+									<span className="mt-3 block">Advanced options JSON</span>
+									<textarea
+										aria-label="Advanced options JSON"
+										className="mt-2 min-h-24 w-full rounded-md border border-input bg-background p-3 font-mono text-sm"
+										value={advancedOptions}
+										onChange={(e) => setAdvancedOptions(e.target.value)}
+									/>
+									<p className="mt-2 text-xs font-normal text-muted-foreground">
+										Discovery and exact-method lookup use the fixed stdlib
+										Python worker (Python must be available). Successful
+										investigations save a private index; use its returned file
+										as the query target. JNI export matches and loader
+										references are static candidates, not verified runtime
+										relationships. Exact bytecode/native analysis needs the
+										optional Androguard/LIEF/Capstone engines; fixture
+										self-tests verify only owned samples. Optional engines are
+										installed separately. Missing engines are blocked. Runtime
+										and licensed adapters are not enabled here.
+									</p>
+								</label>
+							)}
 							<label className="flex items-start gap-2 text-xs">
 								<input
 									checked={allowExternalTarget}
@@ -443,7 +679,11 @@ export function AnalysisWorkbench({
 							{formButton(
 								"Prepare static-analysis task",
 								() => void prepareStatic("static"),
-								!target.trim() && !(operation === "advanced_analysis" && advancedAction === "toolchain"),
+								!target.trim() &&
+									!(
+										operation === "advanced_analysis" &&
+										advancedAction === "toolchain"
+									),
 							)}
 							<button
 								className="w-full rounded-md border border-border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50"
@@ -550,11 +790,35 @@ export function AnalysisWorkbench({
 									<pre className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm">
 										{pretty(pendingPlan)}
 									</pre>
-{pendingPlan.kind === "dynamic"&&<div className="space-y-3 text-sm"><label className="flex min-h-11 items-start gap-3"><input type="checkbox" checked={uploadConfirmed} onChange={e=>setUploadConfirmed(e.target.checked)}/>I approve uploading this exact artifact to the reviewed worker.</label><label className="flex min-h-11 items-start gap-3"><input type="checkbox" checked={runtimeConfirmed} onChange={e=>setRuntimeConfirmed(e.target.checked)}/>I am authorized to execute this exact artifact in that isolated worker with egress disabled.</label></div>}
+									{pendingPlan.kind === "dynamic" && (
+										<div className="space-y-3 text-sm">
+											<label className="flex min-h-11 items-start gap-3">
+												<input
+													type="checkbox"
+													checked={uploadConfirmed}
+													onChange={(e) => setUploadConfirmed(e.target.checked)}
+												/>
+												I approve uploading this exact artifact to the reviewed
+												worker.
+											</label>
+											<label className="flex min-h-11 items-start gap-3">
+												<input
+													type="checkbox"
+													checked={runtimeConfirmed}
+													onChange={(e) =>
+														setRuntimeConfirmed(e.target.checked)
+													}
+												/>
+												I am authorized to execute this exact artifact in that
+												isolated worker with egress disabled.
+											</label>
+										</div>
+									)}
 									{formButton(
 										"Approve exact plan and run",
 										() => void approveAndRun(),
- pendingPlan.kind === "dynamic"&&(!uploadConfirmed||!runtimeConfirmed),
+										pendingPlan.kind === "dynamic" &&
+											(!uploadConfirmed || !runtimeConfirmed),
 									)}
 									<button
 										className="w-full rounded-md border border-border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50"

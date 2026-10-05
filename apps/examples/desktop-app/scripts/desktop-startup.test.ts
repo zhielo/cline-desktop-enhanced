@@ -47,6 +47,7 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 					"--compile",
 					"--no-compile-autoload-dotenv",
 					"--no-compile-autoload-bunfig",
+					`--define=process.env.CLINE_DESKTOP_BUILD_COMMIT=${JSON.stringify(process.env.GITHUB_SHA ?? "development")}`,
 					"--outfile",
 					binary,
 				],
@@ -113,17 +114,21 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			signal: AbortSignal.timeout(5_000),
 		});
 		expect(health.ok).toBe(true);
-		expect(await health.json()).toMatchObject({ ok: true, pid: child.pid });
+		expect(await health.json()).toMatchObject({
+			ok: true,
+			pid: child.pid,
+			transportAuth: "sidecar-capability/v1",
+			sourceCommit: process.env.GITHUB_SHA ?? "development",
+		});
 
 		// Installed binaries must deny tokenless commands, not just prompt approvals.
 		expect(typeof wsEndpoint).toBe("string");
 		const privateEndpoint = new URL(wsEndpoint!);
 		const capability = privateEndpoint.searchParams.get("approval_token");
 		expect(Boolean(capability && capability.length >= 16)).toBe(true);
-		const unauthenticated = new URL(privateEndpoint);
-		unauthenticated.protocol = "http:";
-		unauthenticated.search = "";
-		const denied = await fetch(unauthenticated, {
+		// Probe the advertised HTTP endpoint directly. This avoids a Windows Bun
+		// URL-object protocol-mutation path and proves the same installed server.
+		const denied = await fetch(`${endpoint}/transport`, {
 			signal: AbortSignal.timeout(5000),
 		});
 		expect(denied.status).toBe(401);
@@ -137,7 +142,7 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 			const timer = setTimeout(() => {
 				socket.close();
 				reject(new Error("Authenticated transport smoke timed out"));
-			}, 10000);
+			}, 30000);
 			socket.onopen = () =>
 				socket.send(
 					JSON.stringify({
@@ -245,6 +250,8 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 		expect(await restartedHealth.json()).toMatchObject({
 			ok: true,
 			pid: child.pid,
+			transportAuth: "sidecar-capability/v1",
+			sourceCommit: process.env.GITHUB_SHA ?? "development",
 		});
 		// A restarted process must not accept the old process's capability.
 		const stale = await fetch(

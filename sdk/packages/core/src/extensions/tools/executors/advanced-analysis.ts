@@ -33,9 +33,19 @@ export const ADVANCED_ACTIONS = [
 	"graph_build",
 	"graph_query",
 	"notebook_validate",
-	"notebook_run", "cfg_analyze", "trace_slice", "trace_taint",
+	"notebook_run",
+	"cfg_analyze",
+	"trace_slice",
+	"trace_taint",
 	"decrypt_blob",
-	"artifact_discovery", "android_relationships", "android_method", "investigation_query",
+	"artifact_discovery",
+	"android_relationships",
+	"android_method",
+	"investigation_query",
+	"android_method_code",
+	"native_function",
+	"analysis_readiness",
+	"investigation_graph",
 ] as const;
 export type AdvancedAction = (typeof ADVANCED_ACTIONS)[number];
 const LOCAL_ACTIONS = new Set<AdvancedAction>([
@@ -43,7 +53,12 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"lift_native_ir",
 	"deobfuscation_pass",
 	"decrypt_blob",
-	"artifact_discovery", "android_relationships", "android_method",
+	"artifact_discovery",
+	"android_relationships",
+	"android_method",
+	"android_method_code",
+	"native_function",
+	"analysis_readiness",
 ]);
 export const ADVANCED_BACKENDS = [
 	{ id: "cryptography", integration: "host-gated-authenticated-decryption" },
@@ -83,7 +98,12 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
-		discovery?: { max_depth?: number; max_artifacts?: number };
+		discovery?: {
+			max_depth?: number;
+			max_artifacts?: number;
+			inspect_native?: boolean;
+		};
+		function?: { symbol?: string; address?: string; max_bytes?: number };
 		method?: { class_descriptor: string; name: string; descriptor: string };
 		architecture?: string;
 		offset?: number;
@@ -171,7 +191,7 @@ export async function runAdvancedAnalysis(
 			);
 	}
 	const paths =
-		request.action === "toolchain"
+		request.action === "toolchain" || request.action === "analysis_readiness"
 			? []
 			: [
 					request.target,
@@ -196,7 +216,20 @@ export async function runAdvancedAnalysis(
 		throw new Error("CLINE_RE_PYTHON must be an absolute interpreter path");
 	const directory = await mkdtemp(join(tmpdir(), "cline-advanced-"));
 	const script = join(directory, "worker.py");
-	await writeFile(script, ["artifact_discovery", "android_relationships", "android_method"].includes(request.action) ? ANDROID_INVESTIGATION_WORKER : ADVANCED_ANALYSIS_WORKER, { mode: 0o600 });
+	await writeFile(
+		script,
+		[
+			"artifact_discovery",
+			"android_relationships",
+			"android_method",
+			"android_method_code",
+			"native_function",
+			"analysis_readiness",
+		].includes(request.action)
+			? ANDROID_INVESTIGATION_WORKER
+			: ADVANCED_ANALYSIS_WORKER,
+		{ mode: 0o600 },
+	);
 	const policy = prepareProcessEnvironment({
 		overrides: { PYTHONNOUSERSITE: "1" },
 		allowedSensitiveEnvironmentVariables:

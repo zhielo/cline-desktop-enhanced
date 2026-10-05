@@ -11,7 +11,7 @@ import sys
 import zipfile
 import zlib
 
-VERSION = "android-static/v1"
+VERSION = "android-static/v2"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -218,6 +218,144 @@ def jni_escape(value):
     return "".join(result)
 
 
+def native_metadata(data, artifact_id, limit):
+    import importlib.metadata
+    import tempfile
+    from pathlib import Path
+    import lief
+    if not data.startswith(b"\x7fELF") or len(data)<16 or data[4] not in (1,2) or len(data)<(52 if data[4]==1 else 64) or data[5] != 1:
+        raise ValueError("Native analysis supports bounded little-endian ELF only")
+    with tempfile.TemporaryDirectory(prefix="cline-static-elf-") as directory:
+        file = Path(directory) / "input.so"
+        file.write_bytes(data)
+        file.chmod(0o600)
+        binary = lief.ELF.parse(str(file))
+        if binary is None:
+            raise ValueError("LIEF did not parse ELF")
+        machine = int.from_bytes(data[18:20], "little")
+        architecture = {183:"arm64",40:"arm",62:"x86_64",3:"x86"}.get(machine,"unsupported")
+        segments = []
+        for segment in binary.segments:
+            if str(segment.type).split(".")[-1] != "LOAD":
+                continue
+            offset, size, address = int(segment.file_offset), int(segment.physical_size), int(segment.virtual_address)
+            if offset < 0 or size < 0 or offset + size > len(data):
+                raise ValueError("ELF load segment file bounds invalid")
+            segments.append({"fileOffset":offset,"fileBytes":size,"addressHex":hex(address),"executable":bool(int(segment.flags)&1)})
+        functions, exports, seen = [], [], set()
+        for symbol,source in [(s,"dynamic") for s in binary.dynamic_symbols] + [(s,"symtab") for s in binary.symtab_symbols]:
+            if str(symbol.type).split(".")[-1] != "FUNC" or int(symbol.shndx) == 0 or not symbol.name:
+                continue
+            address, size, name = int(symbol.value), int(symbol.size), symbol.name
+            if len(name) > 4096:
+                raise ValueError("ELF symbol name limit")
+            key=(name,address,size)
+            if key in seen:
+                continue
+            seen.add(key)
+            if len(seen) > 50000:
+                raise ValueError("ELF function work budget")
+            normalized = address & ~1 if architecture == "arm" else address
+            mappings=[s for s in segments if int(s["addressHex"],16) <= normalized < int(s["addressHex"],16)+s["fileBytes"]]
+            record={"id":stable(artifact_id,name,address,size),"artifactId":artifact_id,"name":name,"addressHex":hex(address),"size":size,"architecture":"thumb" if architecture=="arm" and address & 1 else architecture,"rangeValidation":"unmapped-or-ambiguous"}
+            if len(mappings)==1:
+                segment=mappings[0];offset=segment["fileOffset"]+normalized-int(segment["addressHex"],16)
+                record.update(fileOffset=offset,segmentFileEnd=segment["fileOffset"]+segment["fileBytes"],rangeValidation="mapped-file-backed-range")
+                if not segment["executable"]:record["rangeValidation"]="non-executable-file-backed-symbol"
+                if size and offset+size > record["segmentFileEnd"]:
+                    record["rangeValidation"]="symbol-range-exceeds-segment"
+            functions.append(record)
+            if source=="dynamic" and name.startswith("Java_") and str(symbol.binding).split(".")[-1] in ("GLOBAL","WEAK") and str(symbol.visibility).split(".")[-1] in ("DEFAULT","PROTECTED"):
+                exports.append(dict(record,exportEvidence="defined-global-or-weak-ELF-symbol"))
+        return {"engine":"lief","engineVersion":importlib.metadata.version("lief"),"architecture":architecture,"segments":segments[:limit],"segmentsTruncated":len(segments)>limit,"functions":functions[:limit],"functionCount":len(functions),"functionsTruncated":len(functions)>limit,"jniExports":exports[:limit],"jniExportsTruncated":len(exports)>limit},functions
+
+
+def disassemble_selected(data, method, maximum):
+    import capstone
+    if method["rangeValidation"] != "mapped-file-backed-range" or not method["size"]:
+        return {"status":"blocked","reason":"No unique file-backed nonzero symbol range; no function extent is inferred"}
+    architectures={"arm64":(capstone.CS_ARCH_ARM64,capstone.CS_MODE_ARM),"arm":(capstone.CS_ARCH_ARM,capstone.CS_MODE_ARM),"thumb":(capstone.CS_ARCH_ARM,capstone.CS_MODE_THUMB),"x86":(capstone.CS_ARCH_X86,capstone.CS_MODE_32),"x86_64":(capstone.CS_ARCH_X86,capstone.CS_MODE_64)}
+    if method["architecture"] not in architectures:
+        return {"status":"blocked","reason":"Unsupported disassembly architecture"}
+    count=min(method["size"],maximum,65536)
+    offset=method["fileOffset"]
+    engine=capstone.Cs(*architectures[method["architecture"]]);engine.detail=True
+    address=int(method["addressHex"],16)
+    if method["architecture"]=="thumb":address &= ~1
+    instructions=[];decoded=0
+    for instruction in engine.disasm(data[offset:offset+count],address):
+        if len(instructions)>=1000:break
+        calls=[]
+        if instruction.group(capstone.CS_GRP_CALL):
+            for operand in instruction.operands:
+                if operand.type==capstone.CS_OP_IMM:calls.append(hex(operand.imm))
+        instructions.append({"addressHex":hex(instruction.address),"bytes":instruction.bytes.hex(),"mnemonic":instruction.mnemonic,"operands":instruction.op_str,"directCallCandidates":calls})
+        decoded+=instruction.size
+    return {"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
+
+
+def selected_dex_code(data, selector, limit):
+    import importlib.metadata
+    from androguard.core.dex import DEX
+    from loguru import logger
+    logger.disable("androguard")
+    dex=DEX(data)
+    results=[]
+    for cls in dex.get_classes():
+        if cls.get_name()!=selector["class_descriptor"]:continue
+        for method in cls.get_methods():
+            if method.get_name()!=selector["name"] or method.get_descriptor().replace(" ","")!=selector["descriptor"]:continue
+            code=method.get_code()
+            instructions=[];position=0;truncated=False
+            if code:
+                for ins in code.get_bc().get_instructions():
+                    if len(instructions)>=limit:truncated=True;break
+                    instructions.append({"bytecodeOffset":position,"name":ins.get_name(),"operands":ins.get_output()[:4096]})
+                    position+=ins.get_length()
+            results.append({"classDescriptor":cls.get_name(),"name":method.get_name(),"descriptor":method.get_descriptor().replace(" ",""),"instructions":instructions,"instructionsTruncated":truncated,"hasCode":code is not None})
+    return {"engine":"androguard","engineVersion":importlib.metadata.version("androguard"),"methods":results,"coverage":"selected-defined-method-bytecode-not-recovered-source-or-runtime-execution"}
+
+
+def native_selection(request):
+    with open(request["target"],"rb") as file:data=file.read(MAX_INPUT+1)
+    if len(data)>MAX_INPUT:raise ValueError("Native input limit")
+    selector=(request.get("options") or {}).get("function")
+    if not selector or (bool(selector.get("symbol"))==bool(selector.get("address"))):
+        raise ValueError("native_function requires exactly one exact symbol or entry address")
+    artifact=stable(None,"input",None,hashlib.sha256(data).hexdigest())
+    meta,functions=native_metadata(data,artifact,max(1,min(request.get("limit",200),1000)))
+    address=int(str(selector["address"]),0) if selector.get("address") else None
+    matches=[m for m in functions if m["name"]==selector.get("symbol") or (address is not None and int(m["addressHex"],16)==address)]
+    selections=[]
+    for method in matches[:20]:
+        try:body=disassemble_selected(data,method,selector.get("max_bytes",4096))
+        except ImportError:body={"status":"blocked","reason":"Capstone is not installed"}
+        selections.append(dict(method,disassembly=body))
+    return {"protocol":"cline-advanced-analysis/v1","status":"completed" if len(matches)==1 and selections[0]["disassembly"]["status"]=="completed" and not meta["functionsTruncated"] else "partial","engine":"android-static","engineVersion":VERSION,"input":{"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data),"format":"elf"},"evidence":{"schemaVersion":1,"artifacts":[{"id":artifact,"sha256":hashlib.sha256(data).hexdigest(),"format":"elf","validation":"LIEF-parsed-bounded-file-mappings","native":meta}],"relationships":[],"selectedFunctions":selections,"matchCount":len(matches),"ambiguous":len(matches)>1,"coverage":{"truncated":len(matches)>20 or meta["functionsTruncated"]}},"limitations":["Static bounded ELF symbol analysis only; not function discovery in stripped/virtualized code, runtime execution, JNI registration proof or semantic equivalence.","Capstone output is linear range disassembly, not a complete CFG. Addresses are preserved as hexadecimal strings."]}
+
+
+def analysis_readiness():
+    import base64
+    import importlib.metadata
+    checks=[]
+    dex=base64.b64decode('ZGV4CjAzNQBQQLuGcWAtJD6Si/Jnkkf5696c8X/9f57sAQAAcAAAAHhWNBIAAAAAAAAAAGQBAAAIAAAAcAAAAAQAAACQAAAAAgAAAKAAAAAAAAAAAAAAAAIAAAC4AAAAAQAAAMgAAAAEAQAA6AAAAOgAAADzAAAABwEAAAoBAAAeAQAAKwEAADgBAAA7AQAAAAAAAAEAAAACAAAAAwAAAAYAAAACAAAAAAAAAAcAAAACAAAAQAEAAAAAAAAEAAAAAQABAAUAAAAAAAAAAQAAAP////8AAAAA/////wAAAABaAQAAAAAAAAlMRml4dHVyZTsAEkxqYXZhL2xhbmcvU3lzdGVtOwABVgASTGphdmEvbGFuZy9TdHJpbmc7AAtuYXRpdmVfd29yawALbG9hZExpYnJhcnkAAVYAAlZMAAABAAAAAwAAAAEAAAAAAAAAAAAAAAEAAAAOAAAAAQAAAcgCAAALAAAAAAAAAAEAAAAAAAAAAQAAAAgAAABwAAAAAgAAAAQAAACQAAAAAwAAAAIAAACgAAAABQAAAAIAAAC4AAAABgAAAAEAAADIAAAAAiAAAAgAAADoAAAAARAAAAEAAABAAQAAASAAAAEAAABIAQAAACAAAAEAAABaAQAAABAAAAEAAABkAQAA')
+    elf=base64.b64decode('f0VMRgIBAQAAAAAAAAAAAAMAPgABAAAAAAAAAAAAAABAAAAAAAAAALgBAAAAAAAAAAAAAEAAOAACAEAABwAGAAEAAAAFAAAAAAAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAeAMAAAAAAAB4AwAAAAAAAAAQAAAAAAAAAgAAAAQAAAAoAQAAAAAAACgBQAAAAAAAKAFAAAAAAABgAAAAAAAAAGAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAkMMASmF2YV9GaXh0dXJlX25hdGl2ZV8xd29yawAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAEgABAMAAQAAAAAAAAgAAAAAAAAABAAAAAgAAAAEAAAAAAAAAAAAAAAAAAAAFAAAAAAAAAMIAQAAAAAAACgAAAAAAAAAbAAAAAAAAAAYAAAAAAAAA4ABAAAAAAAALAAAAAAAAABgAAAAAAAAABAAAAAAAAAAQAUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALnRleHQALmR5bnN0cgAuZHluc3ltAC5oYXNoAC5keW5hbWljAC5zaHN0cnRhYgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAAAGAAAAAAAAAMAAQAAAAAAAwAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAcAAAADAAAAAgAAAAAAAADCAEAAAAAAAMIAAAAAAAAAGwAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAPAAAACwAAAAIAAAAAAAAA4ABAAAAAAADgAAAAAAAAADAAAAAAAAAAAgAAAAAAAAAIAAAAAAAAABgAAAAAAAAAFwAAAAUAAAACAAAAAAAAABABQAAAAAAAEAEAAAAAAAAUAAAAAAAAAAMAAAAAAAAABAAAAAAAAAAEAAAAAAAAAB0AAAAGAAAAAwAAAAAAAAAoAUAAAAAAACgBAAAAAAAAYAAAAAAAAAACAAAAAAAAAAgAAAAAAAAAEAAAAAAAAAAmAAAAAwAAAAAAAAAAAAAAAAAAAAAAAACIAQAAAAAAADAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAA')
+    for name,run in [
+        ("stdlib-dex-validator",lambda:dex_metadata(dex,20)),
+        ("lief",lambda:native_metadata(elf,"owned-self-test",20)),
+        ("capstone",lambda:disassemble_selected(elf,native_metadata(elf,"owned-self-test",20)[1][0],32)),
+        ("androguard",lambda:selected_dex_code(dex,{"class_descriptor":"LFixture;","name":"native_work","descriptor":"()V"},20)),
+    ]:
+        try:
+            result=run()
+            if name=="capstone" and result["decodedBytes"]!=2:raise ValueError("Owned instruction self-test mismatch")
+            if name=="androguard" and not result["methods"][0]["instructions"]:raise ValueError("Owned DEX code self-test mismatch")
+            checks.append({"engine":name,"status":"completed","executionVerified":True,"scope":"owned-static-fixture-only","version":importlib.metadata.version(name) if name!="stdlib-dex-validator" else VERSION})
+        except ImportError:checks.append({"engine":name,"status":"blocked","executionVerified":False,"reason":"Required static engine missing"})
+        except Exception as exc:checks.append({"engine":name,"status":"failed","executionVerified":False,"reason":str(exc)[:500]})
+    return {"protocol":"cline-advanced-analysis/v1","status":"completed" if all(c["status"]=="completed" for c in checks) else "partial","engine":"android-static-readiness","engineVersion":VERSION,"evidence":{"checks":checks,"fixtureHashes":{"dex":hashlib.sha256(dex).hexdigest(),"elf":hashlib.sha256(elf).hexdigest()}},"limitations":["Owned static fixture checks are not target-wide correctness, external decompiler validation, OS sandboxing, runtime-worker provisioning or license verification."]}
+
+
 def investigate(request):
     target = request["target"]
     with open(target, "rb") as handle:
@@ -230,6 +368,10 @@ def investigate(request):
     max_depth = min(max(int(config.get("max_depth", 3)), 0), 4)
     artifact_limit = min(max(int(config.get("max_artifacts", 200)), 1), MAX_RECORDS)
     records, warnings, dexes = [], [], []
+    native_artifacts = []
+    dex_data = []
+    selected_code = []
+    native_work = [0]
     relationship_count = 0
     work = [0]
     method_work = [0]
@@ -260,12 +402,24 @@ def investigate(request):
                 method_chars[0] += chars
                 record.update(validation=meta.pop("validation"), dex=meta)
                 dexes.append((record, methods))
+                if request["action"]=="android_method_code":dex_data.append((identity,data))
             except (ValueError, struct.error, UnicodeError) as exc:
                 record.update(validation="candidate-rejected-or-unsupported", reason=str(exc))
         elif data.startswith(b"\x7fELF"):
             record["format"] = "elf"
             record["validation"] = "signature-only-candidate"
             record["reason"] = "Use native_inventory for LIEF structural evidence; no ELF execution"
+            if request["action"]=="android_relationships" or config.get("inspect_native"):
+                try:
+                    if native_work[0]>=32:truncated[0]=True;raise ValueError("Native artifact parser budget")
+                    native_work[0]+=1
+                    meta,_=native_metadata(data,identity,limit)
+                    record.update(validation="LIEF-parsed-bounded-file-mappings",native=meta)
+                    native_artifacts.append(record)
+                    if meta["functionsTruncated"] or meta["jniExportsTruncated"]:truncated[0]=True
+                except ImportError:record["reason"]="LIEF missing; ELF remains an unverified signature candidate"
+                except (ValueError,RuntimeError) as exc:record["reason"]=str(exc)
+
         elif data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"):
             record["format"] = "zip"
             record["validation"] = "container-candidate"
@@ -342,7 +496,7 @@ def investigate(request):
     selected = []
     relationships = []
     selector = options.get("method")
-    if request["action"] == "android_method" and not selector:
+    if request["action"] in ("android_method","android_method_code") and not selector:
         raise ValueError("android_method requires exact class_descriptor, name and descriptor")
     for artifact, methods in dexes:
         for method in methods:
@@ -350,31 +504,48 @@ def investigate(request):
             method["artifactId"] = artifact["id"]
             if selector and (method["classDescriptor"],method["name"],method["descriptor"]) == (selector["class_descriptor"],selector["name"],selector["descriptor"]):
                 selected.append(method)
+                if request["action"]=="android_method_code":
+                    try:selected_code.append(dict(artifactId=artifact["id"],methodId=method["id"],**selected_dex_code(next(d for a,d in dex_data if a==artifact["id"]),selector,limit)))
+                    except ImportError:selected_code.append({"artifactId":artifact["id"],"methodId":method["id"],"status":"blocked","reason":"Androguard is not installed"})
             if method.get("native"):
                 relationship_count += 1
             if method.get("native") and len(relationships) < limit:
                 short = "Java_" + jni_escape(method["classDescriptor"][1:-1]) + "_" + jni_escape(method["name"])
                 parameters = method["descriptor"].split(")",1)[0][1:]
                 relationships.append({"id": stable(method["id"], "jni-name"), "methodId": method["id"], "artifactId": artifact["id"], "kind": "jni-name-candidate", "shortName": short, "longName": short + "__" + jni_escape(parameters), "confidence": "derived-name-only", "verifiedBinding": False})
+    matches=[]
+    export_match_count=0
+    short_counts={}
+    for relationship in relationships:short_counts[relationship["shortName"]]=short_counts.get(relationship["shortName"],0)+1
+    for relationship in relationships:
+        for lib in native_artifacts:
+            for symbol in lib["native"]["jniExports"]:
+                if symbol["name"] not in (relationship["shortName"],relationship["longName"]):continue
+                export_match_count+=1
+                if len(matches)>=limit:truncated[0]=True;continue
+                matches.append({"id":stable(relationship["methodId"],symbol["id"]),"kind":"jni-export-match-candidate","methodId":relationship["methodId"],"artifactId":relationship["artifactId"],"nativeArtifactId":lib["id"],"nativeSymbolId":symbol["id"],"symbol":symbol["name"],"addressHex":symbol["addressHex"],"confidence":"static-export-name-match","overloadAmbiguous":symbol["name"]==relationship["shortName"] and (short_counts[relationship["shortName"]]>1 or relationship_count>limit),"verifiedBinding":False})
+    relationships.extend(matches)
     for artifact, _ in dexes:
         for method in artifact["dex"]["methods"] + artifact["dex"]["loaderReferences"]:
             method["id"] = stable(artifact["id"],method["methodIndex"])
             method["artifactId"] = artifact["id"]
     evidence = {"schemaVersion": 1, "artifacts": records, "relationships": relationships,
-                "relationshipCount": relationship_count, "relationshipsTruncated": relationship_count > limit,
+                "relationshipCount": relationship_count + export_match_count, "derivedNameCount": relationship_count, "exportMatchCount": export_match_count, "relationshipsTruncated": relationship_count > limit or export_match_count > limit,
                 "coverage": {"processedBytes": work[0], "parsedMethodCount": method_work[0], "maxParsedMethods": MAX_TOTAL_METHODS, "maxDepth": max_depth, "artifactLimit": artifact_limit, "truncated": truncated[0]}, "warnings": warnings[:64]}
     limitations = ["Static input processing only; no target execution, arbitrary key recovery or full devirtualization.",
                    "DEX validation covers integrity and bounded structures, not full bytecode verification. Modified/unsupported DEX remains a candidate.",
                    "Loader references are pool references, not proven executed calls. JNI names are candidates, not observed RegisterNatives bindings.",
-                   "ELF signatures are candidates; use native_inventory for structural validation. Nested APK/ZIP and compression inspection is bounded."]
+                   "ELF without LIEF remains a signature candidate; LIEF export/name matches remain static candidates, not RegisterNatives observations. Nested inspection is bounded."]
     status = "partial" if truncated[0] or warnings or any("rejected" in r["validation"] or "candidate" in r["validation"] for r in records) else "completed"
-    if request["action"] == "android_method":
+    if request["action"] in ("android_method","android_method_code"):
         evidence["selectedMethods"] = selected[:limit]
+        if selected_code:evidence["selectedCode"]=selected_code
         evidence["selectedMethodCount"] = len(selected)
         evidence["selectedMethodsTruncated"] = len(selected) > limit
         evidence["selectionStatus"] = "found" if selected else "not-found-in-covered-artifacts"
         evidence["ambiguousAcrossArtifacts"] = len(selected) > 1
         status = "partial" if not selected or truncated[0] or len(selected) > limit else status
+    if any(c.get("status")=="blocked" or any(m.get("instructionsTruncated") for m in c.get("methods",[])) for c in selected_code):status="partial"
     if relationship_count > limit or any(r.get("dex",{}).get("methodsTruncated") or r.get("dex",{}).get("loaderReferencesTruncated") for r in records):
         status = "partial"
         limitations.append("Method/reference listings truncated; exact selection searches parsed method pools within stated limits.")
@@ -385,13 +556,15 @@ def investigate(request):
 def main():
     try:
         request = json.loads(sys.argv[1])
-        if request["action"] not in ("artifact_discovery", "android_relationships", "android_method"):
+        if request["action"] not in ("artifact_discovery", "android_relationships", "android_method", "android_method_code", "native_function", "analysis_readiness"):
             raise ValueError("Unsupported Android investigation action")
-        result = investigate(request)
+        result = analysis_readiness() if request["action"]=="analysis_readiness" else native_selection(request) if request["action"]=="native_function" else investigate(request)
         output = json.dumps(result, ensure_ascii=True, separators=(",", ":"))
         if len(output.encode()) > 900000:
             raise ValueError("Android evidence exceeds bounded output; reduce max_artifacts/limit")
         print(output)
+    except ImportError:
+        print(json.dumps({"protocol":"cline-advanced-analysis/v1","status":"blocked","engine":"android-static","engineVersion":VERSION,"evidence":{"reason":"Required static engine is not installed"},"limitations":["No execution verification is claimed"]}))
     except Exception as exc:
         print(json.dumps({"protocol":"cline-advanced-analysis/v1", "status":"failed", "engine":"android-static", "engineVersion":VERSION, "evidence":{"reason":str(exc)}, "limitations":["No successful analysis implied by failure"]}))
 

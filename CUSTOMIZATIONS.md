@@ -12,6 +12,17 @@ This file is the durable customization ledger for this repository. The source on
 
 ## Preserved customizations
 
+### Combined Android/native investigation integration
+
+- One integration PR includes long-session recovery, capability-authenticated transport, bounded Android discovery, exact DEX bytecode and native function analysis, static JNI export-name correlation, saved-index graphs, and targeted decompiler adapters.
+- `analysis_readiness` executes owned DEX/ELF fixtures with the actual installed Androguard/LIEF/Capstone engines. Missing engines stay blocked; installed-version inventory alone is not an execution claim.
+- `android_method_code` uses an exact class/name/descriptor. `native_function` selects a unique file-backed executable symbol by exact name or hexadecimal entry address; it returns bounded linear disassembly, not a recovered CFG or runtime proof.
+- `investigation_graph` reads validated immutable indexes. Loader pool references and JNI export-name matches remain candidate edges, never observed registration or execution.
+- Ghidra/IDA exact-function adapters and JADX single-class cache identities remain approval-gated. Adapter templates and mock routing tests do not substitute for installed engine/license validation.
+- Windows builds delete only cached NSIS bundle outputs, compare installed/fresh sidecar hashes, and assert the transport-auth protocol plus baked-in source commit. Installer smoke still requires strict unauthorized denials; no 404-as-success fallback.
+- Licensed engines, provisioned isolated runtime workers, unknown-key recovery, full devirtualization and universal deobfuscation are not shipped capabilities. See `docs/COMBINED_ANDROID_TOOLING.md` for requirements and coverage.
+
+
 ### Long-session edit and recovery reliability
 
 - Hub session creation and checkpoint restoration use a bounded ten-minute

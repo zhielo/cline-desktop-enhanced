@@ -51,6 +51,27 @@ function result(): AdvancedResult {
 	};
 }
 describe("Android investigation evidence index", () => {
+	it("indexes exact selections outside truncated inventory without retaining instruction bodies in query rows", async () => {
+		const value = result();
+		value.evidence.selectedFunctions = [
+			{
+				id: "e".repeat(32),
+				name: "selected",
+				disassembly: { instructions: [{ name: "ret" }] },
+			},
+		];
+		const index = await persistInvestigation(await temp(), value);
+		const query = await queryInvestigation(index!.file, {
+			kind: "native-symbol",
+			text: "selected",
+		});
+		expect(query.evidence.rows).toEqual([
+			expect.objectContaining({ name: "selected", kind: "native-symbol" }),
+		]);
+		expect(
+			(query.evidence.rows as Record<string, unknown>[])[0],
+		).not.toHaveProperty("disassembly");
+	});
 	it("persists immutable content-addressed evidence and reuses identical runs", async () => {
 		const dir = await temp();
 		const a = await persistInvestigation(dir, result());

@@ -241,6 +241,8 @@ export function createFetchHandler(
 				JSON.stringify({
 					ok: true,
 					mode: SIDECAR_MODE,
+					transportAuth: "sidecar-capability/v1",
+					sourceCommit: process.env.CLINE_DESKTOP_BUILD_COMMIT ?? "development",
 					pid: process.pid,
 				}),
 				{ headers: jsonHeaders(req) },

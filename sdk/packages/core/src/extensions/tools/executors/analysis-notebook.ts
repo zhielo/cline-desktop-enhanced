@@ -17,6 +17,34 @@ const hash = (value: string) =>
 	createHash("sha256").update(value).digest("hex");
 const Options = z
 	.object({
+		discovery: z
+			.object({
+				max_depth: z.number().int().min(0).max(4).optional(),
+				max_artifacts: z.number().int().min(1).max(500).optional(),
+				inspect_native: z.boolean().optional(),
+			})
+			.strict()
+			.optional(),
+		method: z
+			.object({
+				class_descriptor: z.string().min(3).max(4096),
+				name: z.string().min(1).max(4096),
+				descriptor: z.string().min(3).max(4096),
+			})
+			.strict()
+			.optional(),
+		function: z
+			.object({
+				symbol: z.string().min(1).max(4096).optional(),
+				address: z
+					.string()
+					.regex(/^0x[0-9a-fA-F]{1,16}$/)
+					.optional(),
+				max_bytes: z.number().int().min(1).max(65536).optional(),
+			})
+			.strict()
+			.refine((v) => Boolean(v.symbol) !== Boolean(v.address))
+			.optional(),
 		architecture: z.enum(["arm64", "arm", "thumb", "x86", "x86_64"]).optional(),
 		offset: z
 			.number()
@@ -42,6 +70,11 @@ const Cell = z
 	.object({
 		id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
 		action: z.enum([
+			"artifact_discovery",
+			"android_relationships",
+			"android_method",
+			"android_method_code",
+			"native_function",
 			"triage",
 			"apk_inventory",
 			"dex_index",

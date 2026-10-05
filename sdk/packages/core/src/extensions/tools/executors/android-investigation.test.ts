@@ -90,6 +90,19 @@ describe("fixed Android investigation worker", () => {
 			await rm(dir, { recursive: true, force: true });
 		}
 	});
+	it("runs owned static readiness without requiring a target", async () => {
+		const result = await runAdvancedAnalysis({ action: "analysis_readiness" });
+		expect(["completed", "partial"]).toContain(result.status);
+		expect(result.engine).toBe("android-static-readiness");
+		const checks = result.evidence.checks as Array<{
+			status: string;
+			executionVerified: boolean;
+		}>;
+		expect(checks.length).toBe(4);
+		expect(
+			checks.every((c) => c.executionVerified === (c.status === "completed")),
+		).toBe(true);
+	});
 	it("requires a precise bounded selector and rejects unrecognized options", () => {
 		expect(
 			ReverseEngineeringInputSchema.safeParse({

@@ -1,4 +1,6 @@
-# Android static investigation foundation
+# Android static investigation
+
+Exact bytecode/native selections, export-name candidates, fixture readiness and saved-index graphs are documented in `docs/COMBINED_ANDROID_TOOLING.md`.
 
 ## Available now
 
@@ -11,7 +13,7 @@ Use **Analysis workbench → Advanced analysis**, select the function and review
 | `android_method` | Same plus exact selector | Matching method metadata, access flags, native declaration, bounded code range/raw-byte fingerprint where present; ambiguity across artifacts |
 | `investigation_query` | Returned `investigationIndex.file` | Paginated saved artifact/method/reference/JNI-name evidence; no engines or targets execute |
 
-The first three functions use the same fixed static scanner and produce a common evidence schema. They require an available Python executable, not Androguard/LIEF. The host launches it with `-I`, filtered environment, process-tree cancellation, output/time limits and a temporary private working directory. No user-supplied Python runs.
+The original three functions use the same fixed static scanner and produce a common evidence schema. They require an available Python executable, not Androguard/LIEF for basic DEX metadata. Optional native parsing in relationship/discovery results requires LIEF. The host launches it with `-I`, filtered environment, process-tree cancellation, output/time limits and a temporary private working directory. No user-supplied Python runs.
 
 Example discovery options:
 
@@ -38,9 +40,9 @@ For a query, set the input target to the returned index file; it is not the orig
 - Input: at most 64 MiB; expanded child: at most 16 MiB; total processed bytes: 128 MiB; nesting: 0–4; artifacts: 1–500; ZIP entries: at most 10,000; expansion ratio: at most 100. Defaults: depth 3, 200 artifacts. DEX pool/class-data, aggregate parameter/prototype/string-text, 50,000 parsed methods per investigation, 16 MiB retained method-text and 64 embedded-candidate budgets also apply. These bound work/recorded metadata, not an OS memory quota.
 - APK/ZIP traversal checks every member name for traversal, absolute/drive paths, backslashes, duplicates, symlinks and encryption before reading any member. It reads in memory without extracting targets onto the host. CRC/expanded-size errors retain partial/rejected evidence. Unsafe or encrypted ZIP is rejected, not decrypted.
 - Standard DEX 035–040: magic, size, endian, Adler32/SHA1, table/map bounds, string/type/prototype/method indices and bounded class-data/code-item ranges. **Not** complete Dalvik instruction/debug/try-handler verification or ART acceptance. Modified checksum-invalid DEX is retained as a rejected candidate. No attempt repairs it behind the user's back.
-- Opaque/native blobs are searched for embedded standard DEX signatures with bounded declared lengths. ELF at the input/member start remains a signature candidate, not a structurally verified ELF. Use existing `native_inventory` for LIEF evidence and explicit-range disassembly for Capstone. Embedded ELF carving is not implemented.
+- Opaque/native blobs are searched for embedded standard DEX signatures with bounded declared lengths. ELF at the input/member start remains a signature candidate unless optional LIEF parsing succeeds; parsed mappings and exports carry separate evidence. Use `native_function` for exact symbol selections or `native_inventory` for inventory. Embedded ELF carving is not implemented.
 - IDs bind content, artifact parent/path/offset and method index. Same-byte DEX under different member names has distinct artifact identity. Decompression lineage does **not** claim a physical byte offset in the compressed parent.
-- Loader/reflection method pool references are not proof of an invoke or execution. JNI short/long names derive from native declarations, including UTF-16 JNI escaping. No export join or observed `RegisterNatives` binding is implied.
+- Loader/reflection method pool references are not proof of an invoke or execution. JNI short/long names derive from native declarations, including UTF-16 JNI escaping. Optional LIEF joins only defined dynamic exports by derived JNI name. These remain static export-name candidates, never observed `RegisterNatives` binding.
 - Raw method byte fingerprints are not semantic equivalence proofs, recovered source or deobfuscation results. Missing exact matches mean “not found in covered artifacts,” never proof that hidden code does not exist.
 - Entropy is descriptive only. High entropy is not proof of encryption; compressed/random content can behave similarly. The scanner does not recover unknown keys or encrypted bytecode.
 - Output records, methods, loader references, selected methods and relationship counts expose truncation. If serialized evidence exceeds 900,000 bytes, the worker returns a failure and the user must lower limits; it never silently cuts JSON or claims success.
@@ -57,11 +59,11 @@ Fixed code, input budgets and no target execution reduce risk but do not impleme
 
 ## Not yet implemented
 
-1. Reliable DEX↔ELF export joins, proven static call-site edges and runtime `RegisterNatives` correlation.
-2. Targeted Ghidra/IDA/JADX adapters that retrieve only chosen methods/functions, plus validated native CFG/address mappings.
+1. Proven static call-site edges and runtime `RegisterNatives` correlation; implemented name matches are candidates only.
+2. Real installed/licensed Ghidra/IDA adapter validation and complete native CFG recovery; exact selector templates, DEX bytecode and bounded symbol file mappings are implemented.
 3. Authorized isolated runtime capture of dynamically loaded/decrypted DEX and mapping captured hashes to loader events.
 4. Transformation provenance with independent semantic/equivalence proofs and rollback; broad unflattening/devirtualization.
-5. Provisioned disposable workers, strict desktop command-channel authentication audit/fix and production retention controls.
+5. Provisioned disposable workers and production retention controls. Capability-authenticated desktop transport is implemented separately.
 
 Optional engines, package inventory, static candidate names and imported traces must never be labeled as these capabilities. Keep these stages separate, with malformed-input fixtures, approval tests, real engine tests and Windows installed-app smoke before merge.
 

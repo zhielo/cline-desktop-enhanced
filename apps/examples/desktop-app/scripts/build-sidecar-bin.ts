@@ -53,7 +53,10 @@ const buildSidecar = async (
 	// app launched from Finder/the Dock has no OTEL_* env at runtime, so
 	// without this the sidecar silently ships with telemetry disabled.
 	// Verify with `<binary> --telemetry-selfcheck` after building.
-	const defines = telemetryDefineArgs();
+	const defines = [
+		...telemetryDefineArgs(),
+		`--define=process.env.CLINE_DESKTOP_BUILD_COMMIT=${JSON.stringify(process.env.GITHUB_SHA ?? "development")}`,
+	];
 	const optimizationArgs = minify ? ["--minify"] : [];
 	// A compiled Bun executable otherwise reads .env and bunfig.toml from its
 	// launch directory before our entrypoint runs. Remote helpers are launched
