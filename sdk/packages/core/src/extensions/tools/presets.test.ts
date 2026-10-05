@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	createDefaultToolsWithPreset,
-	createToolPoliciesWithPreset,
-	ToolPresets,
-} from "./presets";
+import { createDefaultToolsWithPreset, createToolPoliciesWithPreset, ToolPresets } from "./presets";
 
 describe("default tool presets", () => {
 	it("explicitly configures ask_question across presets", () => {
@@ -13,7 +9,6 @@ describe("default tool presets", () => {
 		expect(ToolPresets.minimal.enableAskQuestion).toBe(false);
 		expect(ToolPresets.yolo.enableAskQuestion).toBe(false);
 	});
-
 	it("disables spawn and team tools by default in yolo mode", () => {
 		expect(ToolPresets.act.enableSpawnAgent).toBe(true);
 		expect(ToolPresets.act.enableAgentTeams).toBe(true);
@@ -21,46 +16,20 @@ describe("default tool presets", () => {
 		expect(ToolPresets.yolo.enableAgentTeams).toBe(false);
 		expect(ToolPresets.yolo.enableSubmitAndExit).toBe(true);
 	});
-
 	it("keeps fast coding and research tools enabled in yolo mode", () => {
 		expect(ToolPresets.yolo.enableSearch).toBe(true);
 		expect(ToolPresets.yolo.enableWebFetch).toBe(true);
 		expect(ToolPresets.yolo.enableApplyPatch).toBe(true);
 		expect(ToolPresets.yolo.enableEditor).toBe(true);
 	});
-
 	it("keeps shell access enabled in plan mode", () => {
-		// Plan mode keeps run_commands for read-only investigation; the
-		// plan-mode command-guard hook registered by the runtime builder is
-		// the hard backstop behind the prompt contract.
 		expect(ToolPresets.plan.enableBash).toBe(true);
 		expect(ToolPresets.plan.enableProcessSessions).toBe(false);
 		expect(ToolPresets.plan.enableEditor).toBe(false);
 	});
-
-	it("yolo preset excludes ask_question even when its executor exists", () => {
-		const tools = createDefaultToolsWithPreset("yolo", {
-			executors: {
-				readFile: async () => "ok",
-				search: async () => "ok",
-				bash: async () => "ok",
-				webFetch: async () => "ok",
-				applyPatch: async () => "ok",
-				editor: async () => "ok",
-				skills: async () => "ok",
-				askQuestion: async () => "ok",
-			},
-		});
-
-		expect(tools.map((tool) => tool.name)).toEqual([
-			"read_files",
-			"search_codebase",
-			"run_commands",
-			"process_session",
-			"fetch_web_content",
-			"editor",
-			"skills",
-		]);
+	it("yolo retains its original tools, adds readonly foundation tools and excludes ask_question", () => {
+		const tools = createDefaultToolsWithPreset("yolo", { executors: { readFile: async () => "ok", search: async () => "ok", bash: async () => "ok", webFetch: async () => "ok", applyPatch: async () => "ok", editor: async () => "ok", skills: async () => "ok", askQuestion: async () => "ok" } });
+		expect(tools.map((tool) => tool.name)).toEqual(["read_files", "search_codebase", "run_commands", "process_session", "fetch_web_content", "editor", "skills", "address_translate", "tool_registry"]);
 	});
 });
 
@@ -68,20 +37,10 @@ describe("tool policy presets", () => {
 	it("returns empty policies for default", () => {
 		expect(createToolPoliciesWithPreset("default")).toEqual({});
 	});
-
 	it("yolo preset enables and auto-approves all tools", () => {
 		const policies = createToolPoliciesWithPreset("yolo");
-		expect(policies["*"]).toEqual({
-			enabled: true,
-			autoApprove: true,
-		});
-		expect(policies.ask_question).toEqual({
-			enabled: true,
-			autoApprove: true,
-		});
-		expect(policies.skills).toEqual({
-			enabled: true,
-			autoApprove: true,
-		});
+		expect(policies["*"]).toEqual({ enabled: true, autoApprove: true });
+		expect(policies.ask_question).toEqual({ enabled: true, autoApprove: true });
+		expect(policies.skills).toEqual({ enabled: true, autoApprove: true });
 	});
 });

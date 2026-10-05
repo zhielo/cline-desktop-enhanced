@@ -33,137 +33,61 @@ function legacyBuildRuntimeEnvironment(
 	createSpawnTool?: () => AgentTool,
 ): AgentTool[] {
 	const tools: AgentTool[] = [];
-	if (config.enableTools) {
-		tools.push(...legacyBuiltinTools(config.cwd));
-	}
+	if (config.enableTools) tools.push(...legacyBuiltinTools(config.cwd));
 	if (config.enableSpawnAgent && createSpawnTool) {
 		const spawnTool = createSpawnTool();
-		tools.push({
-			...spawnTool,
-			execute: async (input, context) => spawnTool.execute(input, context),
-		});
+		tools.push({ ...spawnTool, execute: async (input, context) => spawnTool.execute(input, context) });
 	}
 	return tools;
 }
 
 function normalizeParityToolNames(toolNames: string[]): string[] {
-	// Skills are discovered from user/workspace config and can appear in tests
-	// depending on the machine state. MCP tools may also be configured outside
-	// the test workspace. process_session is an additive host capability with no
-	// legacy equivalent. They are intentionally excluded from strict legacy
-	// parity checks.
-	return toolNames.filter(
-		(toolName) =>
-			toolName !== "skills" &&
-			toolName !== "process_session" &&
-			!toolName.includes("__"),
-	);
+	// Retain the original legacy exclusions. Newly added foundation tools are
+	// explicitly asserted below, NOT filtered out of the parity comparison.
+	return toolNames.filter((toolName) => toolName !== "skills" && toolName !== "process_session" && !toolName.includes("__"));
 }
-
 function makeEmptyWorkspaceCwd(): string {
 	return mkdtempSync(join(tmpdir(), "runtime-parity-"));
 }
-
 function makeSpawnTool(): AgentTool {
-	return {
-		name: "spawn_agent",
-		description: "Spawn a subagent",
-		inputSchema: { type: "object", properties: {}, required: [] },
-		execute: async () => ({ ok: true }),
-	};
+	return { name: "spawn_agent", description: "Spawn a subagent", inputSchema: { type: "object", properties: {}, required: [] }, execute: async () => ({ ok: true }) };
 }
 
 describe("runtime tool parity", () => {
-	const envSnapshot = {
-		HOME: process.env.HOME,
-		CLINE_DIR: process.env.CLINE_DIR,
-	};
-	let isolatedHomeDir = "";
-
+	const envSnapshot = { HOME: process.env.HOME, CLINE_DIR: process.env.CLINE_DIR };
 	beforeEach(() => {
-		isolatedHomeDir = mkdtempSync(join(tmpdir(), "runtime-parity-home-"));
+		const isolatedHomeDir = mkdtempSync(join(tmpdir(), "runtime-parity-home-"));
 		process.env.HOME = isolatedHomeDir;
 		process.env.CLINE_DIR = join(isolatedHomeDir, ".cline");
 		setHomeDir(isolatedHomeDir);
 		setClineDir(process.env.CLINE_DIR);
 	});
-
 	afterEach(() => {
 		process.env.HOME = envSnapshot.HOME;
 		process.env.CLINE_DIR = envSnapshot.CLINE_DIR;
 		setHomeDir(envSnapshot.HOME ?? "~");
 		setClineDir(envSnapshot.CLINE_DIR ?? join("~", ".cline"));
 	});
-
-	it("matches legacy tool list when tools+spawn are enabled", async () => {
-		const config: LegacyConfig = {
-			providerId: "anthropic",
-			modelId: "claude-sonnet-4-6",
-			apiKey: "key",
-			systemPrompt: "test",
-			cwd: makeEmptyWorkspaceCwd(),
-			enableTools: true,
-			enableSpawnAgent: true,
-			enableAgentTeams: false,
-		};
-		const createSpawnTool = makeSpawnTool;
-		const expected = normalizeParityToolNames(
-			legacyBuildRuntimeEnvironment(config, createSpawnTool).map(
-				(tool) => tool.name,
-			),
-		);
-		const runtime = await new DefaultRuntimeBuilder().build({
-			config,
-			createSpawnTool,
-		});
-		const actual = runtime.tools.map((tool) => tool.name);
-
-		expect(normalizeParityToolNames(actual)).toEqual(expected);
+	it("preserves every legacy tool and explicitly adds the readonly foundation when tools+spawn are enabled", async () => {
+		const config: LegacyConfig = { providerId: "anthropic", modelId: "claude-sonnet-4-6", apiKey: "key", systemPrompt: "test", cwd: makeEmptyWorkspaceCwd(), enableTools: true, enableSpawnAgent: true, enableAgentTeams: false };
+		const expected = normalizeParityToolNames(legacyBuildRuntimeEnvironment(config, makeSpawnTool).map((tool) => tool.name));
+		const spawnIndex = expected.indexOf("spawn_agent");
+		expect(spawnIndex).toBeGreaterThanOrEqual(0);
+		expected.splice(spawnIndex, 0, "address_translate", "tool_registry");
+		const runtime = await new DefaultRuntimeBuilder().build({ config, createSpawnTool: makeSpawnTool });
+		expect(normalizeParityToolNames(runtime.tools.map((tool) => tool.name))).toEqual(expected);
 	});
-
 	it("matches legacy tool list when only spawn is enabled", async () => {
-		const config: LegacyConfig = {
-			providerId: "anthropic",
-			modelId: "claude-sonnet-4-6",
-			apiKey: "key",
-			systemPrompt: "test",
-			cwd: makeEmptyWorkspaceCwd(),
-			enableTools: false,
-			enableSpawnAgent: true,
-			enableAgentTeams: false,
-		};
-		const createSpawnTool = makeSpawnTool;
-		const expected = normalizeParityToolNames(
-			legacyBuildRuntimeEnvironment(config, createSpawnTool).map(
-				(tool) => tool.name,
-			),
-		);
-		const runtime = await new DefaultRuntimeBuilder().build({
-			config,
-			createSpawnTool,
-		});
-		const actual = runtime.tools.map((tool) => tool.name);
-
-		expect(normalizeParityToolNames(actual)).toEqual(expected);
+		const config: LegacyConfig = { providerId: "anthropic", modelId: "claude-sonnet-4-6", apiKey: "key", systemPrompt: "test", cwd: makeEmptyWorkspaceCwd(), enableTools: false, enableSpawnAgent: true, enableAgentTeams: false };
+		const expected = normalizeParityToolNames(legacyBuildRuntimeEnvironment(config, makeSpawnTool).map((tool) => tool.name));
+		const runtime = await new DefaultRuntimeBuilder().build({ config, createSpawnTool: makeSpawnTool });
+		expect(normalizeParityToolNames(runtime.tools.map((tool) => tool.name))).toEqual(expected);
+		expect(runtime.tools.some((tool) => ["address_translate", "tool_registry"].includes(tool.name))).toBe(false);
 	});
-
 	it("matches legacy tool list when tools+spawn are disabled", async () => {
-		const config: LegacyConfig = {
-			providerId: "anthropic",
-			modelId: "claude-sonnet-4-6",
-			apiKey: "key",
-			systemPrompt: "test",
-			cwd: makeEmptyWorkspaceCwd(),
-			enableTools: false,
-			enableSpawnAgent: false,
-			enableAgentTeams: false,
-		};
-		const expected = normalizeParityToolNames(
-			legacyBuildRuntimeEnvironment(config).map((tool) => tool.name),
-		);
+		const config: LegacyConfig = { providerId: "anthropic", modelId: "claude-sonnet-4-6", apiKey: "key", systemPrompt: "test", cwd: makeEmptyWorkspaceCwd(), enableTools: false, enableSpawnAgent: false, enableAgentTeams: false };
+		const expected = normalizeParityToolNames(legacyBuildRuntimeEnvironment(config).map((tool) => tool.name));
 		const runtime = await new DefaultRuntimeBuilder().build({ config });
-		const actual = runtime.tools.map((tool) => tool.name);
-
-		expect(normalizeParityToolNames(actual)).toEqual(expected);
+		expect(normalizeParityToolNames(runtime.tools.map((tool) => tool.name))).toEqual(expected);
 	});
 });

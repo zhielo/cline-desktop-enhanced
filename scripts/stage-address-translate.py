@@ -45,7 +45,6 @@ for path in [base + "runtime.ts", base + "model-tool-routing.ts"]:
         changes[path] = text
     replace(path, '\ttool_registry: "enableToolRegistry",', '\taddress_translate: "enableAddressTranslate",\n\ttool_registry: "enableToolRegistry",')
 runtime = base + "runtime.ts"
-replace(runtime, '\t\theadlessToolNames: ["web_search"],', '\t\theadlessToolNames: ["web_search"],')
 text = read(runtime)
 entry = '\t{ id: "address_translate", description: "BigInt-safe supplied-table VA, RVA and file-offset translation with explicit ambiguity and zero-fill evidence.", headlessToolNames: ["address_translate"] },\n'
 if entry not in text:
@@ -58,7 +57,24 @@ section = '\n### BigInt native address translation\n\n- The registered `address_
 if '### BigInt native address translation' not in read(ledger):
     changes[ledger] = read(ledger) + section
 verifier = 'scripts/verify-custom-fork.ts'
-replace(verifier, '}> = [\n', '}> = [\n\t{ path: "sdk/packages/core/src/extensions/tools/address-translate.ts", markers: ["createAddressTranslateTool", "user_supplied_segments", "zero_filled", "MAX_ADDRESS"] },\n')
+text = read(verifier)
+marker = '\t{ path: "sdk/packages/core/src/extensions/tools/address-translate.ts", markers: ["createAddressTranslateTool", "user_supplied_segments", "zero_filled", "MAX_ADDRESS"] },\n'
+if marker not in text:
+    anchor = '\t{ path: "sdk/packages/core/src/extensions/tools/definitions.ts", markers: ["runCommandBatch(commands, runCommand", "createToolRegistryTool", "cleanupUnverified"] },\n'
+    if text.count(anchor) != 1:
+        raise SystemExit("Cannot safely extend preservation contracts")
+    text = text.replace(anchor, anchor + marker, 1)
+# Remove only byte-identical duplicate one-line contracts introduced by staging.
+# Every distinct original and new preservation requirement remains enforced.
+seen = set()
+lines = []
+for line in text.splitlines(keepends=True):
+    if line.startswith('\t{ path: '):
+        if line in seen:
+            continue
+        seen.add(line)
+    lines.append(line)
+changes[verifier] = ''.join(lines)
 for path, text in changes.items():
     if text != (root / path).read_text():
         (root / path).write_text(text)
