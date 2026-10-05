@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/scripts/desktop-startup.test.ts",markers:["HUB_BOOTSTRAP_TIMEOUT_MS","timeout: HUB_BOOTSTRAP_TIMEOUT_MS","SIDECAR_READY_TIMEOUT_MS","expect(health.ok).toBe(true)","expect(restartedHealth.ok).toBe(true)","duplicate session fork operation id"]},
+
  {path:"scripts/validate-advanced-build.mjs",markers:["Test desktop chat UI","Run desktop customization tests","analysis-task-orchestrator.test.ts","analysis-sandbox-client.test.ts","engineering-control-plane.test.ts","engineering-git-review.test.ts","engineering-worktree-manager.test.ts","engineering-workspace.test.tsx","commands-workbench.test.ts","process-session-manager.test.ts","reverse-engineering.test.ts","runtime-builder.test.ts","repository-tool.test.ts","notion-agent-bridge.test.ts","notion-agent-patch.test.ts","functions-view.test.tsx","notion-provenance.test.ts","permission-profile.test.ts","Verify custom fork preservation","Build SDK packages","Run required desktop sidecar regression suite","Test Windows installer configuration","Test AI task report","Test desktop chat UI","Run desktop customization tests","Run focused SDK safety tests","--testTimeout=60000","runValidation","runJobs","timeoutMs","summary.json"]},
 
  {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["CLINE_RE_ALLOW_DECRYPTION","CLINE_RE_PRIVATE_KEY_FILE","host-gated-authenticated-decryption"]},

@@ -454,3 +454,5 @@ Do not hide a new regression by weakening assertions or making a required custom
 - `bun run validate:advanced --engines` additionally requires a trusted absolute CLINE_RE_PYTHON and runs the real static engine, Miasm and cryptography fixture corpora. Default CI reports these optional engines as not requested, not validated. A passed consolidated source test is not proof of installer or whole-platform completion.
 
 - Validation evidence upload explicitly includes the scoped hidden .cline-validation folder and fails if no report is present; it never uploads other hidden repository files.
+
+- Installed-sidecar smoke uses a bounded 45-second Hub bootstrap deadline, covering the SDK's existing 30-second startup contract plus cold-launch overhead. A regression guard prevents reverting to a premature deadline. Readiness, health, restart and database uniqueness assertions remain blocking; no failed startup is accepted or automatically retried.

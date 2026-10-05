@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
@@ -28,4 +29,14 @@ test("a failed prerequisite blocks dependent checks instead of false passing", a
 });
 test("the aggregate status fails if any required check fails", async () => {
   const result = await runValidation([], jobs, 2, async x => ({ name: x.name, status: x.name === "3" ? "failed" : "passed" })); assert.equal(result.status, "failed");
+});
+
+test("installed Hub smoke never expires before the SDK startup contract", () => {
+  const sdk = readFileSync(new URL("../sdk/packages/core/src/hub/daemon/index.ts", import.meta.url), "utf8");
+  const smoke = readFileSync(new URL("../apps/examples/desktop-app/scripts/desktop-startup.test.ts", import.meta.url), "utf8");
+  const value = (text, name) => { const m = text.match(new RegExp("const " + name + " = ([0-9_]+);")); assert.ok(m, `Missing ${name}`); return Number(m[1].replaceAll("_", "")); };
+  assert.ok(value(smoke, "HUB_BOOTSTRAP_TIMEOUT_MS") >= value(sdk, "HUB_STARTUP_TIMEOUT_MS") + 5000);
+  assert.ok(smoke.includes("timeout: HUB_BOOTSTRAP_TIMEOUT_MS"));
+  assert.ok(smoke.includes("expect(health.ok).toBe(true)"));
+  assert.ok(smoke.includes("expect(restartedHealth.ok).toBe(true)"));
 });
