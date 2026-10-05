@@ -133,6 +133,24 @@ jobs:
       - name: Validate portable Windows analysis engines
         shell: pwsh
         run: |
+          # Miasm uses clang-cl plus the first link.exe on PATH. Import the
+          # supported x64 VS environment so Git's Unix link cannot be selected.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw 'vswhere was not found' }
+          $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsRoot) { throw 'Required x64 Visual C++ tools were not found' }
+          $vsRoot = $vsRoot.Trim()
+          $devCmd = Join-Path $vsRoot 'Common7/Tools/VsDevCmd.bat'
+          if (-not (Test-Path $devCmd)) { throw 'Visual Studio developer command script was not found' }
+          $vsEnvironment = & $env:COMSPEC /d /s /c "`"$devCmd`" -no_logo -arch=amd64 -host_arch=amd64 && set"
+          if ($LASTEXITCODE -ne 0) { throw 'Visual Studio x64 environment initialization failed' }
+          foreach ($line in $vsEnvironment) {
+            $separator = $line.IndexOf('=')
+            if ($separator -gt 0) { [Environment]::SetEnvironmentVariable($line.Substring(0, $separator), $line.Substring($separator + 1), 'Process') }
+          }
+          $linker = (Get-Command link.exe -CommandType Application -ErrorAction Stop).Source
+          if (-not $linker.StartsWith($vsRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Expected Microsoft linker, resolved: $linker" }
+          Write-Host "Verified Microsoft linker: $linker"
           $engineRoot = Join-Path $env:RUNNER_TEMP 'cline-portable-engines'
           py -3.13 -m venv $engineRoot
           if ($LASTEXITCODE -ne 0) { throw "Python 3.13 environment creation failed" }
