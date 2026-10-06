@@ -1,3 +1,6 @@
+import { ApkIncidentService } from "./apk-incident-service";
+import { incidentReadiness } from "./incident-readiness";
+import { inspectArtifactEvidence, previewArchiveMember } from "./incident-artifacts";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { InvestigationStore } from "./analysis-investigation-store";
 import { AndroidCaptureInput, bindAndroidCapture, runAndroidCapture } from "./android-runtime-client";
@@ -46,6 +49,8 @@ import {
 	clearAccountTelemetryIdentity,
 	createConfiguredStreamingTranscriptionSession,
 	createLiveDebuggerExecutor,
+ createAndroidDeviceExecutor,
+ AndroidDeviceInputSchema,
 	createReverseEngineeringExecutor,
 	createUserInstructionConfigService,
 	ensureCustomProvidersLoaded,
@@ -2604,6 +2609,17 @@ const desktopEngineeringWorktreeManager = new EngineeringWorktreeManager(
 );
 const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor();
 const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
+const desktopAndroidDeviceExecutor = createAndroidDeviceExecutor();
+let desktopIncidentService: ApkIncidentService | undefined;
+function incidents() {
+ return desktopIncidentService ??= new ApkIncidentService({
+  dbPath:join(resolveClineDataDir(), "analysis", "apk-incidents.sqlite"),
+  cacheRoot:join(resolveClineDataDir(), "analysis", "incident-private"),
+  tasks:desktopAnalysisTaskOrchestrator,
+  android:async(input,signal)=>JSON.parse(await desktopAndroidDeviceExecutor(AndroidDeviceInputSchema.parse(input),{...desktopToolContext("desktop-apk-incidents"),signal})),
+  reverse:async(input,signal)=>JSON.parse(await desktopReverseEngineeringExecutor(ReverseEngineeringInputSchema.parse(input),{...desktopToolContext("desktop-apk-incidents"),signal})),
+ });
+}
 
 function workspaceProcessOwner(baseDir: string): string {
 	const normalized = resolve(baseDir);
@@ -5097,6 +5113,23 @@ export async function handleCommand(
 			processId,
 		};
 	}
+ if (["prepare_apk_incident", "start_apk_incident", "list_apk_incidents", "get_apk_incident", "review_apk_incident", "correlate_apk_incident", "get_incident_readiness", "inspect_artifact_evidence", "preview_archive_member"].includes(command)) {
+  if(getCommandRuntimeBinding(ctx,args).kind === "ssh") throw new Error("Incident workflows and evidence are local-only; remote artifacts are not local files");
+  const root=resolve(typeof args?.cwd==="string" && args.cwd.trim()?args.cwd.trim():ctx.localWorkspaceRoot);
+  if(command==="inspect_artifact_evidence")return inspectArtifactEvidence(root,String(args?.path??""));
+  if(command==="preview_archive_member")return previewArchiveMember(root,String(args?.path??""),String(args?.member??""),String(args?.expectedHash??""));
+  if(command==="prepare_apk_incident")return incidents().prepare(root,args?.input);
+  if(command==="start_apk_incident")return incidents().start(root,String(args?.planId??""),String(args?.executionToken??""));
+  if(command==="list_apk_incidents")return incidents().list(root);
+  if(command==="get_apk_incident")return incidents().get(root,String(args?.id??""));
+  if(command==="review_apk_incident")return incidents().review(root,args?.input);
+  if(command==="correlate_apk_incident")return incidents().correlate(root,String(args?.id??""),Number(args?.revision),args?.input);
+  const toolContext=desktopToolContext(workspaceProcessOwner(root));
+  const discovery=JSON.parse(await desktopReverseEngineeringExecutor(ReverseEngineeringInputSchema.parse({operation:"discover",engine:"auto",discovery_depth:"fast"}),toolContext));
+  let adb:Record<string,unknown>|undefined;try{adb=JSON.parse(await desktopAndroidDeviceExecutor(AndroidDeviceInputSchema.parse({operation:"discover"}),toolContext));}catch{ /* truthful blocked readiness */ }
+  // Opening the dashboard never executes fixtures. This reuses discovery, not an installed==verified shortcut.
+  return incidentReadiness(discovery,adb,undefined);
+ }
 	if (
     command === "prepare_analysis_task" ||
     command === "approve_analysis_task" ||

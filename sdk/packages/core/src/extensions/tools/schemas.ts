@@ -467,6 +467,8 @@ export const AndroidDeviceInputSchema = z.object({
 		"screen_info",
 		"ui_hierarchy",
 		"package_info",
+		"device_info",
+		"pull_apk_bounded",
 		"install",
 		"uninstall",
 		"launch",
@@ -485,6 +487,7 @@ export const AndroidDeviceInputSchema = z.object({
 		"processes",
 	]),
 	device_serial: z.string().min(1).optional(),
+	process_id: z.number().int().positive().optional(),
 	package: z
 		.string()
 		.regex(/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/)

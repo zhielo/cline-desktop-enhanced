@@ -2,6 +2,15 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Integrated APK incident workflow
+
+- APK incidents use exact workspace APK/package/selected-device identities, one-shot device approvals and durable SQLite stages; reading status never launches or replays work.
+- Bounded base-APK identity capture, process-name/PID-scoped log observations and baseline-aware Java/native/ANR crash classification support manual reproduction. Root/Frida, split contents, OS-kill attribution and complete tombstones remain unverified.
+- Candidate validation uses a private hash-checked snapshot, real signature verification, separately acknowledged install/execution, post-install identity and explicit operator regression notes. A separate rollback plan verifies recorded installation identities; no automatic uninstall, retry, force-downgrade or data rollback.
+- Exact-build mapping candidates and GNU-build-ID/ABI/hash/file-backed native symbol ranges remain honest about provenance, stripped symbols and unresolved overloads.
+- Readiness reuses discovery and explicitly approved owned-fixture execution; inventory alone is never engine validation. Artifact evidence offers hash-bound, bounded ZIP member viewing without extraction/execution.
+- See `docs/APK_INCIDENT_WORKFLOW.md` for operational limits and fixture-versus-real-device validation.
+
 ## Post-integration audit hardening
 
 - File-bound analysis approvals use an in-flight claim and revalidate token, cancellation and expiry after hashing. Concurrent requests cannot reuse approval or resurrect cancelled work.

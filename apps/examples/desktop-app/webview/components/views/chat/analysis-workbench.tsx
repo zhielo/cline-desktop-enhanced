@@ -1,6 +1,4 @@
-import { InvestigationWorkspace } from "./investigation-workspace";
-("use client");
-import { AnalysisAuthoring } from "./analysis-authoring";
+"use client";
 
 import {
 	Activity,
@@ -21,8 +19,12 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { desktopClient } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
+import { AnalysisAuthoring } from "./analysis-authoring";
+import { ApkIncidentWorkspace } from "./apk-incident-workspace";
+import { InvestigationWorkspace } from "./investigation-workspace";
 
 type WorkbenchMode =
+	| "incidents"
 	| "investigation"
 	| "tasks"
 	| "notebook"
@@ -34,7 +36,7 @@ type WorkbenchMode =
 	| "approvals"
 	| "evidence"
 	| "diagnostics";
-type TaskKind = "static" | "debugger" | "gui" | "dynamic";
+type TaskKind = "static" | "debugger" | "gui" | "dynamic" | "device";
 type TaskPlan = {
 	id: string;
 	kind: TaskKind;
@@ -84,6 +86,7 @@ const modes: Array<{
 	icon: typeof Activity;
 	label: string;
 }> = [
+	{ id: "incidents", icon: Bug, label: "APK incidents" },
 	{ id: "investigation", icon: ListChecks, label: "Investigation" },
 	{ id: "tasks", icon: ListChecks, label: "Tasks" },
 	{ id: "analyze", icon: Binary, label: "Analyze" },
@@ -237,6 +240,10 @@ export function AnalysisWorkbench({
 
 	const approveAndRun = async () => {
 		if (!pendingPlan) return;
+		if (pendingPlan.kind === "device") {
+			toast({ title: "Use APK incidents to approve this device plan" });
+			return;
+		}
 		if (
 			pendingPlan.kind === "dynamic" &&
 			(!uploadConfirmed || !runtimeConfirmed)
@@ -471,6 +478,9 @@ export function AnalysisWorkbench({
 							common={common}
 							onPrepare={(request) => prepare("static", request)}
 						/>
+					)}
+					{mode === "incidents" && (
+						<ApkIncidentWorkspace cwd={cwd} environmentId={environmentId} />
 					)}
 					{mode === "investigation" && (
 						<InvestigationWorkspace

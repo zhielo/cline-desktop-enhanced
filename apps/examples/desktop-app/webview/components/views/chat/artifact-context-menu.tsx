@@ -5,6 +5,8 @@ import {
 	cloneElement,
 	type ReactElement,
 	type MouseEvent as ReactMouseEvent,
+	useEffect,
+	useRef,
 	useState,
 } from "react";
 import {
@@ -22,8 +24,19 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { desktopClient } from "@/lib/desktop-client";
 import { useArtifactWorkspace } from "@/lib/artifact-workspace";
+import { desktopClient } from "@/lib/desktop-client";
+
+type ArtifactEvidence = {
+	path: string;
+	workspace: string;
+	sha256?: string;
+	size: number;
+	classification: string;
+	blockedReason?: string;
+	members?: { name: string; bytes: number; safe: boolean }[];
+	membersTruncated?: boolean;
+};
 
 type ArtifactPreview = {
 	path: string;
@@ -61,6 +74,17 @@ export function ArtifactContextMenu({
 	const cwd = suppliedCwd?.trim() || workspace.cwd;
 	const environmentId =
 		suppliedEnvironmentId?.trim() || workspace.environmentId;
+	const [evidence, setEvidence] = useState<ArtifactEvidence | null>(null);
+	const epoch = useRef(0);
+	useEffect(() => {
+		epoch.current++;
+		setEvidence(null);
+		setPreview(null);
+		setPreviewOpen(false);
+		return () => {
+			epoch.current++;
+		};
+	}, []);
 	const [previewOpen, setPreviewOpen] = useState(false);
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [preview, setPreview] = useState<ArtifactPreview | null>(null);
@@ -88,18 +112,68 @@ export function ArtifactContextMenu({
 		toast({ title: "Artifact path copied" });
 	};
 
+	const inspectEvidence = async () => {
+		const at = epoch.current;
+		setPreviewOpen(true);
+		setPreviewLoading(true);
+		setPreview(null);
+		setEvidence(null);
+		try {
+			const value = await desktopClient.invoke<ArtifactEvidence>(
+				"inspect_artifact_evidence",
+				{ path, cwd, environmentId },
+			);
+			if (at === epoch.current) setEvidence(value);
+		} catch (error) {
+			if (at === epoch.current)
+				toast({
+					variant: "destructive",
+					title: "Evidence unavailable",
+					description: String(error),
+				});
+		} finally {
+			if (at === epoch.current) setPreviewLoading(false);
+		}
+	};
+	const memberPreview = async (member: string) => {
+		if (!evidence?.sha256) return;
+		const at = epoch.current;
+		setPreviewLoading(true);
+		try {
+			const value = await desktopClient.invoke<ArtifactPreview>(
+				"preview_archive_member",
+				{ path, cwd, environmentId, member, expectedHash: evidence.sha256 },
+			);
+			if (at === epoch.current)
+				setPreview({ ...value, name: member, modifiedAt: "" });
+		} catch (error) {
+			if (at === epoch.current)
+				toast({
+					variant: "destructive",
+					title: "Archive preview blocked",
+					description: String(error),
+				});
+		} finally {
+			if (at === epoch.current) setPreviewLoading(false);
+		}
+	};
 	const showPreview = async () => {
+		const at = epoch.current;
+		setEvidence(null);
 		setPreviewOpen(true);
 		setPreviewLoading(true);
 		try {
-			setPreview(
-				await desktopClient.invoke<ArtifactPreview>("read_artifact_preview", {
+			const value = await desktopClient.invoke<ArtifactPreview>(
+				"read_artifact_preview",
+				{
 					path,
 					...(environmentId ? { environmentId } : {}),
 					...(cwd?.trim() ? { cwd } : {}),
-				}),
+				},
 			);
+			if (at === epoch.current) setPreview(value);
 		} catch (error) {
+			if (at !== epoch.current) return;
 			setPreview(null);
 			toast({
 				variant: "destructive",
@@ -111,7 +185,7 @@ export function ArtifactContextMenu({
 			});
 			setPreviewOpen(false);
 		} finally {
-			setPreviewLoading(false);
+			if (at === epoch.current) setPreviewLoading(false);
 		}
 	};
 	const trigger =
@@ -147,6 +221,10 @@ export function ArtifactContextMenu({
 						<FolderOpen />
 						Show in folder
 					</ContextMenuItem>
+					<ContextMenuItem onSelect={() => void inspectEvidence()}>
+						<Eye />
+						Inspect evidence / archive
+					</ContextMenuItem>
 					<ContextMenuSeparator />
 					<ContextMenuItem onSelect={() => void copyPath()}>
 						<Copy />
@@ -161,11 +239,52 @@ export function ArtifactContextMenu({
 							{preview?.name ?? path}
 						</DialogTitle>
 						<DialogDescription>
-							{preview
-								? `${formatBytes(preview.size)} · Modified ${new Date(preview.modifiedAt).toLocaleString()}`
-								: "Loading artifact preview…"}
+							{evidence
+								? `${evidence.classification} · ${formatBytes(evidence.size)}`
+								: preview
+									? `${formatBytes(preview.size)} · Modified ${new Date(preview.modifiedAt).toLocaleString()}`
+									: "Loading artifact preview…"}
 						</DialogDescription>
 					</DialogHeader>
+					{evidence && (
+						<div className="space-y-2 text-xs break-all">
+							<p>Origin: {evidence.workspace}</p>
+							<p>SHA-256: {evidence.sha256}</p>
+							<p>
+								Archive members are not standalone files. No automatic
+								extraction or execution.
+							</p>
+							{evidence.blockedReason && <p>{evidence.blockedReason}</p>}
+							{evidence.members && (
+								<select
+									aria-label="Archive member"
+									className="w-full border rounded bg-background p-2"
+									defaultValue=""
+									onChange={(e) => {
+										if (e.target.value) void memberPreview(e.target.value);
+									}}
+								>
+									<option value="">Choose a member for bounded preview</option>
+									{evidence.members.map((member, i) => (
+										<option
+											key={`${i}:${member.name}`}
+											value={member.name}
+											disabled={!member.safe}
+										>
+											{member.name} · {formatBytes(member.bytes)}
+											{member.safe ? "" : " · blocked"}
+										</option>
+									))}
+								</select>
+							)}
+							{evidence.membersTruncated && (
+								<p>
+									Listing capped at 200 members; no claim of full archive
+									coverage.
+								</p>
+							)}
+						</div>
+					)}
 					<div className="min-h-48 overflow-auto rounded-lg border border-border/70 bg-muted/20">
 						{previewLoading ? (
 							<div className="grid min-h-48 place-items-center">

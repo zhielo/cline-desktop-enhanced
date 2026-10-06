@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/apk-incident-service.ts",markers:["class ApkIncidentService", "No new matching failure observed", "candidate-installed", "controlUnavailable", "pull_apk_bounded"]},
+ {path:"apps/examples/desktop-app/sidecar/incident-correlation.ts",markers:["module SHA-256/ABI/build-ID mismatch", "candidate-match", "symbol-range-match"]},
+ {path:"apps/examples/desktop-app/sidecar/incident-artifacts.ts",markers:["Archive changed since inspection", "Archive member integrity mismatch", "blocked-archive"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/apk-incident-workspace.tsx",markers:["Approve and start once", "Prepare separately approved rollback", "prepare_apk_incident"]},
+ {path:"docs/APK_INCIDENT_WORKFLOW.md",markers:["No physical KSUN device", "fixed", "explicit bounded member preview"]},
  { path: "apps/examples/desktop-app/webview/lib/artifact-workspace.tsx", markers: ["ArtifactWorkspaceProvider", "ArtifactWorkspaceContext.Provider", "useArtifactWorkspace", "useMemo"] },
  { path: "apps/examples/desktop-app/webview/components/ui/markdown.tsx", markers: ["useArtifactWorkspace()", "workspace.cwd", "workspace.environmentId"] },
  { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx", markers: ["<ArtifactWorkspaceProvider", "cwd={props.cwd}", "environmentId={props.environmentId"] },

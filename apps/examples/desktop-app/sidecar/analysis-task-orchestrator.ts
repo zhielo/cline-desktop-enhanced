@@ -13,7 +13,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { assertAnalysisSandboxReady } from "./analysis-sandbox-client";
 
-export type AnalysisTaskKind = "static" | "debugger" | "gui" | "dynamic";
+export type AnalysisTaskKind = "static" | "debugger" | "gui" | "dynamic" | "device";
 export type AnalysisPermission =
 	| "Inspect"
 	| "Execute"
@@ -154,6 +154,7 @@ function permissionFor(
 	kind: AnalysisTaskKind,
 	operation: string,
 ): AnalysisPermission {
+	if (kind === "device") return operation === "observe_apk" ? "Inspect" : "Execute";
 	if (kind === "static") return "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
 	if (["launch", "continue", "step"].includes(operation)) return "Execute";
@@ -167,6 +168,11 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
+ if (kind === "device") {
+  requirements.add("authorized-target"); requirements.add("sensitive-device-logs"); requirements.add("captured-artifact-write");
+  if(operation !== "observe_apk") requirements.add("execution-control");
+  if(["validate_apk_patch", "rollback_apk"].includes(operation)) {requirements.add("package-change"); requirements.add("dedicated-test-device"); requirements.add("rollback-plan");}
+ }
 	if (externalTarget) requirements.add("external-target");
 	if (
 		kind === "static" &&
@@ -332,7 +338,7 @@ export class AnalysisTaskOrchestrator {
 					Math.max(input.maxOutputBytes ?? 1024 * 1024, 64 * 1024),
 					16 * 1024 * 1024,
 				),
-				network: "disabled",
+				network: input.kind === "device" ? "recorded" : "disabled",
 			},
 			createdAt: new Date(this.now()).toISOString(),
 			expiresAt: new Date(this.now() + this.approvalTtlMs).toISOString(),

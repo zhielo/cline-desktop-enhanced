@@ -34,6 +34,9 @@ if [ "\${1:-}" = "devices" ]; then
   exit 0
 fi
 case "$*" in
+  *"shell ps -A"*) printf 'USER PID NAME\\nuid 4321 com.example.app\\nuid 4322 com.example.app:worker\\nuid 4333 com.other.app\\n' ;;
+  *"shell getprop"*) printf 'fixture-device-identity\\n' ;;
+  *"exec-out cat /data/app/example/base.apk"*) printf 'apk-bytes' ;;
   *"shell pidof"*) printf '4321\\n' ;;
   *"shell wm size"*) printf 'Physical size: 1080x2400\\n' ;;
   *"shell dumpsys input"*) printf 'SurfaceOrientation: 0\\n' ;;
@@ -175,4 +178,72 @@ describe("android device executor", () => {
 			),
 		).rejects.toThrow("confirm_package_change=true");
 	});
+});
+
+it("validates every requested PID against the current package process name", async () => {
+	if (process.platform === "win32") return;
+	await fakeAdb();
+	const run = createAndroidDeviceExecutor();
+	const worker = JSON.parse(
+		await run(
+			{
+				operation: "logcat",
+				package: "com.example.app",
+				process_id: 4322,
+				device_serial: "emulator-5554",
+			},
+			{} as never,
+		),
+	);
+	expect(worker.args).toContain("4322");
+	await expect(
+		run(
+			{
+				operation: "logcat",
+				package: "com.example.app",
+				process_id: 4333,
+				device_serial: "emulator-5554",
+			},
+			{} as never,
+		),
+	).rejects.toThrow("no longer belongs");
+});
+it("uses a bounded base-APK read without overwriting existing evidence", async () => {
+	if (process.platform === "win32") return;
+	const directory = await fakeAdb(),
+		run = createAndroidDeviceExecutor(),
+		output = path.join(directory, "owned.apk");
+	const result = JSON.parse(
+		await run(
+			{
+				operation: "pull_apk_bounded",
+				package: "com.example.app",
+				device_serial: "emulator-5554",
+				output_path: output,
+			},
+			{} as never,
+		),
+	);
+	expect(result.coverage).toBe("base-apk-only");
+	expect(result.succeeded).toBe(true);
+	expect(await fs.readFile(output, "utf8")).toBe("apk-bytes");
+	await expect(
+		run(
+			{
+				operation: "pull_apk_bounded",
+				package: "com.example.app",
+				device_serial: "emulator-5554",
+				output_path: output,
+			},
+			{} as never,
+		),
+	).rejects.toThrow();
+	const device = JSON.parse(
+		await run(
+			{ operation: "device_info", device_serial: "emulator-5554" },
+			{} as never,
+		),
+	);
+	expect(device.root).toBe("unverified");
+	expect(device.frida).toBe("unverified");
 });
