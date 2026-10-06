@@ -4,6 +4,55 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
+		markers: [
+			"private readonly consuming",
+			"this.prune(this.maxPlans - 1)",
+			"finish or cancel pending work first",
+			"Hashing yields to cancellation",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts",
+		markers: [
+			"exactly once under concurrent requests",
+			"does not resurrect a cancelled approval",
+			"retains running task control",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.ts",
+		markers: [
+			"prepareCaptureDirectory",
+			"regular managed ignore-all file",
+			"health.manifest.maxArtifactBytes",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.test.ts",
+		markers: ["capture output privacy preflight", "signed worker upload limit"],
+	},
+	{
+		path: "workers/android-capture/server.py",
+		markers: [
+			"def build_result",
+			"Capture/result validation failed",
+			"Persist a small, signed terminal failure",
+		],
+	},
+	{
+		path: "workers/android-capture/server.test.py",
+		markers: [
+			"test_invalid_collector_observations_become_terminal_signed_failures",
+			"Invalid collector must not replay",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
+		markers: ["preserves UTF-8 and exact omitted-byte accounting"],
+	},
+
  {path:"sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",markers:["tool with spaces.exe", "fs.copyFile(process.execPath", "fixture.args"]},
  {path:"sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",markers:["sourceRepo: realpathSync.native(repo)"]},
  {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts"]},

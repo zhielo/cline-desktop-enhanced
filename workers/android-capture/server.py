@@ -82,13 +82,25 @@ class Worker:
                     db.commit();return self.result(value['nonce'])
                 if db.execute("SELECT COUNT(*) FROM jobs WHERE status NOT IN ('expired','purged')").fetchone()[0]>=50 or db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0]>=4096 or (db.execute('SELECT COALESCE(SUM(length(result)),0) FROM jobs').fetchone()[0])>100*1024*1024:return 429,{'error':'Worker retention budget reached'}
                 db.execute('INSERT INTO jobs VALUES(?,?,?,?,?)',(value['nonce'],identity,'running',None,time.time()))
-            try:observations=self.execute(value,data)
-            except Exception:observations={'status':'failed','artifacts':[],'captures':[],'registrations':[],'events':[],'limitations':['Capture/lifecycle failed; inspect private worker diagnostics. No successful runtime claim.']}
-            if any(a.get('format')=='dex' and not value['captureDex'] or a.get('format')=='elf' and not value.get('captureNative',False) for a in observations.get('artifacts',[])):raise ValueError('Collector returned unapproved plaintext capture')
-            receipt={'protocol':'cline-android-capture/v1','workerId':self.worker_id,'nonce':value['nonce'],'requestHash':value['requestHash'],'artifactSha256':value['artifactSha256'],'network':'disabled','status':observations['status'],'engine':'android-frida','evidence':{k:observations.get(k,[]) for k in ['artifacts','registrations','events']},'limitations':observations['limitations']}
-            if 'device' in observations:receipt['evidence']['device']=observations['device']
-            result=self.signed(receipt,observations.get('captures',[]));body=encoded(result)
-            if len(body)>MAX_OUTPUT:raise ValueError('Worker output budget exceeded')
+            def build_result(observations):
+                if not isinstance(observations,dict) or observations.get('status') not in ('completed','partial','failed'):raise ValueError('Invalid collector status')
+                for name,limit in [('artifacts',32),('captures',32),('registrations',200),('events',200),('limitations',50)]:
+                    rows=observations.get(name,[])
+                    if not isinstance(rows,list) or len(rows)>limit:raise ValueError('Collector evidence budget')
+                    if name=='limitations':
+                        if any(not isinstance(row,str) or len(row)>1000 for row in rows):raise ValueError('Invalid collector limitation')
+                    elif any(not isinstance(row,dict) for row in rows):raise ValueError('Invalid collector evidence')
+                if any(a.get('format') not in ('dex','elf') or (a['format']=='dex' and not value['captureDex']) or (a['format']=='elf' and not value.get('captureNative',False)) for a in observations.get('artifacts',[])):raise ValueError('Collector returned unapproved plaintext capture')
+                receipt={'protocol':'cline-android-capture/v1','workerId':self.worker_id,'nonce':value['nonce'],'requestHash':value['requestHash'],'artifactSha256':value['artifactSha256'],'network':'disabled','status':observations['status'],'engine':'android-frida','evidence':{k:observations.get(k,[]) for k in ['artifacts','registrations','events']},'limitations':observations.get('limitations',[])}
+                if 'device' in observations:receipt['evidence']['device']=observations['device']
+                result=self.signed(receipt,observations.get('captures',[]));body=encoded(result)
+                if len(body)>MAX_OUTPUT:raise ValueError('Worker output budget exceeded')
+                return receipt,result,body
+            try:receipt,result,body=build_result(self.execute(value,data))
+            except Exception:
+                # A started nonce remains one-shot even if result validation fails.
+                # Persist a small, signed terminal failure without private diagnostics.
+                receipt,result,body=build_result({'status':'failed','limitations':['Capture/result validation failed; inspect private worker diagnostics. No successful runtime claim.']})
             with self.db() as db:db.execute('UPDATE jobs SET status=?,result=? WHERE nonce=?',(receipt['status'],body,value['nonce']))
             return 200,result
         finally:LOCK.release()

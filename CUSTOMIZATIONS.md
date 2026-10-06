@@ -2,6 +2,16 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Post-integration audit hardening
+
+- File-bound analysis approvals use an in-flight claim and revalidate token, cancellation and expiry after hashing. Concurrent requests cannot reuse approval or resurrect cancelled work.
+- Ledger capacity reclaims terminal entries only; pending/approved/running tasks and in-flight claims remain controllable. At capacity new plans fail explicitly instead of silently evicting work.
+- Android capture output is preflighted before POST or GET: dedicated workspace child, no symlink directories, and an exact regular ignore-all `.gitignore`. Publication rechecks the same policy; partial staging files are removed on write/sync failure as well as link failure. Ignore rules are not a substitute for encryption, host sandboxing, or protection against force-add/tracked files.
+- Android upload obeys the minimum of the signed worker byte budget and the desktop's 16 MiB cap.
+- Collector/result validation errors persist a bounded signed terminal failure, without private diagnostics or captured bytes; repeated nonce retrieval never re-executes the sample.
+- Terminal UTF-8 truncation uses byte-boundary slicing rather than materializing character arrays/concatenating individual code points; head/tail limits and exact omitted-byte accounting are retained.
+- Regression coverage is in the existing approval, Android capture, worker and process-session suites. See `docs/POST_INTEGRATION_AUDIT.md` for scope and limitations.
+
 ## Quality gate reliability
 
 - Full workspace typechecks run sequentially with the same `-F '*'` scope to avoid simultaneously loading every TypeScript graph. No workspace, strict check or failed diagnostic is suppressed.

@@ -292,30 +292,21 @@ function utf8Bytes(text: string): number {
 
 function takeUtf8Prefix(text: string, maxBytes: number): string {
 	if (maxBytes <= 0) return "";
-	let result = "";
-	let bytes = 0;
-	for (const character of text) {
-		const characterBytes = utf8Bytes(character);
-		if (bytes + characterBytes > maxBytes) break;
-		result += character;
-		bytes += characterBytes;
-	}
-	return result;
+	if (utf8Bytes(text) <= maxBytes) return text;
+	const bytes = Buffer.from(text, "utf8");
+	let end = maxBytes;
+	// A UTF-8 continuation byte means the boundary cuts a code point.
+	while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+	return bytes.subarray(0, end).toString("utf8");
 }
 
 function takeUtf8Suffix(text: string, maxBytes: number): string {
 	if (maxBytes <= 0) return "";
-	const characters = Array.from(text);
-	let result = "";
-	let bytes = 0;
-	for (let index = characters.length - 1; index >= 0; index -= 1) {
-		const character = characters[index];
-		const characterBytes = utf8Bytes(character);
-		if (bytes + characterBytes > maxBytes) break;
-		result = character + result;
-		bytes += characterBytes;
-	}
-	return result;
+	if (utf8Bytes(text) <= maxBytes) return text;
+	const bytes = Buffer.from(text, "utf8");
+	let start = bytes.length - maxBytes;
+	while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+	return bytes.subarray(start).toString("utf8");
 }
 
 /**

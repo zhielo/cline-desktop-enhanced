@@ -434,6 +434,37 @@ describe("ProcessSessionManager", () => {
 		}
 	});
 
+	it.each([
+		2, 3, 7, 80, 1024,
+	])("preserves UTF-8 and exact omitted-byte accounting with a %i-byte log budget", async (maxOutputBytes) => {
+		const manager = new ProcessSessionManager({
+			maxOutputBytes,
+			inheritEnvironment: false,
+		});
+		const text = "H" + "🌏é汉字".repeat(4096) + "T";
+		try {
+			const started = await manager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", `process.stdout.write(${JSON.stringify(text)})`],
+				cwd: process.cwd(),
+			});
+			await waitForCompletion(manager, started.processId);
+			const result = manager.read(OWNER, started.processId);
+			const retained = result.chunks.map((chunk) => chunk.text).join("");
+			expect(retained).not.toContain("\ufffd");
+			expect(Buffer.byteLength(retained)).toBeLessThanOrEqual(maxOutputBytes);
+			expect(retained.startsWith("H")).toBe(true);
+			expect(retained.endsWith("T")).toBe(true);
+			expect(result.droppedOutputBytes).toBe(
+				Buffer.byteLength(text) - Buffer.byteLength(retained),
+			);
+			expect(result.truncated).toBe(true);
+		} finally {
+			await manager.dispose();
+		}
+	});
+
 	it("isolates sessions by owner", async () => {
 		const manager = new ProcessSessionManager();
 		try {

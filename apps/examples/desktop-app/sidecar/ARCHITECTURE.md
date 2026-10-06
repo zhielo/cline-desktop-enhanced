@@ -223,3 +223,10 @@ bun run dev:sidecar   # Start only the sidecar (no browser approval surface)
 bun run dev:web       # Start only Next.js (no authenticated approval connection)
 bun run dev           # Both concurrently
 ```
+
+
+## Analysis execution audit invariants
+
+Analysis approval consumption claims the plan before asynchronous target hashing and rechecks its live status, expiry and token afterwards. Cancellation during hashing cannot promote a terminal plan back to running. Duplicate consumption is rejected before redundant hashing. Bounded ledger retention never evicts live plans or in-flight claims; terminal records are reclaimed first and new preparation fails explicitly when capacity is occupied by protected work.
+
+Android capture requires a valid private output directory before non-replayable submission. Existing `.gitignore` files must be regular, exact ignore-all rules; policy is rechecked before publication. The signed manifest upload limit is enforced before POST. Worker collector and result-validation failures produce a signed, persisted terminal failure; GET-only recovery or duplicate submission cannot replay the original capture.
