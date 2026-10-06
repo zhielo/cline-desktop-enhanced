@@ -21,6 +21,7 @@ import {
 	parseArtifactReference,
 } from "@/lib/artifact-paths";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
+import { useArtifactWorkspace } from "@/lib/artifact-workspace";
 import { cn } from "@/lib/utils";
 import { ArtifactContextMenu } from "../views/chat/artifact-context-menu";
 import {
@@ -237,6 +238,7 @@ function SafeMarkdownLink({
 	title,
 	...props
 }: MarkdownLinkProps) {
+	const workspace = useArtifactWorkspace();
 	const [isOpen, setIsOpen] = useState(false);
 	const isIncomplete = href === "streamdown:incomplete-link";
 	const url = isIncomplete ? undefined : href;
@@ -263,6 +265,10 @@ function SafeMarkdownLink({
 			void desktopClient
 				.invoke(openInEditor ? "open_file_in_editor" : "open_artifact", {
 					path: fileReference.path,
+					...(workspace.cwd ? { cwd: workspace.cwd } : {}),
+					...(workspace.environmentId
+						? { environmentId: workspace.environmentId }
+						: {}),
 					...(openInEditor && fileReference.line
 						? { line: fileReference.line }
 						: {}),

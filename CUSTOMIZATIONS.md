@@ -149,6 +149,7 @@ Primary files:
 - A single artifact path in a fenced Markdown block renders as an actionable artifact card instead of a passive copy-only code block.
 - Finished sessions combine declared task artifacts, artifact paths found in assistant output, and changed Git files into one completion summary. Artifact rows open the exact file, while changed-code rows retain direct editor and review-pane actions.
 - Remote artifacts remain blocked from local opening until an explicit remote download/preview boundary exists.
+- Inline Markdown artifact actions inherit the originating transcript's workspace and environment through a scoped React provider. Preview, system/editor opening and folder reveal use the same context; unchanged memoized Markdown still updates its workspace binding. Copy path remains clipboard-only. See `docs/ARTIFACT_WORKSPACE_CONTEXT.md`.
 
 Primary files:
 

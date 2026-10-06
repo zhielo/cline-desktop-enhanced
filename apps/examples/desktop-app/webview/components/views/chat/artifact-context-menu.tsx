@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { desktopClient } from "@/lib/desktop-client";
+import { useArtifactWorkspace } from "@/lib/artifact-workspace";
 
 type ArtifactPreview = {
 	path: string;
@@ -43,8 +44,8 @@ function formatBytes(value: number) {
 
 export function ArtifactContextMenu({
 	children,
-	cwd,
-	environmentId,
+	cwd: suppliedCwd,
+	environmentId: suppliedEnvironmentId,
 	onOpen,
 	path,
 	primaryAction = "open",
@@ -56,6 +57,10 @@ export function ArtifactContextMenu({
 	path: string;
 	primaryAction?: "open" | "preview";
 }) {
+	const workspace = useArtifactWorkspace();
+	const cwd = suppliedCwd?.trim() || workspace.cwd;
+	const environmentId =
+		suppliedEnvironmentId?.trim() || workspace.environmentId;
 	const [previewOpen, setPreviewOpen] = useState(false);
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const [preview, setPreview] = useState<ArtifactPreview | null>(null);

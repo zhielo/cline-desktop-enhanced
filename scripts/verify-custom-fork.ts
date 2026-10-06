@@ -4,6 +4,12 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ { path: "apps/examples/desktop-app/webview/lib/artifact-workspace.tsx", markers: ["ArtifactWorkspaceProvider", "ArtifactWorkspaceContext.Provider", "useArtifactWorkspace", "useMemo"] },
+ { path: "apps/examples/desktop-app/webview/components/ui/markdown.tsx", markers: ["useArtifactWorkspace()", "workspace.cwd", "workspace.environmentId"] },
+ { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx", markers: ["<ArtifactWorkspaceProvider", "cwd={props.cwd}", "environmentId={props.environmentId"] },
+ { path: "apps/examples/desktop-app/webview/components/views/chat/artifact-context-menu.tsx", markers: ["suppliedCwd", "suppliedEnvironmentId", "useArtifactWorkspace()"] },
+ { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.test.tsx", markers: ["transcript artifact workspace context", "right-click %s", "unchanged", "originating SSH environment"] },
+
 	{
 		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
 		markers: [
