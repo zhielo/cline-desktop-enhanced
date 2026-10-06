@@ -184,7 +184,7 @@ function requirementsFor(
 	) {
 		requirements.add("execution-control");
 	}
-	if (kind === "dynamic") {requirements.add("isolated-sandbox");requirements.add("artifact-upload");requirements.add("authorized-target-execution");}
+	if (kind === "dynamic") {requirements.add("isolated-sandbox");requirements.add("artifact-upload");requirements.add("authorized-target-execution");if(operation==="android_capture"){requirements.add("sensitive-runtime-capture");requirements.add("captured-artifact-write");}}
 	return [...requirements];
 }
 

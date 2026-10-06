@@ -1,7 +1,25 @@
-import {programEvidenceResult} from "./analysis-program-evidence";
-import { runAdvancedAnalysis, advancedEvidenceBundle } from "./advanced-analysis";
+import {
+	TARGETED_GHIDRA_SCRIPT,
+	targetedIdaScript,
+	type FunctionSelector,
+} from "./targeted-decompiler-scripts";
+import {
+	persistInvestigation,
+	queryInvestigation,
+	readInvestigationResult,
+} from "./android-investigation-index";
+import { programEvidenceResult } from "./analysis-program-evidence";
+import {
+	runAdvancedAnalysis,
+	advancedEvidenceBundle,
+	type AdvancedResult,
+} from "./advanced-analysis";
 import { graphResult } from "./analysis-evidence-graph";
-import { readAnalysisJson, prepareNotebook, runAnalysisNotebook } from "./analysis-notebook";
+import {
+	readAnalysisJson,
+	prepareNotebook,
+	runAnalysisNotebook,
+} from "./analysis-notebook";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
@@ -47,14 +65,14 @@ const ANALYSIS_MANIFEST = "cline-analysis.json";
 const ANALYSIS_SCHEMA_VERSION = 2;
 const FORENSIC_REPORT_SCHEMA_VERSION = 1;
 const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
-const GHIDRA_SCRIPT_VERSION = 2;
-const IDA_DECOMPILE_SCRIPT_VERSION = 1;
+const GHIDRA_SCRIPT_VERSION = 3;
+const IDA_DECOMPILE_SCRIPT_VERSION = 2;
 const analysisLocks = new Map<string, Promise<void>>();
 const DISCOVERY_CACHE_TTL_MS = 5 * 60_000;
 const DISCOVERY_PROBE_TIMEOUT_MS = 5_000;
 const discoveryCache = new Map<
-  string,
-  { expiresAt: number; value: Promise<Record<string, unknown>> }
+	string,
+	{ expiresAt: number; value: Promise<Record<string, unknown>> }
 >();
 
 type OutputScope = "managed" | "external-approved";
@@ -410,28 +428,28 @@ async function discoverFirst(commands: string[]): Promise<string | undefined> {
 }
 
 async function boundedDiscoveryProbe<T>(
-  label: string,
-  probe: () => Promise<T>,
+	label: string,
+	probe: () => Promise<T>,
 ): Promise<{ value?: T; error?: string }> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    const value = await Promise.race([
-      probe(),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`${label} discovery timed out`)),
-          DISCOVERY_PROBE_TIMEOUT_MS,
-        );
-      }),
-    ]);
-    return { value };
-  } catch (error) {
-    return {
-      error: error instanceof Error ? error.message : String(error),
-    };
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+	let timer: NodeJS.Timeout | undefined;
+	try {
+		const value = await Promise.race([
+			probe(),
+			new Promise<never>((_resolve, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`${label} discovery timed out`)),
+					DISCOVERY_PROBE_TIMEOUT_MS,
+				);
+			}),
+		]);
+		return { value };
+	} catch (error) {
+		return {
+			error: error instanceof Error ? error.message : String(error),
+		};
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
 }
 
 async function knownAndroidSdkRoots(): Promise<string[]> {
@@ -1720,7 +1738,8 @@ function reportFindings(
 		});
 	}
 	const categories = strings.categoryCounts as
-    Record<string, number> | undefined;
+		| Record<string, number>
+		| undefined;
 	if ((categories?.securityRelevant ?? 0) > 0) {
 		findings.push({
 			severity: "low",
@@ -1730,7 +1749,8 @@ function reportFindings(
 		});
 	}
 	const signature = apk?.signature as
-    { verified?: boolean; available?: boolean } | undefined;
+		| { verified?: boolean; available?: boolean }
+		| undefined;
 	if (
 		signature &&
 		signature.available !== false &&
@@ -1744,7 +1764,8 @@ function reportFindings(
 		});
 	}
 	const manifest = apk?.manifest as
-    { exportedSignals?: number; permissions?: string[] } | undefined;
+		| { exportedSignals?: number; permissions?: string[] }
+		| undefined;
 	if ((manifest?.exportedSignals ?? 0) > 0) {
 		findings.push({
 			severity: "info",
@@ -2111,7 +2132,15 @@ public class ClineDecompileAll extends GhidraScript {
 }
 `;
 
-async function ensureGhidraDecompileScript(outputDir: string) {
+async function ensureGhidraDecompileScript(
+	outputDir: string,
+	selector?: FunctionSelector,
+) {
+	if (selector) {
+		const file = path.join(outputDir, "ClineDecompileSelected.java");
+		await fs.writeFile(file, TARGETED_GHIDRA_SCRIPT, { mode: 0o600 });
+		return file;
+	}
 	const scriptPath = path.join(outputDir, "ClineDecompileAll.java");
 	await fs.writeFile(scriptPath, GHIDRA_DECOMPILE_SCRIPT, {
 		mode: 0o600,
@@ -2119,7 +2148,18 @@ async function ensureGhidraDecompileScript(outputDir: string) {
 	return scriptPath;
 }
 
-async function ensureIdaDecompileScript(outputDir: string, outputPath: string) {
+async function ensureIdaDecompileScript(
+	outputDir: string,
+	outputPath: string,
+	selector?: FunctionSelector,
+) {
+	if (selector) {
+		const file = path.join(outputDir, "cline_decompile_selected.py");
+		await fs.writeFile(file, targetedIdaScript(outputPath, selector), {
+			mode: 0o600,
+		});
+		return file;
+	}
 	const scriptPath = path.join(outputDir, "cline_decompile_all.py");
 	const source = `# Generated by Cline Enhanced for authorized static analysis.
 import traceback
@@ -2209,11 +2249,13 @@ function analysisOptionsHash(
 					script_path: input.script_path ?? null,
 					script_args: input.script_args ?? [],
 					ghidraScriptVersion: GHIDRA_SCRIPT_VERSION,
+					function_selector: input.function_selector ?? null,
 				}
 			: engine === "ida"
 				? {
 						operation: input.operation,
 						idaDecompileScriptVersion: IDA_DECOMPILE_SCRIPT_VERSION,
+						function_selector: input.function_selector ?? null,
 						script_path: input.script_path ?? null,
 						script_args: input.script_args ?? [],
 					}
@@ -2221,6 +2263,7 @@ function analysisOptionsHash(
 						operation: input.operation,
 						jadx_mode: input.jadx_mode ?? "auto",
 						jadx_threads: input.jadx_threads ?? null,
+						jadx_single_class: input.jadx_single_class ?? null,
 						jadx_output_format: input.jadx_output_format ?? "java",
 						jadx_deobfuscate: input.jadx_deobfuscate ?? false,
 						jadx_no_resources: input.jadx_no_resources ?? false,
@@ -2305,104 +2348,104 @@ async function installationCapabilities(
 }
 
 async function discoverCapabilities(
-  depth: "fast" | "deep",
+	depth: "fast" | "deep",
 ): Promise<Record<string, unknown>> {
-  const cacheKey = JSON.stringify({
-    depth,
-    platform: process.platform,
-    path: process.env.PATH ?? "",
-    ghidra: process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR ?? "",
-    ida: process.env.IDA_HOME ?? process.env.IDADIR ?? "",
-    jadx: process.env.JADX_HOME ?? "",
-  });
-  const cached = discoveryCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return {
-      ...(await cached.value),
-      discovery: { cacheHit: true, depth, ttlMs: DISCOVERY_CACHE_TTL_MS },
-    };
-  }
-  if (cached) discoveryCache.delete(cacheKey);
+	const cacheKey = JSON.stringify({
+		depth,
+		platform: process.platform,
+		path: process.env.PATH ?? "",
+		ghidra: process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR ?? "",
+		ida: process.env.IDA_HOME ?? process.env.IDADIR ?? "",
+		jadx: process.env.JADX_HOME ?? "",
+	});
+	const cached = discoveryCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) {
+		return {
+			...(await cached.value),
+			discovery: { cacheHit: true, depth, ttlMs: DISCOVERY_CACHE_TTL_MS },
+		};
+	}
+	if (cached) discoveryCache.delete(cacheKey);
 
-  const startedAtMs = Date.now();
-  const value = (async (): Promise<Record<string, unknown>> => {
-    const [ghidra, ida, jadx, android] = await Promise.all([
-      boundedDiscoveryProbe("Ghidra", () => discover("ghidra")),
-      boundedDiscoveryProbe("IDA", () => discover("ida")),
-      boundedDiscoveryProbe("JADX", () => discover("jadx")),
-      boundedDiscoveryProbe("Android build tools", discoverAndroidUtilities),
-    ]);
-    const available: ToolInventory = {
-      ghidra: ghidra.value,
-      ida: ida.value,
-      jadx: jadx.value,
-    };
-    const androidUtilities = android.value ?? {};
-    const probeErrors = Object.fromEntries(
-      [
-        ["ghidra", ghidra.error],
-        ["ida", ida.error],
-        ["jadx", jadx.error],
-        ["androidBuildTools", android.error],
-      ].filter((entry): entry is [string, string] => Boolean(entry[1])),
-    );
+	const startedAtMs = Date.now();
+	const value = (async (): Promise<Record<string, unknown>> => {
+		const [ghidra, ida, jadx, android] = await Promise.all([
+			boundedDiscoveryProbe("Ghidra", () => discover("ghidra")),
+			boundedDiscoveryProbe("IDA", () => discover("ida")),
+			boundedDiscoveryProbe("JADX", () => discover("jadx")),
+			boundedDiscoveryProbe("Android build tools", discoverAndroidUtilities),
+		]);
+		const available: ToolInventory = {
+			ghidra: ghidra.value,
+			ida: ida.value,
+			jadx: jadx.value,
+		};
+		const androidUtilities = android.value ?? {};
+		const probeErrors = Object.fromEntries(
+			[
+				["ghidra", ghidra.error],
+				["ida", ida.error],
+				["jadx", jadx.error],
+				["androidBuildTools", android.error],
+			].filter((entry): entry is [string, string] => Boolean(entry[1])),
+		);
 
-    let capabilities: Record<string, unknown>;
-    if (depth === "deep") {
-      const deep = await boundedDiscoveryProbe("Deep tool health", () =>
-        installationCapabilities(available, androidUtilities),
-      );
-      capabilities =
-        deep.value ??
-        ({
-          platform: process.platform,
-          ghidra: { headless: available.ghidra },
-          ida: { headless: available.ida },
-          jadx: { cli: available.jadx },
-          androidBuildTools: androidUtilities,
-          androidStudio: { detected: false },
-          supplementalTools: {},
-          toolSelectionGuide: {},
-          cacheDirectory: analysisCacheRoot(),
-        } satisfies Record<string, unknown>);
-      if (deep.error) probeErrors.deepHealth = deep.error;
-    } else {
-      capabilities = {
-        platform: process.platform,
-        ghidra: { headless: available.ghidra },
-        ida: { headless: available.ida },
-        jadx: { cli: available.jadx },
-        androidBuildTools: androidUtilities,
-        androidStudio: { plugins: [], status: "deep discovery not requested" },
-        supplementalTools: {},
-        toolSelectionGuide: {
-          nextStep:
-            "Run deep discovery to verify versions, GUI tools, plugins, decompilers, and supplemental utilities.",
-        },
-        cacheDirectory: analysisCacheRoot(),
-      };
-    }
-    return {
-      capabilities,
-      ...(Object.keys(probeErrors).length > 0 ? { probeErrors } : {}),
-      discovery: {
-        cacheHit: false,
-        depth,
-        durationMs: Date.now() - startedAtMs,
-        ttlMs: DISCOVERY_CACHE_TTL_MS,
-      },
-    };
-  })();
-  discoveryCache.set(cacheKey, {
-    expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS,
-    value,
-  });
-  try {
-    return await value;
-  } catch (error) {
-    discoveryCache.delete(cacheKey);
-    throw error;
-  }
+		let capabilities: Record<string, unknown>;
+		if (depth === "deep") {
+			const deep = await boundedDiscoveryProbe("Deep tool health", () =>
+				installationCapabilities(available, androidUtilities),
+			);
+			capabilities =
+				deep.value ??
+				({
+					platform: process.platform,
+					ghidra: { headless: available.ghidra },
+					ida: { headless: available.ida },
+					jadx: { cli: available.jadx },
+					androidBuildTools: androidUtilities,
+					androidStudio: { detected: false },
+					supplementalTools: {},
+					toolSelectionGuide: {},
+					cacheDirectory: analysisCacheRoot(),
+				} satisfies Record<string, unknown>);
+			if (deep.error) probeErrors.deepHealth = deep.error;
+		} else {
+			capabilities = {
+				platform: process.platform,
+				ghidra: { headless: available.ghidra },
+				ida: { headless: available.ida },
+				jadx: { cli: available.jadx },
+				androidBuildTools: androidUtilities,
+				androidStudio: { plugins: [], status: "deep discovery not requested" },
+				supplementalTools: {},
+				toolSelectionGuide: {
+					nextStep:
+						"Run deep discovery to verify versions, GUI tools, plugins, decompilers, and supplemental utilities.",
+				},
+				cacheDirectory: analysisCacheRoot(),
+			};
+		}
+		return {
+			capabilities,
+			...(Object.keys(probeErrors).length > 0 ? { probeErrors } : {}),
+			discovery: {
+				cacheHit: false,
+				depth,
+				durationMs: Date.now() - startedAtMs,
+				ttlMs: DISCOVERY_CACHE_TTL_MS,
+			},
+		};
+	})();
+	discoveryCache.set(cacheKey, {
+		expiresAt: Date.now() + DISCOVERY_CACHE_TTL_MS,
+		value,
+	});
+	try {
+		return await value;
+	} catch (error) {
+		discoveryCache.delete(cacheKey);
+		throw error;
+	}
 }
 
 function chooseAuto(
@@ -2428,48 +2471,176 @@ function chooseAuto(
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
-    if(input.operation === "advanced_analysis") {
-      if(!input.advanced_action) throw new Error("advanced_action is required");
-      if(input.report_format === "html") throw new Error("Advanced evidence supports JSON only");
-      const action = input.advanced_action;
-      if(action === "decrypt_blob" && input.output_file)throw new Error("Plaintext export is not enabled; decryption returns receipts and structural evidence only");
-      let result;
-      if (["graph_build","graph_query","notebook_validate","notebook_run","cfg_analyze","trace_slice","trace_taint"].includes(action)) {
-        if(!input.target || !path.isAbsolute(input.target))throw new Error("Absolute analysis document required");
-        if(context.signal?.aborted)result={protocol:"cline-advanced-analysis/v1" as const,status:"cancelled" as const,engine:"host",engineVersion:"1",evidence:{reason:"Cancelled before execution"},limitations:[]};
-        else if(action === "cfg_analyze" || action === "trace_slice" || action === "trace_taint")result=programEvidenceResult(action,await readAnalysisJson(input.target,8*1024*1024));
-        else if(action === "graph_build" || action === "graph_query")result=graphResult(action,await readAnalysisJson(input.target,8*1024*1024),input.advanced_options?.graph_query);
-        else if(action === "notebook_run")result=await runAnalysisNotebook(input.target,path.join(analysisCacheRoot(),"notebooks"),runAdvancedAnalysis,context.signal,Math.min(input.timeout_ms??300000,300000));
-        else {const prepared=await prepareNotebook(input.target);result={protocol:"cline-advanced-analysis/v1" as const,status:"completed" as const,engine:"static-notebook",engineVersion:"static-notebook/v1",evidence:{notebookHash:prepared.notebookHash,totalBytes:prepared.totalBytes,cells:prepared.notebook.cells.map(cell=>({id:cell.id,action:cell.action,dependsOn:cell.dependsOn,...prepared.paths.get(cell.id)}))},limitations:["Validation checks configuration and confined input paths; it does not execute engines or targets."]};}
-      } else result=await runAdvancedAnalysis({action,target:input.target,compareTarget:input.compare_target,limit:Math.min(input.max_results??200,1000),timeoutMs:input.timeout_ms,options:input.advanced_options},context.signal);
-      const bundle=advancedEvidenceBundle(input.advanced_action,result);
-      let reportOutputFile:string|undefined;
-      if(input.report_output_file){
-        if(!path.isAbsolute(input.report_output_file))throw new Error("Report output must be absolute");
-        await enforceOutputPath(input.report_output_file,input.acknowledge_external_output);
-        reportOutputFile=input.report_output_file;await fs.mkdir(path.dirname(reportOutputFile),{recursive:true});
-        await fs.writeFile(reportOutputFile,JSON.stringify(bundle,null,2),{flag:"wx",mode:0o600});
-      }
-      return JSON.stringify({operation:input.operation,...bundle,reportOutputFile,durationMs:Date.now()-started},null,2);
-    }
-		const pathRefreshed = await refreshProcessPath();
-		if (input.operation === "discover") {
-      const discovered = await discoverCapabilities(
-        input.discovery_depth ?? "fast",
-			);
-      const capabilities = discovered.capabilities as {
-        ida?: { idalibActivationScript?: string };
-        ghidra?: { bundledPyGhidra?: string };
-      };
+		if (input.function_selector && input.operation !== "decompile")
+			throw new Error("function_selector is only accepted for decompile");
+		if (input.operation === "advanced_analysis") {
+			if (!input.advanced_action)
+				throw new Error("advanced_action is required");
+			if (input.report_format === "html")
+				throw new Error("Advanced evidence supports JSON only");
+			const action = input.advanced_action;
+			if (action === "decrypt_blob" && input.output_file)
+				throw new Error(
+					"Plaintext export is not enabled; decryption returns receipts and structural evidence only",
+				);
+			let result: AdvancedResult;
+			if (action === "investigation_graph") {
+				if (!input.target)
+					throw new Error("Investigation index target is required");
+				const source = await readInvestigationResult(input.target);
+				result = graphResult("graph_build", {
+					schemaVersion: 1,
+					results: [source],
+				});
+				if (source.status === "partial") result.status = "partial";
+			} else if (action === "investigation_query") {
+				if (!input.target)
+					throw new Error("Investigation index target is required");
+				result = context.signal?.aborted
+					? {
+							protocol: "cline-advanced-analysis/v1" as const,
+							status: "cancelled" as const,
+							engine: "host",
+							engineVersion: "1",
+							evidence: { reason: "Cancelled before execution" },
+							limitations: [],
+						}
+					: await queryInvestigation(
+							input.target,
+							input.advanced_options?.investigation_query,
+						);
+			} else if (
+				[
+					"graph_build",
+					"graph_query",
+					"notebook_validate",
+					"notebook_run",
+					"cfg_analyze",
+					"trace_slice",
+					"trace_taint",
+				].includes(action)
+			) {
+				if (!input.target || !path.isAbsolute(input.target))
+					throw new Error("Absolute analysis document required");
+				if (context.signal?.aborted)
+					result = {
+						protocol: "cline-advanced-analysis/v1" as const,
+						status: "cancelled" as const,
+						engine: "host",
+						engineVersion: "1",
+						evidence: { reason: "Cancelled before execution" },
+						limitations: [],
+					};
+				else if (
+					action === "cfg_analyze" ||
+					action === "trace_slice" ||
+					action === "trace_taint"
+				)
+					result = programEvidenceResult(
+						action,
+						await readAnalysisJson(input.target, 8 * 1024 * 1024),
+					);
+				else if (action === "graph_build" || action === "graph_query")
+					result = graphResult(
+						action,
+						await readAnalysisJson(input.target, 8 * 1024 * 1024),
+						input.advanced_options?.graph_query,
+					);
+				else if (action === "notebook_run")
+					result = await runAnalysisNotebook(
+						input.target,
+						path.join(analysisCacheRoot(), "notebooks"),
+						runAdvancedAnalysis,
+						context.signal,
+						Math.min(input.timeout_ms ?? 300000, 300000),
+					);
+				else {
+					const prepared = await prepareNotebook(input.target);
+					result = {
+						protocol: "cline-advanced-analysis/v1" as const,
+						status: "completed" as const,
+						engine: "static-notebook",
+						engineVersion: "static-notebook/v1",
+						evidence: {
+							notebookHash: prepared.notebookHash,
+							totalBytes: prepared.totalBytes,
+							cells: prepared.notebook.cells.map((cell) => ({
+								id: cell.id,
+								action: cell.action,
+								dependsOn: cell.dependsOn,
+								...prepared.paths.get(cell.id),
+							})),
+						},
+						limitations: [
+							"Validation checks configuration and confined input paths; it does not execute engines or targets.",
+						],
+					};
+				}
+			} else
+				result = await runAdvancedAnalysis(
+					{
+						action,
+						target: input.target,
+						compareTarget: input.compare_target,
+						limit: Math.min(input.max_results ?? 200, 1000),
+						timeoutMs: input.timeout_ms,
+						options: input.advanced_options,
+					},
+					context.signal,
+				);
+			const investigationIndex =
+				!context.signal?.aborted && result.engine === "android-static"
+					? await persistInvestigation(
+							path.join(analysisCacheRoot(), "investigations"),
+							result,
+						)
+					: undefined;
+			const bundle = advancedEvidenceBundle(input.advanced_action, result);
+			let reportOutputFile: string | undefined;
+			if (input.report_output_file) {
+				if (!path.isAbsolute(input.report_output_file))
+					throw new Error("Report output must be absolute");
+				await enforceOutputPath(
+					input.report_output_file,
+					input.acknowledge_external_output,
+				);
+				reportOutputFile = input.report_output_file;
+				await fs.mkdir(path.dirname(reportOutputFile), { recursive: true });
+				await fs.writeFile(reportOutputFile, JSON.stringify(bundle, null, 2), {
+					flag: "wx",
+					mode: 0o600,
+				});
+			}
 			return JSON.stringify(
 				{
-          ...discovered,
+					operation: input.operation,
+					...bundle,
+					investigationIndex,
+					reportOutputFile,
+					durationMs: Date.now() - started,
+				},
+				null,
+				2,
+			);
+		}
+		const pathRefreshed = await refreshProcessPath();
+		if (input.operation === "discover") {
+			const discovered = await discoverCapabilities(
+				input.discovery_depth ?? "fast",
+			);
+			const capabilities = discovered.capabilities as {
+				ida?: { idalibActivationScript?: string };
+				ghidra?: { bundledPyGhidra?: string };
+			};
+			return JSON.stringify(
+				{
+					...discovered,
 					pathRefreshed,
 					recommendations: {
-            ida: capabilities.ida?.idalibActivationScript
+						ida: capabilities.ida?.idalibActivationScript
 							? `Activate idalib once with: uv run "${capabilities.ida.idalibActivationScript}"`
 							: "Set IDADIR or IDA_HOME if IDA is installed but not detected.",
-            ghidra: capabilities.ghidra?.bundledPyGhidra
+						ghidra: capabilities.ghidra?.bundledPyGhidra
 							? `Install bundled PyGhidra with: py -m pip install --no-index -f "${capabilities.ghidra.bundledPyGhidra}" pyghidra`
 							: "Set GHIDRA_INSTALL_DIR if Ghidra is installed but not detected.",
 					},
@@ -2478,12 +2649,12 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				2,
 			);
 		}
-    const available: ToolInventory = {
-      ghidra: await discover("ghidra"),
-      ida: await discover("ida"),
-      jadx: await discover("jadx"),
-    };
-    const androidUtilities = await discoverAndroidUtilities();
+		const available: ToolInventory = {
+			ghidra: await discover("ghidra"),
+			ida: await discover("ida"),
+			jadx: await discover("jadx"),
+		};
+		const androidUtilities = await discoverAndroidUtilities();
 		if (!input.target) throw new Error("target is required for this operation");
 		if (!path.isAbsolute(input.target))
 			throw new Error("target must be an absolute path");
@@ -2663,7 +2834,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			}
 			const strings = stages.strings as Record<string, unknown>;
 			const apkSecurity = stages.apkSecurity as
-        Record<string, unknown> | undefined;
+				| Record<string, unknown>
+				| undefined;
 			const report: Record<string, unknown> = {
 				schemaVersion: FORENSIC_REPORT_SCHEMA_VERSION,
 				operation: input.operation,
@@ -3036,6 +3208,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				"No compatible reverse-engineering engine was found. Configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
 			);
 		const gui = input.operation === "open_gui";
+		if (
+			input.function_selector &&
+			(input.operation !== "decompile" || engine === "jadx")
+		)
+			throw new Error(
+				"function_selector is only supported for Ghidra/IDA decompile; use JADX single-class or exact DEX/Smali method retrieval instead",
+			);
 		const command = gui ? await discover(engine, true) : available[engine];
 		if (!command) throw new Error(`${engine} executable was not found`);
 		const { outputDir, persistent, outputScope } =
@@ -3094,13 +3273,25 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					const scriptPaths: string[] = [];
 					const postScripts: string[] = [];
 					if (input.operation === "decompile") {
-						const decompileScript =
-							await ensureGhidraDecompileScript(outputDir);
+						const decompileScript = await ensureGhidraDecompileScript(
+							outputDir,
+							input.function_selector,
+						);
 						scriptPaths.push(path.dirname(decompileScript));
 						postScripts.push(
 							"-postScript",
 							path.basename(decompileScript),
 							path.join(outputDir, "decompiled.c"),
+							...(input.function_selector
+								? [
+										input.function_selector.symbol ? "symbol" : "address",
+										Buffer.from(
+											input.function_selector.symbol ??
+												input.function_selector.address ??
+												"",
+										).toString("base64"),
+									]
+								: []),
 						);
 					}
 					if (input.script_path) {
@@ -3131,6 +3322,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						const decompileScript = await ensureIdaDecompileScript(
 							outputDir,
 							path.join(outputDir, "decompiled.c"),
+							input.function_selector,
 						);
 						args.push(`-S${shellLikeQuote(decompileScript)}`);
 					}

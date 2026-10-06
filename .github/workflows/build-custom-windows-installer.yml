@@ -157,10 +157,25 @@ jobs:
           $python = Join-Path $engineRoot 'Scripts/python.exe'
           & $python -m pip install --disable-pip-version-check -r sdk/packages/core/scripts/requirements-advanced-windows.txt
           if ($LASTEXITCODE -ne 0) { throw "Pinned portable engine installation failed" }
+          & $python workers/android-capture/server.test.py
+          if ($LASTEXITCODE -ne 0) { throw "Owned Android protocol fixtures failed (not live-device validation)" }
+          & $python workers/android-capture/capture_support.test.py
+          if ($LASTEXITCODE -ne 0) { throw "Bounded native module fixtures failed (not live-device validation)" }
+          & $python workers/android-capture/setup-controller.test.py
+          if ($LASTEXITCODE -ne 0) { throw "Controller setup plan fixtures failed (not VM provisioning evidence)" }
           $env:CLINE_RE_PYTHON = $python
           Push-Location sdk
           try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }
           finally { Pop-Location }
+
+      - name: Build pinned Android instrumentation bundle
+        working-directory: workers/android-capture
+        shell: pwsh
+        run: |
+          bun install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Android agent dependency installation failed" }
+          bun run build
+          if ($LASTEXITCODE -ne 0) { throw "Android instrumentation compilation failed (not live-device validation)" }
 
       - name: Upload consolidated validation evidence
         if: ${{ always() }}
@@ -182,7 +197,13 @@ jobs:
 
       - name: Build NSIS installer
         working-directory: apps/examples/desktop-app
-        run: bunx tauri build --bundles nsis
+        shell: pwsh
+        run: |
+          # Cargo cache includes old bundle outputs. Never select an old installer
+          # merely because its filename/version still matches this source.
+          Remove-Item 'src-tauri/target/release/bundle/nsis' -Recurse -Force -ErrorAction SilentlyContinue
+          & bunx tauri build --bundles nsis
+          if ($LASTEXITCODE -ne 0) { throw "Tauri build failed with exit code $LASTEXITCODE" }
 
       - name: Optionally Authenticode-sign installer
         id: signing
@@ -368,6 +389,15 @@ jobs:
           $sidecarExe = Get-ChildItem $installLocation -Filter 'code-sidecar.exe' -Recurse | Select-Object -First 1
           if (-not $appExe) { throw "cline-app.exe not found under $installLocation" }
           if (-not $sidecarExe) { throw "code-sidecar.exe not found under $installLocation" }
+          $builtSidecar = 'src-tauri/bin/code-sidecar-x86_64-pc-windows-msvc.exe'
+          if (-not (Test-Path $builtSidecar)) { throw 'Current built sidecar is missing' }
+          $builtHash = (Get-FileHash $builtSidecar -Algorithm SHA256).Hash
+          $installedHash = (Get-FileHash $sidecarExe.FullName -Algorithm SHA256).Hash
+          if ($builtHash -ne $installedHash) {
+            throw 'Installed sidecar does not match the current source build'
+          }
+          "Installed sidecar SHA256: $installedHash" | Out-File 'dist/custom-installer/BUILD-INFO.txt' -Encoding utf8 -Append
+
 
           foreach ($binary in @($appExe, $sidecarExe)) {
             $signature = Get-AuthenticodeSignature $binary.FullName

@@ -25,7 +25,13 @@ const Edge = z
 	.object({
 		source: z.string().max(80),
 		target: z.string().max(80),
-		relation: z.enum(["contains", "declares", "invokes-candidate"]),
+		relation: z.enum([
+			"contains",
+			"declares",
+			"invokes-candidate",
+			"references-candidate",
+			"jni-export-name-candidate",
+		]),
 		confidence: Confidence,
 	})
 	.strict();
@@ -108,15 +114,16 @@ export function buildEvidenceGraph(document: unknown) {
 			kind: z.infer<typeof Node>["kind"],
 			name: string,
 			confidence: z.infer<typeof Confidence> = "reported",
+			boundArtifact = artifact,
 		) => {
-			const id = `e-${hash(`${artifact}:${kind}:${name}`)}`;
+			const id = `e-${hash(`${boundArtifact}:${kind}:${name}`)}`;
 			if (!nodes.has(id) && nodes.size >= 10000)
 				throw new Error("Graph node budget exceeded");
 			nodes.set(id, {
 				id,
 				kind,
-				label: name,
-				artifactSha256: artifact,
+				label: name.slice(0, 4096),
+				artifactSha256: boundArtifact,
 				confidence,
 				evidenceIndex: index,
 			});
@@ -129,6 +136,112 @@ export function buildEvidenceGraph(document: unknown) {
 		for (const item of result.limitations)
 			if (coverage.size < 100) coverage.add(item);
 		const data = result.evidence;
+		if (result.engine === "android-static") {
+			const artifactIds = new Map<string, string>(),
+				methodIds = new Map<string, string>(),
+				nativeIds = new Map<string, string>();
+			const items = records(data.artifacts);
+			for (const item of items) {
+				if (
+					typeof item.id !== "string" ||
+					typeof item.sha256 !== "string" ||
+					!/^[a-f0-9]{64}$/.test(item.sha256)
+				)
+					throw new Error("Invalid Android artifact graph identity");
+				const id = node(
+					"artifact",
+					`${item.id}:${String(item.logicalPath ?? item.format)}`,
+					"reported",
+					item.sha256,
+				);
+				artifactIds.set(item.id, id);
+				edge(root, id, "contains", "reported");
+				const dex = item.dex as Record<string, unknown> | undefined;
+				for (const method of [
+					...records(dex?.methods),
+					...records(data.selectedMethods).filter(
+						(method) => method.artifactId === item.id,
+					),
+				]) {
+					if (typeof method.id !== "string") continue;
+					const labelText = `${method.id}:${String(method.classDescriptor)}->${String(method.name)}${String(method.descriptor)}`;
+					const target = node(
+						"dex-method",
+						labelText,
+						method.defined === true ? "reported" : "candidate",
+						item.sha256,
+					);
+					methodIds.set(method.id, target);
+					edge(
+						id,
+						target,
+						method.defined === true ? "declares" : "references-candidate",
+						method.defined === true ? "reported" : "candidate",
+					);
+				}
+				for (const reference of records(dex?.loaderReferences))
+					edge(
+						id,
+						node(
+							"unresolved-call",
+							`${String(reference.id)}:pool-reference:${String(reference.classDescriptor)}->${String(reference.name)}`,
+							"candidate",
+							item.sha256,
+						),
+						"references-candidate",
+						"candidate",
+					);
+				const native = item.native as Record<string, unknown> | undefined;
+				for (const symbol of [
+					...records(native?.functions),
+					...records(native?.jniExports),
+					...records(data.selectedFunctions).filter(
+						(symbol) => symbol.artifactId === item.id,
+					),
+				]) {
+					if (typeof symbol.id !== "string") continue;
+					const target = node(
+						"native-symbol",
+						`${symbol.id}:${String(symbol.name)}@${String(symbol.addressHex)}`,
+						"reported",
+						item.sha256,
+					);
+					nativeIds.set(symbol.id, target);
+					edge(id, target, "declares", "reported");
+				}
+			}
+			for (const item of items) {
+				if (
+					typeof item.parentId === "string" &&
+					typeof item.id === "string" &&
+					artifactIds.has(item.parentId) &&
+					artifactIds.has(item.id)
+				)
+					edge(
+						artifactIds.get(item.parentId)!,
+						artifactIds.get(item.id)!,
+						"contains",
+						"reported",
+					);
+			}
+			for (const match of records(data.relationships)) {
+				if (match.kind !== "jni-export-match-candidate") continue;
+				const source = methodIds.get(String(match.methodId)),
+					target = nativeIds.get(String(match.nativeSymbolId));
+				if (source && target)
+					edge(source, target, "jni-export-name-candidate", "candidate");
+				else if (coverage.size < 100)
+					coverage.add(
+						"JNI candidate endpoint missing from bounded listings; no endpoint inferred",
+					);
+			}
+			if (result.status === "partial" && coverage.size < 100)
+				coverage.add(
+					"Android source coverage is partial; static edges are not runtime bindings",
+				);
+			return;
+		}
+
 		for (const cls of Array.isArray(data.classes)
 			? data.classes.slice(0, 2000)
 			: []) {

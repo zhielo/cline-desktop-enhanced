@@ -49,6 +49,7 @@ async function main() {
   const pkg = JSON.parse(await readFile(path.join(desktop, "package.json"), "utf8"));
   const job = (name, args, cwd = root) => ({ name, args, cwd, timeoutMs: 20 * 60 * 1000 });
   const prerequisites = [
+    job("Check Android worker embed", ["scripts/generate-android-investigation.mjs", "--check"]),
     job("Verify custom fork preservation", ["run", "scripts/verify-custom-fork.ts"]),
     job("Build SDK packages", ["run", "build:sdk"]),
   ];
@@ -59,9 +60,21 @@ async function main() {
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),
     job("Test Windows installer configuration", ["-F", "@cline/code", "test:windows-installer"]),
     job("Test AI task report", ["x", "vitest", "run", "webview/lib/task-report.test.ts", "--config", "vitest.config.mts"], desktop),
+    job("Test desktop authentication boundary", ["x", "vitest", "run",
+      "sidecar/server.test.ts", "sidecar/server-auth.test.ts", "sidecar/transport-auth.test.ts",
+      "--config", "vitest.config.mts"], desktop),
+    job("Test desktop transport recovery", ["x", "vitest", "run",
+      "webview/lib/desktop-client.test.ts",
+      "webview/lib/run-error.test.ts",
+      "--config", "vitest.config.mts"], desktop),
+    job("Test Hub lifecycle deadlines", ["x", "vitest", "run",
+      "sdk/packages/shared/src/hub.test.ts", "--config", "vitest.config.mts"]),
     job("Test desktop chat UI", ["x", ...pkg.scripts["test:chat-ui"].split(/\s+/)], desktop),
     job("Run desktop customization tests", ["x", "vitest", "run",
       "apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts",
+      "apps/examples/desktop-app/sidecar/android-runtime-client.test.ts",
+      "apps/examples/desktop-app/sidecar/analysis-investigation-store.test.ts",
+      "apps/examples/desktop-app/webview/components/views/chat/investigation-workspace.test.tsx",
       "apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts",
       "apps/examples/desktop-app/sidecar/engineering-control-plane.test.ts",
@@ -75,21 +88,30 @@ async function main() {
       "apps/examples/desktop-app/webview/components/views/settings/functions-view.test.tsx",
       "apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.test.tsx",
       "--config", "apps/examples/desktop-app/vitest.config.mts"]),
+    job("Test real Hub shutdown runtime identity", ["x", "vitest", "run", "src/hub/daemon/shutdown.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
     job("Run focused SDK safety tests", ["x", "vitest", "run",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
+ "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",
+ "sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/targeted-decompiler-scripts.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.test.ts",
       "sdk/packages/core/src/runtime/orchestration/notion-provenance.test.ts",
       "sdk/packages/core/src/runtime/orchestration/runtime-builder.test.ts",
+      "sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.test.ts",
       "--config", "vitest.config.mts", "--testTimeout=60000"]),
   ];
   if (flags.includes("--engines")) {
     const python = process.env.CLINE_RE_PYTHON;
     if (!python || !path.isAbsolute(python)) throw new Error("--engines requires an absolute trusted CLINE_RE_PYTHON");
+    for (const corpus of ["server.test.py", "capture_support.test.py", "setup-controller.test.py"])
+      checks.push({ ...job(`Android controller corpus: ${corpus}`, [path.join(root, "workers/android-capture", corpus)]), executable: python });
     for (const corpus of ["advanced-analysis-worker.test.py", "advanced-ir.test.py", "advanced-crypto.test.py"])
       checks.push({ ...job(`Engine corpus: ${corpus}`, [path.join(root, "sdk/packages/core/scripts", corpus)]), executable: python });
   }

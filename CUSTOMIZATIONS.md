@@ -2,6 +2,13 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Quality gate reliability
+
+- Full workspace typechecks run sequentially with the same `-F '*'` scope to avoid simultaneously loading every TypeScript graph. No workspace, strict check or failed diagnostic is suppressed.
+- SDK smoke checks use separate Node/Bun projects, both mandatory, so portable-engine tests have Bun declarations without leaking Bun fetch augmentation into Node-only tests. Long-history OAuth fixtures explicitly constrain user/assistant input roles instead of widening them to tool-role messages.
+- SDK CI uses the same pinned Bun 1.3.14 and frozen lockfile as the Windows installer. Downstream lint and test gates remain blocking.
+- Functions custom controls use instance-unique React IDs and explicit label/control associations; duplicate view instances are covered by a DOM regression test.
+
 ## Build policy
 
 - Produce an **unsigned Windows x64 NSIS `setup.exe`** for private use and testing.
@@ -11,6 +18,39 @@ This file is the durable customization ledger for this repository. The source on
 - Run `scripts/verify-custom-fork.ts` before every custom Windows build. If a customization is intentionally renamed or replaced, update both the implementation and the verifier in the same commit.
 
 ## Preserved customizations
+
+### Combined Android/native investigation integration
+
+- One integration PR includes long-session recovery, capability-authenticated transport, bounded Android discovery, exact DEX bytecode and native function analysis, static JNI export-name correlation, saved-index graphs, and targeted decompiler adapters.
+- `analysis_readiness` executes owned DEX/ELF fixtures with the actual installed Androguard/LIEF/Capstone engines. Missing engines stay blocked; installed-version inventory alone is not an execution claim.
+- `android_method_code` uses an exact class/name/descriptor. `native_function` selects a unique file-backed executable symbol by exact name or hexadecimal entry address; it returns bounded linear disassembly, not a recovered CFG or runtime proof.
+- `investigation_graph` reads validated immutable indexes. Loader pool references and JNI export-name matches remain candidate edges, never observed registration or execution.
+- Ghidra/IDA exact-function adapters and JADX single-class cache identities remain approval-gated. Adapter templates and mock routing tests do not substitute for installed engine/license validation.
+- Windows builds delete only cached NSIS bundle outputs, compare installed/fresh sidecar hashes, and assert the transport-auth protocol plus baked-in source commit. Installer smoke still requires strict unauthorized denials; no 404-as-success fallback.
+- Licensed engines, provisioned isolated runtime workers, unknown-key recovery, full devirtualization and universal deobfuscation are not shipped capabilities. See `docs/COMBINED_ANDROID_TOOLING.md` for requirements and coverage.
+
+
+### Long-session edit and recovery reliability
+
+- Hub session creation and checkpoint restoration use a bounded ten-minute
+  lifecycle deadline instead of the thirty-second metadata deadline. The
+  desktop lifecycle waiter has a thirty-second response grace period.
+- Desktop command deadlines are selected centrally by action, covering direct
+  history-attachment callers as well as chat hooks. Explicit caller deadlines
+  still take precedence, ordinary control/status calls remain bounded, and
+  model-turn sends remain unbounded until their runtime completion or disconnect.
+- Message-edit forks reconcile ambiguous lifecycle timeouts using the existing
+  stable operation ID before one bounded retry. Provider authentication failures
+  and arbitrary send failures are not classified as retryable edits.
+- A failed re-attachment preserves visible messages for the same session without
+  mixing another thread's transcript into it.
+- Mandatory installer validation includes desktop transport/recovery tests, Hub
+  lifecycle-deadline tests, and long-history ClinePass OAuth continuation coverage.
+  OAuth recovery retains completed tool evidence rather than replaying the user
+  turn. These tests do not claim that revoked credentials can be repaired without
+  signing in again.
+
+See `docs/LONG_SESSION_RECOVERY.md`.
 
 ### Engineering Control Center
 
@@ -472,3 +512,51 @@ Do not hide a new regression by weakening assertions or making a required custom
 - New notebook/graph documents are fully staged, synced, and published atomically without overwrite using a same-directory hard link. This requires a hard-link-capable filesystem (normally NTFS on Windows); unsupported filesystems fail closed. This does not claim protection against privileged or non-cooperating actors, Windows reparse races, or stronger ACLs than the workspace provides.
 - Both input and pretty-printed saved documents must fit the 1 MiB UTF-8 byte budget. Nine required document-store regressions cover complete publication, no-overwrite, explicit approval, reviewed hash updates, stale content, path confinement, graph integrity, serialized expansion, concurrent publication and foreign-lock preservation.
 - Notebook preparation actions wrap with an explicit gap at narrow widths. The authoring tests require that container while preserving separate file-write and exact analysis approvals. All previous source, real Windows engine, terminal, installer and installed-app gates remain mandatory.
+
+## Android static investigation foundation
+
+- `artifact_discovery`, `android_relationships` and `android_method` use a reviewable, fixed stdlib-only Python worker, embedded deterministically in the SDK. They never execute target code. Python must be available; optional engines are not required for these three actions.
+- Bounded ZIP/APK, gzip and zlib traversal inspects names independently of extensions and carves embedded standard DEX (035–040) from opaque/native inputs. DEX candidates must pass Adler32/SHA1, header/table/map checks and bounded method/class-data/code-item range checks before structured metadata is emitted. This is not full bytecode verification. Compact DEX, v041, arbitrary encryption and unsupported formats are not silently promoted to valid DEX.
+- Source hashes, parent identities, member lineage and byte offsets survive discovery. Method selectors require the exact class descriptor/name/prototype and report ambiguity across artifacts. Loader references are explicitly reference-only; JNI mangled names are derived candidates, not confirmed exports or runtime bindings. ELF discovery is signature-only; structural native evidence remains a separate `native_inventory` operation.
+- Successful/partial investigations save immutable, private, content-addressed JSON indexes using atomic no-overwrite publication. `investigation_query` performs bounded literal-text/kind/ID queries with pagination, preserving incomplete coverage and candidate status. Hashes detect corruption, not privileged tampering. Windows ACL/reparse protections remain host responsibilities; hard-link-capable storage is required.
+- The SDK fixture corpus, real supervised worker, schema limits, index concurrency/integrity and embed-parity tests are blocking in consolidated validation. Existing recovery, engine, terminal, installer and installed-sidecar gates are retained.
+- This is the static foundation, not all advanced recommendations. Full JNI registration correlation, decompiler/function-target adapters, runtime DEX capture, transform proof pipelines, live taint/CFG recovery, sandbox provisioning and general devirtualization are not delivered. See `docs/ANDROID_INVESTIGATION.md` for usage and remaining work.
+
+## Authenticated desktop command transport
+
+- Every `/transport` upgrade requires the per-process sidecar capability, regardless of trusted or absent Origin. The existing `approval_token` query is retained for the native/dev WebSocket bootstrap; authenticated originless integrations may also use a bearer header. Duplicates, conflicting credential sources, missing/empty/oversized tokens fail closed with constant-time equality for equal-length inputs.
+- WebSocket handlers separately require authenticated, registered connections before command dispatch or event replay. Interactive tool-prompt approval authority still requires the trusted browser Origin; possessing the capability is a privileged command credential, not a granular integration permission profile.
+- `/shutdown` and `/telemetry/error` require bearer authentication plus the existing Origin policy. HTTP query credentials are not accepted. Health and marketplace catalog remain public and contain no capability. Authenticated telemetry input is streamed with a 64 KiB ceiling; diagnostic capability/query/bearer redaction occurs before field limits and telemetry capture.
+- Native shutdown remains the existing child-process signal/termination path, not HTTP. Native ready-line token handoff and `dev:headless` ephemeral-token handoff are preserved. Manual split development must explicitly share the sidecar capability with the web endpoint; there is no insecure tokenless fallback on the server.
+- Installed-sidecar smoke now denies tokenless transport/shutdown, executes one authenticated diagnostic command and rejects the prior automatically generated capability after restart. Explicit token overrides must be rotated by their operator. Required authentication, recovery, optional-engine, terminal, installer and installed-app checks remain blocking. No TLS, OS sandbox, protection against same-user memory/log access, or comprehensive desktop security audit is claimed.
+
+## Durable advanced investigation and isolated Android capture
+
+- Workspace-scoped SQLite investigations persist checkpoints, questions, artifact/request/result hashes, bounded cross-language summaries and integrity chains independently of chat. Stale writes fail; forks inherit metadata, never executable jobs. Evidence truncation counts are explicit. Signed worker observations remain reports, not hardware attestation or runtime class-loader identity proof.
+- The optional fixed Android Frida worker observes supported Java DEX loaders and JNI registrations under explicit upload/execution/capture-write approval. Exact pinned worker identity, nonce and artifact binding are verified before private content-addressed capture and original signed receipt publication. Output is bounded; duplicate/expired/interrupted nonces never automatically replay. GET recovery requires prior approval and leaves original task failure status visible.
+- Existing targeted native/decompiler adapters and expression/IR/CFG tools link evidence and model-limited transformation records into investigations without rewriting originals. Whole-method equivalence, automatic key recovery, generic devirtualization, native module hash capture and VM provisioning remain unimplemented. Live Android capture needs operator-provisioned Linux/Android isolation and separate device tests; owned protocol fixtures and bundle compilation are not device validation.
+- Consolidated checks require investigation-store, Android client and investigation UI regressions. Windows gates additionally require owned worker protocol fixtures and the pinned Frida bundle build while preserving real portable engines, terminal, unsigned installer and installed-app checks. See docs/ADVANCED_INVESTIGATION_INTEGRATION.md and workers/android-capture/README.md. No merge or release is enabled.
+
+- Terminal process completion keeps the PTY/ConPTY handle open for a bounded 250 ms trailing-output drain after exit notification, without respawning the child. The regression fixture deliberately emits after exit notification and still requires TTY/input/resize evidence. Real Windows terminal smoke remains mandatory; this is not an unlimited EOF-drain guarantee.
+
+## Confirmed CI blocker repair after advanced integration
+
+- The Python Android worker now closes SQLite connections deterministically after both commit and rollback. SQLite's native connection context manager alone does not close a connection; open handles caused Windows fixture cleanup to fail with WinError 32. New regressions require closed handles and rollback on exceptions; no cleanup failure is suppressed.
+- Real Hub shutdown tests probe the exact Bun executable they launch, then require the fixture to report that same runtime version. The obsolete Bun 1.3.13 string assertion is removed, not the exact-version check, authenticated shutdown, forced-exit evidence, discovery cleanup or 5-second exit bound.
+- Real Hub shutdown identity tests are now an additional blocking consolidated validation stage. Existing engine, terminal, installer and installed-app gates stay required. New exact-head Windows results remain necessary; Linux fixtures cannot establish Windows installer success.
+
+## Remaining practical runtime safeguards in the same integration
+
+- Native disk capture is opt-in and requires a signed native capability before upload. A fixed bounded reader permits at most four package-scoped .so paths, 2 MiB each within the shared 8 MiB capture budget. Captured disk ELF hashes bind signed JNI module-relative observations; this is not proof of the loaded memory image, structural ELF validity or system-library capture. Both desktop and worker reject plaintext artifact formats without their independent capture consent.
+- JNI observations include the approved capture nonce, process, class handle and best-effort bootstrap/class-loader identity hash. Cross-session observations are rejected. Class-loader hashes may collide and handles are transient, so correlation never becomes a global class identity proof.
+- Worker receipt payloads expire on a periodic sweep, not only when another request arrives. Explicit authenticated DELETE with boolean confirmation clears non-running worker payloads and returns signed logical-removal evidence while preserving nonce tombstones. SQLite secure_delete is enabled, but snapshots, backups, SSD copies, RAM and desktop capture files are not proven erased.
+- setup-controller.py defaults to a no-write plan; --apply validates operator isolation, TLS paths and pinned Bun before installing a private venv, building fixed instrumentation and generating protected credentials without printing secrets or starting a server/sample. It requires an already isolated Linux controller, valid TLS, lifecycle hooks and Android target; it does not provision the outer VM or network policy.
+- Owned native-reader, purge/retention, setup-plan and client-consent tests are mandatory in their appropriate source/Windows/engine gates. No real-device test, universal decryption or devirtualization is claimed.
+
+- User-selected physical Android mode checks online state, exact serial and emulator property, then refuses replacement of an existing app. A reviewed dedicated-device cleanup policy is mandatory at worker startup/setup. No rooting, flashing, factory reset, emulator provisioning or phone snapshot is performed. The remote VM snapshot claim concerns the controller, not hardware. Real physical-device validation remains required.
+
+- KernelSU/KSUN physical targets use bounded read-only root (`su -c id`), serial/state, emulator-property and ABI preflight. Frida must connect before installation. Signed device summaries report hashed serial and uid0 observation, not hardware attestation. Native root reads accept only prevalidated package paths; no root-manager setting, module, wipe, flashing or arbitrary command is exposed.
+
+- Physical device SHA256 identity is copied from the signed worker manifest into the approved request and checked again before upload; successful signed device observations must match it. Missing/broken physical identity fails closed. This is serial-based configuration binding, not hardware cryptographic attestation.
+
+- Remaining Windows CI fixture blockers are repaired without skips: supervisor fixtures use a copied native runtime executable with spaces plus owned JS on Windows (POSIX shell retained elsewhere); writer metadata compares the exact canonical filesystem path; capacity fixtures stay alive until explicit manager disposal rather than expiring under slow CI. Corresponding suites are added to mandatory focused SDK validation. Windows reruns remain necessary.

@@ -1,0 +1,14 @@
+node_modules/
+agent.js
+__pycache__/
+*.sqlite*
+*.pem
+*.key
+capture-*/
+
+controller.env
+public.pem
+signing.pem
+token
+.venv/
+data/

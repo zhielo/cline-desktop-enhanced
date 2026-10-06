@@ -428,6 +428,51 @@ afterEach(async () => {
 });
 
 describe("useChatSession", () => {
+	it.each([true, false])(
+		"preserves only matching history after a hydration failure (same session: %s)",
+		async (sameSession) => {
+			let failRead = false;
+			invokeMock.mockImplementation(
+				async (command: string, args?: Record<string, unknown>) => {
+					if (command === "read_session_messages") {
+						if (failRead) throw new Error("Hub connection closed");
+						return [{
+							id: "saved-answer",
+							sessionId: "long-chat",
+							role: "assistant",
+							content: "Important work already completed",
+							createdAt: 1,
+						}];
+					}
+					if (command === "chat_session_command") {
+						const request = args?.request as { action?: string };
+						if (request.action === "attach")
+							return { sessionId: "long-chat", status: "completed" };
+					}
+					return [];
+				},
+			);
+			const history = (sessionId: string) => ({
+				sessionId,
+				status: "completed" as const,
+				provider: "cline-pass",
+				model: "test-model",
+				cwd: "/workspace",
+				workspaceRoot: "/workspace",
+				startedAt: "2026-10-05T00:00:00Z",
+			});
+			await act(async () => current.hydrateSession(history("long-chat")));
+			expect(current.messages.some((message) => message.id === "saved-answer")).toBe(true);
+			failRead = true;
+			await act(async () =>
+				current.hydrateSession(history(sameSession ? "long-chat" : "other-chat")),
+			);
+			expect(current.status).toBe("error");
+			expect(current.messages.some((message) => message.id === "saved-answer")).toBe(sameSession);
+			expect(current.messages.at(-1)?.role).toBe("error");
+		},
+	);
+
 	const cloudSessionConfig = {
 		provider: "cline",
 		model: "test-model",

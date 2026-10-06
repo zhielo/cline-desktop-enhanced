@@ -10,6 +10,10 @@ const CAPABILITY_OWNER_DISCONNECT =
 	/^Capability owner client .+ disconnected before request was resolved\.?$/i;
 const DESKTOP_TRANSPORT_DISCONNECT =
 	/^Desktop backend transport (?:closed|unavailable)/i;
+// Only an idempotent fork caller may reconcile/retry these ambiguous replies.
+// In particular, never classify provider 401s or arbitrary sends as recoverable.
+const FORK_LIFECYCLE_TIMEOUT =
+	/^(?:Desktop command timed out waiting for chat_session_command|Hub command session\.(?:create|restore) timed out after \d+ms(?: .*)?)$/i;
 
 function normalizedFailureDetail(detail: string): string {
 	return detail
@@ -33,7 +37,8 @@ export function isRecoverableForkTransportError(error: unknown): boolean {
 	return (
 		TRANSIENT_HUB_DISCONNECT.test(normalized) ||
 		CAPABILITY_OWNER_DISCONNECT.test(normalized) ||
-		DESKTOP_TRANSPORT_DISCONNECT.test(normalized)
+		DESKTOP_TRANSPORT_DISCONNECT.test(normalized) ||
+		FORK_LIFECYCLE_TIMEOUT.test(normalized)
 	);
 }
 

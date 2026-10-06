@@ -104,3 +104,37 @@ describe("desktop execution workbench boundaries", () => {
 		expect(diagnostics.processSessions.pipeFallback).toBe(true);
 	});
 });
+
+describe("Android capture authorization before retrieval or execution", () => {
+	it("requires previous approval and capture-write consent for GET recovery", async () => {
+		await expect(
+			handleCommand(context, "recover_android_capture", {
+				cwd: workspace,
+				planId: "unknown",
+			}),
+		).rejects.toThrow("write confirmation");
+		await expect(
+			handleCommand(context, "recover_android_capture", {
+				cwd: workspace,
+				planId: "unknown",
+				confirmCaptureWrite: true,
+			}),
+		).rejects.toThrow("Previously approved");
+	});
+	it("refuses execution without independent upload and authorized execution confirmations", async () => {
+		await expect(
+			handleCommand(context, "run_dynamic_analysis", {
+				cwd: workspace,
+				input: { operation: "android_capture" },
+			}),
+		).rejects.toThrow("execution and artifact upload confirmation");
+	});
+	it("requires explicit investigation metadata write consent", async () => {
+		await expect(
+			handleCommand(context, "mutate_investigation", {
+				cwd: workspace,
+				input: { action: "create", title: "Owned" },
+			}),
+		).rejects.toThrow();
+	});
+});

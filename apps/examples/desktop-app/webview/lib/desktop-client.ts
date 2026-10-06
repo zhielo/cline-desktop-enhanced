@@ -9,6 +9,7 @@ import type {
 	HubTaskCreateInput,
 	HubTaskUpdateInput,
 } from "@cline/shared";
+import { HUB_SESSION_LIFECYCLE_TIMEOUT_MS } from "@cline/shared/browser";
 import type {
 	DesktopTransportEvent,
 	DesktopTransportMessage,
@@ -16,6 +17,7 @@ import type {
 	DesktopTransportResponse,
 	DesktopTransportState,
 } from "@/lib/desktop-transport";
+import { redactDesktopTransportSecrets } from "./desktop-transport-security";
 
 // Lazily import the Tauri invoke API only when available. When running in
 // sidecar/web mode (without Tauri), this module may not exist or the bridge
@@ -93,6 +95,15 @@ export async function resolveDesktopBackendHttpEndpoint(): Promise<string> {
 	return endpoint.toString().replace(/\/$/, "");
 }
 
+async function desktopHttpAuthorization(): Promise<string> {
+	const values = new URL(
+		await resolveDesktopBackendWsEndpoint(),
+	).searchParams.getAll("approval_token");
+	if (values.length !== 1 || !values[0])
+		throw new Error("Authenticated desktop endpoint unavailable");
+	return `Bearer ${values[0]}`;
+}
+
 type PendingRequest = {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
@@ -152,7 +163,7 @@ const ERROR_REPORT_FIELD_LIMIT = 500;
 
 function boundedReportString(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim()
-		? value.slice(0, ERROR_REPORT_FIELD_LIMIT)
+		? redactDesktopTransportSecrets(value).slice(0, ERROR_REPORT_FIELD_LIMIT)
 		: undefined;
 }
 
@@ -179,6 +190,9 @@ function raceDeadline<T>(
 }
 
 const REQUEST_TIMEOUT_MS = 120_000;
+// The desktop waiter must outlive the Hub's bounded lifecycle deadline so
+// slow restores return their actual result/error instead of a false UI timeout.
+const SESSION_LIFECYCLE_TIMEOUT_MS = HUB_SESSION_LIFECYCLE_TIMEOUT_MS + 30_000;
 const RECONNECT_BASE_DELAY_MS = 400;
 const RECONNECT_MAX_DELAY_MS = 4_000;
 /**
@@ -208,6 +222,45 @@ export function isTauriAvailable(): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function defaultCommandTimeoutMs(
+	command: string,
+	args?: Record<string, unknown>,
+): number | null {
+	if (
+		command === "run_dynamic_analysis" ||
+		command === "recover_android_capture"
+	) {
+		// Bounded worker execution plus reset/cleanup grace. A timeout is not permission to replay.
+		const input = isRecord(args?.input) ? args.input : {};
+		return Math.min(
+			300000,
+			Math.max(
+				1000,
+				typeof input.timeout_ms === "number" &&
+					Number.isFinite(input.timeout_ms)
+					? input.timeout_ms
+					: 120000,
+			) + 180000,
+		);
+	}
+	if (command !== "chat_session_command" || !isRecord(args?.request)) {
+		return REQUEST_TIMEOUT_MS;
+	}
+	switch (args.request.action) {
+		case "send":
+			// The reply represents a whole model/tool turn, not an acknowledgement.
+			return null;
+		case "start":
+		case "attach":
+		case "fork":
+		case "restore_checkpoint":
+			return SESSION_LIFECYCLE_TIMEOUT_MS;
+		default:
+			// Status, queue and control calls still fail promptly.
+			return REQUEST_TIMEOUT_MS;
+	}
 }
 
 function parseDesktopDebugLogPayload(
@@ -343,10 +396,16 @@ class DesktopClient {
 			const endpoint = await resolveDesktopBackendHttpEndpoint();
 			const response = await fetch(`${endpoint}/telemetry/error`, {
 				method: "POST",
-				headers: { "content-type": "application/json" },
+				headers: {
+					"content-type": "application/json",
+					authorization: await desktopHttpAuthorization(),
+				},
 				body: JSON.stringify({
 					operation: report.operation,
-					errorMessage,
+					errorMessage: redactDesktopTransportSecrets(errorMessage).slice(
+						0,
+						4000,
+					),
 					errorType,
 					handled: report.handled ?? true,
 					command: report.command,
@@ -522,7 +581,9 @@ class DesktopClient {
 					}
 					if (this.transportState !== "connected") {
 						reject(
-							new Error(`Desktop backend transport unavailable at ${endpoint}`),
+							new Error(
+								`Desktop backend transport unavailable at ${redactDesktopTransportSecrets(endpoint)}`,
+							),
 						);
 						return;
 					}
@@ -672,7 +733,7 @@ class DesktopClient {
 		return await new Promise<T>((resolve, reject) => {
 			const timeoutMs =
 				options?.timeoutMs === undefined
-					? REQUEST_TIMEOUT_MS
+					? defaultCommandTimeoutMs(command, args)
 					: options.timeoutMs;
 			const timeoutId =
 				timeoutMs === null

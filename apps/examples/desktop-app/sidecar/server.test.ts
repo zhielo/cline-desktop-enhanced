@@ -25,7 +25,11 @@ function createHandler(onShutdown = vi.fn()) {
 
 function createTelemetryHandler(capture = vi.fn()) {
 	return {
-		handler: createFetchHandler({ telemetry: { capture } } as never),
+		handler: createFetchHandler(
+			{ telemetry: { capture } } as never,
+			undefined,
+			TEST_APPROVAL_TOKEN,
+		),
 		capture,
 	};
 }
@@ -87,7 +91,7 @@ describe("sidecar HTTP origin checks", () => {
 			server,
 		);
 
-		expect(response?.status).toBe(404);
+		expect(response?.status).toBe(403);
 		expect(server.upgrade).not.toHaveBeenCalled();
 	});
 
@@ -101,7 +105,7 @@ describe("sidecar HTTP origin checks", () => {
 		);
 
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
-			data: { canApproveTools: false },
+			data: { authenticated: true, canApproveTools: false },
 		});
 	});
 
@@ -118,7 +122,7 @@ describe("sidecar HTTP origin checks", () => {
 		);
 
 		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
-			data: { canApproveTools: true },
+			data: { authenticated: true, canApproveTools: true },
 		});
 	});
 
@@ -143,16 +147,15 @@ describe("sidecar HTTP origin checks", () => {
 
 	it("does not grant approval authority to a spoofed trusted origin", async () => {
 		const server = createTestServer();
-		await createHandler()(
+		const response = await createHandler()(
 			new Request("http://127.0.0.1:3126/transport", {
 				headers: { origin: "tauri://localhost" },
 			}),
 			server,
 		);
 
-		expect(server.upgrade).toHaveBeenCalledWith(expect.any(Request), {
-			data: { canApproveTools: false },
-		});
+		expect(response?.status).toBe(401);
+		expect(server.upgrade).not.toHaveBeenCalled();
 	});
 });
 
@@ -166,6 +169,7 @@ describe("desktop error telemetry", () => {
 				headers: {
 					origin: "tauri://localhost",
 					"content-type": "application/json",
+					authorization: `Bearer ${TEST_APPROVAL_TOKEN}`,
 				},
 				body: JSON.stringify({
 					operation: "webview.command_timeout",
@@ -204,6 +208,7 @@ describe("desktop error telemetry", () => {
 				headers: {
 					origin: "tauri://localhost",
 					"content-type": "application/json",
+					authorization: `Bearer ${TEST_APPROVAL_TOKEN}`,
 				},
 				body: JSON.stringify({
 					operation: "webview.uncaught_error",
@@ -256,6 +261,7 @@ describe("desktop error telemetry", () => {
 				headers: {
 					origin: "tauri://localhost",
 					"content-type": "application/json",
+					authorization: `Bearer ${TEST_APPROVAL_TOKEN}`,
 				},
 				body: JSON.stringify({
 					operation: "webview.uncaught_error",
@@ -295,4 +301,39 @@ describe("desktop error telemetry", () => {
 		expect(response?.status).toBe(403);
 		expect(capture).not.toHaveBeenCalled();
 	});
+});
+
+it("redacts the configured capability in authenticated telemetry", async () => {
+	const server = createTestServer();
+	const { handler, capture } = createTelemetryHandler();
+	const response = await handler(
+		new Request("http://127.0.0.1:3126/telemetry/error", {
+			method: "POST",
+			headers: { authorization: `Bearer ${TEST_APPROVAL_TOKEN}` },
+			body: JSON.stringify({
+				operation: "test.redact",
+				errorMessage: `capability ${TEST_APPROVAL_TOKEN}`,
+				sourceUrl: `ws://localhost/transport?approval_token=${TEST_APPROVAL_TOKEN}`,
+				stack: `Bearer ${TEST_APPROVAL_TOKEN}`,
+			}),
+		}),
+		server,
+	);
+	expect(response?.status).toBe(202);
+	expect(JSON.stringify(capture.mock.calls)).not.toContain(TEST_APPROVAL_TOKEN);
+	expect(JSON.stringify(capture.mock.calls)).toContain("[redacted]");
+});
+
+it("does not capture token-bearing parser snippets from malformed JSON", async () => {
+	const { handler, capture } = createTelemetryHandler();
+	const response = await handler(
+		new Request("http://127.0.0.1:3126/telemetry/error", {
+			method: "POST",
+			headers: { authorization: `Bearer ${TEST_APPROVAL_TOKEN}` },
+			body: `malformed ${TEST_APPROVAL_TOKEN}`,
+		}),
+		createTestServer(),
+	);
+	expect(response?.status).toBe(400);
+	expect(JSON.stringify(capture.mock.calls)).not.toContain(TEST_APPROVAL_TOKEN);
 });

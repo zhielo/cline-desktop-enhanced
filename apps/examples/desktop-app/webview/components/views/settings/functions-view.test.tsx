@@ -256,7 +256,7 @@ describe("FunctionsView project intelligence", () => {
     );
     expect(approvals).toHaveLength(2);
     await act(async () => {
-      approvals.forEach((input) => input.click());
+      approvals.forEach((input) => { input.click(); });
     });
     const ask = [...container.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("Ask Notion Agent"),
@@ -518,3 +518,11 @@ describe("FunctionsView bridge depth presets", () => {
     );
   });
 });
+
+ it("associates custom controls with labels and keeps IDs unique across instances",async()=>{
+ await act(async()=>{root.render(<><FunctionsView onOpenMcpSettings={vi.fn()}/><FunctionsView onOpenMcpSettings={vi.fn()}/></>);});
+ await vi.waitFor(()=>expect(container.textContent).toContain("Connected"));
+ const labels=[...container.querySelectorAll<HTMLLabelElement>("label[for]")];expect(labels.length).toBeGreaterThan(0);
+ for(const label of labels){expect(label.control).not.toBeNull();expect(container.contains(label.control)).toBe(true);}
+ const ids=[...container.querySelectorAll("[id]")].map(control=>control.id);expect(new Set(ids).size).toBe(ids.length);
+ });

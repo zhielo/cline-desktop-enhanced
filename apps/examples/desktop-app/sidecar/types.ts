@@ -143,7 +143,7 @@ export type PendingAskQuestion = {
 };
 
 export type SidecarWebSocketClient = {
-	data?: { canApproveTools?: boolean };
+	data?: { authenticated?: boolean; canApproveTools?: boolean };
 	send: (message: string) => void;
 	close?: () => void;
 };

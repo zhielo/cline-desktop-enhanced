@@ -1061,7 +1061,6 @@ export function useChatSession(environmentId: string) {
 			};
 			if (
 				body.action === "send" ||
-				body.action === "fork" ||
 				(body.action === "start" && bodyConfig.executionTarget === "cloud")
 			) {
 				return await desktopClient.invoke<ChatSessionCommandResponse>(
@@ -4053,7 +4052,17 @@ export function useChatSession(environmentId: string) {
 				const msg = errorMessage(err);
 				setError(msg);
 				setStatus("error");
-				setMessages([makeErrorChatMessage(session.sessionId, msg)]);
+				// A failed re-attachment is not evidence that the saved/live
+				// transcript disappeared. Keep this session's visible history;
+				// never leak the previous thread into a different session.
+				setMessages((previous) =>
+					sliceMessages([
+						...previous.filter(
+							(message) => message.sessionId === session.sessionId,
+						),
+						makeErrorChatMessage(session.sessionId, msg),
+					]),
+				);
 			} finally {
 				if (hydrationRequestIdRef.current === requestId) {
 					setIsHydratingSession(false);

@@ -128,3 +128,136 @@ describe("AnalysisWorkbench approval flow", () => {
 		);
 	});
 });
+
+it("offers bounded Android investigations through the existing approval flow", async () => {
+	const invoke = vi
+		.spyOn(desktopClient, "invoke")
+		.mockImplementation(async (command: string, args?: unknown) => {
+			if (command === "list_analysis_tasks") return [];
+			if (command === "prepare_analysis_task")
+				return {
+					id: "android-plan",
+					kind: "static",
+					operation: "advanced_analysis",
+					target: "C:\\work\\sample.apk",
+					request: (args as { request: unknown }).request,
+					requestHash: "a".repeat(64),
+					permission: "Inspect",
+					status: "awaiting-approval",
+					requirements: [],
+					risk: "low",
+					budget: {},
+					createdAt: new Date().toISOString(),
+					expiresAt: new Date(Date.now() + 60000).toISOString(),
+				};
+			return {};
+		});
+	await act(async () => {
+		root.render(<AnalysisWorkbench cwd={"C:\\work"} environmentId="local" />);
+		await Promise.resolve();
+	});
+	const operation = [...container.querySelectorAll("select")].find((select) =>
+		[...select.options].some((option) => option.value === "advanced_analysis"),
+	)!;
+	await act(async () => {
+		operation.value = "advanced_analysis";
+		operation.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const advanced = container.querySelector(
+		'select[aria-label="Advanced function"]',
+	) as HTMLSelectElement;
+	for (const action of [
+		"artifact_discovery",
+		"android_relationships",
+		"android_method",
+		"android_method_code",
+		"native_function",
+		"analysis_readiness",
+		"investigation_graph",
+		"investigation_query",
+	])
+		expect(
+			[...advanced.options].some((option) => option.value === action),
+		).toBe(true);
+	await act(async () => {
+		advanced.value = "artifact_discovery";
+		advanced.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const target = container.querySelector(
+		'input[placeholder="Workspace-relative or absolute path"]',
+	) as HTMLInputElement;
+	await setInput(target, "sample.apk");
+	expect(container.textContent).toContain("not verified runtime relationships");
+	await clickText("Prepare static-analysis task");
+	expect(invoke).toHaveBeenCalledWith(
+		"prepare_analysis_task",
+		expect.objectContaining({
+			kind: "static",
+			request: expect.objectContaining({
+				advanced_action: "artifact_discovery",
+				operation: "advanced_analysis",
+				target: "sample.apk",
+			}),
+		}),
+	);
+	expect(
+		invoke.mock.calls.some(([command]) => command === "run_static_analysis"),
+	).toBe(false);
+});
+
+it("keeps exact decompiler selectors in the approval request and rejects envelope overrides", async () => {
+	const invoke = vi
+		.spyOn(desktopClient, "invoke")
+		.mockImplementation(async (command: string) =>
+			command === "list_analysis_tasks" ? [] : {},
+		);
+	await act(async () => {
+		root.render(<AnalysisWorkbench cwd={"C:\\work"} environmentId="local" />);
+		await Promise.resolve();
+	});
+	const operation = [...container.querySelectorAll("select")].find((s) =>
+		[...s.options].some((o) => o.value === "decompile"),
+	)!;
+	await act(async () => {
+		operation.value = "decompile";
+		operation.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const options = container.querySelector(
+		'textarea[aria-label="Targeted decompiler options JSON"]',
+	) as HTMLTextAreaElement;
+	async function value(text: string) {
+		await act(async () => {
+			Object.getOwnPropertyDescriptor(
+				HTMLTextAreaElement.prototype,
+				"value",
+			)?.set?.call(options, text);
+			options.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+	}
+	await setInput(
+		container.querySelector(
+			'input[placeholder="Workspace-relative or absolute path"]',
+		) as HTMLInputElement,
+		"owned.so",
+	);
+
+	invoke.mockClear();
+	await value('{"engine":"ida","executionToken":"override"}');
+	await clickText("Prepare static-analysis task");
+	expect(
+		invoke.mock.calls.some(
+			([c]) => c === "prepare_analysis_task" || c === "run_static_analysis",
+		),
+	).toBe(false);
+	await value('{"function_selector":{"address":"0x1000"}}');
+	await clickText("Prepare static-analysis task");
+	expect(invoke).toHaveBeenCalledWith(
+		"prepare_analysis_task",
+		expect.objectContaining({
+			request: expect.objectContaining({
+				operation: "decompile",
+				function_selector: { address: "0x1000" },
+			}),
+		}),
+	);
+});

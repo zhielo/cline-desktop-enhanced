@@ -4,14 +4,248 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"apps/examples/desktop-app/scripts/desktop-startup.test.ts",markers:["HUB_BOOTSTRAP_TIMEOUT_MS","timeout: HUB_BOOTSTRAP_TIMEOUT_MS","SIDECAR_READY_TIMEOUT_MS","expect(health.ok).toBe(true)","expect(restartedHealth.ok).toBe(true)","duplicate session fork operation id"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",markers:["tool with spaces.exe", "fs.copyFile(process.execPath", "fixture.args"]},
+ {path:"sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",markers:["sourceRepo: realpathSync.native(repo)"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts"]},
 
- {path:"scripts/validate-advanced-build.mjs",markers:["Test desktop chat UI","Run desktop customization tests","analysis-task-orchestrator.test.ts","analysis-sandbox-client.test.ts","engineering-control-plane.test.ts","engineering-git-review.test.ts","engineering-worktree-manager.test.ts","engineering-workspace.test.tsx","commands-workbench.test.ts","process-session-manager.test.ts","reverse-engineering.test.ts","runtime-builder.test.ts","repository-tool.test.ts","notion-agent-bridge.test.ts","notion-agent-patch.test.ts","functions-view.test.tsx","notion-provenance.test.ts","permission-profile.test.ts","Verify custom fork preservation","Build SDK packages","Run required desktop sidecar regression suite","Test Windows installer configuration","Test AI task report","Test desktop chat UI","Run desktop customization tests","Run focused SDK safety tests","--testTimeout=60000","runValidation","runJobs","timeoutMs","summary.json"]},
+ {path:"workers/android-capture/capture_support.py",markers:["physical_preflight", "Root probe denied", "uid0-reported", "attestation"]},
+ {path:"workers/android-capture/capture.py",markers:["Refusing to replace an existing app", "device.enumerate_processes()", "support.physical_preflight", "'exec-out','su','-c'"]},
+ {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["device_serial_sha256", "Physical device changed", "Physical device observation differs"]},
 
- {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["CLINE_RE_ALLOW_DECRYPTION","CLINE_RE_PRIVATE_KEY_FILE","host-gated-authenticated-decryption"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.ts",markers:["buildEvidenceGraph","queryEvidenceGraph","content-identity-not-authentication"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/analysis-notebook.ts",markers:["prepareNotebook","runAnalysisNotebook","Input changed during analysis","Checkpoint budget exceeded"]},
-  {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["cline-advanced-analysis/v1","prepareProcessEnvironment","external-adapter-required","killTree","advancedEvidenceBundle"]},
+ {path:"workers/android-capture/capture_support.py",markers:["authorized_module_path", "MAX_MODULE=2*1024*1024", "captured-disk-file-not-loaded-memory-proof", "len(attempted)>=4"]},
+ {path:"workers/android-capture/server.py",markers:["sweep_retention", "PRAGMA secure_delete=ON", "def do_DELETE", "physicalErasure", "confirmPlaintextRemoval"]},
+ {path:"workers/android-capture/setup-controller.py",markers:["ALREADY isolated Linux controller", "--apply", "os.O_EXCL", "No server, VM or target was started"]},
+ {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["capture_native", "without capture consent", "observation session", "android-native-capture"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["capture_support.test.py", "setup-controller.test.py", "not VM provisioning evidence"]},
+
+ {path:"workers/android-capture/server.py",markers:["@contextmanager", "with connection:yield connection", "finally:connection.close()"]},
+ {path:"workers/android-capture/server.test.py",markers:["test_database_connections_close_after_success", "test_database_connections_close_and_rollback_after_failure"]},
+ {path:"sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",markers:["probeBunRuntimeVersion", "daemon.runtimeVersion", "forced exit:", "toBeLessThan(5_000)"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["Test real Hub shutdown runtime identity", "vitest.e2e.config.ts"]},
+
+ {path:"sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",markers:["ConPTY can deliver trailing data", "setTimeout(resolve, 250)"]},
+
+ {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["verifyAndroidCapture", "receipt.json", "Worker capability changed before upload", "Capture directory must not contain symlinks"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-investigation-store.ts",markers:["BEGIN IMMEDIATE", "Investigation changed; reload before writing", "metadataCoverage", "equivalent-under-expression-model-only", "forked-with-inherited-evidence"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/investigation-workspace.tsx",markers:["Fork without replay", "correlateEvidence", "ambiguous-static-descriptor-matches", "unresolved-module-hash"]},
+ {path:"workers/android-capture/server.py",markers:["Nonce identity conflict", "expired", "bounded_collect", "get_all('Authorization'", "operator-enforced-disposable-android-and-denied-egress"]},
+ {path:"workers/android-capture/hooks.js",markers:["RegisterNatives", "InMemoryDexClassLoader", "rpc.exports"]},
+ {path:"workers/android-capture/README.md",markers:["NOT hardware attestation", "GET-only", "No such live-device result"]},
+ {path:"docs/ADVANCED_INVESTIGATION_INTEGRATION.md",markers:["No original binary is rewritten", "Exact-head", "not a token-refresh implementation"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["analysis-investigation-store.test.ts", "android-runtime-client.test.ts", "investigation-workspace.test.tsx"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["server.test.py", "Build pinned Android instrumentation bundle", "bun install --frozen-lockfile"]},
+
+ {path:"sdk/packages/core/package.json",markers:["bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit"]},
+
+ {path:"package.json",markers:["bun --sequential -F '*' typecheck"]},
+ {path:"sdk/packages/core/tsconfig.bun-smoke.json",markers:['"types": ["node", "bun"]']},
+ {path:".github/workflows/sdk-test.yml",markers:['bun-version: "1.3.14"', "bun install --frozen-lockfile", "bun run types", "run: bun run lint"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",markers:["const controlPrefix = useId()", "htmlFor={", "field-21"]},
+
+	{
+		path: "scripts/build-windows.ps1",
+		markers: [
+			"Build from a clean committed checkout",
+			"validate:advanced",
+			"advanced-windows-engine-smoke.test.ts",
+			"NOT RUN",
+			"Expected exactly one fresh installer",
+		],
+	},
+
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/targeted-decompiler-scripts.ts",
+		markers: ["getFunctionAt", "Ambiguous", "ida_hexrays"],
+	},
+	{
+		path: "docs/COMBINED_ANDROID_TOOLING.md",
+		markers: [
+			"analysis_readiness",
+			"native_function",
+			"Runtime requirements",
+			"not Windows installer evidence",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"Remove-Item 'src-tauri/target/release/bundle/nsis'",
+			"Get-FileHash $sidecarExe.FullName",
+			"Get-FileHash $builtSidecar",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/desktop-startup.test.ts",
+		markers: [
+			"sidecar-capability/v1",
+			"sourceCommit",
+			"denied.status).toBe(401)",
+		],
+	},
+
+	{
+		path: "apps/examples/desktop-app/sidecar/transport-auth.ts",
+		markers: [
+			"timingSafeEqual",
+			"MAX_TOKEN_BYTES",
+			"values.length > 1",
+			"hasSidecarAuthentication",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/server.ts",
+		markers: [
+			"hasSidecarAuthentication(req, approvalToken, true)",
+			"authenticated: true",
+			"ws.data?.authenticated !== true",
+			"MAX_ERROR_REPORT_BYTES",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/desktop-transport-security.ts",
+		markers: ["redactDesktopTransportSecrets", "knownToken", "[redacted]"],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/desktop-startup.test.ts",
+		markers: [
+			"Authenticated transport smoke timed out",
+			"shutdownDenied.status",
+			"stale.status",
+		],
+	},
+	{
+		path: "docs/DESKTOP_TRANSPORT_AUTH.md",
+		markers: ["all WebSocket commands", "Originless integrations", "No TLS"],
+	},
+	{
+		path: "sdk/packages/core/scripts/android-investigation-worker.py",
+		markers: [
+			"MAX_WORK",
+			"DEX Adler32 mismatch",
+			"verifiedBinding",
+			"methodsTruncated",
+			"unsafe/duplicate/encrypted ZIP member",
+			"Not evidence of encryption",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/android-investigation-index.ts",
+		markers: [
+			"cline-android-investigation/v1",
+			"content hash mismatch",
+			"await link(stagedFile, file)",
+			"Queries only cover indexed evidence",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/schemas.ts",
+		markers: [
+			"artifact_discovery",
+			"android_relationships",
+			"android_method",
+			"investigation_query",
+		],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"Check Android worker embed",
+			"android-investigation.test.ts",
+			"android-investigation-index.test.ts",
+		],
+	},
+	{
+		path: "docs/ANDROID_INVESTIGATION.md",
+		markers: [
+			"Not a runtime sandbox",
+			"RegisterNatives",
+			"Not yet implemented",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/scripts/desktop-startup.test.ts",
+		markers: [
+			"HUB_BOOTSTRAP_TIMEOUT_MS",
+			"timeout: HUB_BOOTSTRAP_TIMEOUT_MS",
+			"SIDECAR_READY_TIMEOUT_MS",
+			"expect(health.ok).toBe(true)",
+			"expect(restartedHealth.ok).toBe(true)",
+			"duplicate session fork operation id",
+		],
+	},
+
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"Test desktop chat UI",
+			"Run desktop customization tests",
+			"analysis-task-orchestrator.test.ts",
+			"analysis-sandbox-client.test.ts",
+			"engineering-control-plane.test.ts",
+			"engineering-git-review.test.ts",
+			"engineering-worktree-manager.test.ts",
+			"engineering-workspace.test.tsx",
+			"commands-workbench.test.ts",
+			"process-session-manager.test.ts",
+			"reverse-engineering.test.ts",
+			"runtime-builder.test.ts",
+			"repository-tool.test.ts",
+			"notion-agent-bridge.test.ts",
+			"notion-agent-patch.test.ts",
+			"functions-view.test.tsx",
+			"notion-provenance.test.ts",
+			"permission-profile.test.ts",
+			"Verify custom fork preservation",
+			"Build SDK packages",
+			"Run required desktop sidecar regression suite",
+			"Test Windows installer configuration",
+			"Test AI task report",
+			"Test desktop chat UI",
+			"Run desktop customization tests",
+			"Run focused SDK safety tests",
+			"--testTimeout=60000",
+			"runValidation",
+			"runJobs",
+			"timeoutMs",
+			"summary.json",
+		],
+	},
+
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",
+		markers: [
+			"CLINE_RE_ALLOW_DECRYPTION",
+			"CLINE_RE_PRIVATE_KEY_FILE",
+			"host-gated-authenticated-decryption",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.ts",
+		markers: [
+			"buildEvidenceGraph",
+			"queryEvidenceGraph",
+			"content-identity-not-authentication",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.ts",
+		markers: [
+			"prepareNotebook",
+			"runAnalysisNotebook",
+			"Input changed during analysis",
+			"Checkpoint budget exceeded",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",
+		markers: [
+			"cline-advanced-analysis/v1",
+			"prepareProcessEnvironment",
+			"external-adapter-required",
+			"killTree",
+			"advancedEvidenceBundle",
+		],
+	},
 	{
 		path: "CUSTOMIZATIONS.md",
 		markers: [
@@ -56,126 +290,129 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: ".github/workflows/build-custom-windows-installer.yml",
-		markers: ["Run consolidated custom fork validation", "validate:advanced", "include-hidden-files: true",
+		markers: [
+			"Run consolidated custom fork validation",
+			"validate:advanced",
+			"include-hidden-files: true",
 			"Build custom Windows installer",
 			"Get-AuthenticodeSignature",
 			"Upload verified setup.exe",
 			"CUSTOMIZATIONS.md",
 			"BUILD-INFO.txt",
 			"CLINE_TEST_SIDECAR_BIN",
-            "scripts/desktop-startup.test.ts",
+			"scripts/desktop-startup.test.ts",
 			"Record installer smoke-test result",
 			"Run process-session terminal smoke test",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
 			'BUN_VERSION: "1.3.14"',
 			"bun-version: ${{ env.BUN_VERSION }}",
-      "SBOM.spdx.json",
-      "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+			"SBOM.spdx.json",
+			"actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
 		],
 	},
-  {
-    path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
-    markers: [
-      "AnalysisTaskOrchestrator",
-      "awaiting-approval",
-      "executionToken",
-      "canonical full-request one-time token",
-      "timingSafeEqual",
-      "targetIdentity",
-      "expiresAt",
-      "resultHash",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/webview/components/views/chat/analysis-workbench.tsx",
-    markers: [
-      "prepare_analysis_task",
-      "approve_analysis_task",
-      "Approval boundary",
-      "Evidence ledger",
-      "Deep check",
-      "Export evidence bundle",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",
-    markers: [
-      "cline-analysis-worker/v1",
-      "pinned public key",
-      "ephemeralSnapshots",
-      "attestation signature",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/sidecar/engineering-control-plane.ts",
-    markers: [
-      "EngineeringControlPlane",
-      "PRAGMA journal_mode = WAL",
-      "requireWorktreeForWrites",
-      "claimReadyTasks",
-      "Only the agent that claimed the task may update it",
-      "Repository-writing tasks require worktree evidence",
-      "evaluateExecutionPolicy",
-      "scoreReviewRisk",
-      "routeEngineeringModel",
-      "isolated-vm",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/sidecar/engineering-worktree-manager.ts",
-    markers: [
-      "EngineeringWorktreeManager",
-      "cline/engineering/",
-      "baseRevision",
-      "outside the managed root",
-      "explicit discard confirmation",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/sidecar/engineering-git-review.ts",
-    markers: [
-      "buildEngineeringGitReview",
-      "Invalid Git comparison base",
-      "sensitiveFiles",
-      "publicApiChanged",
-      "symbols",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.tsx",
-    markers: [
-      "Engineering Control Center",
-      "Normal Cline chat remains unchanged",
-      "plan_engineering_mission",
-      "claim_engineering_tasks",
-      "Prepare next agent drafts",
-      "Git review evidence",
-      "Secure execution",
-      "Parallel agents",
-      "Git review",
-      "Model intelligence",
-    ],
-  },
-  {
-    path: "docs/ENGINEERING_CONTROL_CENTER.md",
-    markers: [
-      "Trust boundary",
-      "Normal chat isolation",
-      "Windows Sandbox",
-      "isolated VM",
-      "does not execute a mission",
-    ],
-  },
-  {
-    path: "docs/ANALYSIS_TRUST_BOUNDARY.md",
-    markers: [
-      "complete normalized request",
-      "single-use token",
-      "Dynamic analysis",
-      "administrator responsibility",
-    ],
-  },
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
+		markers: [
+			"AnalysisTaskOrchestrator",
+			"awaiting-approval",
+			"executionToken",
+			"canonical full-request one-time token",
+			"timingSafeEqual",
+			"targetIdentity",
+			"expiresAt",
+			"resultHash",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/analysis-workbench.tsx",
+		markers: [
+			"prepare_analysis_task",
+			"approve_analysis_task",
+			"Approval boundary",
+			"Evidence ledger",
+			"Deep check",
+			"Export evidence bundle",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",
+		markers: [
+			"cline-analysis-worker/v1",
+			"pinned public key",
+			"ephemeralSnapshots",
+			"attestation signature",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/engineering-control-plane.ts",
+		markers: [
+			"EngineeringControlPlane",
+			"PRAGMA journal_mode = WAL",
+			"requireWorktreeForWrites",
+			"claimReadyTasks",
+			"Only the agent that claimed the task may update it",
+			"Repository-writing tasks require worktree evidence",
+			"evaluateExecutionPolicy",
+			"scoreReviewRisk",
+			"routeEngineeringModel",
+			"isolated-vm",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/engineering-worktree-manager.ts",
+		markers: [
+			"EngineeringWorktreeManager",
+			"cline/engineering/",
+			"baseRevision",
+			"outside the managed root",
+			"explicit discard confirmation",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/engineering-git-review.ts",
+		markers: [
+			"buildEngineeringGitReview",
+			"Invalid Git comparison base",
+			"sensitiveFiles",
+			"publicApiChanged",
+			"symbols",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/engineering/engineering-workspace.tsx",
+		markers: [
+			"Engineering Control Center",
+			"Normal Cline chat remains unchanged",
+			"plan_engineering_mission",
+			"claim_engineering_tasks",
+			"Prepare next agent drafts",
+			"Git review evidence",
+			"Secure execution",
+			"Parallel agents",
+			"Git review",
+			"Model intelligence",
+		],
+	},
+	{
+		path: "docs/ENGINEERING_CONTROL_CENTER.md",
+		markers: [
+			"Trust boundary",
+			"Normal chat isolation",
+			"Windows Sandbox",
+			"isolated VM",
+			"does not execute a mission",
+		],
+	},
+	{
+		path: "docs/ANALYSIS_TRUST_BOUNDARY.md",
+		markers: [
+			"complete normalized request",
+			"single-use token",
+			"Dynamic analysis",
+			"administrator responsibility",
+		],
+	},
 	{
 		path: "apps/examples/desktop-app/sidecar/repository-tool.ts",
 		markers: [
@@ -891,19 +1128,116 @@ const requiredMarkers: Array<{
 ];
 
 requiredMarkers.push(
- {path:"sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.ts",markers:["analyzeProgramCfg","analyzeProgramTrace","not-proven","output budget"]},
- {path:"apps/examples/desktop-app/sidecar/analysis-document-store.ts",markers:["confirmWrite","validateNotebook","expectedSha256","Document changed since review"]},
- {path:"apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",markers:["bindRuntimeAnalysisRequest","submitAnalysisSandbox","worker_key_sha256","redirect:\"error\"","Receipt does not bind approved job"]},
- {path:"apps/examples/desktop-app/sidecar/notion-agent-bridge.ts",markers:["evidenceId","serialized","split"]},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/analysis-program-evidence.ts",
+		markers: [
+			"analyzeProgramCfg",
+			"analyzeProgramTrace",
+			"not-proven",
+			"output budget",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-document-store.ts",
+		markers: [
+			"confirmWrite",
+			"validateNotebook",
+			"expectedSha256",
+			"Document changed since review",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts",
+		markers: [
+			"bindRuntimeAnalysisRequest",
+			"submitAnalysisSandbox",
+			"worker_key_sha256",
+			'redirect:"error"',
+			"Receipt does not bind approved job",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/notion-agent-bridge.ts",
+		markers: ["evidenceId", "serialized", "split"],
+	},
 );
-requiredMarkers.push({path:"apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx",markers:["expectedSha256","Saving never executes analysis","graph_query"]},{path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate portable Windows analysis engines","advanced-windows-engine-smoke.test.ts","Real portable engine execution failed"]});
-requiredMarkers.push({path:"apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",markers:["bounded atomic analysis document publication","bounds serialized bytes","allows exactly one concurrent","never deletes another caller"]},{path:"apps/examples/desktop-app/sidecar/analysis-document-store.ts",markers:["Serialized document byte budget exceeded","await link(stage,path)"]});
+requiredMarkers.push(
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/analysis-authoring.tsx",
+		markers: [
+			"expectedSha256",
+			"Saving never executes analysis",
+			"graph_query",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"Validate portable Windows analysis engines",
+			"advanced-windows-engine-smoke.test.ts",
+			"Real portable engine execution failed",
+		],
+	},
+);
+requiredMarkers.push(
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",
+		markers: [
+			"bounded atomic analysis document publication",
+			"bounds serialized bytes",
+			"allows exactly one concurrent",
+			"never deletes another caller",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-document-store.ts",
+		markers: [
+			"Serialized document byte budget exceeded",
+			"await link(stage,path)",
+		],
+	},
+);
 const forbiddenPaths = [
 	"vitest.config.ts",
 	"apps/examples/vscode/vitest.config.ts",
 	"apps/examples/desktop-app/vitest.config.ts",
 ];
 const failures: string[] = [];
+
+requiredMarkers.push(
+	{
+		path: "sdk/packages/shared/src/hub.ts",
+		markers: [
+			"HUB_SESSION_LIFECYCLE_TIMEOUT_MS",
+			'case "session.create":',
+			'case "session.restore":',
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/desktop-client.ts",
+		markers: [
+			"HUB_SESSION_LIFECYCLE_TIMEOUT_MS",
+			"defaultCommandTimeoutMs",
+			"SESSION_LIFECYCLE_TIMEOUT_MS",
+		],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"Test desktop transport recovery",
+			"Test Hub lifecycle deadlines",
+			"session-runtime-orchestrator.test.ts",
+		],
+	},
+	{
+		path: "docs/LONG_SESSION_RECOVERY.md",
+		markers: [
+			"Authentication is separate",
+			"No automatic replay of sends",
+			"ten minutes",
+		],
+	},
+);
 
 for (const forbiddenPath of forbiddenPaths) {
 	if (existsSync(forbiddenPath)) {

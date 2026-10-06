@@ -252,14 +252,19 @@ describe("ProcessSessionManager", () => {
 							typeof data === "string"
 								? data
 								: Buffer.from(data).toString("utf8");
-						options.onData(Buffer.from(`input:${text}`, "utf8"));
 						resolveExit?.(0);
+						setTimeout(() => {
+							if (!terminal.closed)
+								options.onData(Buffer.from(`input:${text}`, "utf8"));
+						}, 30);
 						return Buffer.byteLength(text);
 					},
 					resize: (columns: number, rows: number) => {
 						resizedTo = [columns, rows];
 					},
-					close: () => {},
+					close: () => {
+						terminal.closed = true;
+					},
 				};
 				queueMicrotask(() =>
 					options.onData(Buffer.from("tty:true:true\n", "utf8")),
@@ -325,36 +330,36 @@ describe("ProcessSessionManager", () => {
 		}
 	});
 
-  it("falls back to bounded pipes when the PTY runtime is unavailable", async () => {
-    const manager = new ProcessSessionManager({
-      spawnTerminalProcess: () => {
-        throw new Error("Bun.Terminal is unavailable in this runtime");
-      },
-    });
-    try {
-      const started = await manager.start({
-        ownerSessionId: OWNER,
-        executable: process.execPath,
-        args: ["-e", "console.log('pipe fallback')"],
-        cwd: process.cwd(),
-        interactive: true,
-      });
-      expect(started).toMatchObject({
-        interactive: false,
-        terminalBackend: "pipe-fallback",
-      });
-      expect(started.terminalFallbackReason).toContain("Bun.Terminal");
-      await waitForCompletion(manager, started.processId);
-      const output = manager
-        .read(OWNER, started.processId)
-        .chunks.map((chunk) => chunk.text)
-        .join("");
-      expect(output).toContain("using bounded pipe mode");
-      expect(output).toContain("pipe fallback");
-    } finally {
-      await manager.dispose();
-    }
-  });
+	it("falls back to bounded pipes when the PTY runtime is unavailable", async () => {
+		const manager = new ProcessSessionManager({
+			spawnTerminalProcess: () => {
+				throw new Error("Bun.Terminal is unavailable in this runtime");
+			},
+		});
+		try {
+			const started = await manager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", "console.log('pipe fallback')"],
+				cwd: process.cwd(),
+				interactive: true,
+			});
+			expect(started).toMatchObject({
+				interactive: false,
+				terminalBackend: "pipe-fallback",
+			});
+			expect(started.terminalFallbackReason).toContain("Bun.Terminal");
+			await waitForCompletion(manager, started.processId);
+			const output = manager
+				.read(OWNER, started.processId)
+				.chunks.map((chunk) => chunk.text)
+				.join("");
+			expect(output).toContain("using bounded pipe mode");
+			expect(output).toContain("pipe fallback");
+		} finally {
+			await manager.dispose();
+		}
+	});
 
 	it("filters environment secrets and redacts explicitly granted values", async () => {
 		const filteredManager = new ProcessSessionManager();
@@ -457,28 +462,28 @@ describe("ProcessSessionManager", () => {
 			await manager.start({
 				ownerSessionId: OWNER,
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 30_000)"],
+				args: ["-e", "setInterval(() => {}, 1000)"],
 				cwd: process.cwd(),
 			});
 			await expect(
 				manager.start({
 					ownerSessionId: OWNER,
 					executable: process.execPath,
-					args: ["-e", "setTimeout(() => {}, 30_000)"],
+					args: ["-e", "setInterval(() => {}, 1000)"],
 					cwd: process.cwd(),
 				}),
 			).rejects.toThrow("limit reached for owner");
 			await manager.start({
 				ownerSessionId: "second-owner",
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 1000)"],
+				args: ["-e", "setInterval(() => {}, 1000)"],
 				cwd: process.cwd(),
 			});
 			await expect(
 				manager.start({
 					ownerSessionId: "third-owner",
 					executable: process.execPath,
-					args: ["-e", "setTimeout(() => {}, 1000)"],
+					args: ["-e", "setInterval(() => {}, 1000)"],
 					cwd: process.cwd(),
 				}),
 			).rejects.toThrow("2 active sessions");

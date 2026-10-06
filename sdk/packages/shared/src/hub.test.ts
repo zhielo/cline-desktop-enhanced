@@ -2,10 +2,28 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { HubCommandInput } from "./hub";
 import {
 	describeOutdatedHubSessions,
+	getDefaultHubCommandTimeoutMs,
 	HUB_CAPABILITIES,
 	isHubProtocolCompatible,
 	readHubScheduleMode,
+	resolveHubCommandTimeoutMs,
 } from "./hub";
+
+describe("Hub session lifecycle deadlines", () => {
+	it.each(["session.create", "session.restore"] as const)(
+		"allows bounded long-history initialization for %s",
+		(command) => {
+			expect(getDefaultHubCommandTimeoutMs(command)).toBe(600_000);
+			expect(resolveHubCommandTimeoutMs(command, 500)).toBe(500);
+			expect(resolveHubCommandTimeoutMs(command, null)).toBeNull();
+		},
+	);
+
+	it("keeps ordinary reads bounded and model turns unbounded", () => {
+		expect(getDefaultHubCommandTimeoutMs("session.get")).toBe(30_000);
+		expect(getDefaultHubCommandTimeoutMs("session.send_input")).toBeNull();
+	});
+});
 
 describe("HUB_CAPABILITIES", () => {
 	it("advertises the task queue command surface", () => {

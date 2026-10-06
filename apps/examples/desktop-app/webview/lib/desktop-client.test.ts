@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { writeDesktopDebugLog } from "./desktop-client";
+import {
+	writeDesktopDebugLog,
+	defaultCommandTimeoutMs,
+} from "./desktop-client";
 
 type SentDesktopRequest = {
 	id: string;
@@ -98,7 +101,7 @@ beforeEach(() => {
 	globalThis.fetch = fetchMock as unknown as typeof fetch;
 	fetchMock.mockClear();
 	(window as unknown as Record<string, unknown>).__SIDECAR_WS_ENDPOINT__ =
-		"ws://127.0.0.1:3126/transport";
+		"ws://127.0.0.1:3126/transport?approval_token=test-client-token";
 });
 
 afterEach(() => {
@@ -111,6 +114,54 @@ afterEach(() => {
 });
 
 describe("DesktopClient command deadlines", () => {
+	it.each([
+		"start",
+		"attach",
+		"fork",
+		"restore_checkpoint",
+	])("does not expire a long-session %s at the ordinary two-minute deadline", async (action) => {
+		const { desktopClient } = await import("./desktop-client");
+		let settled = false;
+		const invocation = desktopClient
+			.invoke("chat_session_command", { request: { action } })
+			.finally(() => {
+				settled = true;
+			});
+		const socket = await connectLatestSocket();
+		await vi.advanceTimersByTimeAsync(120_001);
+		expect(settled).toBe(false);
+		socket.respond({ sessionId: "restored-long-session" });
+		await expect(invocation).resolves.toEqual({
+			sessionId: "restored-long-session",
+		});
+	});
+
+	it("still bounds lifecycle commands when the backend stops responding", async () => {
+		const { desktopClient } = await import("./desktop-client");
+		const invocation = desktopClient.invoke("chat_session_command", {
+			request: { action: "start" },
+		});
+		await connectLatestSocket();
+		const rejection = expect(invocation).rejects.toThrow(
+			"Desktop command timed out waiting for chat_session_command",
+		);
+		await vi.advanceTimersByTimeAsync(630_000);
+		await rejection;
+	});
+
+	it("honors an explicit short deadline even for a lifecycle command", async () => {
+		const { desktopClient } = await import("./desktop-client");
+		const invocation = desktopClient.invoke(
+			"chat_session_command",
+			{ request: { action: "fork" } },
+			{ timeoutMs: 500 },
+		);
+		await connectLatestSocket();
+		const rejection = expect(invocation).rejects.toThrow("timed out");
+		await vi.advanceTimersByTimeAsync(500);
+		await rejection;
+	});
+
 	it("sends the displayed revision for Agenda approval, cancellation, and run", async () => {
 		const { desktopClient } = await import("./desktop-client");
 		const approval = desktopClient.approveAgendaTask({
@@ -571,6 +622,8 @@ describe("writeDesktopDebugLog", () => {
 		"info",
 		"error",
 	] as const)("prints valid %s sidecar diagnostics with a static format string", (level) => {
+		// Production logging is opt-in; tests must opt in too.
+		window.localStorage.setItem("cline.debugLogs", "1");
 		const consoleSpy = vi.spyOn(console, level).mockImplementation(() => {});
 
 		writeDesktopDebugLog({
@@ -607,4 +660,66 @@ describe("writeDesktopDebugLog", () => {
 
 		expect(debugSpy).not.toHaveBeenCalled();
 	});
+});
+
+describe("DesktopClient authenticated telemetry", () => {
+	it("puts the process capability in the HTTP header, not URL", async () => {
+		const { desktopClient } = await import("./desktop-client");
+		desktopClient.reportError({
+			operation: "test.auth-report",
+			error: new Error("safe"),
+		});
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+		expect(fetchMock.mock.calls[0]?.[0]).toBe(
+			"http://127.0.0.1:3126/telemetry/error",
+		);
+		expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+			authorization: "Bearer test-client-token",
+		});
+	});
+	it("redacts endpoint tokens and bearer credentials before telemetry", async () => {
+		const { desktopClient } = await import("./desktop-client");
+		const error = new Error(
+			"ws://localhost/transport?approval_token=private-token Bearer other-private-token",
+		);
+		desktopClient.reportError({
+			operation: "test.secret-redaction",
+			error,
+			sourceUrl: "http://localhost/?approval_token=private-token",
+		});
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+		const body = String(fetchMock.mock.calls[0]?.[1]?.body);
+		expect(body).not.toContain("private-token");
+		expect(body).toContain("[redacted]");
+	});
+	it("does not send HTTP telemetry without an endpoint token", async () => {
+		(window as unknown as Record<string, unknown>).__SIDECAR_WS_ENDPOINT__ =
+			"ws://127.0.0.1:3126/transport";
+		const { desktopClient } = await import("./desktop-client");
+		desktopClient.reportError({
+			operation: "test.missing-token",
+			error: new Error("safe"),
+		});
+		await vi.advanceTimersByTimeAsync(20);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+it("runtime capture deadlines include bounded cleanup grace without changing chat send semantics", () => {
+	expect(
+		defaultCommandTimeoutMs("run_dynamic_analysis", {
+			input: { timeout_ms: 60000 },
+		}),
+	).toBe(240000);
+	expect(defaultCommandTimeoutMs("recover_android_capture")).toBe(300000);
+	expect(
+		defaultCommandTimeoutMs("run_dynamic_analysis", {
+			input: { timeout_ms: Infinity },
+		}),
+	).toBe(300000);
+	expect(
+		defaultCommandTimeoutMs("chat_session_command", {
+			request: { action: "send" },
+		}),
+	).toBeNull();
 });

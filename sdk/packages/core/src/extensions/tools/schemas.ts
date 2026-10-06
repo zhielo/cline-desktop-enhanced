@@ -109,12 +109,158 @@ export const ReadFilesInputUnionSchema = z.union([
  * Schema for supervised reverse-engineering operations.
  */
 export const ReverseEngineeringInputSchema = z.object({
-  advanced_action: z.enum(["toolchain", "suite", "triage", "apk_inventory", "dex_index", "native_inventory", "native_disassemble", "simplify_expression", "compare_expressions", "transform_blob", "triton_expression", "match_native_functions", "trace_native_region", "trace_input_influence", "trace_android_dataflow", "lift_native_ir", "deobfuscation_pass", "jeb_analysis", "virtual_dispatch", "graph_build", "graph_query", "notebook_validate", "notebook_run", "cfg_analyze", "trace_slice", "trace_taint", "decrypt_blob"]).optional(),
-  advanced_options: z.object({decrypt:z.object({algorithm:z.enum(["aes-256-gcm","chacha20-poly1305"]),nonce_hex:z.string().regex(/^[a-fA-F0-9]{24}$/),aad_hex:z.string().regex(/^(?:[a-fA-F0-9]{2})*$/).max(8192).optional(),analysis:z.enum(["triage","structured"]).optional()}).strict().optional(),architecture:z.enum(["arm64","arm","thumb","x86","x86_64"]).optional(),offset:z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),address:z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),bytes:z.number().int().min(1).max(65536).optional(),steps:z.array(z.enum(["base64","hex","zlib","gzip"])).min(1).max(8).optional(), graph_query:z.object({kind:z.enum(["artifact","dex-class","dex-method","native-symbol","archive-member","unresolved-call"]).optional(),text:z.string().max(512).optional(),startId:z.string().max(80).optional(),depth:z.number().int().min(0).max(8).optional(),limit:z.number().int().min(1).max(1000).optional()}).strict().optional()}).strict().optional(),
+	advanced_action: z
+		.enum([
+			"toolchain",
+			"suite",
+			"triage",
+			"apk_inventory",
+			"dex_index",
+			"native_inventory",
+			"native_disassemble",
+			"simplify_expression",
+			"compare_expressions",
+			"transform_blob",
+			"triton_expression",
+			"match_native_functions",
+			"trace_native_region",
+			"trace_input_influence",
+			"trace_android_dataflow",
+			"lift_native_ir",
+			"deobfuscation_pass",
+			"jeb_analysis",
+			"virtual_dispatch",
+			"graph_build",
+			"graph_query",
+			"notebook_validate",
+			"notebook_run",
+			"cfg_analyze",
+			"trace_slice",
+			"trace_taint",
+			"decrypt_blob",
+			"artifact_discovery",
+			"android_relationships",
+			"android_method",
+			"investigation_query",
+			"android_method_code",
+			"native_function",
+			"analysis_readiness",
+			"investigation_graph",
+		])
+		.optional(),
+	advanced_options: z
+		.object({
+			discovery: z
+				.object({
+					max_depth: z.number().int().min(0).max(4).optional(),
+					max_artifacts: z.number().int().min(1).max(500).optional(),
+					inspect_native: z.boolean().optional(),
+				})
+				.strict()
+				.optional(),
+			function: z
+				.object({
+					symbol: z.string().min(1).max(4096).optional(),
+					address: z
+						.string()
+						.regex(/^0x[0-9a-fA-F]{1,16}$/)
+						.optional(),
+					max_bytes: z.number().int().min(1).max(65536).optional(),
+				})
+				.strict()
+				.refine(
+					(v) => Boolean(v.symbol) !== Boolean(v.address),
+					"Choose exactly one symbol or entry address",
+				)
+				.optional(),
+			method: z
+				.object({
+					class_descriptor: z
+						.string()
+						.min(3)
+						.max(4096)
+						.regex(/^L.+;$/),
+					name: z.string().min(1).max(4096),
+					descriptor: z
+						.string()
+						.min(3)
+						.max(4096)
+						.regex(/^\(.*\).+$/),
+				})
+				.strict()
+				.optional(),
+			investigation_query: z
+				.object({
+					kind: z
+						.enum([
+							"artifact",
+							"method",
+							"loader-reference",
+							"jni-name-candidate",
+							"native-symbol",
+							"jni-export-match-candidate",
+						])
+						.optional(),
+					text: z.string().max(512).optional(),
+					id: z
+						.string()
+						.regex(/^[a-f0-9]{32}$/)
+						.optional(),
+					offset: z.number().int().min(0).max(10000).optional(),
+					limit: z.number().int().min(1).max(200).optional(),
+				})
+				.strict()
+				.optional(),
+			decrypt: z
+				.object({
+					algorithm: z.enum(["aes-256-gcm", "chacha20-poly1305"]),
+					nonce_hex: z.string().regex(/^[a-fA-F0-9]{24}$/),
+					aad_hex: z
+						.string()
+						.regex(/^(?:[a-fA-F0-9]{2})*$/)
+						.max(8192)
+						.optional(),
+					analysis: z.enum(["triage", "structured"]).optional(),
+				})
+				.strict()
+				.optional(),
+			architecture: z
+				.enum(["arm64", "arm", "thumb", "x86", "x86_64"])
+				.optional(),
+			offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+			address: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+			bytes: z.number().int().min(1).max(65536).optional(),
+			steps: z
+				.array(z.enum(["base64", "hex", "zlib", "gzip"]))
+				.min(1)
+				.max(8)
+				.optional(),
+			graph_query: z
+				.object({
+					kind: z
+						.enum([
+							"artifact",
+							"dex-class",
+							"dex-method",
+							"native-symbol",
+							"archive-member",
+							"unresolved-call",
+						])
+						.optional(),
+					text: z.string().max(512).optional(),
+					startId: z.string().max(80).optional(),
+					depth: z.number().int().min(0).max(8).optional(),
+					limit: z.number().int().min(1).max(1000).optional(),
+				})
+				.strict()
+				.optional(),
+		})
+		.strict()
+		.optional(),
 	engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
 	operation: z.enum([
 		"discover",
-    "advanced_analysis",
+		"advanced_analysis",
 		"inspect",
 		"forensic_report",
 		"apk_security_report",
@@ -146,6 +292,20 @@ export const ReverseEngineeringInputSchema = z.object({
 		.describe(
 			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
 		),
+	function_selector: z
+		.object({
+			symbol: z.string().min(1).max(4096).optional(),
+			address: z
+				.string()
+				.regex(/^0x[0-9a-fA-F]{1,16}$/)
+				.optional(),
+		})
+		.strict()
+		.refine(
+			(v) => Boolean(v.symbol) !== Boolean(v.address),
+			"Choose exactly one exact function name or entry address",
+		)
+		.optional(),
 	script_path: z.string().min(1).optional(),
 	script_args: z.array(z.string()).optional(),
 	timeout_ms: z.number().int().positive().max(3_600_000).optional(),
@@ -163,12 +323,12 @@ export const ReverseEngineeringInputSchema = z.object({
 			"Optional absolute destination for a JSON or HTML forensic report",
 		),
 	report_format: z.enum(["json", "html"]).default("json"),
-  discovery_depth: z
-    .enum(["fast", "deep"])
-    .default("fast")
-    .describe(
-      "Discovery only: fast returns cached executable inventory; deep also verifies versions, plugins, decompilers, and supplemental tools",
-    ),
+	discovery_depth: z
+		.enum(["fast", "deep"])
+		.default("fast")
+		.describe(
+			"Discovery only: fast returns cached executable inventory; deep also verifies versions, plugins, decompilers, and supplemental tools",
+		),
 	acknowledge_external_output: z
 		.boolean()
 		.optional()
