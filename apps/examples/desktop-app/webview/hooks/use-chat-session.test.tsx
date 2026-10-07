@@ -428,6 +428,176 @@ afterEach(async () => {
 });
 
 describe("useChatSession", () => {
+	it("keeps a newly started queued turn authoritative over a stale completed attach", async () => {
+		const sid = "navigation-new-turn";
+		const attached = deferred<{ sessionId: string; status: string }>();
+		invokeMock.mockImplementation(
+			async (command: string, args?: Record<string, unknown>) => {
+				if (command === "get_process_context")
+					return { cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+				if (command === "read_session_messages")
+					return [
+						{
+							id: "previous",
+							sessionId: sid,
+							role: "assistant",
+							content: "Previous answer",
+							createdAt: 1,
+						},
+					];
+				if (
+					command === "chat_session_command" &&
+					(args?.request as { action?: string })?.action === "attach"
+				)
+					return attached.promise;
+				return [];
+			},
+		);
+		let hydration!: Promise<void>;
+		await act(async () => {
+			hydration = current.hydrateSession({
+				sessionId: sid,
+				status: "completed",
+				provider: "cline",
+				model: "test",
+				cwd: "/workspace/cline",
+				startedAt: "2026-10-07T00:00:00Z",
+			});
+			await Promise.resolve();
+		});
+		await act(async () =>
+			handlerFor("chat_event")({
+				sessionId: sid,
+				stream: "chat_queued_prompt_start",
+				chunk: JSON.stringify({
+					promptId: "next",
+					prompt: "Continue debugging",
+				}),
+				ts: Date.now(),
+				index: 1,
+			}),
+		);
+		expect(current.status).toBe("running");
+		await act(async () => {
+			attached.resolve({ sessionId: sid, status: "completed" });
+			await hydration;
+		});
+		expect(current.status).toBe("running");
+	});
+
+	it.each([
+		"local",
+		"remote",
+	])("keeps a %s session running after navigation rehydrates narration", async (environmentId) => {
+		const sid = "navigation-running";
+		const history = {
+			sessionId: sid,
+			environmentId,
+			status: "running" as const,
+			provider: "cline",
+			model: "test",
+			cwd: "/workspace/cline",
+			startedAt: "2026-10-07T00:00:00Z",
+		};
+		const transcript = [
+			{
+				id: "user",
+				sessionId: sid,
+				role: "user",
+				content: "debug crash",
+				createdAt: 1,
+			},
+			{
+				id: "narration",
+				sessionId: sid,
+				role: "assistant",
+				content: "Let me inspect the logs",
+				createdAt: 2,
+			},
+		];
+		invokeMock.mockImplementation(
+			async (command: string, args?: Record<string, unknown>) => {
+				if (command === "get_process_context")
+					return { cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+				if (command === "read_session_messages") return transcript;
+				if (
+					command === "chat_session_command" &&
+					(args?.request as { action?: string })?.action === "attach"
+				)
+					return { sessionId: sid, environmentId, status: "running" };
+				return [];
+			},
+		);
+		await act(async () =>
+			root.render(<HookHarness environmentId={environmentId} />),
+		);
+		await act(async () => current.hydrateSession(history));
+		expect(current.status).toBe("running");
+		await act(async () => root.render(null));
+		await act(async () =>
+			root.render(<HookHarness environmentId={environmentId} />),
+		);
+		await act(async () => current.hydrateSession(history));
+		expect(current.status).toBe("running");
+		expect(current.messages.map((message) => message.id)).toEqual([
+			"user",
+			"narration",
+		]);
+	});
+	it.each([
+		"failed",
+		"completed",
+	] as const)("preserves live %s over a delayed running attach snapshot", async (terminalStatus) => {
+		const sid = "navigation-race";
+		const attached = deferred<{ sessionId: string; status: string }>();
+		invokeMock.mockImplementation(
+			async (command: string, args?: Record<string, unknown>) => {
+				if (command === "get_process_context")
+					return { cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+				if (command === "read_session_messages")
+					return [
+						{
+							id: "narration",
+							sessionId: sid,
+							role: "assistant",
+							content: "Inspecting logs",
+							createdAt: 1,
+						},
+					];
+				if (
+					command === "chat_session_command" &&
+					(args?.request as { action?: string })?.action === "attach"
+				)
+					return attached.promise;
+				return [];
+			},
+		);
+		let hydration!: Promise<void>;
+		await act(async () => {
+			hydration = current.hydrateSession({
+				sessionId: sid,
+				status: "running",
+				provider: "cline",
+				model: "test",
+				cwd: "/workspace/cline",
+				startedAt: "2026-10-07T00:00:00Z",
+			});
+			await Promise.resolve();
+		});
+		await act(async () =>
+			handlerFor("chat_session_status")({
+				sessionId: sid,
+				status: terminalStatus,
+			}),
+		);
+		expect(current.status).toBe(terminalStatus);
+		await act(async () => {
+			attached.resolve({ sessionId: sid, status: "running" });
+			await hydration;
+		});
+		expect(current.status).toBe(terminalStatus);
+	});
+
 	it.each([true, false])(
 		"preserves only matching history after a hydration failure (same session: %s)",
 		async (sameSession) => {

@@ -38,7 +38,14 @@ describe("supervised process lifecycle", () => {
 			expect(result.exitCode).toBe(0);
 			expect(result.stdout).toBe("first\nfinal\n");
 		} finally {
-			await fs.rm(fixture.directory, { recursive: true, force: true });
+			// Windows may briefly retain the executable image lock after close.
+			// Retry only the OS cleanup; a persistent lock still fails this test.
+			await fs.rm(fixture.directory, {
+				recursive: true,
+				force: true,
+				maxRetries: 5,
+				retryDelay: 100,
+			});
 		}
 	});
 
@@ -56,7 +63,14 @@ describe("supervised process lifecycle", () => {
 				exitCode: 7,
 			});
 		} finally {
-			await fs.rm(fixture.directory, { recursive: true, force: true });
+			// Windows may briefly retain the executable image lock after close.
+			// Retry only the OS cleanup; a persistent lock still fails this test.
+			await fs.rm(fixture.directory, {
+				recursive: true,
+				force: true,
+				maxRetries: 5,
+				retryDelay: 100,
+			});
 		}
 	});
 
@@ -65,8 +79,19 @@ describe("supervised process lifecycle", () => {
 		try {
 			const result = await runSupervised(fixture.target, fixture.args, 50);
 			expect(result.timedOut).toBe(true);
+			// A drain-timeout fallback is not proof that the owned child exited.
+			// POSIX signal termination legitimately has a null numeric exit code.
+			if (process.platform === "win32") expect(result.exitCode).not.toBeNull();
+			expect(result.outputDrainTimedOut).toBe(false);
 		} finally {
-			await fs.rm(fixture.directory, { recursive: true, force: true });
+			// Windows may briefly retain the executable image lock after close.
+			// Retry only the OS cleanup; a persistent lock still fails this test.
+			await fs.rm(fixture.directory, {
+				recursive: true,
+				force: true,
+				maxRetries: 5,
+				retryDelay: 100,
+			});
 		}
 	});
 });

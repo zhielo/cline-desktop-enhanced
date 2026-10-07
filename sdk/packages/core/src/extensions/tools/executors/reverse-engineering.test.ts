@@ -1,8 +1,10 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createReverseEngineeringExecutor } from "./reverse-engineering";
+import * as supervisedProcess from "./supervised-process";
+import * as windowsEnvironment from "./windows-tool-environment";
 
 const ZIP_WITH_TRAVERSAL =
 	"UEsDBBQAAAAAAGIZN11H3dx5AgAAAAIAAAANAAAAc2FmZS9maWxlLnR4dG9rUEsDBBQAAAAAAGIZN10fKKpnAgAAAAIAAAANAAAALi4vZXNjYXBlLnR4dG5vUEsBAhQDFAAAAAAAYhk3XUfd3HkCAAAAAgAAAA0AAAAAAAAAAAAAAIABAAAAAHNhZmUvZmlsZS50eHRQSwECFAMUAAAAAABiGTddHyiqZwIAAAACAAAADQAAAAAAAAAAAAAAgAEtAAAALi4vZXNjYXBlLnR4dFBLBQYAAAAAAgACAHYAAABaAAAAAAA=";
@@ -15,6 +17,7 @@ const originalIdaHome = process.env.IDA_HOME;
 const originalJadxHome = process.env.JADX_HOME;
 
 afterEach(async () => {
+	vi.restoreAllMocks();
 	process.env.PATH = originalPath;
 	if (originalCacheDirectory === undefined)
 		delete process.env.CLINE_RE_CACHE_DIR;
@@ -68,6 +71,16 @@ describe("reverse-engineering archive inspection", () => {
 		await fs.writeFile(original, Buffer.from(cleanZip, "base64"));
 		await fs.writeFile(modified, Buffer.from(ZIP_WITH_TRAVERSAL, "base64"));
 
+		const registry = vi
+			.spyOn(windowsEnvironment, "readWindowsRegistryValue")
+			.mockRejectedValue(
+				new Error("File-only comparison must not query the registry"),
+			);
+		const discovery = vi
+			.spyOn(supervisedProcess, "commandAvailable")
+			.mockRejectedValue(
+				new Error("File-only comparison must not discover external tools"),
+			);
 		const result = JSON.parse(
 			await createReverseEngineeringExecutor()(
 				{
@@ -80,6 +93,8 @@ describe("reverse-engineering archive inspection", () => {
 			),
 		);
 
+		expect(registry).not.toHaveBeenCalled();
+		expect(discovery).not.toHaveBeenCalled();
 		expect(result.identicalFile).toBe(false);
 		expect(result.summary).toMatchObject({
 			originalEntries: 1,
@@ -927,7 +942,6 @@ it.each([
 		),
 	).rejects.toThrow("Managed workers require");
 });
-
 
 it.each([
  {engine:"auto",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"}},

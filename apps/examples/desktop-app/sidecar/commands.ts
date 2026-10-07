@@ -1,3 +1,4 @@
+import { getProjectOutputLocation, ensureProjectOutputDirectories } from "./project-output";
 import { queryRuntimeJni } from "./runtime-jni-evidence";
 import { ExecutionControlService } from "./execution-control-service";
 import { planEvidenceAnalysis } from "./execution-analysis-planner";
@@ -4634,6 +4635,16 @@ export async function handleCommand(
 			};
 		}
 	}
+	if (command === "get_project_output_location" || command === "open_project_output_folder") {
+  if (getCommandRuntimeBinding(ctx, args).kind === "ssh") throw new Error("Project output folders are local Windows only; SSH outputs are not local files");
+  const workspace = typeof args?.cwd === "string" && args.cwd.trim() ? args.cwd.trim() : ctx.localWorkspaceRoot;
+  const location = getProjectOutputLocation(workspace);
+  if (command === "get_project_output_location") return location;
+  if (!location) throw new Error("The fixed C:\\Cline-Outputs folder is available on Windows only");
+  const directory = ensureProjectOutputDirectories(location);
+  await revealArtifactInFolder(directory);
+  return location;
+ }
 	if (command === "pick_workspace_directory") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") return null;
 		return await pickWorkspaceDirectory();

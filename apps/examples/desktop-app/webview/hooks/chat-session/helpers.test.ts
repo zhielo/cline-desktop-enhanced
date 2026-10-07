@@ -166,11 +166,17 @@ describe("resolveCredentialFailureAction", () => {
 });
 
 describe("inferHydratedChatStatus", () => {
-	it("treats an assistant-answered running record as completed", () => {
-		// The stale-record heuristic: a "running" record whose transcript
-		// ends on an assistant answer is read as a session that died without
-		// a status flip. (The stale-stream poll deliberately bypasses this
-		// via mapSessionRecordStatus — see use-chat-session.)
+	it.each([
+		"completed",
+		"failed",
+		"cancelled",
+		"idle",
+	] as const)("retains the explicit %s runtime status", (status) => {
+		expect(inferHydratedChatStatus(status, [])).toBe(status);
+	});
+
+	it("does not infer completion from narration in a running session", () => {
+		// Partial assistant narration never proves that a runtime turn ended.
 		expect(
 			inferHydratedChatStatus("running", [
 				{
@@ -188,7 +194,7 @@ describe("inferHydratedChatStatus", () => {
 					createdAt: 2,
 				},
 			]),
-		).toBe("completed");
+		).toBe("running");
 	});
 });
 

@@ -3877,6 +3877,14 @@ export function useChatSession(environmentId: string) {
 			clearLiveToolRefs();
 			discardPendingStream();
 
+			const hydrationStatusRevision = authoritativeStatusRevisionRef.current;
+			const hydrationTurnEpoch = turnEpochRef.current;
+			// Runtime events and new turns observed during either history read
+			// or attach supersede the older snapshot used for this hydration.
+			const hydrationOwnsStatus = () =>
+				authoritativeStatusRevisionRef.current === hydrationStatusRevision &&
+				turnEpochRef.current === hydrationTurnEpoch;
+
 			const applyHydratedMessages = (
 				msgs: ChatMessage[],
 				sessionStatus: typeof session.status,
@@ -3909,12 +3917,13 @@ export function useChatSession(environmentId: string) {
 				}
 				setRawTranscript("");
 				resetCounters();
-				setStatus(
-					session.origin === "cloud"
-						? (mapCloudRuntimeStatus(sessionStatus) ??
-								inferHydratedChatStatus(sessionStatus, msgs))
-						: inferHydratedChatStatus(sessionStatus, msgs),
-				);
+				if (hydrationOwnsStatus())
+					setStatus(
+						session.origin === "cloud"
+							? (mapCloudRuntimeStatus(sessionStatus) ??
+									inferHydratedChatStatus(sessionStatus, msgs))
+							: inferHydratedChatStatus(sessionStatus, msgs),
+					);
 				void refreshSessionDiffSummary(session.sessionId);
 			};
 
@@ -4014,19 +4023,21 @@ export function useChatSession(environmentId: string) {
 				}
 
 				if (historyMessages.length > 0) {
-					setStatus(
-						session.origin === "cloud"
-							? (mapCloudRuntimeStatus(attached?.status || session.status) ??
-									inferHydratedChatStatus(
+					if (hydrationOwnsStatus())
+						setStatus(
+							session.origin === "cloud"
+								? (mapCloudRuntimeStatus(attached?.status || session.status) ??
+										inferHydratedChatStatus(
+											(attached?.status ||
+												session.status) as SessionHistoryStatus,
+											historyMessages,
+										))
+								: inferHydratedChatStatus(
 										(attached?.status ||
 											session.status) as SessionHistoryStatus,
 										historyMessages,
-									))
-							: inferHydratedChatStatus(
-									(attached?.status || session.status) as SessionHistoryStatus,
-									historyMessages,
-								),
-					);
+									),
+						);
 					return;
 				}
 
@@ -4051,7 +4062,7 @@ export function useChatSession(environmentId: string) {
 				if (hydrationRequestIdRef.current !== requestId) return;
 				const msg = errorMessage(err);
 				setError(msg);
-				setStatus("error");
+				if (hydrationOwnsStatus()) setStatus("error");
 				// A failed re-attachment is not evidence that the saved/live
 				// transcript disappeared. Keep this session's visible history;
 				// never leak the previous thread into a different session.

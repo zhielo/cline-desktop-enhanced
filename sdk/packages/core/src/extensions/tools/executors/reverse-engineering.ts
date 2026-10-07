@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -41,6 +40,8 @@ import {
 	TARGETED_GHIDRA_SCRIPT,
 	targetedIdaScript,
 } from "./targeted-decompiler-scripts";
+
+import { readWindowsRegistryValue } from "./windows-tool-environment";
 
 const managedEnginePool = new ManagedEnginePool();
 
@@ -168,39 +169,6 @@ function splitPathEntries(value: string | undefined): string[] {
 		.split(path.delimiter)
 		.map((entry) => entry.trim())
 		.filter(Boolean);
-}
-
-function expandWindowsEnvironment(value: string): string {
-	return value.replace(/%([^%]+)%/g, (_match, name: string) => {
-		const replacement = process.env[name] ?? process.env[name.toUpperCase()];
-		return replacement ?? _match;
-	});
-}
-
-async function readWindowsRegistryValue(
-	key: string,
-	name: string,
-): Promise<string | undefined> {
-	if (process.platform !== "win32") return undefined;
-	return new Promise((resolve) => {
-		const child = spawn("reg.exe", ["query", key, "/v", name], {
-			stdio: ["ignore", "pipe", "ignore"],
-			windowsHide: true,
-		});
-		let output = "";
-		child.stdout?.on("data", (chunk) => {
-			output = boundedAppend(output, chunk);
-		});
-		child.once("error", () => resolve(undefined));
-		child.once("exit", (code) => {
-			if (code !== 0) return resolve(undefined);
-			const line = output
-				.split(/\r?\n/)
-				.find((candidate) => /\bREG_(?:EXPAND_)?SZ\b/i.test(candidate));
-			const value = line?.split(/\bREG_(?:EXPAND_)?SZ\b/i)[1]?.trim();
-			resolve(value ? expandWindowsEnvironment(value) : undefined);
-		});
-	});
 }
 
 /**
@@ -716,11 +684,6 @@ async function sha256Directory(directory: string): Promise<string> {
 	};
 	await visit(directory);
 	return hash.digest("hex");
-}
-
-function boundedAppend(current: string, chunk: Buffer | string): string {
-	if (current.length >= MAX_OUTPUT_CHARS) return current;
-	return (current + chunk.toString()).slice(0, MAX_OUTPUT_CHARS);
 }
 
 async function toolIdentity(engine: Engine, command: string | undefined) {
@@ -2636,8 +2599,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				2,
 			);
 		}
-		const pathRefreshed = await refreshProcessPath();
 		if (input.operation === "discover") {
+			const pathRefreshed = await refreshProcessPath();
 			const discovered = await discoverCapabilities(
 				input.discovery_depth ?? "fast",
 			);
@@ -2662,12 +2625,16 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				2,
 			);
 		}
-		const available: ToolInventory = {
-			ghidra: await discover("ghidra"),
-			ida: await discover("ida"),
-			jadx: await discover("jadx"),
-		};
-		const androidUtilities = await discoverAndroidUtilities();
+		// File-only operations must not wait on registry/installation/command probes.
+		// Refresh only when a branch actually needs an external executable.
+		let environmentRefresh: Promise<boolean> | undefined;
+		const ensureToolEnvironment = () =>
+			(environmentRefresh ??= refreshProcessPath());
+		let androidDiscovery: Promise<AndroidReUtilities> | undefined;
+		const getAndroidUtilities = () =>
+			(androidDiscovery ??= ensureToolEnvironment().then(() =>
+				discoverAndroidUtilities(),
+			));
 		if (!input.target) throw new Error("target is required for this operation");
 		if (!path.isAbsolute(input.target))
 			throw new Error("target must be an absolute path");
@@ -2839,7 +2806,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			if (isApk && !stages.apkSecurity) {
 				stages.apkSecurity = await apkSecurityInspection(
 					target,
-					androidUtilities,
+					await getAndroidUtilities(),
 					Math.min(input.timeout_ms ?? 120_000, 120_000),
 					context.signal,
 				);
@@ -2906,6 +2873,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			if (!zip) {
 				throw new Error("verify_apk_signature requires an APK/ZIP container");
 			}
+			const androidUtilities = await getAndroidUtilities();
 			if (!androidUtilities.apksigner) {
 				throw new Error(
 					"apksigner was not found. Install Android SDK Build Tools or set ANDROID_SDK_ROOT.",
@@ -3017,6 +2985,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			}
 		}
 		if (input.operation === "disassemble_smali") {
+			const androidUtilities = await getAndroidUtilities();
 			const extension = path.extname(target).toLowerCase();
 			const apkContainer = [".apk", ".aab", ".apkm", ".xapk"].includes(
 				extension,
@@ -3160,6 +3129,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					`output_file must end with ${expectedExtension} for ${input.operation}`,
 				);
 			}
+			const androidUtilities = await getAndroidUtilities();
 			const command =
 				input.operation === "assemble_smali"
 					? androidUtilities.smali
@@ -3229,6 +3199,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				context.signal,
 			);
 		}
+		await ensureToolEnvironment();
+		const [ghidra, ida, jadx] = await Promise.all([
+			discover("ghidra"),
+			discover("ida"),
+			discover("jadx"),
+		]);
+		const available: ToolInventory = { ghidra, ida, jadx };
 		const engine =
 			input.engine === "auto" ? chooseAuto(target, available) : input.engine;
 		if (!engine)
