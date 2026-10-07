@@ -102,6 +102,7 @@ jobs:
             sdk/packages/core/src/extensions/tools/executors/live-debugger.test.ts \
             sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts \
             sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts \
+            sdk/packages/core/src/extensions/tools/executors/windows-tool-environment.test.ts \
             sdk/packages/core/src/extensions/tools/permission-profile.test.ts \
             sdk/packages/core/src/extensions/tools/presets.test.ts \
             sdk/packages/core/src/extensions/tools/runtime.test.ts \

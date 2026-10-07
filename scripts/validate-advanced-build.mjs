@@ -118,6 +118,7 @@ async function main() {
  "sdk/packages/core/src/extensions/tools/executors/live-debugger.test.ts",
  "sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/windows-tool-environment.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/targeted-decompiler-scripts.test.ts",
