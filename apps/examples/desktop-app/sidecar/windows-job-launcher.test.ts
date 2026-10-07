@@ -55,25 +55,78 @@ it.runIf(process.platform === "win32")(
 	},
 	40000,
 );
+// A Windows Job Object violation may synchronously throw UNKNOWN or emit an error event.
+// The two-process control must actually run this identical owned child, so unrelated spawn failure cannot pass.
+function processLimitProbe(
+	spawnExpression = "require('node:child_process').spawn",
+) {
+	return `const spawn=${spawnExpression};let settled=false;
+ function finish(value){if(settled)return;settled=true;process.stdout.write(JSON.stringify(value));process.exitCode=value.kind==='unexpected-exit'?1:0;}
+ function denied(error){finish({kind:'denied',code:error.code,syscall:error.syscall,delivery:'handled'});}
+ try{const child=spawn(process.execPath,['-e',"process.stdout.write('owned-child-ran')"]);let output='';
+ child.stdout.on('data',data=>{output+=data;});child.on('error',denied);
+ child.on('close',code=>finish({kind:code===0&&output==='owned-child-ran'?'spawned':'unexpected-exit',code,output}));
+ }catch(error){denied(error);}`;
+}
+it("handles synchronous and asynchronous spawn denials without swallowing unexpected child exits", async () => {
+	const probes = [
+		"()=>{const e=new Error('owned fixture denial');e.code='UNKNOWN';e.syscall='spawn';throw e;}",
+		"()=>{const {EventEmitter}=require('node:events');const c=new EventEmitter();c.stdout=new EventEmitter();queueMicrotask(()=>{const e=new Error('owned fixture denial');e.code='EACCES';e.syscall='spawn';c.emit('error',e);c.emit('close',-1);});return c;}",
+	];
+	for (const probe of probes) {
+		const result = await promisify(execFile)(
+			process.execPath,
+			["-e", processLimitProbe(probe)],
+			{ timeout: 10000, maxBuffer: 65536 },
+		);
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			kind: "denied",
+			syscall: "spawn",
+			delivery: "handled",
+		});
+	}
+	const control = await promisify(execFile)(
+		process.execPath,
+		["-e", processLimitProbe()],
+		{ timeout: 10000, maxBuffer: 65536 },
+	);
+	expect(JSON.parse(control.stdout)).toMatchObject({
+		kind: "spawned",
+		code: 0,
+		output: "owned-child-ran",
+	});
+});
 it.runIf(process.platform === "win32")(
 	"enforces active-process limits rather than reporting logical limits",
 	async () => {
-		const invocation = windowsJobInvocation(
+		const run = async (maxProcesses: number) => {
+			const invocation = windowsJobInvocation(
 				process.execPath,
-				[
-					"-e",
-					"require('child_process').spawn(process.execPath,['-e','process.exit(0)']).on('error',()=>process.stdout.write('job-limit-enforced'))",
-				],
+				["-e", processLimitProbe()],
 				process.cwd(),
 				512,
-				1,
-			),
-			result = await promisify(execFile)(
+				maxProcesses,
+			);
+			const result = await promisify(execFile)(
 				invocation.executable,
 				invocation.args,
 				{ timeout: 30000, maxBuffer: 65536 },
 			);
-		expect(result.stdout).toContain("job-limit-enforced");
+			return JSON.parse(result.stdout);
+		};
+		const permitted = await run(2);
+		expect(permitted).toMatchObject({
+			kind: "spawned",
+			code: 0,
+			output: "owned-child-ran",
+		});
+		const blocked = await run(1);
+		expect(blocked).toMatchObject({
+			kind: "denied",
+			syscall: "spawn",
+			delivery: "handled",
+		});
+		expect(["UNKNOWN", "EPERM", "EACCES"]).toContain(blocked.code);
 	},
-	40000,
+	70000,
 );

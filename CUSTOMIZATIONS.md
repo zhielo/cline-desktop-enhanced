@@ -5,6 +5,7 @@ This file is the durable customization ledger for this repository. The source on
 ## Integrated execution and evidence lab
 
 - Local one-shot, resource-aware task DAGs use durable hash-checked receipts; refresh/owner loss never replays work. Bounded timings, output hashes, drop/incomplete-drain/truncation evidence, stdin/resize and confirmed cancellation reuse the existing process manager.
+- Windows resource-limit fixtures handle synchronous throws and asynchronous spawn denials, and require an identical two-process positive control before asserting one-process enforcement; no check is skipped.
 - Opt-in Windows suspended-launch Job Objects enforce process count and memory; unsupported/interactive configurations fail explicitly, with no sandbox or Linux-hard-limit claim.
 - Debugger launch now requires execution-control confirmation; attaches bind/recheck process start-tokens. IDA/Ghidra project reuse uses cross-process leases and executable/config/script fingerprints; stale leases are not silently stolen.
 - Evidence-first plans, package-scoped imported ANR/tombstone/death reports and hash-bound patch review are available in Execution lab. Import/review never installs, resumes, roots or executes a target.

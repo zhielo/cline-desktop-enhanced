@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",markers:["processLimitProbe", "const permitted = await run(2)", "const blocked = await run(1)"]},
  {path:"apps/examples/desktop-app/sidecar/execution-control-service.ts",markers:["ExecutionControlService", "Execution receipt integrity mismatch", "Termination requested but exit was not confirmed", "Reconciliation is read-only"]},
  {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.ts",markers:["CreateProcess suspended", "AssignProcessToJobObject", "no silent hard-limit fallback"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/execution-workspace.tsx",markers:["Prepare exact task", "Approve and start once", "Reconcile without replay"]},
