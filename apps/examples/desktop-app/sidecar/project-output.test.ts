@@ -8,8 +8,8 @@ import {
 	symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { basename, join, sep } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import {
 	ensureProjectOutputDirectories,
 	getProjectOutputLocation,
@@ -18,6 +18,44 @@ import {
 } from "./project-output";
 
 describe("fixed Windows project output location", () => {
+	it("accepts alternate canonical spelling only for the same directory and parent identities", () => {
+		const temp = realpathSync(
+			mkdtempSync(join(tmpdir(), "cline-output-alias-")),
+		);
+		const root = join(temp, "outputs"),
+			projectDirectory = join(root, "owned-0123456789abcdef");
+		const location = {
+			root,
+			projectDirectory,
+			deliverables: "",
+			reports: "",
+			logs: "",
+		};
+		const native = realpathSync.native;
+		let outside = false;
+		const other = join(temp, "other");
+		mkdirSync(other);
+		const spy = vi
+			.spyOn(realpathSync, "native")
+			.mockImplementation((path) =>
+				String(path) === projectDirectory
+					? outside
+						? other
+						: `${root}${sep}.${sep}${basename(projectDirectory)}`
+					: native(path),
+			);
+		try {
+			expect(ensureProjectOutputDirectories(location)).toBe(projectDirectory);
+			outside = true;
+			expect(() => ensureProjectOutputDirectories(location)).toThrow(
+				/identity|redirects/,
+			);
+		} finally {
+			spy.mockRestore();
+			rmSync(temp, { recursive: true, force: true });
+		}
+	});
+
 	it("uses C:\\Cline-Outputs and stable case/slash-normalized project identities", () => {
 		const a = getProjectOutputLocation("C:\\Work\\AppCloner\\", "win32");
 		expect(a?.root).toBe(WINDOWS_PROJECT_OUTPUT_ROOT);

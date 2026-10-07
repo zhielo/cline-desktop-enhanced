@@ -4,6 +4,8 @@ This file is the durable customization ledger for this repository. The source on
 
 ## Fixed Windows project output location
 
+- Windows canonical directory spelling is accepted only when bigint filesystem directory and parent identities match; existing junction/link and distinct-identity redirection tests remain mandatory. Build #174 exposed the former spelling-only false positive; no failing suite was skipped.
+
 - New local Windows session prompts supply `C:\Cline-Outputs` as the generated-output default. Stable sanitized project names plus a workspace-path hash separate same-named projects; `deliverables`, `reports` and `logs` are explicit destinations. Source edits and existing build/private-evidence/native-project storage remain unchanged.
 - The session header shows the exact destination with Copy path and Open outputs. Reading/refresh does not create folders. The explicit button creates direct children only, rejects existing links/junctions, and surfaces permission failures without AppData fallback.
 - Local Windows only: SSH/cloud hosts are never routed to the desktop C drive. This is agent guidance plus folder controls, not interception of arbitrary shell/file operations or an OS sandbox; explicit existing tool output paths remain in effect. Existing sessions keep their persisted prompt until a new/rebuilt session is started.

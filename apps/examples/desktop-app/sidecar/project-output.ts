@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync, realpathSync } from "node:fs";
-import { join, relative, win32 } from "node:path";
+import { dirname, join, relative, win32 } from "node:path";
 
 export const WINDOWS_PROJECT_OUTPUT_ROOT = "C:\\Cline-Outputs";
 export interface ProjectOutputLocation {
@@ -58,17 +58,32 @@ export function projectOutputInstructions(
 }
 
 function assertDirectory(path: string): void {
-	const stat = lstatSync(path);
+	const stat = lstatSync(path, { bigint: true });
 	if (!stat.isDirectory() || stat.isSymbolicLink())
 		throw new Error(
 			"Project output directories must not be links or junctions",
 		);
 	const actual = realpathSync.native(path);
-	const normalize = (p: string) =>
-		process.platform === "win32" ? win32.normalize(p).toLowerCase() : p;
-	if (normalize(actual) !== normalize(path))
+	// Windows native canonical spelling can differ from the requested path.
+	// Accept only the same directory object and parent object, not arbitrary
+	// redirected names. The entry itself must still be a non-link directory.
+	const canonical = lstatSync(actual, { bigint: true });
+	const parent = lstatSync(dirname(path), { bigint: true });
+	const canonicalParent = lstatSync(dirname(actual), { bigint: true });
+	if (
+		!canonical.isDirectory() ||
+		canonical.isSymbolicLink() ||
+		parent.isSymbolicLink() ||
+		canonicalParent.isSymbolicLink() ||
+		stat.ino === BigInt(0) ||
+		parent.ino === BigInt(0) ||
+		stat.dev !== canonical.dev ||
+		stat.ino !== canonical.ino ||
+		parent.dev !== canonicalParent.dev ||
+		parent.ino !== canonicalParent.ino
+	)
 		throw new Error(
-			"Project output directory redirects outside its fixed location",
+			"Project output directory identity redirects outside its fixed location",
 		);
 }
 

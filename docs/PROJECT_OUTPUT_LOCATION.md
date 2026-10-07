@@ -11,3 +11,7 @@ New local Windows session prompts supply these absolute destinations for generat
 SSH/cloud output remains on its owning host; non-Windows desktop hosts have no fictional C drive destination. The header button is not available for remote/cloud sessions.
 
 Mandatory validation covers deterministic path identities, invalid paths, no filesystem work during resolution, explicit folder creation, root/child junction rejection, local/remote RPC boundaries, permission errors, and stale project UI responses. Windows installer and a manual Explorer/open/preview check remain separate operational validation.
+
+## Windows canonical spelling correction
+
+Build #174 failed the valid folder-creation regression because native canonical spelling differed from the requested path. The reader now verifies non-link directory and parent filesystem identities using bigint device/inode values rather than assuming identical spelling. A new regression failed on the old guard and accepts an alternate spelling only for the same objects; a fake canonical destination with a different identity still fails. Root/child junction tests remain enabled. This is not an atomic host-filesystem lock.
