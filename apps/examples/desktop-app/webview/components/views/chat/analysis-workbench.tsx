@@ -23,7 +23,10 @@ import { AnalysisAuthoring } from "./analysis-authoring";
 import { ApkIncidentWorkspace } from "./apk-incident-workspace";
 import { InvestigationWorkspace } from "./investigation-workspace";
 
+import { ExecutionWorkspace } from "./execution-workspace";
+
 type WorkbenchMode =
+ | "execution"
 	| "incidents"
 	| "investigation"
 	| "tasks"
@@ -36,7 +39,7 @@ type WorkbenchMode =
 	| "approvals"
 	| "evidence"
 	| "diagnostics";
-type TaskKind = "static" | "debugger" | "gui" | "dynamic" | "device";
+type TaskKind = "static" | "debugger" | "gui" | "dynamic" | "device" | "execution";
 type TaskPlan = {
 	id: string;
 	kind: TaskKind;
@@ -86,7 +89,8 @@ const modes: Array<{
 	icon: typeof Activity;
 	label: string;
 }> = [
-	{ id: "incidents", icon: Bug, label: "APK incidents" },
+	{ id: "execution", icon: Terminal, label: "Execution lab" },
+ { id: "incidents", icon: Bug, label: "APK incidents" },
 	{ id: "investigation", icon: ListChecks, label: "Investigation" },
 	{ id: "tasks", icon: ListChecks, label: "Tasks" },
 	{ id: "analyze", icon: Binary, label: "Analyze" },
@@ -240,8 +244,8 @@ export function AnalysisWorkbench({
 
 	const approveAndRun = async () => {
 		if (!pendingPlan) return;
-		if (pendingPlan.kind === "device") {
-			toast({ title: "Use APK incidents to approve this device plan" });
+		if (pendingPlan.kind === "device" || pendingPlan.kind === "execution") {
+			toast({ title: "Use the APK incidents or Execution lab tab to approve this plan" });
 			return;
 		}
 		if (
@@ -385,7 +389,7 @@ export function AnalysisWorkbench({
 		if (Number.isInteger(numericPid) && numericPid > 0)
 			request.pid = numericPid;
 		if (address.trim()) request.address = address.trim();
-		if (debugOperation === "continue" || debugOperation === "step") {
+		if (["launch","continue","step"].includes(debugOperation)) {
 			request.confirm_execution_control = executionConfirmed;
 		}
 		return prepare("debugger", request);
@@ -479,7 +483,8 @@ export function AnalysisWorkbench({
 							onPrepare={(request) => prepare("static", request)}
 						/>
 					)}
-					{mode === "incidents" && (
+					{mode === "execution" && <ExecutionWorkspace cwd={cwd} environmentId={environmentId} />}
+ {mode === "incidents" && (
 						<ApkIncidentWorkspace cwd={cwd} environmentId={environmentId} />
 					)}
 					{mode === "investigation" && (

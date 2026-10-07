@@ -667,6 +667,24 @@ printf "%s\\n" "$@"`,
 		expect(second.reusedAnalysis).toBe(true);
 		expect(second.args).toContain("-process");
 		expect(second.args).not.toContain("-import");
+		await fs.appendFile(
+			path.join(ghidraHome, "support", "analyzeHeadless"),
+			"\n# executable identity changed\n",
+		);
+		const changed = JSON.parse(
+			await execute(
+				{
+					engine: "ghidra",
+					operation: "analyze",
+					target,
+					output_directory: outputDirectory,
+					max_cpu: 2,
+				},
+				{} as never,
+			),
+		);
+		expect(changed.reusedAnalysis).toBe(false);
+		expect(changed.args).toContain("-import");
 	});
 
 	it("supports an editable APK-to-Smali-to-APK round trip", async () => {

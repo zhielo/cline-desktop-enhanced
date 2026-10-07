@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/execution-control-service.ts",markers:["ExecutionControlService", "Execution receipt integrity mismatch", "Termination requested but exit was not confirmed", "Reconciliation is read-only"]},
+ {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.ts",markers:["CreateProcess suspended", "AssignProcessToJobObject", "no silent hard-limit fallback"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/execution-workspace.tsx",markers:["Prepare exact task", "Approve and start once", "Reconcile without replay"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",markers:["withProjectLease", "Stale leases are never automatically stolen"]},
+ {path:"docs/EXECUTION_EVIDENCE_LAB.md",markers:["uncertain", "not a security boundary", "No physical KSUN device"]},
  {path:"apps/examples/desktop-app/sidecar/apk-incident-service.ts",markers:["class ApkIncidentService", "No new matching failure observed", "candidate-installed", "controlUnavailable", "pull_apk_bounded"]},
  {path:"apps/examples/desktop-app/sidecar/incident-correlation.ts",markers:["module SHA-256/ABI/build-ID mismatch", "candidate-match", "symbol-range-match"]},
  {path:"apps/examples/desktop-app/sidecar/incident-artifacts.ts",markers:["Archive changed since inspection", "Archive member integrity mismatch", "blocked-archive"]},
@@ -1005,7 +1010,7 @@ const requiredMarkers: Array<{
 			'child.once("close"',
 			"process.kill(-child.pid",
 			"exited_early",
-			"childExited",
+			"outputDrainTimedOut",
 		],
 	},
 	{

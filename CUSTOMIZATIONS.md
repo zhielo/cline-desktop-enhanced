@@ -2,6 +2,14 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Integrated execution and evidence lab
+
+- Local one-shot, resource-aware task DAGs use durable hash-checked receipts; refresh/owner loss never replays work. Bounded timings, output hashes, drop/incomplete-drain/truncation evidence, stdin/resize and confirmed cancellation reuse the existing process manager.
+- Opt-in Windows suspended-launch Job Objects enforce process count and memory; unsupported/interactive configurations fail explicitly, with no sandbox or Linux-hard-limit claim.
+- Debugger launch now requires execution-control confirmation; attaches bind/recheck process start-tokens. IDA/Ghidra project reuse uses cross-process leases and executable/config/script fingerprints; stale leases are not silently stolen.
+- Evidence-first plans, package-scoped imported ANR/tombstone/death reports and hash-bound patch review are available in Execution lab. Import/review never installs, resumes, roots or executes a target.
+- Persistent licensed workers, transactional automatic type edits, live runtime JNI mapping and real-device validation remain explicitly unsupported/unverified. See `docs/EXECUTION_EVIDENCE_LAB.md` for contracts and limits.
+
 ## Integrated APK incident workflow
 
 - APK incidents use exact workspace APK/package/selected-device identities, one-shot device approvals and durable SQLite stages; reading status never launches or replays work.

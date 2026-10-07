@@ -414,6 +414,7 @@ const SAFE_DEBUGGER_LOCATION_PATTERN =
 export const LiveDebuggerInputSchema = z.object({
 	operation: z.enum([
 		"discover",
+ "process_identity",
 		"inspect_dump",
 		"launch",
 		"attach_snapshot",
@@ -429,6 +430,7 @@ export const LiveDebuggerInputSchema = z.object({
 	target: z.string().min(1).optional(),
 	args: z.array(z.string().max(32_768)).max(256).optional(),
 	pid: z.number().int().positive().optional(),
+ pid_start_token:z.string().min(1).max(300).optional(),
 	breakpoint: z
 		.string()
 		.min(1)
@@ -455,7 +457,7 @@ export const LiveDebuggerInputSchema = z.object({
 		.boolean()
 		.optional()
 		.describe(
-			"Required for continue or step because these operations resume target execution",
+			"Required for launch, continue or step because these operations resume target execution",
 		),
 });
 

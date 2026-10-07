@@ -1,3 +1,7 @@
+import { ExecutionControlService } from "./execution-control-service";
+import { planEvidenceAnalysis } from "./execution-analysis-planner";
+import { importAndroidDebugEvidence } from "./android-debug-evidence";
+import { reviewPatchArtifacts } from "./execution-patch-lab";
 import { ApkIncidentService } from "./apk-incident-service";
 import { incidentReadiness } from "./incident-readiness";
 import { inspectArtifactEvidence, previewArchiveMember } from "./incident-artifacts";
@@ -67,6 +71,7 @@ import {
 	listLocalProviders,
 	normalizeOAuthProvider,
 	ProcessSessionManager,
+ probeProcessStartTokenAsync,
 	ProviderSettingsManager,
 	parseMcpServerRegistration,
 	persistClineAccountTelemetryIdentity,
@@ -2621,6 +2626,16 @@ function incidents() {
  });
 }
 
+let executionService: ExecutionControlService | undefined;
+function executions() {
+ return executionService ??= new ExecutionControlService({
+ dbPath: join(resolveClineDataDir(),"analysis","execution-receipts.sqlite"),
+ logRoot: join(resolveClineDataDir(),"analysis","execution-private"),
+ tasks: desktopAnalysisTaskOrchestrator, processes: desktopWorkspaceProcessManager,
+ static: async(input,signal)=>JSON.parse(await desktopReverseEngineeringExecutor(ReverseEngineeringInputSchema.parse(input),{...desktopToolContext("desktop-execution"),signal})),
+ debugger: async(input,signal)=>JSON.parse(await desktopLiveDebuggerExecutor(LiveDebuggerInputSchema.parse(input),{...desktopToolContext("desktop-execution"),signal})),
+ });
+}
 function workspaceProcessOwner(baseDir: string): string {
 	const normalized = resolve(baseDir);
 	return `desktop-workspace:${process.platform === "win32" ? normalized.toLowerCase() : normalized}`;
@@ -5113,6 +5128,22 @@ export async function handleCommand(
 			processId,
 		};
 	}
+ if (["prepare_execution_pipeline","start_execution_pipeline","list_execution_receipts","get_execution_receipt","cancel_execution_receipt","reconcile_execution_receipt","execution_stdin","execution_resize","plan_evidence_analysis","import_android_debug_evidence","review_patch_artifacts"].includes(command)) {
+ if(getCommandRuntimeBinding(ctx,args).kind==="ssh")throw new Error("Execution workspace is local-only; no local execution on an SSH workspace");
+ const root=resolve(typeof args?.cwd==="string"&&args.cwd.trim()?args.cwd.trim():ctx.localWorkspaceRoot);
+ if(command==="plan_evidence_analysis")return planEvidenceAnalysis(root,args?.input);
+ if(command==="import_android_debug_evidence")return importAndroidDebugEvidence(root,args?.input);
+ if(command==="review_patch_artifacts")return reviewPatchArtifacts(root,args?.input);
+ if(command==="prepare_execution_pipeline")return executions().prepare(root,args?.input);
+ if(command==="start_execution_pipeline")return executions().start(root,String(args?.planId??""),String(args?.executionToken??""));
+ if(command==="list_execution_receipts")return executions().list(root);
+ const id=String(args?.id??"");
+ if(command==="get_execution_receipt")return executions().get(root,id);
+ if(command==="cancel_execution_receipt")return executions().cancel(root,id);
+ if(command==="reconcile_execution_receipt")return executions().reconcile(root,id);
+ if(command==="execution_resize")return executions().resize(root,id,String(args?.stageId??""),Number(args?.columns),Number(args?.rows));
+ return executions().input(root,id,String(args?.stageId??""),String(args?.text??""));
+ }
  if (["prepare_apk_incident", "start_apk_incident", "list_apk_incidents", "get_apk_incident", "review_apk_incident", "correlate_apk_incident", "get_incident_readiness", "inspect_artifact_evidence", "preview_archive_member"].includes(command)) {
   if(getCommandRuntimeBinding(ctx,args).kind === "ssh") throw new Error("Incident workflows and evidence are local-only; remote artifacts are not local files");
   const root=resolve(typeof args?.cwd==="string" && args.cwd.trim()?args.cwd.trim():ctx.localWorkspaceRoot);
@@ -5188,6 +5219,9 @@ export async function handleCommand(
       let request: Record<string, unknown>;
       if (kind === "debugger") {
         request = LiveDebuggerInputSchema.parse(suppliedRequest);
+ if(typeof request.pid==="number" && request.operation!=="process_identity"){
+  const identity=await probeProcessStartTokenAsync(request.pid);if(identity.status!=="found")throw new Error("Debugger process identity unavailable");request.pid_start_token=identity.token;
+ }
       } else if (kind === "dynamic") {
         request = suppliedRequest.operation === "android_capture" ? await bindAndroidCapture(suppliedRequest) : await bindRuntimeAnalysisRequest(RuntimeAnalysisInputSchema.parse(suppliedRequest));
       } else {

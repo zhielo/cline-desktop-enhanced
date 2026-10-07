@@ -1,7 +1,9 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { StringDecoder } from "node:string_decoder";
+import { redactSensitiveText } from "./process-environment-policy";
 
 const MAX_OUTPUT_CHARS = 200_000;
 
@@ -100,6 +102,8 @@ export async function runSupervised(
 		stderr: string;
 		timedOut: boolean;
 		cancelled: boolean;
+		outputDrainTimedOut?: boolean;
+		truncated?: boolean;
 	}>((resolve, reject) => {
 		if (signal?.aborted) {
 			resolve({
@@ -116,16 +120,27 @@ export async function runSupervised(
 		let stderr = "";
 		let timedOut = false;
 		let cancelled = false;
-		let childExited = false;
+
+		let outputDrainTimedOut = false,
+			truncated = false;
+		let parentExitCode: number | null = null;
+		let drainTimer: ReturnType<typeof setTimeout> | undefined;
+		const stdoutDecoder = new StringDecoder("utf8"),
+			stderrDecoder = new StringDecoder("utf8");
 		let settled = false;
 		child.stdout?.on("data", (chunk) => {
-			stdout = boundedAppend(stdout, chunk);
+			const text = stdoutDecoder.write(chunk);
+			if (stdout.length + text.length > MAX_OUTPUT_CHARS) truncated = true;
+			stdout = boundedAppend(stdout, text);
 		});
 		child.stderr?.on("data", (chunk) => {
-			stderr = boundedAppend(stderr, chunk);
+			const text = stderrDecoder.write(chunk);
+			if (stderr.length + text.length > MAX_OUTPUT_CHARS) truncated = true;
+			stderr = boundedAppend(stderr, text);
 		});
 		const cleanup = () => {
 			clearTimeout(timer);
+			if (drainTimer) clearTimeout(drainTimer);
 			signal?.removeEventListener("abort", abort);
 		};
 		const finish = (result: { exitCode: number | null; error?: Error }) => {
@@ -136,26 +151,48 @@ export async function runSupervised(
 			else
 				resolve({
 					exitCode: result.exitCode,
-					stdout,
-					stderr,
+					stdout: redactSensitiveText(
+						boundedAppend(stdout, stdoutDecoder.end()),
+					),
+					stderr: redactSensitiveText(
+						boundedAppend(stderr, stderrDecoder.end()),
+					),
+					outputDrainTimedOut,
+					truncated,
 					timedOut,
 					cancelled,
 				});
 		};
 		const timer = setTimeout(() => {
-			if (childExited) return;
+			if (settled) return;
 			timedOut = true;
 			killProcessTree(child);
+			drainTimer = setTimeout(() => {
+				outputDrainTimedOut = true;
+				child.stdout?.destroy();
+				child.stderr?.destroy();
+				finish({ exitCode: parentExitCode });
+			}, 2000);
 		}, timeoutMs);
 		const abort = () => {
-			if (childExited) return;
+			if (settled) return;
 			cancelled = true;
 			killProcessTree(child);
 		};
 		signal?.addEventListener("abort", abort, { once: true });
 		child.once("error", (error) => finish({ exitCode: null, error }));
-		child.once("exit", () => {
-			childExited = true;
+		child.once("exit", (code) => {
+			parentExitCode = code;
+			if (drainTimer) clearTimeout(drainTimer);
+			// Descendants may retain stdout after the parent exits. Never wait forever for EOF.
+			drainTimer = setTimeout(() => {
+				if (settled) return;
+				outputDrainTimedOut = true;
+				killProcessTree(child);
+				child.stdout?.destroy();
+				child.stderr?.destroy();
+				finish({ exitCode: parentExitCode });
+			}, 2000);
 		});
 		// close fires only after stdio has drained; exit can precede the final chunks.
 		child.once("close", (exitCode) => finish({ exitCode }));
