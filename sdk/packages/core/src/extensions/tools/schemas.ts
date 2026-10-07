@@ -477,6 +477,7 @@ export const AndroidDeviceInputSchema = z.object({
 		"force_stop",
 		"logcat",
 		"crash_logs",
+ "debug_reports",
 		"pull_apk",
 		"screenshot",
 		"tap",
@@ -488,6 +489,11 @@ export const AndroidDeviceInputSchema = z.object({
 		"bugreport",
 		"processes",
 	]),
+ debug_report_paths:z.array(z.string().regex(/^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/)).min(1).max(6).optional(),
+ use_root:z.boolean().optional(),
+ confirm_sensitive_reports:z.boolean().optional(),
+ acknowledge_root_read:z.boolean().optional(),
+
 	device_serial: z.string().min(1).optional(),
 	process_id: z.number().int().positive().optional(),
 	package: z

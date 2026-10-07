@@ -81,6 +81,7 @@ async function main() {
       "apps/examples/desktop-app/sidecar/incident-artifacts.test.ts",
       "apps/examples/desktop-app/sidecar/incident-correlation.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/android-device.test.ts",
+ "sdk/packages/core/src/extensions/tools/executors/android-debug-reports.test.ts",
       "apps/examples/desktop-app/sidecar/engineering-control-plane.test.ts",
       "apps/examples/desktop-app/sidecar/engineering-git-review.test.ts",
       "apps/examples/desktop-app/sidecar/engineering-worktree-manager.test.ts",

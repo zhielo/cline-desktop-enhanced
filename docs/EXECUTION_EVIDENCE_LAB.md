@@ -35,3 +35,7 @@ New receipt, graph, cancellation, privacy, stale-UI, lease, report-scoping and p
 ### Windows resource-limit fixture correction
 
 Installer #165 passed 15 of 16 consolidated gates, but the sidecar suite failed when Windows Node synchronously threw `spawn UNKNOWN` for a child rejected by the one-process job limit. The fixture previously listened only for an asynchronous error event. It now handles both delivery paths, validates the reported spawn failure, and requires an identical child to execute successfully under a two-process job limit before testing the one-process rejection. Cross-platform owned fixtures exercise both denial paths. Production job limits and mandatory checks are unchanged. A new exact-head Windows build is required; Linux controls do not prove the native policy.
+
+### Subsequent device/JNI evidence integration
+
+Selected root-optional text-report collection and a signed RegisterNatives query bridge are now implemented separately; see `docs/DEVICE_DEBUG_JNI_EVIDENCE.md`. The collector itself already existed. These additions do not establish hardware attestation, complete device collection or runtime/disk equivalence. Persistent licensed-worker pools and automatic transactional type editing remain unimplemented.

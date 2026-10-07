@@ -1,6 +1,8 @@
 "use client";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopClient } from "@/lib/desktop-client";
+import { RuntimeJniWorkspace } from "./runtime-jni-workspace";
 
 type Plan = {
 	id: string;
@@ -162,6 +164,7 @@ export function ExecutionWorkspace({
 	return (
 		<section className="space-y-3 p-3 text-sm">
 			<h2 className="font-semibold">Execution and evidence lab</h2>
+			<RuntimeJniWorkspace cwd={cwd} environmentId={environmentId} />
 			<p>
 				Reviewed host commands only—not an OS sandbox. Never run unknown
 				APK/native samples here. Approvals bind the exact staged request;

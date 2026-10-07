@@ -51,6 +51,26 @@ async function fixture() {
 		sleep: async () => {},
 		android: async (input: Record<string, unknown>) => {
 			calls.push(input);
+			if (input.operation === "debug_reports") {
+				const text =
+					'Cmd line: com.example.app\n"main" tid=1 Blocked\n - waiting to lock <0x1> held by thread 2\n';
+				return {
+					succeeded: true,
+					coverage: "explicit-path-package-scoped-adb-observations",
+					deviceSerialSha256: digest(String(input.device_serial)),
+					reports: [
+						{
+							sourcePath: "/data/anr/anr_owned",
+							status: "scoped-report-read",
+							sourceComplete: true,
+							text,
+							sha256: digest(text),
+						},
+					],
+					limitations: ["Owned fixture, not a physical-device validation"],
+				};
+			}
+
 			if (input.operation === "pull_apk_bounded") {
 				const b = state.wrongDeviceHash ? candidate : installed;
 				await writeFile(String(input.output_path), b);
@@ -366,4 +386,35 @@ it("closes every SQLite owner before deleting shared fixture directories", async
 		"remove-shared-root",
 		"remove-other-root",
 	]);
+});
+
+it("collects separately approved diagnostic reports without launch, install or blanket root", async () => {
+	const f = await fixture();
+	const p = await f.service.prepare(f.root, {
+		...f.request,
+		operation: "collect_apk_debug",
+		debug_report_paths: ["/data/anr/anr_owned"],
+		use_root: true,
+	});
+	expect(p.permission).toBe("Inspect");
+	expect(p.requirements).toContain("explicit-root-read-without-policy-change");
+	expect(p.requirements).not.toContain("execution-control");
+	const approval = f.tasks.approve(p.id, p.requirements, p.requestHash),
+		accepted = await f.service.start(f.root, p.id, approval.executionToken),
+		c = await f.completed(accepted.id);
+	expect(c.stage).toBe("diagnostic-report-completed");
+	expect(
+		f.calls.some((c) =>
+			["launch", "install", "force_stop"].includes(String(c.operation)),
+		),
+	).toBe(false);
+	const report = c.observations.find((o) => o.stage === "diagnostic-report")!;
+	expect(report.text).toBeUndefined();
+	const viewed = await f.service.diagnosticReport(
+		f.root,
+		c.id,
+		String(report.sha256),
+	);
+	expect(viewed.text).toContain("com.example.app");
+	expect(viewed.parsed.scope).toContain("adb-file-observation");
 });

@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, realpathSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { constants, mkdirSync, realpathSync } from "node:fs";
+import {
+	lstat,
+	open,
+	readFile,
+	realpath,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
 import { z } from "zod";
 import type { AnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
+import { parseAndroidDebugEvidence } from "./android-debug-evidence";
 import { apkPackage, digest, ownedFile } from "./incident-artifacts";
 
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -12,10 +20,23 @@ export const IncidentRequest = z
 	.object({
 		operation: z.enum([
 			"observe_apk",
+			"collect_apk_debug",
 			"launch_apk",
 			"validate_apk_patch",
 			"rollback_apk",
 		]),
+		debug_report_paths: z
+			.array(
+				z
+					.string()
+					.regex(
+						/^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/,
+					),
+			)
+			.min(1)
+			.max(6)
+			.optional(),
+		use_root: z.boolean().default(false),
 		target: z.string().min(1),
 		compare_target: z.string().min(1).optional(),
 		package: z.string().regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/),
@@ -105,6 +126,42 @@ export function packageFailures(text: string, pkg: string) {
 							: "unclassified-failure";
 			return { kind, text: safe, sha256: digest(safe) };
 		});
+}
+async function readDiagnosticBytes(expected: string, hash: string) {
+	const path = await realpath(expected);
+	if (path !== expected)
+		throw new Error("Diagnostic report symlink not permitted");
+	const before = await lstat(path);
+	if (!before.isFile() || before.isSymbolicLink() || before.size > 524288)
+		throw new Error("Diagnostic report integrity/budget mismatch");
+	const handle = await open(
+		path,
+		constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+	);
+	try {
+		const info = await handle.stat();
+		if (
+			!info.isFile() ||
+			info.size !== before.size ||
+			info.ino !== before.ino ||
+			info.dev !== before.dev
+		)
+			throw new Error("Diagnostic report identity changed");
+		const buffer = Buffer.alloc(info.size + 1);
+		let size = 0;
+		while (size < buffer.length) {
+			const part = await handle.read(buffer, size, buffer.length - size, size);
+			if (!part.bytesRead) break;
+			size += part.bytesRead;
+		}
+		const after = await handle.stat(),
+			raw = buffer.subarray(0, size);
+		if (size !== info.size || after.size !== info.size || digest(raw) !== hash)
+			throw new Error("Diagnostic report integrity mismatch");
+		return raw;
+	} finally {
+		await handle.close();
+	}
 }
 export class ApkIncidentService {
 	private db?: SqliteDb;
@@ -208,6 +265,19 @@ export class ApkIncidentService {
 			throw new Error("Original APK manifest/package mismatch");
 		request.target = original.path;
 		request.target_sha256 = original.sha256;
+		if (
+			request.operation === "collect_apk_debug" &&
+			!request.debug_report_paths?.length
+		)
+			throw new Error("Explicit diagnostic report paths required");
+		if (
+			request.operation !== "collect_apk_debug" &&
+			(request.use_root || request.debug_report_paths)
+		)
+			throw new Error(
+				"Root diagnostic reads belong to a separate collect_apk_debug plan",
+			);
+
 		if (request.compare_target) {
 			const candidate = await ownedFile(root, request.compare_target);
 			if (apkPackage(candidate.bytes) !== request.package)
@@ -399,6 +469,89 @@ export class ApkIncidentService {
 					"Installed base APK differs from approved baseline; capture/installation blocked",
 				);
 			c.observations.push({ stage: "installed-identity", sha256: before });
+			if (c.request.operation === "collect_apk_debug") {
+				this.checkpoint(c, "explicit-diagnostic-report-read");
+				const result = await this.call(c, "debug_reports", {
+					debug_report_paths: c.request.debug_report_paths,
+					use_root: c.request.use_root,
+					acknowledge_root_read: c.request.use_root,
+					confirm_sensitive_reports: true,
+					timeout_ms: 120000,
+				});
+				if (
+					result.succeeded !== true ||
+					result.coverage !== "explicit-path-package-scoped-adb-observations" ||
+					result.deviceSerialSha256 !== digest(c.request.device_serial)
+				)
+					throw new Error(
+						"Diagnostic capture identity or coverage unavailable",
+					);
+				const reports = Array.isArray(result.reports)
+					? (result.reports as Result[])
+					: [];
+				for (const report of reports) {
+					const { text: raw, ...metadata } = report,
+						text = typeof raw === "string" ? raw : "";
+					if (text) {
+						if (
+							Buffer.byteLength(text) > 524288 ||
+							digest(text) !== report.sha256
+						)
+							throw new Error("Diagnostic report integrity/budget mismatch");
+						const output = join(
+							this.options.cacheRoot,
+							c.id,
+							`${report.sha256}.report.txt`,
+						);
+						try {
+							await writeFile(output, text, { flag: "wx", mode: 0o600 });
+						} catch (error) {
+							if ((error as NodeJS.ErrnoException).code !== "EEXIST")
+								throw error;
+							await readDiagnosticBytes(output, String(report.sha256));
+						}
+						const parsed = parseAndroidDebugEvidence(text, c.request.package);
+						c.observations.push({
+							stage: "diagnostic-report",
+							...metadata,
+							outputPath: output,
+							summary: {
+								nativeFrames: parsed.nativeFrames.length,
+								threads: parsed.threads.length,
+								deaths: parsed.deaths.length,
+								findings: parsed.findings,
+							},
+						});
+					} else
+						c.observations.push({ stage: "diagnostic-report", ...metadata });
+				}
+				if ((await this.installedHash(c)) !== before)
+					throw new Error(
+						"Installed identity changed during diagnostic collection",
+					);
+				const initial = c.observations.find(
+					(o) => o.stage === "device-preflight",
+				)?.device;
+				if (
+					JSON.stringify(await this.call(c, "device_info")) !==
+					JSON.stringify(initial)
+				)
+					throw new Error(
+						"Device identity changed during diagnostic collection",
+					);
+				c.coverage.push(
+					...(Array.isArray(result.limitations)
+						? result.limitations.map(String)
+						: []),
+				);
+				c.status = "completed";
+				c.result =
+					"Selected diagnostic reports collected as package-scoped observations. Age, root cause and absence of failures are not proven.";
+				this.checkpoint(c, "diagnostic-report-completed");
+				this.options.tasks.complete(c.planId, c, "apk-diagnostic-reports");
+				return;
+			}
+
 			if (
 				c.request.operation === "validate_apk_patch" ||
 				c.request.operation === "rollback_apk"
@@ -577,6 +730,32 @@ export class ApkIncidentService {
 			this.active.delete(c.id);
 		}
 	}
+	async diagnosticReport(root: string, id: string, hash: string) {
+		Hash.parse(hash);
+		const c = this.get(root, id);
+		if (
+			c.request.operation !== "collect_apk_debug" ||
+			!c.observations.some(
+				(o) => o.stage === "diagnostic-report" && o.sha256 === hash,
+			)
+		)
+			throw new Error("Report is not bound to this incident");
+		const expected = join(this.options.cacheRoot, c.id, `${hash}.report.txt`),
+			raw = await readDiagnosticBytes(expected, hash);
+		const text = raw.toString("utf8");
+		return {
+			sha256: hash,
+			text,
+			parsed: {
+				...parseAndroidDebugEvidence(text, c.request.package),
+				scope:
+					"selected-device-package-scoped-adb-file-observation-not-hardware-attestation",
+			},
+			notice:
+				"Historical report age and immutable runtime provenance are not proven",
+		};
+	}
+
 	review(root: string, value: unknown) {
 		const input = z
 				.object({

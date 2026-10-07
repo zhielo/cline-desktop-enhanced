@@ -11,6 +11,7 @@ type Plan = {
 	kind: string;
 };
 type Case = {
+	observations?: Record<string, unknown>[];
 	id: string;
 	revision: number;
 	status: string;
@@ -30,6 +31,9 @@ export function ApkIncidentWorkspace({
 }) {
 	const scope = useMemo(() => ({ cwd, environmentId }), [cwd, environmentId]);
 	const epoch = useRef(0);
+	const [reportPaths, setReportPaths] = useState(""),
+		[rootRead, setRootRead] = useState(false),
+		[diagnostic, setDiagnostic] = useState<unknown>();
 	const [operation, setOperation] = useState("observe_apk"),
 		[target, setTarget] = useState(""),
 		[candidate, setCandidate] = useState(""),
@@ -84,6 +88,9 @@ export function ApkIncidentWorkspace({
 		setReproduced(false);
 		setRegressed(false);
 		setCorrelation("");
+		setReportPaths("");
+		setRootRead(false);
+		setDiagnostic(undefined);
 		void refresh();
 		return () => {
 			epoch.current++;
@@ -149,6 +156,15 @@ export function ApkIncidentWorkspace({
 						reproduction,
 						expected,
 						duration_seconds: seconds,
+						...(operation === "collect_apk_debug"
+							? {
+									debug_report_paths: reportPaths
+										.split(/[\n,]+/)
+										.map((p) => p.trim())
+										.filter(Boolean),
+									use_root: rootRead,
+								}
+							: {}),
 					};
 		const value = await call<Plan>("prepare_apk_incident", { input });
 		if (at === epoch.current) {
@@ -228,6 +244,9 @@ export function ApkIncidentWorkspace({
 					value={operation}
 					onChange={(e) => setOperation(e.target.value)}
 				>
+					<option value="collect_apk_debug">
+						Read selected tombstone / ANR reports (no launch)
+					</option>
 					<option value="observe_apk">Observe already-running app</option>
 					<option value="launch_apk">Explicitly launch and observe</option>
 					<option value="validate_apk_patch">
@@ -239,6 +258,45 @@ export function ApkIncidentWorkspace({
 			{field("Candidate APK (patch validation only)", candidate, setCandidate)}
 			{field("Exact package", pkg, setPkg)}
 			{field("ADB device serial", serial, setSerial)}
+			{operation === "collect_apk_debug" && (
+				<div className="space-y-2">
+					<label className="block">
+						Exact diagnostic report paths (one per line)
+						<textarea
+							aria-label="Exact diagnostic report paths"
+							className="w-full rounded border bg-background p-2"
+							value={reportPaths}
+							onChange={(e) => {
+								epoch.current++;
+								setReportPaths(e.target.value);
+								setPlan(null);
+								setConfirmed([]);
+								setBusy(false);
+							}}
+						/>
+					</label>
+					<label>
+						<input
+							type="checkbox"
+							checked={rootRead}
+							onChange={(e) => {
+								epoch.current++;
+								setRootRead(e.target.checked);
+								setPlan(null);
+								setConfirmed([]);
+								setBusy(false);
+							}}
+						/>
+						Use root for these selected reads only; requires separate approval
+						and never changes KernelSU policy
+					</label>
+					<p>
+						Only selected text tombstones/ANR files are read. Other packages are
+						not retained; report age is not automatically a new crash.
+					</p>
+				</div>
+			)}
+
 			{field(
 				"Manual reproduction steps (never executed as shell)",
 				reproduction,
@@ -379,6 +437,7 @@ export function ApkIncidentWorkspace({
 								});
 							if (at === epoch.current) {
 								setCurrent(c);
+								setDiagnostic(undefined);
 								setNotes("");
 								setReproduced(false);
 								setRegressed(false);
@@ -395,6 +454,36 @@ export function ApkIncidentWorkspace({
 			</select>
 			{current && (
 				<div className="space-y-2 rounded border p-3">
+					{current.observations
+						?.filter(
+							(o) =>
+								o.stage === "diagnostic-report" && typeof o.sha256 === "string",
+						)
+						.map((o) => (
+							<button
+								type="button"
+								className="rounded border px-2 py-1"
+								key={`${String(o.sha256)}:${String(o.sourcePath)}`}
+								disabled={busy}
+								onClick={() =>
+									void action(async () => {
+										const at = epoch.current,
+											value = await call("get_apk_diagnostic_report", {
+												id: current.id,
+												sha256: o.sha256,
+											});
+										if (at === epoch.current) setDiagnostic(value);
+									})
+								}
+							>
+								View hash-bound report {String(o.sourcePath)}
+							</button>
+						))}
+					{diagnostic !== undefined && (
+						<pre className="max-h-80 overflow-auto whitespace-pre-wrap text-xs">
+							{JSON.stringify(diagnostic, null, 2)}
+						</pre>
+					)}
 					<p>
 						{current.status} · {current.stage}
 					</p>

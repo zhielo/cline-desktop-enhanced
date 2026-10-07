@@ -189,7 +189,7 @@ async function bounded(response: Response) {
 	}
 	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
-export async function verifyAndroidCapture(
+export async function verifyAndroidObservationReceipt(
 	body: unknown,
 	input: z.infer<typeof AndroidCaptureInput>,
 	requestHash: string,
@@ -244,6 +244,9 @@ export async function verifyAndroidCapture(
 		throw new Error(
 			"Physical device observation differs from approved identity",
 		);
+ return {receipt,signature:b.signature};
+}
+export async function verifyAndroidCapture(body:unknown,input:z.infer<typeof AndroidCaptureInput>,requestHash:string,artifactSha256:string){const b=body as {captures?:unknown};const {receipt,signature}=await verifyAndroidObservationReceipt(body,input,requestHash,artifactSha256);
 	const captures = z
 		.array(
 			z.object({ sha256: Hash, base64: z.string().max(11200000) }).strict(),
@@ -272,7 +275,7 @@ export async function verifyAndroidCapture(
 		throw new Error("Missing or duplicate signed artifact payload");
 	if (new Set(captures.map((x) => x.sha256)).size !== captures.length)
 		throw new Error("Duplicate capture payload");
-	return { receipt, signature: b.signature, files };
+	return { receipt, signature, files };
 }
 async function prepareCaptureDirectory(root: string, directory: string) {
 	const workspace = await realpath(root),

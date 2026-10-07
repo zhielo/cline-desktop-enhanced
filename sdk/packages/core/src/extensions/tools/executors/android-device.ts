@@ -1,3 +1,4 @@
+import {collectAndroidDebugReports} from "./android-debug-reports";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -367,6 +368,11 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 			context.signal,
 		);
 		const selected = selectedDevice(deviceSerial);
+ if(input.operation==="debug_reports"){
+ if(!input.device_serial||!input.package)throw new Error("Debug reports require an explicitly selected device and package");
+ return JSON.stringify(await collectAndroidDebugReports({package:input.package,deviceSerial,paths:input.debug_report_paths??[],useRoot:input.use_root===true,confirmSensitive:input.confirm_sensitive_reports===true,acknowledgeRoot:input.acknowledge_root_read===true},(args,limit)=>runAdb(adb,[...selected,...args],Math.min(timeoutMs,15000),context.signal,limit)));
+ }
+
 		if (input.operation === "screen_info")
 			return JSON.stringify(
 				{

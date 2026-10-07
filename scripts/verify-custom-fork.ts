@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-debug-reports.ts",markers:["collectAndroidDebugReports", "Separate root-read acknowledgement", "no root fallback or retry", "unattributed-not-retained"]},
+ {path:"apps/examples/desktop-app/sidecar/runtime-jni-evidence.ts",markers:["verifyAndroidObservationReceipt", "Completed approved Android capture plan required", "ambiguous-observations", "executeAutomatically: false"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/runtime-jni-workspace.tsx",markers:["query_runtime_jni", "Refresh completed JNI captures", "Verify and query signed registrations"]},
+ {path:"docs/DEVICE_DEBUG_JNI_EVIDENCE.md",markers:["Root is off by default", "existing signed", "not hardware attestation", "Persistent IDA/Ghidra"]},
  {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",markers:["processLimitProbe", "const permitted = await run(2)", "const blocked = await run(1)"]},
  {path:"apps/examples/desktop-app/sidecar/execution-control-service.ts",markers:["ExecutionControlService", "Execution receipt integrity mismatch", "Termination requested but exit was not confirmed", "Reconciliation is read-only"]},
  {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.ts",markers:["CreateProcess suspended", "AssignProcessToJobObject", "no silent hard-limit fallback"]},

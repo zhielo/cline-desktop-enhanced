@@ -1,3 +1,4 @@
+import { queryRuntimeJni } from "./runtime-jni-evidence";
 import { ExecutionControlService } from "./execution-control-service";
 import { planEvidenceAnalysis } from "./execution-analysis-planner";
 import { importAndroidDebugEvidence } from "./android-debug-evidence";
@@ -5144,10 +5145,12 @@ export async function handleCommand(
  if(command==="execution_resize")return executions().resize(root,id,String(args?.stageId??""),Number(args?.columns),Number(args?.rows));
  return executions().input(root,id,String(args?.stageId??""),String(args?.text??""));
  }
- if (["prepare_apk_incident", "start_apk_incident", "list_apk_incidents", "get_apk_incident", "review_apk_incident", "correlate_apk_incident", "get_incident_readiness", "inspect_artifact_evidence", "preview_archive_member"].includes(command)) {
+ if (["prepare_apk_incident", "start_apk_incident", "list_apk_incidents", "get_apk_incident", "review_apk_incident", "correlate_apk_incident", "get_incident_readiness", "inspect_artifact_evidence", "preview_archive_member", "get_apk_diagnostic_report", "query_runtime_jni"].includes(command)) {
   if(getCommandRuntimeBinding(ctx,args).kind === "ssh") throw new Error("Incident workflows and evidence are local-only; remote artifacts are not local files");
   const root=resolve(typeof args?.cwd==="string" && args.cwd.trim()?args.cwd.trim():ctx.localWorkspaceRoot);
-  if(command==="inspect_artifact_evidence")return inspectArtifactEvidence(root,String(args?.path??""));
+  if(command==="query_runtime_jni")return queryRuntimeJni(root,args?.input,desktopAnalysisTaskOrchestrator);
+ if(command==="get_apk_diagnostic_report")return incidents().diagnosticReport(root,String(args?.id??""),String(args?.sha256??""));
+ if(command==="inspect_artifact_evidence")return inspectArtifactEvidence(root,String(args?.path??""));
   if(command==="preview_archive_member")return previewArchiveMember(root,String(args?.path??""),String(args?.member??""),String(args?.expectedHash??""));
   if(command==="prepare_apk_incident")return incidents().prepare(root,args?.input);
   if(command==="start_apk_incident")return incidents().start(root,String(args?.planId??""),String(args?.executionToken??""));
