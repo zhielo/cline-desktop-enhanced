@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { probeProcessStartTokenAsync } from "../../../runtime/process-start-token";
 import type { LiveDebuggerExecutor } from "../types";
 import { commandAvailable, runSupervised } from "./supervised-process";
 
@@ -152,7 +153,9 @@ function lldbArgs(input: Parameters<LiveDebuggerExecutor>[0]): string[] {
 		);
 	if (input.operation === "disassemble")
 		commands.push(
-			`disassemble --name ${input.address ?? input.breakpoint ?? "main"}`,
+			input.address
+				? `disassemble --start-address ${input.address} --count 64`
+				: `disassemble --name ${input.breakpoint ?? "main"}`,
 		);
 	if (input.pid) commands.push("process detach");
 	commands.push("quit");
@@ -165,6 +168,16 @@ function lldbArgs(input: Parameters<LiveDebuggerExecutor>[0]): string[] {
 
 export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 	return async (input, context) => {
+		if (input.operation === "process_identity") {
+			if (!input.pid) throw new Error("process_identity requires pid");
+			const identity = await probeProcessStartTokenAsync(input.pid);
+			return JSON.stringify({
+				operation: input.operation,
+				pid: input.pid,
+				identity,
+				scope: "kernel-start-token-not-authorization",
+			});
+		}
 		const available = await Promise.all(
 			(["gdb", "lldb", "cdb"] as const).map(async (backend) => {
 				const found = await discoverBackend(backend);
@@ -266,7 +279,10 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 					symbolPathConfigured: Boolean(configuredSymbolPath),
 					symbolCacheDirectory,
 					succeeded:
-						result.exitCode === 0 && !result.timedOut && !result.cancelled,
+						result.exitCode === 0 &&
+						!result.timedOut &&
+						!result.cancelled &&
+						!result.outputDrainTimedOut,
 					...result,
 				},
 				null,
@@ -277,10 +293,12 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 			throw new Error(
 				"Live debugging executes or attaches to a process; set acknowledge_risk=true after confirming authorization.",
 			);
-		const resumesExecution = ["continue", "step"].includes(input.operation);
+		const resumesExecution = ["launch", "continue", "step"].includes(
+			input.operation,
+		);
 		if (resumesExecution && input.confirm_execution_control !== true) {
 			throw new Error(
-				"continue and step resume target execution; set confirm_execution_control=true after reviewing the target.",
+				"launch, continue and step control target execution; set confirm_execution_control=true after reviewing the target.",
 			);
 		}
 		if (input.target_kind === "remote")
@@ -306,6 +324,20 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 		if (selected.backend === "cdb") {
 			throw new Error("cdb is supported only for inspect_dump");
 		}
+		if (attaching) {
+			if (!input.pid_start_token)
+				throw new Error(
+					"PID start-token required; resolve process_identity and approve the exact process first",
+				);
+			const identity = await probeProcessStartTokenAsync(input.pid!);
+			if (
+				identity.status !== "found" ||
+				identity.token !== input.pid_start_token
+			)
+				throw new Error(
+					"Debugger process identity changed or unavailable; attachment blocked",
+				);
+		}
 		const args = selected.backend === "gdb" ? gdbArgs(input) : lldbArgs(input);
 		const result = await runSupervised(
 			selected.command,
@@ -324,7 +356,10 @@ export function createLiveDebuggerExecutor(): LiveDebuggerExecutor {
 				executionControlConfirmed: resumesExecution,
 				mode: resumesExecution ? "execution-control" : "inspect-only",
 				succeeded:
-					result.exitCode === 0 && !result.timedOut && !result.cancelled,
+					result.exitCode === 0 &&
+					!result.timedOut &&
+					!result.cancelled &&
+					!result.outputDrainTimedOut,
 				...result,
 			},
 			null,

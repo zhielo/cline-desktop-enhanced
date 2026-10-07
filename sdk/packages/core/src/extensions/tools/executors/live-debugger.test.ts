@@ -44,6 +44,7 @@ it("discovers and invokes a supervised one-shot debugger", async () => {
 				debugger: "gdb",
 				target_kind: "local",
 				target,
+				confirm_execution_control: true,
 				acknowledge_risk: true,
 			},
 			{} as never,
@@ -158,4 +159,35 @@ describe("debugger location validation", () => {
 			).toThrow();
 		}
 	});
+});
+
+it("does not label a launch inspect-only or accept it without execution confirmation", async () => {
+	await expect(
+		createLiveDebuggerExecutor()(
+			{
+				operation: "launch",
+				debugger: "auto",
+				target_kind: "local",
+				target: "/owned/fixture",
+				acknowledge_risk: true,
+			},
+			{} as never,
+		),
+	).rejects.toThrow("confirm_execution_control");
+});
+it("returns process identity without attaching and rejects a stale token", async () => {
+	const execute = createLiveDebuggerExecutor();
+	const result = JSON.parse(
+		await execute(
+			{
+				operation: "process_identity",
+				pid: process.pid,
+				debugger: "auto",
+				target_kind: "local",
+			},
+			{} as never,
+		),
+	);
+	expect(result.identity.status).toBe("found");
+	expect(result.identity.token).toBeTruthy();
 });

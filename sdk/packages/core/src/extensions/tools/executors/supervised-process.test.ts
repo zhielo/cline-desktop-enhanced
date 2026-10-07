@@ -70,3 +70,29 @@ describe("supervised process lifecycle", () => {
 		}
 	});
 });
+
+it("bounds orphan-inherited output handles rather than hanging after parent exit", async () => {
+	if (process.platform === "win32") return; // Windows native Job Object fixture covers owned descendant termination.
+	const result = await runSupervised(
+		process.execPath,
+		[
+			"-e",
+			`require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{stdio:['ignore','inherit','inherit']});process.exit(0)`,
+		],
+		10000,
+	);
+	expect(result.outputDrainTimedOut).toBe(true);
+	expect(result.exitCode).toBe(0);
+}, 15000);
+it("preserves split UTF-8 and redacts retained credential output", async () => {
+	const result = await runSupervised(
+		process.execPath,
+		[
+			"-e",
+			`process.stdout.write(Buffer.from([0xe2]));setTimeout(()=>{process.stdout.write(Buffer.from([0x82,0xac]));process.stdout.write(' token=ownedsecret')},20)`,
+		],
+		5000,
+	);
+	expect(result.stdout).toContain("€");
+	expect(result.stdout).not.toContain("ownedsecret");
+});

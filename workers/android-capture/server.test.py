@@ -76,4 +76,20 @@ class WorkerTest(unittest.TestCase):
    for token,body,expected in [('',{'confirmPlaintextRemoval':True},401),('Bearer '+'t'*40,{'confirmPlaintextRemoval':1},400),('Bearer '+'t'*40,{'confirmPlaintextRemoval':True},200)]:
     conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=5);conn.request('DELETE','/v1/jobs/'+self.job['nonce'],w.encoded(body),{'Authorization':token});response=conn.getresponse();self.assertEqual(response.status,expected);response.read();conn.close()
   finally:server.shutdown();server.server_close();thread.join(timeout=5)
+ def test_invalid_collector_observations_become_terminal_signed_failures(self):
+  fixtures=[{'status':'unexpected','limitations':[]}, {'status':'partial','artifacts':[{'format':'dex'}],'limitations':[]}, {'status':'partial','limitations':['x'*900,'y'*900]}, {'status':'partial','limitations':[object()]}]
+  original=w.MAX_OUTPUT;w.MAX_OUTPUT=1024
+  try:
+   for index,observations in enumerate(fixtures):
+    nonce=('%032x'%(index+1));job=dict(self.job,nonce=nonce)
+    self.worker.execute=lambda *_:observations
+    status,result=self.worker.job(job)
+    self.assertEqual(status,200);self.assertEqual(result['receipt']['status'],'failed')
+    self.key.public_key().verify(base64.b64decode(result['signature']),w.encoded(result['receipt']))
+    self.assertEqual(result['captures'],[])
+    self.worker.execute=lambda *_:self.fail('Invalid collector must not replay')
+    self.assertEqual(self.worker.job(job)[0],200)
+    with self.worker.db() as db:self.assertEqual(db.execute('SELECT status FROM jobs WHERE nonce=?',(nonce,)).fetchone()[0],'failed')
+    self.assertEqual(self.worker.purge(nonce)[0],200)
+  finally:w.MAX_OUTPUT=original
 if __name__=='__main__':unittest.main()

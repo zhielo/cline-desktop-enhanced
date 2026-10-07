@@ -249,7 +249,9 @@ it("keeps exact decompiler selectors in the approval request and rejects envelop
 			([c]) => c === "prepare_analysis_task" || c === "run_static_analysis",
 		),
 	).toBe(false);
-	await value('{"function_selector":{"address":"0x1000"}}');
+	await value(
+		'{"function_selector":{"address":"0x1000"},"managed_worker":true,"confirm_managed_worker":true}',
+	);
 	await clickText("Prepare static-analysis task");
 	expect(invoke).toHaveBeenCalledWith(
 		"prepare_analysis_task",
@@ -257,7 +259,68 @@ it("keeps exact decompiler selectors in the approval request and rejects envelop
 			request: expect.objectContaining({
 				operation: "decompile",
 				function_selector: { address: "0x1000" },
+				managed_worker: true,
+				confirm_managed_worker: true,
 			}),
 		}),
 	);
+});
+
+it("prepares a native candidate preview without executing or overriding the envelope", async () => {
+	const invoke = vi
+		.spyOn(desktopClient, "invoke")
+		.mockImplementation(async (command: string) =>
+			command === "list_analysis_tasks" ? [] : {},
+		);
+	await act(async () => {
+		root.render(<AnalysisWorkbench cwd={"C:\\work"} environmentId="local" />);
+		await Promise.resolve();
+	});
+	const operation = [...container.querySelectorAll("select")].find((s) =>
+		[...s.options].some((o) => o.value === "project_edit"),
+	)!;
+	const engine = [...container.querySelectorAll("select")].find((s) =>
+		[...s.options].some((o) => o.value === "ghidra"),
+	)!;
+	await act(async () => {
+		operation.value = "project_edit";
+		operation.dispatchEvent(new Event("change", { bubbles: true }));
+		engine.value = "ghidra";
+		engine.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	await setInput(
+		container.querySelector(
+			'input[placeholder="Workspace-relative or absolute path"]',
+		) as HTMLInputElement,
+		"owned.so",
+	);
+	const textarea = container.querySelector(
+		'textarea[aria-label="Targeted decompiler options JSON"]',
+	) as HTMLTextAreaElement;
+	await act(async () => {
+		Object.getOwnPropertyDescriptor(
+			HTMLTextAreaElement.prototype,
+			"value",
+		)?.set?.call(
+			textarea,
+			'{"function_selector":{"address":"0x1000"},"project_edit":{"mode":"preview"}}',
+		);
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	invoke.mockClear();
+	await clickText("Prepare static-analysis task");
+	expect(invoke).toHaveBeenCalledWith(
+		"prepare_analysis_task",
+		expect.objectContaining({
+			request: expect.objectContaining({
+				engine: "ghidra",
+				operation: "project_edit",
+				project_edit: { mode: "preview" },
+				function_selector: { address: "0x1000" },
+			}),
+		}),
+	);
+	expect(
+		invoke.mock.calls.some(([command]) => command === "run_static_analysis"),
+	).toBe(false);
 });

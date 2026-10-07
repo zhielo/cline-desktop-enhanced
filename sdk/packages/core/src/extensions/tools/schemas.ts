@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import { NativeProjectEditSchema } from "./native-project-edits-schema";
 
 export const INPUT_ARG_CHAR_LIMIT = 6000;
 
@@ -270,6 +271,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		"extract",
 		"analyze",
 		"decompile",
+		"project_edit",
 		"disassemble_smali",
 		"read_smali_method",
 		"search_smali",
@@ -291,6 +293,19 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional()
 		.describe(
 			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
+		),
+	project_edit: NativeProjectEditSchema.optional(),
+	managed_worker: z
+		.boolean()
+		.optional()
+		.describe(
+			"Opt-in bounded persistent IDA/Ghidra process for exact selected-function decompilation only",
+		),
+	confirm_managed_worker: z
+		.boolean()
+		.optional()
+		.describe(
+			"Explicit acknowledgement of licensed-engine process lifetime and private project writes",
 		),
 	function_selector: z
 		.object({
@@ -414,6 +429,7 @@ const SAFE_DEBUGGER_LOCATION_PATTERN =
 export const LiveDebuggerInputSchema = z.object({
 	operation: z.enum([
 		"discover",
+ "process_identity",
 		"inspect_dump",
 		"launch",
 		"attach_snapshot",
@@ -429,6 +445,7 @@ export const LiveDebuggerInputSchema = z.object({
 	target: z.string().min(1).optional(),
 	args: z.array(z.string().max(32_768)).max(256).optional(),
 	pid: z.number().int().positive().optional(),
+ pid_start_token:z.string().min(1).max(300).optional(),
 	breakpoint: z
 		.string()
 		.min(1)
@@ -455,7 +472,7 @@ export const LiveDebuggerInputSchema = z.object({
 		.boolean()
 		.optional()
 		.describe(
-			"Required for continue or step because these operations resume target execution",
+			"Required for launch, continue or step because these operations resume target execution",
 		),
 });
 
@@ -467,12 +484,15 @@ export const AndroidDeviceInputSchema = z.object({
 		"screen_info",
 		"ui_hierarchy",
 		"package_info",
+		"device_info",
+		"pull_apk_bounded",
 		"install",
 		"uninstall",
 		"launch",
 		"force_stop",
 		"logcat",
 		"crash_logs",
+ "debug_reports",
 		"pull_apk",
 		"screenshot",
 		"tap",
@@ -484,7 +504,13 @@ export const AndroidDeviceInputSchema = z.object({
 		"bugreport",
 		"processes",
 	]),
+ debug_report_paths:z.array(z.string().regex(/^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/)).min(1).max(6).optional(),
+ use_root:z.boolean().optional(),
+ confirm_sensitive_reports:z.boolean().optional(),
+ acknowledge_root_read:z.boolean().optional(),
+
 	device_serial: z.string().min(1).optional(),
+	process_id: z.number().int().positive().optional(),
 	package: z
 		.string()
 		.regex(/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/)

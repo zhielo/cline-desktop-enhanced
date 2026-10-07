@@ -189,7 +189,7 @@ async function bounded(response: Response) {
 	}
 	return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
-export async function verifyAndroidCapture(
+export async function verifyAndroidObservationReceipt(
 	body: unknown,
 	input: z.infer<typeof AndroidCaptureInput>,
 	requestHash: string,
@@ -244,6 +244,9 @@ export async function verifyAndroidCapture(
 		throw new Error(
 			"Physical device observation differs from approved identity",
 		);
+ return {receipt,signature:b.signature};
+}
+export async function verifyAndroidCapture(body:unknown,input:z.infer<typeof AndroidCaptureInput>,requestHash:string,artifactSha256:string){const b=body as {captures?:unknown};const {receipt,signature}=await verifyAndroidObservationReceipt(body,input,requestHash,artifactSha256);
 	const captures = z
 		.array(
 			z.object({ sha256: Hash, base64: z.string().max(11200000) }).strict(),
@@ -272,16 +275,9 @@ export async function verifyAndroidCapture(
 		throw new Error("Missing or duplicate signed artifact payload");
 	if (new Set(captures.map((x) => x.sha256)).size !== captures.length)
 		throw new Error("Duplicate capture payload");
-	return { receipt, signature: b.signature, files };
+	return { receipt, signature, files };
 }
-async function publish(
-	root: string,
-	directory: string,
-	files: Array<{
-		meta: { sha256: string; format: "dex" | "elf" | "receipt" };
-		bytes: Buffer;
-	}>,
-) {
+async function prepareCaptureDirectory(root: string, directory: string) {
 	const workspace = await realpath(root),
 		target = resolve(workspace, directory),
 		rel = relative(workspace, target);
@@ -301,19 +297,53 @@ async function publish(
 		)
 			throw new Error("Capture directory must not contain symlinks");
 	}
-	const ignore = await open(join(target, ".gitignore"), "wx", 0o600).catch(
-		(e) => {
-			if (e.code !== "EEXIST") throw e;
-			return undefined;
-		},
-	);
+	const ignorePath = join(target, ".gitignore");
+	const ignore = await open(ignorePath, "wx", 0o600).catch((e) => {
+		if (e.code !== "EEXIST") throw e;
+		return undefined;
+	});
 	if (ignore) {
 		try {
 			await ignore.writeFile("*\n");
+			await ignore.sync();
 		} finally {
 			await ignore.close();
 		}
 	}
+	// Existing ignore rules must not expose plaintext via negation or symlinks.
+	if ((await lstat(ignorePath)).isSymbolicLink())
+		throw new Error(
+			"Capture .gitignore must be a regular managed ignore-all file",
+		);
+	const handle = await open(
+		ignorePath,
+		constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+	);
+	try {
+		const st = await handle.stat();
+		if (!st.isFile() || st.size < 2 || st.size > 3)
+			throw new Error(
+				"Capture .gitignore must contain only the managed ignore-all rule",
+			);
+		const rule = await handle.readFile("utf8");
+		if (rule !== "*\n" && rule !== "*\r\n")
+			throw new Error(
+				"Capture .gitignore must contain only the managed ignore-all rule",
+			);
+	} finally {
+		await handle.close();
+	}
+	return target;
+}
+async function publish(
+	root: string,
+	directory: string,
+	files: Array<{
+		meta: { sha256: string; format: "dex" | "elf" | "receipt" };
+		bytes: Buffer;
+	}>,
+) {
+	const target = await prepareCaptureDirectory(root, directory);
 	const paths: string[] = [];
 	for (const { meta, bytes } of files) {
 		const path = join(
@@ -321,49 +351,53 @@ async function publish(
 				`${meta.sha256}.${meta.format === "dex" ? "dex" : meta.format === "elf" ? "so" : "receipt.json"}`,
 			),
 			stage = join(target, `.pending-${randomBytes(16).toString("hex")}`);
-		const handle = await open(stage, "wx", 0o600);
+		let ownsStage = false;
 		try {
-			await handle.writeFile(bytes);
-			await handle.sync();
-		} finally {
-			await handle.close();
-		}
-		try {
-			await link(stage, path);
-		} catch (e) {
-			if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-			const h = await open(
-				path,
-				constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
-			);
+			const handle = await open(stage, "wx", 0o600);
+			ownsStage = true;
 			try {
-				const st = await h.stat();
-				const existing = Buffer.alloc(bytes.length + 1);
-				let read = 0;
-				while (read < existing.length) {
-					const got = await h.read(
-						existing,
-						read,
-						existing.length - read,
-						read,
-					);
-					if (!got.bytesRead) break;
-					read += got.bytesRead;
-				}
-				if (
-					!st.isFile() ||
-					st.size !== bytes.length ||
-					read !== bytes.length ||
-					createHash("sha256")
-						.update(existing.subarray(0, read))
-						.digest("hex") !== meta.sha256
-				)
-					throw new Error("Existing capture artifact mismatch");
+				await handle.writeFile(bytes);
+				await handle.sync();
 			} finally {
-				await h.close();
+				await handle.close();
+			}
+			try {
+				await link(stage, path);
+			} catch (e) {
+				if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+				const h = await open(
+					path,
+					constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+				);
+				try {
+					const st = await h.stat();
+					const existing = Buffer.alloc(bytes.length + 1);
+					let read = 0;
+					while (read < existing.length) {
+						const got = await h.read(
+							existing,
+							read,
+							existing.length - read,
+							read,
+						);
+						if (!got.bytesRead) break;
+						read += got.bytesRead;
+					}
+					if (
+						!st.isFile() ||
+						st.size !== bytes.length ||
+						read !== bytes.length ||
+						createHash("sha256")
+							.update(existing.subarray(0, read))
+							.digest("hex") !== meta.sha256
+					)
+						throw new Error("Existing capture artifact mismatch");
+				} finally {
+					await h.close();
+				}
 			}
 		} finally {
-			await rm(stage, { force: true });
+			if (ownsStage) await rm(stage, { force: true });
 		}
 		paths.push(path);
 	}
@@ -399,7 +433,13 @@ export async function runAndroidCapture(
 		!health.manifest?.operations?.includes("android-runtime-capture")
 	)
 		throw new Error("Worker capability changed before upload");
-	if (!recover && (!artifact?.length || artifact.length > 16777216))
+	if (
+		!recover &&
+		(!artifact?.length ||
+			!Number.isSafeInteger(health.manifest.maxArtifactBytes) ||
+			health.manifest.maxArtifactBytes <= 0 ||
+			artifact.length > Math.min(16777216, health.manifest.maxArtifactBytes))
+	)
 		throw new Error("APK upload budget exceeded");
 	if (signal?.aborted) throw new Error("Cancelled before Android submission");
 	if (
@@ -415,6 +455,9 @@ export async function runAndroidCapture(
 			!input.device_serial_sha256)
 	)
 		throw new Error("Physical device changed or was not bound before upload");
+	// Refuse unusable/private-output policy before starting non-replayable work.
+	await prepareCaptureDirectory(root, input.output_directory);
+	if (signal?.aborted) throw new Error("Cancelled before Android submission");
 	const controller = new AbortController(),
 		abort = () => controller.abort();
 	signal?.addEventListener("abort", abort, { once: true });

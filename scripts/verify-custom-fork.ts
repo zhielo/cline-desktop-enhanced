@@ -4,9 +4,87 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-project-candidates.ts",markers:["runNativeProjectCandidate", "Persisted candidate read-back mismatch", "Candidate head changed since review", "pointerOnly: true"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-project-edit-scripts.ts",markers:["currentProgram.endTransaction(tx,commit)", "actual.equals_to(tif)", "save_database(DATABASE,0)"]},
+ {path:"docs/NATIVE_PROJECT_CANDIDATES.md",markers:["no native undo guarantee", "separate engine process", "not signatures", "physical KSUN-device"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.ts",markers:["class ManagedEnginePool", "Worker termination unconfirmed; project lease retained", "Managed engine request binding mismatch", "Managed engine pool capacity reached", "guardManagedBatchArguments"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-scripts.ts",markers:["MANAGED_GHIDRA_SCRIPT", "managedIdaScript", "Ambiguous exact function name", "finally: idc.qexit(0)"]},
+ {path:"docs/MANAGED_ENGINE_WORKERS.md",markers:["90-second idle", "not an OS sandbox", "Transactional annotation/prototype editing is not implemented"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-debug-reports.ts",markers:["collectAndroidDebugReports", "Separate root-read acknowledgement", "no root fallback or retry", "unattributed-not-retained"]},
+ {path:"apps/examples/desktop-app/sidecar/runtime-jni-evidence.ts",markers:["verifyAndroidObservationReceipt", "Completed approved Android capture plan required", "ambiguous-observations", "executeAutomatically: false"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/runtime-jni-workspace.tsx",markers:["query_runtime_jni", "Refresh completed JNI captures", "Verify and query signed registrations"]},
+ {path:"docs/DEVICE_DEBUG_JNI_EVIDENCE.md",markers:["Root is off by default", "existing signed", "not hardware attestation", "Persistent IDA/Ghidra"]},
+ {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",markers:["processLimitProbe", "const permitted = await run(2)", "const blocked = await run(1)"]},
+ {path:"apps/examples/desktop-app/sidecar/execution-control-service.ts",markers:["ExecutionControlService", "Execution receipt integrity mismatch", "Termination requested but exit was not confirmed", "Reconciliation is read-only"]},
+ {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.ts",markers:["CreateProcess suspended", "AssignProcessToJobObject", "no silent hard-limit fallback"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/execution-workspace.tsx",markers:["Prepare exact task", "Approve and start once", "Reconcile without replay"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",markers:["withProjectLease", "Stale leases are never automatically stolen"]},
+ {path:"docs/EXECUTION_EVIDENCE_LAB.md",markers:["uncertain", "not a security boundary", "No physical KSUN device"]},
+ {path:"apps/examples/desktop-app/sidecar/apk-incident-service.ts",markers:["class ApkIncidentService", "No new matching failure observed", "candidate-installed", "controlUnavailable", "pull_apk_bounded", "const base = await realpath(cacheRoot)", "Diagnostic incident directory link not permitted", "if (path !== expected)"]},
+ {path:"apps/examples/desktop-app/sidecar/apk-incident-service.test.ts",markers:["rejects a diagnostic incident directory junction even when report bytes match", "rejects modified and oversized private diagnostic reports", "symlink(moved, directory, \"junction\")"]},
+ {path:"apps/examples/desktop-app/sidecar/incident-correlation.ts",markers:["module SHA-256/ABI/build-ID mismatch", "candidate-match", "symbol-range-match"]},
+ {path:"apps/examples/desktop-app/sidecar/incident-artifacts.ts",markers:["Archive changed since inspection", "Archive member integrity mismatch", "blocked-archive"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/apk-incident-workspace.tsx",markers:["Approve and start once", "Prepare separately approved rollback", "prepare_apk_incident"]},
+ {path:"docs/APK_INCIDENT_WORKFLOW.md",markers:["No physical KSUN device", "fixed", "explicit bounded member preview"]},
+ { path: "apps/examples/desktop-app/webview/lib/artifact-workspace.tsx", markers: ["ArtifactWorkspaceProvider", "ArtifactWorkspaceContext.Provider", "useArtifactWorkspace", "useMemo"] },
+ { path: "apps/examples/desktop-app/webview/components/ui/markdown.tsx", markers: ["useArtifactWorkspace()", "workspace.cwd", "workspace.environmentId"] },
+ { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx", markers: ["<ArtifactWorkspaceProvider", "cwd={props.cwd}", "environmentId={props.environmentId"] },
+ { path: "apps/examples/desktop-app/webview/components/views/chat/artifact-context-menu.tsx", markers: ["suppliedCwd", "suppliedEnvironmentId", "useArtifactWorkspace()"] },
+ { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.test.tsx", markers: ["transcript artifact workspace context", "right-click %s", "unchanged", "originating SSH environment"] },
+
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
+		markers: [
+			"private readonly consuming",
+			"this.prune(this.maxPlans - 1)",
+			"finish or cancel pending work first",
+			"Hashing yields to cancellation",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts",
+		markers: [
+			"exactly once under concurrent requests",
+			"does not resurrect a cancelled approval",
+			"retains running task control",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.ts",
+		markers: [
+			"prepareCaptureDirectory",
+			"regular managed ignore-all file",
+			"health.manifest.maxArtifactBytes",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.test.ts",
+		markers: ["capture output privacy preflight", "signed worker upload limit"],
+	},
+	{
+		path: "workers/android-capture/server.py",
+		markers: [
+			"def build_result",
+			"Capture/result validation failed",
+			"Persist a small, signed terminal failure",
+		],
+	},
+	{
+		path: "workers/android-capture/server.test.py",
+		markers: [
+			"test_invalid_collector_observations_become_terminal_signed_failures",
+			"Invalid collector must not replay",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
+		markers: ["preserves UTF-8 and exact omitted-byte accounting"],
+	},
+
  {path:"sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",markers:["tool with spaces.exe", "fs.copyFile(process.execPath", "fixture.args"]},
  {path:"sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",markers:["sourceRepo: realpathSync.native(repo)"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts", "formatValidationHeartbeat", "recordValidationProgress", "progress.jsonl", "clearInterval(heartbeat)"]},
+ {path:"apps/examples/desktop-app/vitest.config.mts",markers:['maxWorkers: process.platform === "win32" && process.env.CI ? 2 : undefined']},
 
  {path:"workers/android-capture/capture_support.py",markers:["physical_preflight", "Root probe denied", "uid0-reported", "attestation"]},
  {path:"workers/android-capture/capture.py",markers:["Refusing to replace an existing app", "device.enumerate_processes()", "support.physical_preflight", "'exec-out','su','-c'"]},
@@ -292,6 +370,8 @@ const requiredMarkers: Array<{
 		path: ".github/workflows/build-custom-windows-installer.yml",
 		markers: [
 			"Run consolidated custom fork validation",
+			"timeout-minutes: 35",
+			'CLINE_VALIDATION_PARALLEL: "1"',
 			"validate:advanced",
 			"include-hidden-files: true",
 			"Build custom Windows installer",
@@ -945,7 +1025,7 @@ const requiredMarkers: Array<{
 			'child.once("close"',
 			"process.kill(-child.pid",
 			"exited_early",
-			"childExited",
+			"outputDrainTimedOut",
 		],
 	},
 	{

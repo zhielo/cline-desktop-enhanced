@@ -667,6 +667,24 @@ printf "%s\\n" "$@"`,
 		expect(second.reusedAnalysis).toBe(true);
 		expect(second.args).toContain("-process");
 		expect(second.args).not.toContain("-import");
+		await fs.appendFile(
+			path.join(ghidraHome, "support", "analyzeHeadless"),
+			"\n# executable identity changed\n",
+		);
+		const changed = JSON.parse(
+			await execute(
+				{
+					engine: "ghidra",
+					operation: "analyze",
+					target,
+					output_directory: outputDirectory,
+					max_cpu: 2,
+				},
+				{} as never,
+			),
+		);
+		expect(changed.reusedAnalysis).toBe(false);
+		expect(changed.args).toContain("-import");
 	});
 
 	it("supports an editable APK-to-Smali-to-APK round trip", async () => {
@@ -871,4 +889,51 @@ done`,
 		};
 		expect(await run("example.First")).not.toBe(await run("example.Second"));
 	});
+});
+
+it.each([
+	{
+		engine: "auto",
+		operation: "inspect",
+		managed_worker: true,
+		confirm_managed_worker: true,
+	},
+	{
+		engine: "ghidra",
+		operation: "decompile",
+		managed_worker: true,
+		function_selector: { address: "0x10" },
+	},
+	{
+		engine: "ghidra",
+		operation: "decompile",
+		managed_worker: true,
+		confirm_managed_worker: true,
+		function_selector: { address: "0x10" },
+		script_path: "/untrusted.py",
+	},
+	{
+		engine: "jadx",
+		operation: "decompile",
+		managed_worker: true,
+		confirm_managed_worker: true,
+		function_selector: { address: "0x10" },
+	},
+])("rejects invalid managed-worker mode before discovery or engine execution: %j", async (request) => {
+	await expect(
+		createReverseEngineeringExecutor()(
+			request as never,
+			{ sessionId: "owned-session" } as never,
+		),
+	).rejects.toThrow("Managed workers require");
+});
+
+
+it.each([
+ {engine:"auto",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"}},
+ {engine:"ghidra",operation:"project_edit",project_edit:{mode:"preview"}},
+ {engine:"ghidra",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"},script_path:"/untrusted.py"},
+ {engine:"ghidra",operation:"inspect",project_edit:{mode:"preview"}},
+])("rejects unsafe native edit envelopes before discovery: %j",async request=>{
+ await expect(createReverseEngineeringExecutor()(request as never,{sessionId:"owned-session"} as never)).rejects.toThrow(/Native project edits require|project_edit data/);
 });

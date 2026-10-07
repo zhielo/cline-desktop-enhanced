@@ -2,6 +2,63 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Windows validation hang safeguards
+
+- The Windows installer workflow serializes consolidated gates and caps Windows CI Vitest pools at two workers without removing suites or changing assertions. An independent 35-minute Actions step deadline bounds validator hangs; the existing 20-minute per-check deadlines remain enforced.
+- Named 30-second heartbeats and append-and-close `progress.jsonl` records expose active checks and preserve intermediate start/finish evidence before a final summary exists. A lost hosted runner can still prevent artifact upload; these safeguards do not claim a diagnosed application defect or a successful installer.
+
+## Reviewed native-project edit candidates
+
+- Fixed Ghidra/IDA adapters preview exact function state and create private name/comment/prototype candidates under separate Modify/state/project/pointer approvals. Original target bytes and GUI databases are never replaced. Every candidate is saved and independently reopened at the exact entry before publication.
+- Ghidra wraps edits in a native transaction; IDA rollback is isolated unpublished-candidate discard, not a native undo claim. Byte-bound immutable candidate manifests and a separately approved exact-head pointer rollback preserve prior candidate data without replay or in-place patching.
+- Bounded metadata/receipts/project inventory reject link/junction escape, stale state/head, partial native save, read-back mismatch, cancelled work and tampered bytes. Read-only profiles block this workflow. Source/API checks and owned protocol fixtures are not actual installed-engine or physical-device validation.
+- See `docs/NATIVE_PROJECT_CANDIDATES.md`. Global type-library/struct migrations, automatic GUI replacement, licensed-engine compatibility and KSUN-device validation remain outside the verified scope.
+
+## Managed selected-function native engine workers
+
+- Explicitly opted-in Ghidra/IDA exact decompilation can reuse a bounded native process and private imported project. Two workers per owning SDK process, serialized requests, finite idle/lifetime/deadlines, fixed data-only adapters and held cross-process leases prevent silent concurrent project reuse or automatic replay.
+- Reuse binds owning session, canonical target/hash, command/config/script identity, output root and CPU settings; new imports use a byte-verified snapshot. No arbitrary scripts, debugger actions, target execution, license bypass or annotation/type writes are accepted. Pseudocode, mailbox bytes and child diagnostic tails remain bounded.
+- Windows batch engine launches reject cmd.exe expansion/control characters before spawn; ordinary spaced paths remain supported.
+- Analysis workbench requires separate persistent-process/private-project acknowledgements. Opening/refresh never launches workers. Owned process lifecycle tests are mandatory on Linux and Windows; fixed script contracts are not real IDA/Ghidra validation.
+- Guarded function name/comment/prototype candidate editing is implemented above; actual native compatibility and physical KSUN-device validation remain outstanding. See `docs/MANAGED_ENGINE_WORKERS.md` for limits and operational validation.
+
+## Selected device diagnostics and signed live JNI evidence
+
+- A separate `collect_apk_debug` incident binds the workspace APK, installed base-APK hash, explicit device serial and 1–6 approved text tombstone/ANR paths. It does not install, launch, stop, clear logs or instrument an app. Root is off by default and requires an additional exact-plan acknowledgement; KernelSU policy is never changed or bypassed.
+- Report reads reject symlinks/traversal/protobufs, check device/file metadata before and after, cap capture bytes and retain exact-package sections only. Historical age, immutable runtime identity and absence of crashes are not inferred. Bounded private hash-checked report files remain outside the source workspace; the journal stores metadata and a bounded summary, with explicit hash-bound viewing.
+- The existing signed RegisterNatives collector is reused. Queries reverify the pinned Ed25519 signature, approved capture request, nonce, original APK identity and captured module hashes. Exact class/name/descriptor, optional PID and loader identity preserve ambiguous observations rather than guessing an overload or address mapping.
+- Module-relative offsets are not automatically ELF virtual addresses. A unique existing-symbol candidate requires an explicit coordinate acknowledgement and remains an operator-reviewed disk candidate, not loaded-memory equivalence; query/refresh never attaches, resumes or replays a capture.
+- Diagnostic report viewing canonicalizes the trusted cache anchor before constructing UUID/hash paths, avoiding Windows drive/ancestor/short-name spelling false positives. Cache/incident links, report links, byte-budget violations and hash/handle identity changes remain rejected; junction and tamper regressions are mandatory.
+- Physical KSUN/Frida/ADB validation remains unavailable here. Managed read-only selected-function worker adapters are implemented in the subsequent worker phase above; real installed-engine compatibility remains unverified. Guarded function name/comment/prototype candidate adapters are implemented above; they do not automatically modify GUI databases. See `docs/DEVICE_DEBUG_JNI_EVIDENCE.md`.
+
+## Integrated execution and evidence lab
+
+- Local one-shot, resource-aware task DAGs use durable hash-checked receipts; refresh/owner loss never replays work. Bounded timings, output hashes, drop/incomplete-drain/truncation evidence, stdin/resize and confirmed cancellation reuse the existing process manager.
+- Windows resource-limit fixtures handle synchronous throws and asynchronous spawn denials, and require an identical two-process positive control before asserting one-process enforcement; no check is skipped.
+- Opt-in Windows suspended-launch Job Objects enforce process count and memory; unsupported/interactive configurations fail explicitly, with no sandbox or Linux-hard-limit claim.
+- Debugger launch now requires execution-control confirmation; attaches bind/recheck process start-tokens. IDA/Ghidra project reuse uses cross-process leases and executable/config/script fingerprints; stale leases are not silently stolen.
+- Evidence-first plans, package-scoped imported ANR/tombstone/death reports and hash-bound patch review are available in Execution lab. Import/review never installs, resumes, roots or executes a target.
+- Managed read-only native workers are implemented above but require installed-engine validation; guarded candidate edits are implemented above; native-engine compatibility and real-device validation remain outstanding. Signed JNI registration queries and selected device-report reads are implemented in the subsequent evidence integration below; disk-to-runtime equivalence is not inferred. See `docs/EXECUTION_EVIDENCE_LAB.md` for contracts and limits.
+
+## Integrated APK incident workflow
+
+- APK incidents use exact workspace APK/package/selected-device identities, one-shot device approvals and durable SQLite stages; reading status never launches or replays work.
+- Bounded base-APK identity capture, process-name/PID-scoped log observations and baseline-aware Java/native/ANR crash classification support manual reproduction. Root/Frida, split contents, OS-kill attribution and complete tombstones remain unverified.
+- Candidate validation uses a private hash-checked snapshot, real signature verification, separately acknowledged install/execution, post-install identity and explicit operator regression notes. A separate rollback plan verifies recorded installation identities; no automatic uninstall, retry, force-downgrade or data rollback.
+- Exact-build mapping candidates and GNU-build-ID/ABI/hash/file-backed native symbol ranges remain honest about provenance, stripped symbols and unresolved overloads.
+- Readiness reuses discovery and explicitly approved owned-fixture execution; inventory alone is never engine validation. Artifact evidence offers hash-bound, bounded ZIP member viewing without extraction/execution.
+- See `docs/APK_INCIDENT_WORKFLOW.md` for operational limits and fixture-versus-real-device validation.
+
+## Post-integration audit hardening
+
+- File-bound analysis approvals use an in-flight claim and revalidate token, cancellation and expiry after hashing. Concurrent requests cannot reuse approval or resurrect cancelled work.
+- Ledger capacity reclaims terminal entries only; pending/approved/running tasks and in-flight claims remain controllable. At capacity new plans fail explicitly instead of silently evicting work.
+- Android capture output is preflighted before POST or GET: dedicated workspace child, no symlink directories, and an exact regular ignore-all `.gitignore`. Publication rechecks the same policy; partial staging files are removed on write/sync failure as well as link failure. Ignore rules are not a substitute for encryption, host sandboxing, or protection against force-add/tracked files.
+- Android upload obeys the minimum of the signed worker byte budget and the desktop's 16 MiB cap.
+- Collector/result validation errors persist a bounded signed terminal failure, without private diagnostics or captured bytes; repeated nonce retrieval never re-executes the sample.
+- Terminal UTF-8 truncation uses byte-boundary slicing rather than materializing character arrays/concatenating individual code points; head/tail limits and exact omitted-byte accounting are retained.
+- Regression coverage is in the existing approval, Android capture, worker and process-session suites. See `docs/POST_INTEGRATION_AUDIT.md` for scope and limitations.
+
 ## Quality gate reliability
 
 - Full workspace typechecks run sequentially with the same `-F '*'` scope to avoid simultaneously loading every TypeScript graph. No workspace, strict check or failed diagnostic is suppressed.
@@ -139,6 +196,7 @@ Primary files:
 - A single artifact path in a fenced Markdown block renders as an actionable artifact card instead of a passive copy-only code block.
 - Finished sessions combine declared task artifacts, artifact paths found in assistant output, and changed Git files into one completion summary. Artifact rows open the exact file, while changed-code rows retain direct editor and review-pane actions.
 - Remote artifacts remain blocked from local opening until an explicit remote download/preview boundary exists.
+- Inline Markdown artifact actions inherit the originating transcript's workspace and environment through a scoped React provider. Preview, system/editor opening and folder reveal use the same context; unchanged memoized Markdown still updates its workspace binding. Copy path remains clipboard-only. See `docs/ARTIFACT_WORKSPACE_CONTEXT.md`.
 
 Primary files:
 

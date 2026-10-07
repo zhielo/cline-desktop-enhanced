@@ -5,10 +5,23 @@ import {
 	verifyAndroidCapture,
 	runAndroidCapture,
 } from "./android-runtime-client";
-import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import {
+	mkdtemp,
+	readFile,
+	rm,
+	symlink,
+	mkdir,
+	writeFile,
+	readdir,
+	open,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeAnalysisSandbox } from "./analysis-sandbox-client";
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:fs/promises")>();
+	return { ...actual, open: vi.fn(actual.open) };
+});
 vi.mock("./analysis-sandbox-client", () => ({ probeAnalysisSandbox: vi.fn() }));
 afterEach(() => {
 	vi.unstubAllEnvs();
@@ -175,7 +188,11 @@ describe("capture publication and retrieval", () => {
 			root = await mkdtemp(join(tmpdir(), "capture-test-"));
 		vi.mocked(probeAnalysisSandbox).mockResolvedValue({
 			ready: true,
-			manifest: { workerId: "worker", operations: ["android-runtime-capture"] },
+			manifest: {
+				workerId: "worker",
+				maxArtifactBytes: 16777216,
+				operations: ["android-runtime-capture"],
+			},
 		} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
 		const fetcher = vi
 			.spyOn(globalThis, "fetch")
@@ -235,7 +252,11 @@ describe("capture publication and retrieval", () => {
 		expect(fetcher).not.toHaveBeenCalled();
 		vi.mocked(probeAnalysisSandbox).mockResolvedValue({
 			ready: true,
-			manifest: { workerId: "worker", operations: ["android-runtime-capture"] },
+			manifest: {
+				workerId: "worker",
+				maxArtifactBytes: 16777216,
+				operations: ["android-runtime-capture"],
+			},
 		} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
 		await expect(
 			runAndroidCapture(
@@ -254,7 +275,11 @@ describe("capture publication and retrieval", () => {
 			other = await mkdtemp(join(tmpdir(), "capture-other-"));
 		vi.mocked(probeAnalysisSandbox).mockResolvedValue({
 			ready: true,
-			manifest: { workerId: "worker", operations: ["android-runtime-capture"] },
+			manifest: {
+				workerId: "worker",
+				maxArtifactBytes: 16777216,
+				operations: ["android-runtime-capture"],
+			},
 		} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
 		vi.spyOn(globalThis, "fetch").mockImplementation(
 			async () => new Response(JSON.stringify(f.body)),
@@ -329,7 +354,11 @@ it("refuses native collection when signed worker capabilities do not advertise i
 		fetcher = vi.spyOn(globalThis, "fetch");
 	vi.mocked(probeAnalysisSandbox).mockResolvedValue({
 		ready: true,
-		manifest: { workerId: "worker", operations: ["android-runtime-capture"] },
+		manifest: {
+			workerId: "worker",
+			maxArtifactBytes: 16777216,
+			operations: ["android-runtime-capture"],
+		},
 	} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
 	await expect(
 		runAndroidCapture(
@@ -349,6 +378,7 @@ it("rejects physical device changes before uploading approved APK", async () => 
 		ready: true,
 		manifest: {
 			workerId: "worker",
+			maxArtifactBytes: 16777216,
 			targetKind: "physical",
 			deviceSerialSha256: "e".repeat(64),
 			operations: ["android-runtime-capture"],
@@ -363,4 +393,123 @@ it("rejects physical device changes before uploading approved APK", async () => 
 		),
 	).rejects.toThrow("device changed");
 	expect(fetcher).not.toHaveBeenCalled();
+});
+
+describe("capture output privacy preflight", () => {
+	it.each([
+		"empty",
+		"unignore",
+		"directory",
+		"symlink",
+	])("refuses an unsafe %s .gitignore before contacting the worker", async (kind) => {
+		const f = fixture(),
+			root = await mkdtemp(join(tmpdir(), "capture-privacy-"));
+		const other = await mkdtemp(join(tmpdir(), "capture-privacy-other-"));
+		vi.mocked(probeAnalysisSandbox).mockResolvedValue({
+			ready: true,
+			manifest: {
+				workerId: "worker",
+				maxArtifactBytes: 16777216,
+				operations: ["android-runtime-capture"],
+			},
+		} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
+		const fetcher = vi
+			.spyOn(globalThis, "fetch")
+			.mockImplementation(async () => new Response(JSON.stringify(f.body)));
+		try {
+			await mkdir(join(root, "captures"));
+			const path = join(root, "captures", ".gitignore");
+			if (kind === "directory") await mkdir(path);
+			else if (kind === "symlink") await symlink(other, path, "junction");
+			else await writeFile(path, kind === "empty" ? "" : "*\n!*.dex\n");
+			await expect(
+				runAndroidCapture(
+					f.input,
+					undefined,
+					"b".repeat(64),
+					root,
+					undefined,
+					true,
+					"c".repeat(64),
+				),
+			).rejects.toThrow("gitignore");
+			expect(fetcher).not.toHaveBeenCalled();
+			expect(await readdir(join(root, "captures"))).toEqual([".gitignore"]);
+			expect(await readdir(other)).toEqual([]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(other, { recursive: true, force: true });
+		}
+	});
+	it("respects the signed worker upload limit before POST", async () => {
+		const f = fixture(),
+			root = await mkdtemp(join(tmpdir(), "capture-limit-"));
+		vi.mocked(probeAnalysisSandbox).mockResolvedValue({
+			ready: true,
+			manifest: {
+				workerId: "worker",
+				maxArtifactBytes: 2,
+				operations: ["android-runtime-capture"],
+			},
+		} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
+		const fetcher = vi
+			.spyOn(globalThis, "fetch")
+			.mockImplementation(async () => new Response(JSON.stringify(f.body)));
+		try {
+			await expect(
+				runAndroidCapture(f.input, Buffer.from("APK"), "b".repeat(64), root),
+			).rejects.toThrow("upload budget");
+			expect(fetcher).not.toHaveBeenCalled();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+});
+
+it.each([
+	"writeFile",
+	"sync",
+] as const)("removes owned staging plaintext after a %s failure", async (method) => {
+	const f = fixture(),
+		root = await mkdtemp(join(tmpdir(), "capture-stage-fault-"));
+	const actual =
+		await vi.importActual<typeof import("node:fs/promises")>(
+			"node:fs/promises",
+		);
+	vi.mocked(probeAnalysisSandbox).mockResolvedValue({
+		ready: true,
+		manifest: {
+			workerId: "worker",
+			maxArtifactBytes: 16777216,
+			operations: ["android-runtime-capture"],
+		},
+	} as Awaited<ReturnType<typeof probeAnalysisSandbox>>);
+	vi.spyOn(globalThis, "fetch").mockImplementation(
+		async () => new Response(JSON.stringify(f.body)),
+	);
+	vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+		const handle = await actual.open(path, flags, mode);
+		if (String(path).includes(".pending-"))
+			vi.spyOn(handle, method).mockRejectedValue(
+				new Error("Owned staging I/O failure"),
+			);
+		return handle;
+	});
+	try {
+		await expect(
+			runAndroidCapture(
+				f.input,
+				undefined,
+				"b".repeat(64),
+				root,
+				undefined,
+				true,
+				"c".repeat(64),
+			),
+		).rejects.toThrow("staging I/O failure");
+		expect(await readdir(join(root, "captures"))).toEqual([".gitignore"]);
+	} finally {
+		vi.mocked(open).mockImplementation(actual.open);
+		await rm(root, { recursive: true, force: true });
+	}
 });

@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/lib/chat-schema";
+import { desktopClient } from "@/lib/desktop-client";
 import { MAX_LIVE_COMMAND_OUTPUT_CHARS } from "@/lib/command-output";
 import { ChatMessages, getSessionRunMetrics } from "./chat-messages";
 
@@ -2442,5 +2443,132 @@ describe("ChatMessages credential failures", () => {
 		]);
 		await act(async () => buttons[0]?.click());
 		expect(onFixCredentials).toHaveBeenCalledWith("models");
+	});
+});
+
+describe("transcript artifact workspace context", () => {
+	const content = "Report: `out/REPORT.md`";
+	const messages: ChatMessage[] = [
+		{
+			id: "artifact-message",
+			sessionId: "session-1",
+			role: "assistant",
+			content,
+			createdAt: 1,
+		},
+	];
+	function preview() {
+		return {
+			path: "C:\\work\\out\\REPORT.md",
+			name: "REPORT.md",
+			size: 32,
+			modifiedAt: "2026-10-06T10:00:00Z",
+			kind: "text",
+			content: "# Owned report fixture",
+		};
+	}
+	async function artifact() {
+		return await vi.waitFor(() => {
+			const link = container.querySelector<HTMLAnchorElement>(
+				'[data-cline-file-reference="out/REPORT.md"]',
+			);
+			expect(link).not.toBeNull();
+			return link!;
+		});
+	}
+	it("previews a relative Markdown file in the transcript's workspace", async () => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockResolvedValue(preview());
+		await renderMessages(messages, { cwd: "C:\\work", environmentId: "local" });
+		const link = await artifact();
+		await act(async () => {
+			link.click();
+		});
+		expect(invoke).toHaveBeenCalledWith("read_artifact_preview", {
+			path: "out/REPORT.md",
+			cwd: "C:\\work",
+			environmentId: "local",
+		});
+		expect(document.body.textContent).toContain("Owned report fixture");
+		expect(invoke).not.toHaveBeenCalledWith("open_artifact", expect.anything());
+	});
+	it.each([
+		["Preview", "read_artifact_preview"],
+		["Open with default app", "open_artifact"],
+		["Show in folder", "reveal_artifact_in_folder"],
+	])("passes the same workspace to right-click %s", async (label, command) => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockResolvedValue(preview());
+		await renderMessages(messages, { cwd: "C:\\work", environmentId: "local" });
+		const link = await artifact();
+		await act(async () => {
+			link.dispatchEvent(
+				new MouseEvent("contextmenu", {
+					bubbles: true,
+					button: 2,
+					cancelable: true,
+				}),
+			);
+		});
+		const item = await vi.waitFor(() => {
+			const item = [
+				...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+			].find((e) => e.textContent?.includes(label));
+			expect(item).toBeDefined();
+			return item!;
+		});
+		await act(async () => {
+			item.click();
+		});
+		expect(invoke).toHaveBeenCalledWith(command, {
+			path: "out/REPORT.md",
+			cwd: "C:\\work",
+			environmentId: "local",
+		});
+	});
+	it("retains the originating SSH environment instead of using the active local desktop", async () => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockRejectedValue(
+				new Error("Remote artifact previews are not available yet."),
+			);
+		await renderMessages(messages, {
+			cwd: "/owned/remote",
+			environmentId: "ssh-owned",
+		});
+		const link = await artifact();
+		await act(async () => {
+			link.click();
+		});
+		expect(invoke).toHaveBeenCalledWith("read_artifact_preview", {
+			path: "out/REPORT.md",
+			cwd: "/owned/remote",
+			environmentId: "ssh-owned",
+		});
+		expect(invoke).not.toHaveBeenCalledWith("open_artifact", expect.anything());
+	});
+	it("updates workspace binding even when memoized Markdown content is unchanged", async () => {
+		const invoke = vi
+			.spyOn(desktopClient, "invoke")
+			.mockResolvedValue(preview());
+		await renderMessages(messages, {
+			cwd: "C:\\first",
+			environmentId: "local",
+		});
+		await renderMessages(messages, {
+			cwd: "C:\\second",
+			environmentId: "local",
+		});
+		const link = await artifact();
+		await act(async () => {
+			link.click();
+		});
+		expect(invoke).toHaveBeenCalledWith("read_artifact_preview", {
+			path: "out/REPORT.md",
+			cwd: "C:\\second",
+			environmentId: "local",
+		});
 	});
 });

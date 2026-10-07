@@ -252,3 +252,141 @@ describe("known-key decryption review", () => {
 		).toBeTruthy();
 	});
 });
+
+describe("approval races and bounded ledger retention", () => {
+	async function approvedFile(orchestrator: AnalysisTaskOrchestrator) {
+		const root = workspace();
+		writeFileSync(join(root, "owned.bin"), "owned fixture");
+		const request = { operation: "inspect", target: "owned.bin" };
+		const plan = await orchestrator.prepare({
+			workspaceRoot: root,
+			kind: "static",
+			request,
+		});
+		const approval = orchestrator.approve(
+			plan.id,
+			plan.requirements,
+			plan.requestHash,
+		);
+		return {
+			root,
+			plan,
+			consume: {
+				planId: plan.id,
+				executionToken: approval.executionToken,
+				workspaceRoot: root,
+				kind: "static" as const,
+				request,
+			},
+		};
+	}
+	it("consumes a file-bound token exactly once under concurrent requests", async () => {
+		const o = new AnalysisTaskOrchestrator();
+		const f = await approvedFile(o);
+		try {
+			const results = await Promise.allSettled([
+				o.consume(f.consume),
+				o.consume(f.consume),
+			]);
+			expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+			expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+		} finally {
+			o.cancel(f.plan.id);
+		}
+	});
+	it("does not resurrect a cancelled approval while target hashing is in flight", async () => {
+		const o = new AnalysisTaskOrchestrator();
+		const f = await approvedFile(o);
+		const consuming = o.consume(f.consume);
+		o.cancel(f.plan.id);
+		try {
+			await expect(consuming).rejects.toThrow("exact request envelope");
+			expect(o.list(f.root)[0].status).toBe("cancelled");
+		} finally {
+			if (o.list(f.root)[0].status === "running") o.cancel(f.plan.id);
+		}
+	});
+	it("rechecks expiry after asynchronous target hashing", async () => {
+		let now = 1000;
+		const o = new AnalysisTaskOrchestrator({
+			now: () => now,
+			approvalTtlMs: 1000,
+		});
+		const f = await approvedFile(o);
+		const consuming = o.consume(f.consume);
+		now = 2001;
+		try {
+			await expect(consuming).rejects.toThrow("exact request envelope");
+			expect(o.list(f.root)[0].status).toBe("expired");
+		} finally {
+			if (o.list(f.root)[0].status === "running") o.cancel(f.plan.id);
+		}
+	});
+	it("rejects new plans rather than evicting pending approvals", async () => {
+		const o = new AnalysisTaskOrchestrator({ maxPlans: 1 });
+		const root = workspace();
+		const input = {
+			workspaceRoot: root,
+			kind: "static" as const,
+			request: { operation: "inspect" },
+		};
+		const plan = await o.prepare(input);
+		await expect(o.prepare(input)).rejects.toThrow("capacity");
+		expect(o.list(root).map((p) => p.id)).toEqual([plan.id]);
+	});
+	it("retains running task control and reclaims only terminal ledger entries", async () => {
+		const o = new AnalysisTaskOrchestrator({ maxPlans: 1 });
+		const f = await approvedFile(o);
+		await o.consume(f.consume);
+		try {
+			await expect(
+				o.prepare({
+					workspaceRoot: f.root,
+					kind: "static",
+					request: { operation: "inspect" },
+				}),
+			).rejects.toThrow("capacity");
+			expect(o.signal(f.plan.id).aborted).toBe(false);
+			o.complete(f.plan.id, { owned: true }, "fixture");
+			const next = await o.prepare({
+				workspaceRoot: f.root,
+				kind: "static",
+				request: { operation: "inspect" },
+			});
+			expect(o.list(f.root).map((p) => p.id)).toEqual([next.id]);
+		} finally {
+			if (
+				o.list(f.root).some((p) => p.id === f.plan.id && p.status === "running")
+			)
+				o.cancel(f.plan.id);
+		}
+	});
+});
+
+it("requires separate persistent engine process and private project acknowledgements", async () => {
+	const root = workspace();
+	writeFileSync(join(root, "owned.so"), "owned fixture");
+	const tasks = new AnalysisTaskOrchestrator();
+	const plan = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: {
+			operation: "decompile",
+			target: "owned.so",
+			engine: "ghidra",
+			function_selector: { address: "0x10" },
+			managed_worker: true,
+			confirm_managed_worker: true,
+		},
+	});
+	expect(plan.requirements).toContain("managed-persistent-engine-process");
+	expect(plan.requirements).toContain("private-analysis-project-write");
+	expect(() => tasks.approve(plan.id, [], plan.requestHash)).toThrow();
+});
+
+
+it("classifies native project candidates as Modify with explicit state/pointer approvals",async()=>{
+ const root=workspace();writeFileSync(join(root,"owned.so"),"owned fixture");const tasks=new AnalysisTaskOrchestrator();
+ const plan=await tasks.prepare({workspaceRoot:root,kind:"static",request:{operation:"project_edit",target:"owned.so",engine:"ghidra",project_edit:{mode:"preview"},function_selector:{address:"0x10"}}});
+ expect(plan.permission).toBe("Modify");expect(plan.requirements).toContain("reviewed-native-project-state");expect(plan.requirements).toContain("candidate-pointer-change-not-gui-replacement");expect(()=>tasks.approve(plan.id,[],plan.requestHash)).toThrow();
+});

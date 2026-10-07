@@ -1,3 +1,4 @@
+import {collectAndroidDebugReports} from "./android-debug-reports";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -15,6 +16,7 @@ type ProcessResult = {
 	stderr: string;
 	timedOut: boolean;
 	cancelled: boolean;
+	truncated?: boolean;
 };
 
 async function commandAvailable(command: string): Promise<boolean> {
@@ -77,7 +79,9 @@ async function runAdb(
 		let stderr = "";
 		let timedOut = false;
 		let cancelled = false;
+		let truncated = false;
 		child.stdout?.on("data", (chunk: Buffer<ArrayBufferLike>) => {
+			if (stdout.length + chunk.length > maxStdoutBytes) truncated = true;
 			if (stdout.length < maxStdoutBytes) {
 				stdout = Buffer.concat([
 					stdout,
@@ -117,7 +121,7 @@ async function runAdb(
 		child.once("close", (exitCode) => {
 			clearTimeout(timer);
 			signal?.removeEventListener("abort", abort);
-			resolve({ exitCode, stdout, stderr, timedOut, cancelled });
+			resolve({ exitCode, stdout, stderr, timedOut, cancelled, truncated });
 		});
 	});
 }
@@ -298,6 +302,7 @@ function textResult(
 			exitCode: result.exitCode,
 			stdout: redactSensitiveText(result.stdout.toString("utf8")),
 			stderr: redactSensitiveText(result.stderr),
+			truncated: result.truncated ?? false,
 			timedOut: result.timedOut,
 			cancelled: result.cancelled,
 			durationMs: Date.now() - started,
@@ -329,6 +334,15 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 					operation: input.operation,
 					adb,
 					version: version.stdout.toString("utf8").trim(),
+					versionExitCode: version.exitCode,
+					devicesExitCode: devices.exitCode,
+					incomplete:
+						version.timedOut ||
+						devices.timedOut ||
+						version.cancelled ||
+						devices.cancelled ||
+						!!version.truncated ||
+						!!devices.truncated,
 					devices: devices.stdout.toString("utf8").trim(),
 					stderr: `${version.stderr}\n${devices.stderr}`.trim(),
 					durationMs: Date.now() - started,
@@ -354,6 +368,11 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 			context.signal,
 		);
 		const selected = selectedDevice(deviceSerial);
+ if(input.operation==="debug_reports"){
+ if(!input.device_serial||!input.package)throw new Error("Debug reports require an explicitly selected device and package");
+ return JSON.stringify(await collectAndroidDebugReports({package:input.package,deviceSerial,paths:input.debug_report_paths??[],useRoot:input.use_root===true,confirmSensitive:input.confirm_sensitive_reports===true,acknowledgeRoot:input.acknowledge_root_read===true},(args,limit)=>runAdb(adb,[...selected,...args],Math.min(timeoutMs,15000),context.signal,limit)));
+ }
+
 		if (input.operation === "screen_info")
 			return JSON.stringify(
 				{
@@ -434,6 +453,94 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 			);
 		}
 		switch (input.operation) {
+			case "device_info": {
+				const observations: Record<string, string> = {};
+				for (const property of [
+					"ro.build.version.sdk",
+					"ro.build.version.release",
+					"ro.product.cpu.abilist",
+					"ro.kernel.qemu",
+					"ro.build.fingerprint",
+				]) {
+					const result = await runAdb(
+						adb,
+						[...selected, "shell", "getprop", property],
+						15000,
+						context.signal,
+					);
+					if (
+						result.exitCode !== 0 ||
+						result.timedOut ||
+						result.cancelled ||
+						result.truncated
+					)
+						throw new Error("Device identity query incomplete");
+					observations[property] = redactSensitiveText(
+						result.stdout.toString("utf8").trim(),
+					);
+				}
+				return JSON.stringify({
+					operation: input.operation,
+					deviceSerial,
+					observations,
+					root: "unverified",
+					frida: "unverified",
+				});
+			}
+			case "pull_apk_bounded": {
+				const packageName = requirePackage(input.package),
+					output = requireAbsolute(input.output_path, "output_path");
+				const paths = await runAdb(
+					adb,
+					[...selected, "shell", "pm", "path", packageName],
+					15000,
+					context.signal,
+				);
+				if (
+					paths.exitCode !== 0 ||
+					paths.timedOut ||
+					paths.cancelled ||
+					paths.truncated
+				)
+					throw new Error("Installed APK path query incomplete");
+				const entries = paths.stdout
+					.toString("utf8")
+					.split(/\r?\n/)
+					.filter((line) => line.startsWith("package:"))
+					.map((line) => line.slice(8).trim());
+				const remote =
+					entries.find((entry) => entry.endsWith("/base.apk")) ?? entries[0];
+				if (!remote || !/^\/[A-Za-z0-9_+.,=@%/~-]+\.apk$/.test(remote))
+					throw new Error("Unsupported installed APK path");
+				const result = await runAdb(
+					adb,
+					[...selected, "exec-out", "cat", remote],
+					timeoutMs,
+					context.signal,
+					64 * 1024 * 1024,
+				);
+				if (
+					result.exitCode !== 0 ||
+					result.timedOut ||
+					result.cancelled ||
+					result.truncated
+				)
+					throw new Error(
+						"Installed APK read incomplete or exceeded 64 MiB budget",
+					);
+				await fs.mkdir(path.dirname(output), { recursive: true, mode: 0o700 });
+				await fs.writeFile(output, result.stdout, { mode: 0o600, flag: "wx" });
+				return JSON.stringify({
+					operation: input.operation,
+					deviceSerial,
+					outputPath: output,
+					sha256: createHash("sha256").update(result.stdout).digest("hex"),
+					bytes: result.stdout.length,
+					splitCount: entries.length,
+					coverage: "base-apk-only",
+					succeeded: true,
+				});
+			}
 			case "package_info":
 				args = [
 					...selected,
@@ -594,7 +701,50 @@ export function createAndroidDeviceExecutor(): AndroidDeviceExecutor {
 						15_000,
 						context.signal,
 					);
-				if (input.package) {
+				if (input.process_id !== undefined) {
+					const pkg = requirePackage(input.package);
+					const processes = await runAdb(
+						adb,
+						[...selected, "shell", "ps", "-A"],
+						15000,
+						context.signal,
+					);
+					if (
+						processes.exitCode !== 0 ||
+						processes.timedOut ||
+						processes.cancelled ||
+						processes.truncated
+					)
+						throw new Error("Process identity query incomplete");
+					const rows = processes.stdout
+						.toString("utf8")
+						.trim()
+						.split(/\r?\n/)
+						.map((line) => line.trim().split(/\s+/));
+					const pidColumn = rows[0]?.indexOf("PID") ?? -1;
+					if (
+						pidColumn < 0 ||
+						!rows
+							.slice(1)
+							.some(
+								(row) =>
+									Number(row[pidColumn]) === input.process_id &&
+									(row.at(-1) === pkg || row.at(-1)?.startsWith(`${pkg}:`)),
+							)
+					)
+						throw new Error(
+							"PID no longer belongs to the approved package process name",
+						);
+					args = [
+						...selected,
+						"logcat",
+						"-d",
+						"--pid",
+						String(input.process_id),
+						"-t",
+						String(input.lines ?? 500),
+					];
+				} else if (input.package) {
 					const pidResult = await runAdb(
 						adb,
 						[...selected, "shell", "pidof", input.package],

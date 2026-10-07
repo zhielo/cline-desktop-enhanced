@@ -1,25 +1,3 @@
-import {
-	TARGETED_GHIDRA_SCRIPT,
-	targetedIdaScript,
-	type FunctionSelector,
-} from "./targeted-decompiler-scripts";
-import {
-	persistInvestigation,
-	queryInvestigation,
-	readInvestigationResult,
-} from "./android-investigation-index";
-import { programEvidenceResult } from "./analysis-program-evidence";
-import {
-	runAdvancedAnalysis,
-	advancedEvidenceBundle,
-	type AdvancedResult,
-} from "./advanced-analysis";
-import { graphResult } from "./analysis-evidence-graph";
-import {
-	readAnalysisJson,
-	prepareNotebook,
-	runAnalysisNotebook,
-} from "./analysis-notebook";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
@@ -30,10 +8,41 @@ import { promisify } from "node:util";
 import { inflateRaw } from "node:zlib";
 import type { ReverseEngineeringExecutor } from "../types";
 import {
+	type AdvancedResult,
+	advancedEvidenceBundle,
+	runAdvancedAnalysis,
+} from "./advanced-analysis";
+import { graphResult } from "./analysis-evidence-graph";
+import {
+	prepareNotebook,
+	readAnalysisJson,
+	runAnalysisNotebook,
+} from "./analysis-notebook";
+import { programEvidenceResult } from "./analysis-program-evidence";
+import { readNativeCandidateReceipt, runNativeProjectCandidate } from "./native-project-candidates";
+import { NATIVE_GHIDRA_EDIT_SCRIPT, nativeIdaEditScript } from "./native-project-edit-scripts";
+import { NativeProjectEditSchema } from "../native-project-edits-schema";
+import { guardManagedBatchArguments } from "./managed-engine-pool";
+import { ManagedEnginePool } from "./managed-engine-pool";
+import { MANAGED_GHIDRA_SCRIPT, managedIdaScript } from "./managed-engine-scripts";
+import { withProjectLease } from "./analysis-project-lease";
+import {
+	persistInvestigation,
+	queryInvestigation,
+	readInvestigationResult,
+} from "./android-investigation-index";
+import {
 	commandAvailable,
 	launchDetachedGui,
 	runSupervised,
 } from "./supervised-process";
+import {
+	type FunctionSelector,
+	TARGETED_GHIDRA_SCRIPT,
+	targetedIdaScript,
+} from "./targeted-decompiler-scripts";
+
+const managedEnginePool = new ManagedEnginePool();
 
 const MAX_OUTPUT_CHARS = 200_000;
 const MAX_ZIP_ENTRIES = 100_000;
@@ -67,7 +76,6 @@ const FORENSIC_REPORT_SCHEMA_VERSION = 1;
 const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
 const GHIDRA_SCRIPT_VERSION = 3;
 const IDA_DECOMPILE_SCRIPT_VERSION = 2;
-const analysisLocks = new Map<string, Promise<void>>();
 const DISCOVERY_CACHE_TTL_MS = 5 * 60_000;
 const DISCOVERY_PROBE_TIMEOUT_MS = 5_000;
 const discoveryCache = new Map<
@@ -150,21 +158,9 @@ function boundedUserRegex(pattern: string, label: string): RegExp {
 async function withAnalysisLock<T>(
 	key: string,
 	work: () => Promise<T>,
+	signal?: AbortSignal,
 ): Promise<T> {
-	const previous = analysisLocks.get(key) ?? Promise.resolve();
-	let release!: () => void;
-	const current = new Promise<void>((resolve) => {
-		release = resolve;
-	});
-	const queued = previous.catch(() => undefined).then(() => current);
-	analysisLocks.set(key, queued);
-	await previous.catch(() => undefined);
-	try {
-		return await work();
-	} finally {
-		release();
-		if (analysisLocks.get(key) === queued) analysisLocks.delete(key);
-	}
+	return withProjectLease(key, work, signal);
 }
 
 function splitPathEntries(value: string | undefined): string[] {
@@ -2471,7 +2467,24 @@ function chooseAuto(
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
-		if (input.function_selector && input.operation !== "decompile")
+		if (
+			input.managed_worker === true &&
+			(input.operation !== "decompile" ||
+				!input.function_selector ||
+				input.engine === "jadx" ||
+				input.script_path ||
+				(input.script_args?.length ?? 0) > 0 ||
+				input.confirm_managed_worker !== true ||
+				typeof context.sessionId !== "string" ||
+				!context.sessionId)
+		)
+			throw new Error(
+				"Managed workers require an owning session, explicit acknowledgement, exact decompile and no user scripts",
+			);
+
+		if (input.project_edit && input.operation !== "project_edit") throw new Error("project_edit data is only accepted for project_edit");
+		if (input.operation === "project_edit" && (!input.project_edit || !["ghidra","ida"].includes(input.engine ?? "") || input.script_path || input.script_args?.length || input.managed_worker === true || typeof context.sessionId !== "string" || !context.sessionId || (input.project_edit.mode !== "rollback" && !input.function_selector))) throw new Error("Native project edits require an owning session, explicit Ghidra/IDA engine, fixed edit data and exact function selector");
+		if (input.function_selector && !["decompile","project_edit"].includes(input.operation))
 			throw new Error("function_selector is only accepted for decompile");
 		if (input.operation === "advanced_analysis") {
 			if (!input.advanced_action)
@@ -2911,7 +2924,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					sha256: hash,
 					tool: androidUtilities.apksigner,
 					verified:
-						result.exitCode === 0 && !result.timedOut && !result.cancelled,
+						result.exitCode === 0 &&
+						!result.timedOut &&
+						!result.cancelled &&
+						!result.outputDrainTimedOut,
 					...result,
 					durationMs: Date.now() - started,
 				},
@@ -3024,14 +3040,83 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				input.acknowledge_external_output,
 			);
 			const smaliManifestPath = `${outputDir}.${ANALYSIS_MANIFEST}`;
-			return withAnalysisLock(outputDir, async () => {
-				const existingManifest = await readJsonFile(smaliManifestPath);
-				if (
-					input.reuse_analysis !== false &&
-					existingManifest?.sha256 === hash &&
-					existingManifest?.operation === "disassemble_smali"
-				) {
-					const artifacts = await listGeneratedArtifacts(outputDir);
+			return withAnalysisLock(
+				outputDir,
+				async () => {
+					const existingManifest = await readJsonFile(smaliManifestPath);
+					if (
+						input.reuse_analysis !== false &&
+						existingManifest?.sha256 === hash &&
+						existingManifest?.operation === "disassemble_smali"
+					) {
+						const artifacts = await listGeneratedArtifacts(outputDir);
+						return JSON.stringify(
+							{
+								operation: input.operation,
+								target,
+								sha256: hash,
+								outputDirectory: outputDir,
+								outputScope,
+								command,
+								reusedAnalysis: true,
+								artifacts,
+								artifactsTruncated: artifacts.length >= 200,
+								durationMs: Date.now() - started,
+							},
+							null,
+							2,
+						);
+					}
+					if (input.output_directory && (await exists(outputDir))) {
+						throw new Error(
+							"output_directory already exists; choose a new directory or reuse the existing cached analysis",
+						);
+					}
+					await fs.mkdir(path.dirname(outputDir), {
+						recursive: true,
+						mode: 0o700,
+					});
+					await fs.rm(outputDir, { recursive: true, force: true });
+					const args = apkContainer
+						? ["d", "-f", "-o", outputDir, target]
+						: [
+								"disassemble",
+								target,
+								"-o",
+								outputDir,
+								...(input.smali_api_level
+									? ["--api", String(input.smali_api_level)]
+									: []),
+							];
+					const result = await runSupervised(
+						command,
+						args,
+						input.timeout_ms ?? 900_000,
+						context.signal,
+					);
+					const succeeded =
+						result.exitCode === 0 &&
+						!result.timedOut &&
+						!result.cancelled &&
+						!result.outputDrainTimedOut;
+					if (succeeded) {
+						await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
+						await writeJsonFile(smaliManifestPath, {
+							schemaVersion: 1,
+							sha256: hash,
+							target,
+							operation: input.operation,
+							tool: apkContainer ? "apktool" : "baksmali",
+							outputScope,
+							updatedAt: new Date().toISOString(),
+						});
+					} else {
+						await fs.rm(outputDir, { recursive: true, force: true });
+						await fs.rm(smaliManifestPath, { force: true });
+					}
+					const artifacts = succeeded
+						? await listGeneratedArtifacts(outputDir)
+						: [];
 					return JSON.stringify(
 						{
 							operation: input.operation,
@@ -3040,81 +3125,19 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							outputDirectory: outputDir,
 							outputScope,
 							command,
-							reusedAnalysis: true,
+							args,
+							reusedAnalysis: false,
 							artifacts,
 							artifactsTruncated: artifacts.length >= 200,
 							durationMs: Date.now() - started,
+							...result,
 						},
 						null,
 						2,
 					);
-				}
-				if (input.output_directory && (await exists(outputDir))) {
-					throw new Error(
-						"output_directory already exists; choose a new directory or reuse the existing cached analysis",
-					);
-				}
-				await fs.mkdir(path.dirname(outputDir), {
-					recursive: true,
-					mode: 0o700,
-				});
-				await fs.rm(outputDir, { recursive: true, force: true });
-				const args = apkContainer
-					? ["d", "-f", "-o", outputDir, target]
-					: [
-							"disassemble",
-							target,
-							"-o",
-							outputDir,
-							...(input.smali_api_level
-								? ["--api", String(input.smali_api_level)]
-								: []),
-						];
-				const result = await runSupervised(
-					command,
-					args,
-					input.timeout_ms ?? 900_000,
-					context.signal,
-				);
-				const succeeded =
-					result.exitCode === 0 && !result.timedOut && !result.cancelled;
-				if (succeeded) {
-					await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
-					await writeJsonFile(smaliManifestPath, {
-						schemaVersion: 1,
-						sha256: hash,
-						target,
-						operation: input.operation,
-						tool: apkContainer ? "apktool" : "baksmali",
-						outputScope,
-						updatedAt: new Date().toISOString(),
-					});
-				} else {
-					await fs.rm(outputDir, { recursive: true, force: true });
-					await fs.rm(smaliManifestPath, { force: true });
-				}
-				const artifacts = succeeded
-					? await listGeneratedArtifacts(outputDir)
-					: [];
-				return JSON.stringify(
-					{
-						operation: input.operation,
-						target,
-						sha256: hash,
-						outputDirectory: outputDir,
-						outputScope,
-						command,
-						args,
-						reusedAnalysis: false,
-						artifacts,
-						artifactsTruncated: artifacts.length >= 200,
-						durationMs: Date.now() - started,
-						...result,
-					},
-					null,
-					2,
-				);
-			});
+				},
+				context.signal,
+			);
 		}
 		if (
 			input.operation === "assemble_smali" ||
@@ -3165,41 +3188,46 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 								: []),
 						]
 					: ["b", "-f", target, "-o", temporaryOutput];
-			return withAnalysisLock(target, async () => {
-				const result = await runSupervised(
-					command,
-					args,
-					input.timeout_ms ?? 900_000,
-					context.signal,
-				);
-				const succeeded =
-					result.exitCode === 0 &&
-					!result.timedOut &&
-					!result.cancelled &&
-					(await exists(temporaryOutput));
-				if (succeeded) {
-					await fs.rm(outputFile, { force: true });
-					await fs.rename(temporaryOutput, outputFile);
-				} else {
-					await fs.rm(temporaryOutput, { force: true });
-				}
-				return JSON.stringify(
-					{
-						operation: input.operation,
-						target,
-						sha256: hash,
-						outputFile,
-						outputScope,
+			return withAnalysisLock(
+				target,
+				async () => {
+					const result = await runSupervised(
 						command,
 						args,
-						durationMs: Date.now() - started,
-						...result,
-						succeeded,
-					},
-					null,
-					2,
-				);
-			});
+						input.timeout_ms ?? 900_000,
+						context.signal,
+					);
+					const succeeded =
+						result.exitCode === 0 &&
+						!result.timedOut &&
+						!result.cancelled &&
+						!result.outputDrainTimedOut &&
+						(await exists(temporaryOutput));
+					if (succeeded) {
+						await fs.rm(outputFile, { force: true });
+						await fs.rename(temporaryOutput, outputFile);
+					} else {
+						await fs.rm(temporaryOutput, { force: true });
+					}
+					return JSON.stringify(
+						{
+							operation: input.operation,
+							target,
+							sha256: hash,
+							outputFile,
+							outputScope,
+							command,
+							args,
+							durationMs: Date.now() - started,
+							...result,
+							succeeded,
+						},
+						null,
+						2,
+					);
+				},
+				context.signal,
+			);
 		}
 		const engine =
 			input.engine === "auto" ? chooseAuto(target, available) : input.engine;
@@ -3207,10 +3235,22 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			throw new Error(
 				"No compatible reverse-engineering engine was found. Configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
 			);
+		if (
+			input.managed_worker === true &&
+			(input.operation !== "decompile" ||
+				!input.function_selector ||
+				(engine !== "ghidra" && engine !== "ida") ||
+				input.script_path ||
+				(input.script_args?.length ?? 0) > 0 ||
+				input.confirm_managed_worker !== true)
+		)
+			throw new Error(
+				"Managed workers require explicit acknowledgement, Ghidra/IDA exact decompile and no user scripts",
+			);
 		const gui = input.operation === "open_gui";
 		if (
 			input.function_selector &&
-			(input.operation !== "decompile" || engine === "jadx")
+			(!["decompile","project_edit"].includes(input.operation) || engine === "jadx")
 		)
 			throw new Error(
 				"function_selector is only supported for Ghidra/IDA decompile; use JADX single-class or exact DEX/Smali method retrieval instead",
@@ -3228,7 +3268,52 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 		const timeoutMs = input.timeout_ms ?? 900_000;
 		const engineIdentity = await toolIdentity(engine, available[engine]);
-		const optionsHash = analysisOptionsHash(engine, input);
+		const fingerprintFile = async (file: string | undefined) => {
+			if (!file) return null;
+			const info = await fs.stat(file);
+			if (!info.isFile() || info.size > 512 * 1024 * 1024)
+				throw new Error("Engine identity hash budget exceeded");
+			const h = createHash("sha256");
+			await new Promise<void>((resolve, reject) => {
+				const stream = createReadStream(file);
+				stream.on("data", (chunk) => h.update(chunk));
+				stream.once("error", reject);
+				stream.once("end", resolve);
+			});
+			return h.digest("hex");
+		};
+		const resolveCommand = async () => {
+			if (path.isAbsolute(command)) return command;
+			const probe = await runSupervised(
+				process.platform === "win32" ? "where.exe" : "which",
+				[command],
+				5000,
+				context.signal,
+			);
+			const file = probe.stdout.trim().split(/\r?\n/)[0];
+			if (probe.exitCode !== 0 || !file)
+				throw new Error("Engine executable identity unavailable");
+			return fs.realpath(file);
+		};
+		const resolvedCommand = await resolveCommand();
+		const engineFingerprint = await fingerprintFile(resolvedCommand);
+		const scriptFingerprint = await fingerprintFile(input.script_path);
+		const configFingerprint = await fingerprintFile(
+			engineIdentity.versionSource &&
+				path.isAbsolute(engineIdentity.versionSource)
+				? engineIdentity.versionSource
+				: undefined,
+		);
+		const optionsHash = createHash("sha256")
+			.update(
+				JSON.stringify({
+					options: analysisOptionsHash(engine, input),
+					engineFingerprint,
+					scriptFingerprint,
+					configFingerprint,
+				}),
+			)
+			.digest("hex");
 		if (
 			engine === "ida" &&
 			input.operation === "decompile" &&
@@ -3239,213 +3324,443 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 		}
 
-		return withAnalysisLock(outputDir, async () => {
-			const existingManifest = await readAnalysisManifest(outputDir);
-			const sameArtifact =
-				existingManifest?.schemaVersion === ANALYSIS_SCHEMA_VERSION &&
-				existingManifest?.sha256 === hash &&
-				existingManifest?.engine === engine &&
-				existingManifest?.engineVersion === engineIdentity.version &&
-				existingManifest?.analysisOptionsHash === optionsHash;
-			const projectName = `cline-${hash.slice(0, 16)}`;
-			const ghidraProject = path.join(outputDir, `${projectName}.gpr`);
-			const idaDatabase = path.join(outputDir, "analysis.i64");
-			let reusedAnalysis = false;
-			let args: string[];
-
-			if (engine === "ghidra") {
-				if (gui) {
-					args = [(await exists(ghidraProject)) ? ghidraProject : target];
-					reusedAnalysis = args[0] === ghidraProject;
-				} else {
-					const projectExists = sameArtifact && (await exists(ghidraProject));
-					reusedAnalysis = projectExists;
-					args = projectExists
-						? [outputDir, projectName, "-process", path.basename(target)]
-						: [outputDir, projectName, "-import", target, "-overwrite"];
-					args.push(
-						"-analysisTimeoutPerFile",
-						String(Math.max(1, Math.floor(timeoutMs / 1000))),
+		if (input.operation === "project_edit") {
+			if (engine !== "ghidra" && engine !== "ida")
+				throw new Error("Only native project engines are supported");
+			const edit = NativeProjectEditSchema.parse(input.project_edit);
+			const adapter =
+				engine === "ghidra"
+					? NATIVE_GHIDRA_EDIT_SCRIPT
+					: nativeIdaEditScript("", "", "");
+			const binding = createHash("sha256")
+				.update(JSON.stringify({ engineFingerprint, configFingerprint, adapter }))
+				.digest("hex");
+			const verifyTarget = async () => {
+				if ((await sha256(target)) !== hash)
+					throw new Error("Native edit target changed since approval");
+				if (
+					(await fingerprintFile(resolvedCommand)) !== engineFingerprint ||
+					(await fingerprintFile(
+						engineIdentity.versionSource &&
+							path.isAbsolute(engineIdentity.versionSource)
+							? engineIdentity.versionSource
+							: undefined,
+					)) !== configFingerprint
+				)
+					throw new Error("Native edit engine/config changed since approval");
+			};
+			const result = await runNativeProjectCandidate({
+				root: path.join(outputDir, "native-project-candidates"),
+				engine,
+				artifactSha256: hash,
+				engineSha256: binding,
+				selector: input.function_selector,
+				edit,
+				signal: context.signal,
+				prepareInput: async (stage) => {
+					await fs.copyFile(
+						target,
+						path.join(stage, "input.bin"),
+						(await import("node:fs")).constants.COPYFILE_EXCL,
 					);
-					if (input.max_cpu) {
-						args.push("-max-cpu", String(input.max_cpu));
-					}
-					const scriptPaths: string[] = [];
-					const postScripts: string[] = [];
-					if (input.operation === "decompile") {
-						const decompileScript = await ensureGhidraDecompileScript(
-							outputDir,
-							input.function_selector,
-						);
-						scriptPaths.push(path.dirname(decompileScript));
-						postScripts.push(
-							"-postScript",
-							path.basename(decompileScript),
-							path.join(outputDir, "decompiled.c"),
-							...(input.function_selector
-								? [
-										input.function_selector.symbol ? "symbol" : "address",
-										Buffer.from(
-											input.function_selector.symbol ??
-												input.function_selector.address ??
-												"",
-										).toString("base64"),
-									]
-								: []),
-						);
-					}
-					if (input.script_path) {
-						scriptPaths.push(path.dirname(input.script_path));
-						postScripts.push(
-							"-postScript",
-							path.basename(input.script_path),
-							...(input.script_args ?? []),
-						);
-					}
-					if (scriptPaths.length > 0) {
-						args.push(
+				},
+				verifyTarget,
+				run: async (stage, request) => {
+					await verifyTarget();
+					context.signal?.throwIfAborted();
+					const requestPath = path.join(
+							stage,
+							`${request.requestId}.request.json`,
+						),
+						receiptPath = path.join(stage, `${request.requestId}.receipt.json`);
+					const raw = JSON.stringify(request);
+					if (Buffer.byteLength(raw) > 65536)
+						throw new Error("Native edit request byte budget exceeded");
+					await fs.writeFile(requestPath, raw, { flag: "wx", mode: 0o600 });
+					let args: string[];
+					if (engine === "ghidra") {
+						const script = path.join(stage, "ClineNativeEdit.java");
+						await fs.writeFile(script, adapter, { mode: 0o600 });
+						const existing = await exists(path.join(stage, "candidate.gpr"));
+						args = [
+							stage,
+							"candidate",
+							...(existing
+								? ["-process", "input.bin", "-noanalysis"]
+								: ["-import", path.join(stage, "input.bin")]),
+							"-analysisTimeoutPerFile",
+							String(Math.max(1, Math.floor(timeoutMs / 1000))),
 							"-scriptPath",
-							[...new Set(scriptPaths)].join(path.delimiter),
-							...postScripts,
+							stage,
+							"-postScript",
+							"ClineNativeEdit.java",
+							requestPath,
+							receiptPath,
+						];
+					} else {
+						const script = path.join(stage, `${request.requestId}.edit.py`),
+							database = path.join(stage, "candidate.i64");
+						await fs.writeFile(
+							script,
+							nativeIdaEditScript(requestPath, receiptPath, database),
+							{ flag: "wx", mode: 0o600 },
 						);
+						const existing = await exists(database);
+						args = [
+							"-A",
+							`-L${path.join(stage, "ida.log")}`,
+							...(existing ? [] : [`-o${database}`]),
+							`-S${shellLikeQuote(script)}`,
+							existing ? database : path.join(stage, "input.bin"),
+						];
 					}
-				}
-			} else if (engine === "ida") {
-				const databaseExists = sameArtifact && (await exists(idaDatabase));
-				reusedAnalysis = databaseExists;
-				if (gui) {
-					args = [databaseExists ? idaDatabase : target];
-				} else {
-					args = ["-A", `-L${path.join(outputDir, "ida.log")}`];
-					if (!databaseExists) args.push(`-o${idaDatabase}`);
-					if (input.operation === "decompile") {
-						const decompileScript = await ensureIdaDecompileScript(
-							outputDir,
-							path.join(outputDir, "decompiled.c"),
-							input.function_selector,
+					if (
+						process.platform === "win32" &&
+						/\.(bat|cmd)$/i.test(resolvedCommand)
+					)
+						guardManagedBatchArguments(resolvedCommand, args);
+					const outcome = await runSupervised(
+						resolvedCommand,
+						args,
+						timeoutMs,
+						context.signal,
+					);
+					if (outcome.exitCode !== 0 || outcome.timedOut || outcome.cancelled)
+						throw new Error(
+							"Native edit engine failed/interrupted; candidate remains unpublished",
 						);
-						args.push(`-S${shellLikeQuote(decompileScript)}`);
-					}
-					if (input.script_path) {
-						args.push(
-							`-S${[input.script_path, ...(input.script_args ?? [])]
-								.map(shellLikeQuote)
-								.join(" ")}`,
-						);
-					}
-					args.push(databaseExists ? idaDatabase : target);
-				}
-			} else if (gui) {
-				args = [target];
-			} else {
-				args = [
-					"-d",
-					outputDir,
-					"--decompilation-mode",
-					input.jadx_mode ?? "auto",
-					"--output-format",
-					input.jadx_output_format ?? "java",
-				];
-				if (input.jadx_threads)
-					args.push("--threads-count", String(input.jadx_threads));
-				if (input.jadx_single_class)
-					args.push("--single-class", input.jadx_single_class);
-				if (input.jadx_deobfuscate) args.push("--deobf");
-				if (input.jadx_call_graph)
-					args.push("--call-graph", input.jadx_call_graph);
-				if (input.jadx_export_gradle) args.push("--export-gradle");
-				if (input.jadx_no_resources) args.push("--no-res");
-				if (input.jadx_no_sources) args.push("--no-src");
-				if (input.jadx_mappings_path) {
-					if (!path.isAbsolute(input.jadx_mappings_path)) {
-						throw new Error("jadx_mappings_path must be an absolute path");
-					}
-					args.push("--mappings-path", input.jadx_mappings_path);
-				}
-				args.push(target);
-				reusedAnalysis = sameArtifact;
-			}
+					return await readNativeCandidateReceipt(receiptPath);
+				},
+			});
+			return JSON.stringify({
+				operation: input.operation,
+				engine,
+				target,
+				sha256: hash,
+				outputScope,
+				...result,
+			});
+		}
 
-			if (gui) {
+		if (input.managed_worker === true) {
+			const key = createHash("sha256")
+				.update(
+					JSON.stringify({
+						owner: context.sessionId,
+						target: await fs.realpath(target),
+						hash,
+						engine,
+						resolvedCommand,
+						engineFingerprint,
+						configFingerprint,
+						outputDir: await fs.realpath(outputDir),
+						maxCpu: input.max_cpu ?? null,
+						adapter:
+							engine === "ghidra"
+								? MANAGED_GHIDRA_SCRIPT
+								: managedIdaScript("", ""),
+					}),
+				)
+				.digest("hex");
+			const result = await managedEnginePool.query(
+				key,
+				outputDir,
+				async () => {
+					const root = await fs.realpath(
+						await fs.mkdtemp(path.join(outputDir, "managed-worker-")),
+					);
+					const nonce = (await import("node:crypto")).randomUUID();
+					const snapshot = path.join(
+						root,
+						`input${path.extname(target).slice(0, 16)}`,
+					);
+					await fs.copyFile(
+						target,
+						snapshot,
+						(await import("node:fs")).constants.COPYFILE_EXCL,
+					);
+					if ((await sha256(snapshot)) !== hash)
+						throw new Error("Target changed before managed-engine import");
+					if (
+						(await fingerprintFile(resolvedCommand)) !== engineFingerprint ||
+						(await fingerprintFile(
+							engineIdentity.versionSource &&
+								path.isAbsolute(engineIdentity.versionSource)
+								? engineIdentity.versionSource
+								: undefined,
+						)) !== configFingerprint
+					)
+						throw new Error(
+							"Engine identity changed before managed-worker launch",
+						);
+					let args: string[];
+					if (engine === "ghidra") {
+						const script = path.join(root, "ClineManagedSelected.java");
+						await fs.writeFile(script, MANAGED_GHIDRA_SCRIPT, {
+							flag: "wx",
+							mode: 0o600,
+						});
+						args = [
+							root,
+							"cline-managed",
+							"-import",
+							snapshot,
+							"-analysisTimeoutPerFile",
+							String(Math.max(1, Math.floor(timeoutMs / 1000))),
+							"-scriptPath",
+							root,
+							"-postScript",
+							"ClineManagedSelected.java",
+							root,
+							nonce,
+						];
+						if (input.max_cpu)
+							args.splice(2, 0, "-max-cpu", String(input.max_cpu));
+					} else {
+						const script = path.join(root, "cline-managed.py");
+						await fs.writeFile(script, managedIdaScript(root, nonce), {
+							flag: "wx",
+							mode: 0o600,
+						});
+						args = [
+							"-A",
+							`-L${path.join(root, "ida.log")}`,
+							`-o${path.join(root, "managed.i64")}`,
+							`-S${shellLikeQuote(script)}`,
+							snapshot,
+						];
+					}
+					return { root, command: resolvedCommand, args, nonce };
+				},
+				input.function_selector!,
+				context.signal,
+				timeoutMs,
+			);
+			return JSON.stringify({
+				engine,
+				operation: input.operation,
+				target,
+				sha256: hash,
+				managedWorker: true,
+				outputDirectory: outputDir,
+				outputScope,
+				succeeded: true,
+				...result,
+			});
+		}
+
+		return withAnalysisLock(
+			outputDir,
+			async () => {
+				const existingManifest = await readAnalysisManifest(outputDir);
+				const sameArtifact =
+					existingManifest?.schemaVersion === ANALYSIS_SCHEMA_VERSION &&
+					existingManifest?.sha256 === hash &&
+					existingManifest?.engine === engine &&
+					existingManifest?.engineVersion === engineIdentity.version &&
+					existingManifest?.analysisOptionsHash === optionsHash;
+				const projectName = `cline-${hash.slice(0, 16)}`;
+				const ghidraProject = path.join(outputDir, `${projectName}.gpr`);
+				const idaDatabase = path.join(outputDir, "analysis.i64");
+				let reusedAnalysis = false;
+				let args: string[];
+
+				if (engine === "ghidra") {
+					if (gui) {
+						args = [(await exists(ghidraProject)) ? ghidraProject : target];
+						reusedAnalysis = args[0] === ghidraProject;
+					} else {
+						const projectExists = sameArtifact && (await exists(ghidraProject));
+						reusedAnalysis = projectExists;
+						args = projectExists
+							? [outputDir, projectName, "-process", path.basename(target)]
+							: [outputDir, projectName, "-import", target, "-overwrite"];
+						args.push(
+							"-analysisTimeoutPerFile",
+							String(Math.max(1, Math.floor(timeoutMs / 1000))),
+						);
+						if (input.max_cpu) {
+							args.push("-max-cpu", String(input.max_cpu));
+						}
+						const scriptPaths: string[] = [];
+						const postScripts: string[] = [];
+						if (input.operation === "decompile") {
+							const decompileScript = await ensureGhidraDecompileScript(
+								outputDir,
+								input.function_selector,
+							);
+							scriptPaths.push(path.dirname(decompileScript));
+							postScripts.push(
+								"-postScript",
+								path.basename(decompileScript),
+								path.join(outputDir, "decompiled.c"),
+								...(input.function_selector
+									? [
+											input.function_selector.symbol ? "symbol" : "address",
+											Buffer.from(
+												input.function_selector.symbol ??
+													input.function_selector.address ??
+													"",
+											).toString("base64"),
+										]
+									: []),
+							);
+						}
+						if (input.script_path) {
+							scriptPaths.push(path.dirname(input.script_path));
+							postScripts.push(
+								"-postScript",
+								path.basename(input.script_path),
+								...(input.script_args ?? []),
+							);
+						}
+						if (scriptPaths.length > 0) {
+							args.push(
+								"-scriptPath",
+								[...new Set(scriptPaths)].join(path.delimiter),
+								...postScripts,
+							);
+						}
+					}
+				} else if (engine === "ida") {
+					const databaseExists = sameArtifact && (await exists(idaDatabase));
+					reusedAnalysis = databaseExists;
+					if (gui) {
+						args = [databaseExists ? idaDatabase : target];
+					} else {
+						args = ["-A", `-L${path.join(outputDir, "ida.log")}`];
+						if (!databaseExists) args.push(`-o${idaDatabase}`);
+						if (input.operation === "decompile") {
+							const decompileScript = await ensureIdaDecompileScript(
+								outputDir,
+								path.join(outputDir, "decompiled.c"),
+								input.function_selector,
+							);
+							args.push(`-S${shellLikeQuote(decompileScript)}`);
+						}
+						if (input.script_path) {
+							args.push(
+								`-S${[input.script_path, ...(input.script_args ?? [])]
+									.map(shellLikeQuote)
+									.join(" ")}`,
+							);
+						}
+						args.push(databaseExists ? idaDatabase : target);
+					}
+				} else if (gui) {
+					args = [target];
+				} else {
+					args = [
+						"-d",
+						outputDir,
+						"--decompilation-mode",
+						input.jadx_mode ?? "auto",
+						"--output-format",
+						input.jadx_output_format ?? "java",
+					];
+					if (input.jadx_threads)
+						args.push("--threads-count", String(input.jadx_threads));
+					if (input.jadx_single_class)
+						args.push("--single-class", input.jadx_single_class);
+					if (input.jadx_deobfuscate) args.push("--deobf");
+					if (input.jadx_call_graph)
+						args.push("--call-graph", input.jadx_call_graph);
+					if (input.jadx_export_gradle) args.push("--export-gradle");
+					if (input.jadx_no_resources) args.push("--no-res");
+					if (input.jadx_no_sources) args.push("--no-src");
+					if (input.jadx_mappings_path) {
+						if (!path.isAbsolute(input.jadx_mappings_path)) {
+							throw new Error("jadx_mappings_path must be an absolute path");
+						}
+						args.push("--mappings-path", input.jadx_mappings_path);
+					}
+					args.push(target);
+					reusedAnalysis = sameArtifact;
+				}
+
+				if (gui) {
+					return JSON.stringify(
+						{
+							engine,
+							operation: input.operation,
+							target,
+							sha256: hash,
+							command,
+							outputDirectory: outputDir,
+							outputScope,
+							reusedAnalysis,
+							handoffTarget: args[0],
+							...(await launchDetachedGui(command, args)),
+						},
+						null,
+						2,
+					);
+				}
+				const decompileOutput = path.join(outputDir, "decompiled.c");
+				if (input.operation === "decompile") {
+					await Promise.all([
+						fs.rm(decompileOutput, { force: true }),
+						fs.rm(`${decompileOutput}.error.txt`, { force: true }),
+					]);
+				}
+				const result = await runSupervised(
+					command,
+					args,
+					timeoutMs,
+					context.signal,
+				);
+				const decompileStat =
+					input.operation === "decompile"
+						? await fs.stat(decompileOutput).catch(() => undefined)
+						: undefined;
+				const artifactVerified =
+					input.operation !== "decompile" ||
+					(Boolean(decompileStat?.isFile()) && (decompileStat?.size ?? 0) > 0);
+				const succeeded =
+					result.exitCode === 0 &&
+					!result.timedOut &&
+					!result.cancelled &&
+					!result.outputDrainTimedOut &&
+					artifactVerified;
+				if (succeeded) {
+					await writeAnalysisManifest(outputDir, {
+						schemaVersion: ANALYSIS_SCHEMA_VERSION,
+						sha256: hash,
+						target,
+						engine,
+						engineVersion: engineIdentity.version,
+						engineVersionSource: engineIdentity.versionSource,
+						analysisOptionsHash: optionsHash,
+						operation: input.operation,
+						outputScope,
+						updatedAt: new Date().toISOString(),
+					});
+				}
+				const artifacts = await listGeneratedArtifacts(outputDir);
 				return JSON.stringify(
 					{
 						engine,
 						operation: input.operation,
 						target,
 						sha256: hash,
-						command,
 						outputDirectory: outputDir,
 						outputScope,
+						persistent,
 						reusedAnalysis,
-						handoffTarget: args[0],
-						...(await launchDetachedGui(command, args)),
+						command,
+						args,
+						durationMs: Date.now() - started,
+						artifacts,
+						artifactsTruncated: artifacts.length >= 200,
+						artifactVerified,
+						succeeded,
+						...result,
 					},
 					null,
 					2,
 				);
-			}
-			const decompileOutput = path.join(outputDir, "decompiled.c");
-			if (input.operation === "decompile") {
-				await Promise.all([
-					fs.rm(decompileOutput, { force: true }),
-					fs.rm(`${decompileOutput}.error.txt`, { force: true }),
-				]);
-			}
-			const result = await runSupervised(
-				command,
-				args,
-				timeoutMs,
-				context.signal,
-			);
-			const decompileStat =
-				input.operation === "decompile"
-					? await fs.stat(decompileOutput).catch(() => undefined)
-					: undefined;
-			const artifactVerified =
-				input.operation !== "decompile" ||
-				(Boolean(decompileStat?.isFile()) && (decompileStat?.size ?? 0) > 0);
-			const succeeded =
-				result.exitCode === 0 &&
-				!result.timedOut &&
-				!result.cancelled &&
-				artifactVerified;
-			if (succeeded) {
-				await writeAnalysisManifest(outputDir, {
-					schemaVersion: ANALYSIS_SCHEMA_VERSION,
-					sha256: hash,
-					target,
-					engine,
-					engineVersion: engineIdentity.version,
-					engineVersionSource: engineIdentity.versionSource,
-					analysisOptionsHash: optionsHash,
-					operation: input.operation,
-					outputScope,
-					updatedAt: new Date().toISOString(),
-				});
-			}
-			const artifacts = await listGeneratedArtifacts(outputDir);
-			return JSON.stringify(
-				{
-					engine,
-					operation: input.operation,
-					target,
-					sha256: hash,
-					outputDirectory: outputDir,
-					outputScope,
-					persistent,
-					reusedAnalysis,
-					command,
-					args,
-					durationMs: Date.now() - started,
-					artifacts,
-					artifactsTruncated: artifacts.length >= 200,
-					artifactVerified,
-					succeeded,
-					...result,
-				},
-				null,
-				2,
-			);
-		});
+			},
+			context.signal,
+		);
 	};
 }

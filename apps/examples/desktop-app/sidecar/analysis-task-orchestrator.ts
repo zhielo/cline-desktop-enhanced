@@ -13,7 +13,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { assertAnalysisSandboxReady } from "./analysis-sandbox-client";
 
-export type AnalysisTaskKind = "static" | "debugger" | "gui" | "dynamic";
+export type AnalysisTaskKind = "static" | "debugger" | "gui" | "dynamic" | "device" | "execution";
 export type AnalysisPermission =
 	| "Inspect"
 	| "Execute"
@@ -154,7 +154,9 @@ function permissionFor(
 	kind: AnalysisTaskKind,
 	operation: string,
 ): AnalysisPermission {
-	if (kind === "static") return "Inspect";
+	if(kind==="execution")return "Execute";
+	if (kind === "device") return ["observe_apk","collect_apk_debug"].includes(operation) ? "Inspect" : "Execute";
+	if (kind === "static") return operation === "project_edit" ? "Modify" : "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
 	if (["launch", "continue", "step"].includes(operation)) return "Execute";
 	return "Debug";
@@ -167,6 +169,21 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
+ if(kind==="execution"){
+ requirements.add("trusted-host-work");requirements.add("full-access-execution");requirements.add("side-effect-review");
+ if(request?.archive_logs===true)requirements.add("captured-artifact-write");
+ const stages=Array.isArray(request?.stages)?request.stages as {backend?:string;request?:Record<string,unknown>}[]:[];
+ if(stages.some(s=>s.backend==="debugger"))requirements.add("authorized-debug-target");
+ if(stages.some(s=>s.backend==="debugger"&&["launch","continue","step"].includes(String(s.request?.operation))))requirements.add("execution-control");
+ if(stages.some(s=>s.request?.advanced_action==="decrypt_blob")){requirements.add("authorized-decryption");requirements.add("sensitive-plaintext-processing");}
+ if(stages.some(s=>s.request?.project_action==="annotate"))requirements.add("reviewed-project-modification");
+ }
+ if (kind === "device") {
+  requirements.add("authorized-target"); requirements.add("sensitive-device-logs"); requirements.add("captured-artifact-write");
+  if(!["observe_apk","collect_apk_debug"].includes(operation)) requirements.add("execution-control");
+ if(operation === "collect_apk_debug") {requirements.add("selected-diagnostic-path-read");if(request?.use_root===true)requirements.add("explicit-root-read-without-policy-change");}
+  if(["validate_apk_patch", "rollback_apk"].includes(operation)) {requirements.add("package-change"); requirements.add("dedicated-test-device"); requirements.add("rollback-plan");}
+ }
 	if (externalTarget) requirements.add("external-target");
 	if (
 		kind === "static" &&
@@ -176,6 +193,8 @@ function requirementsFor(
 		requirements.add("authorized-decryption");
 		requirements.add("sensitive-plaintext-processing");
 	}
+	if (kind === "static" && request?.managed_worker === true) {requirements.add("managed-persistent-engine-process"); requirements.add("private-analysis-project-write");}
+	if (kind === "static" && operation === "project_edit") {requirements.add("authorized-target");requirements.add("isolated-analysis-project-write");requirements.add("reviewed-native-project-state");requirements.add("candidate-pointer-change-not-gui-replacement");}
 	if (kind === "debugger") requirements.add("authorized-target");
 	if (
 		kind === "gui" ||
@@ -184,7 +203,15 @@ function requirementsFor(
 	) {
 		requirements.add("execution-control");
 	}
-	if (kind === "dynamic") {requirements.add("isolated-sandbox");requirements.add("artifact-upload");requirements.add("authorized-target-execution");if(operation==="android_capture"){requirements.add("sensitive-runtime-capture");requirements.add("captured-artifact-write");}}
+	if (kind === "dynamic") {
+		requirements.add("isolated-sandbox");
+		requirements.add("artifact-upload");
+		requirements.add("authorized-target-execution");
+		if (operation === "android_capture") {
+			requirements.add("sensitive-runtime-capture");
+			requirements.add("captured-artifact-write");
+		}
+	}
 	return [...requirements];
 }
 
@@ -253,6 +280,7 @@ function normalizeRequestPaths(
 
 export class AnalysisTaskOrchestrator {
 	private readonly plans = new Map<string, StoredPlan>();
+	private readonly consuming = new Set<string>();
 	private readonly active = new Map<
 		string,
 		{ controller: AbortController; timeout: ReturnType<typeof setTimeout> }
@@ -266,6 +294,8 @@ export class AnalysisTaskOrchestrator {
 		this.ledgerFilePath = options.ledgerFilePath;
 		this.approvalTtlMs = options.approvalTtlMs ?? DEFAULT_APPROVAL_TTL_MS;
 		this.maxPlans = options.maxPlans ?? DEFAULT_MAX_PLANS;
+		if (!Number.isSafeInteger(this.maxPlans) || this.maxPlans < 1)
+			throw new Error("Analysis ledger capacity must be a positive integer");
 		this.now = options.now ?? Date.now;
 		this.restore();
 	}
@@ -321,13 +351,18 @@ export class AnalysisTaskOrchestrator {
 					Math.max(input.maxOutputBytes ?? 1024 * 1024, 64 * 1024),
 					16 * 1024 * 1024,
 				),
-				network: "disabled",
+				network: ["device","execution"].includes(input.kind) ? "recorded" : "disabled",
 			},
 			createdAt: new Date(this.now()).toISOString(),
 			expiresAt: new Date(this.now() + this.approvalTtlMs).toISOString(),
 		};
+		this.expireStale();
+		this.prune(this.maxPlans - 1);
+		if (this.plans.size >= this.maxPlans)
+			throw new Error(
+				"Analysis ledger capacity reached; finish or cancel pending work first",
+			);
 		this.plans.set(plan.id, plan);
-		this.prune();
 		this.persist();
 		return publicPlan(plan);
 	}
@@ -371,52 +406,67 @@ export class AnalysisTaskOrchestrator {
 		const plan = this.require(input.planId);
 		const workspaceRoot = canonicalWorkspaceRoot(input.workspaceRoot);
 		const request = normalizeRequestPaths(input.request, workspaceRoot);
-		const suppliedHash = Buffer.from(sha256(input.executionToken), "hex");
-		const expectedHash = Buffer.from(plan.approvalTokenHash ?? "", "hex");
-		const tokenMatches =
-			suppliedHash.length === expectedHash.length &&
-			timingSafeEqual(suppliedHash, expectedHash);
-		if (
-			plan.status !== "approved" ||
-			!tokenMatches ||
-			plan.workspaceRoot !== workspaceRoot ||
-			plan.kind !== input.kind ||
-			plan.requestHash !== sha256(canonicalJson(request))
-		) {
+		const assertApproval = () => {
+			const suppliedHash = Buffer.from(sha256(input.executionToken), "hex");
+			const expectedHash = Buffer.from(plan.approvalTokenHash ?? "", "hex");
+			const tokenMatches =
+				suppliedHash.length === expectedHash.length &&
+				timingSafeEqual(suppliedHash, expectedHash);
+			if (
+				plan.status !== "approved" ||
+				!tokenMatches ||
+				plan.workspaceRoot !== workspaceRoot ||
+				plan.kind !== input.kind ||
+				plan.requestHash !== sha256(canonicalJson(request))
+			) {
+				throw new Error(
+					"Analysis approval does not match this exact request envelope.",
+				);
+			}
+		};
+		assertApproval();
+		if (this.consuming.has(plan.id))
 			throw new Error(
 				"Analysis approval does not match this exact request envelope.",
 			);
-		}
-		if (plan.target && plan.targetIdentity) {
-			const currentIdentity = await targetIdentity(plan.target);
-			if (
-				canonicalJson(currentIdentity) !== canonicalJson(plan.targetIdentity)
-			) {
-				throw new Error(
-					"The analysis target changed after review. Prepare a new plan.",
+		this.consuming.add(plan.id);
+		try {
+			if (plan.target && plan.targetIdentity) {
+				const currentIdentity = await targetIdentity(plan.target);
+				if (
+					canonicalJson(currentIdentity) !== canonicalJson(plan.targetIdentity)
+				) {
+					throw new Error(
+						"The analysis target changed after review. Prepare a new plan.",
+					);
+				}
+			}
+			// Hashing yields to cancellation, expiry and concurrent command handlers.
+			this.expireStale();
+			assertApproval();
+			plan.approvalTokenHash = undefined;
+			plan.status = "running";
+			plan.startedAt = new Date(this.now()).toISOString();
+			const controller = new AbortController();
+			const timeout = setTimeout(() => {
+				controller.abort(
+					new Error(`Analysis timed out after ${plan.budget.timeoutMs}ms`),
 				);
-			}
+				const current = this.plans.get(plan.id);
+				if (current?.status === "running") {
+					current.status = "failed";
+					current.completedAt = new Date(this.now()).toISOString();
+					current.error = `Analysis timed out after ${plan.budget.timeoutMs}ms`;
+					this.persist();
+				}
+				this.active.delete(plan.id);
+			}, plan.budget.timeoutMs);
+			this.active.set(plan.id, { controller, timeout });
+			this.persist();
+			return publicPlan(plan);
+		} finally {
+			this.consuming.delete(plan.id);
 		}
-		plan.approvalTokenHash = undefined;
-		plan.status = "running";
-		plan.startedAt = new Date(this.now()).toISOString();
-		const controller = new AbortController();
-		const timeout = setTimeout(() => {
-			controller.abort(
-				new Error(`Analysis timed out after ${plan.budget.timeoutMs}ms`),
-			);
-			const current = this.plans.get(plan.id);
-			if (current?.status === "running") {
-				current.status = "failed";
-				current.completedAt = new Date(this.now()).toISOString();
-				current.error = `Analysis timed out after ${plan.budget.timeoutMs}ms`;
-				this.persist();
-			}
-			this.active.delete(plan.id);
-		}, plan.budget.timeoutMs);
-		this.active.set(plan.id, { controller, timeout });
-		this.persist();
-		return publicPlan(plan);
 	}
 
 	signal(planId: string): AbortSignal {
@@ -559,11 +609,18 @@ export class AnalysisTaskOrchestrator {
 		if (changed) this.persist();
 	}
 
-	private prune() {
-		const ordered = [...this.plans.values()].sort((left, right) =>
-			right.createdAt.localeCompare(left.createdAt),
-		);
-		for (const plan of ordered.slice(this.maxPlans)) this.plans.delete(plan.id);
+	private prune(limit = this.maxPlans) {
+		const terminal = [...this.plans.values()]
+			.filter(
+				(plan) =>
+					!["awaiting-approval", "approved", "running"].includes(plan.status) &&
+					!this.consuming.has(plan.id),
+			)
+			.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+		for (const plan of terminal) {
+			if (this.plans.size <= limit) break;
+			this.plans.delete(plan.id);
+		}
 	}
 
 	private restore() {

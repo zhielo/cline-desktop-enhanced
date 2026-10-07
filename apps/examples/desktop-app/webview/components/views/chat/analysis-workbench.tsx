@@ -1,6 +1,4 @@
-import { InvestigationWorkspace } from "./investigation-workspace";
-("use client");
-import { AnalysisAuthoring } from "./analysis-authoring";
+"use client";
 
 import {
 	Activity,
@@ -21,8 +19,15 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { desktopClient } from "@/lib/desktop-client";
 import { cn } from "@/lib/utils";
+import { AnalysisAuthoring } from "./analysis-authoring";
+import { ApkIncidentWorkspace } from "./apk-incident-workspace";
+import { InvestigationWorkspace } from "./investigation-workspace";
+
+import { ExecutionWorkspace } from "./execution-workspace";
 
 type WorkbenchMode =
+	| "execution"
+	| "incidents"
 	| "investigation"
 	| "tasks"
 	| "notebook"
@@ -34,7 +39,13 @@ type WorkbenchMode =
 	| "approvals"
 	| "evidence"
 	| "diagnostics";
-type TaskKind = "static" | "debugger" | "gui" | "dynamic";
+type TaskKind =
+	| "static"
+	| "debugger"
+	| "gui"
+	| "dynamic"
+	| "device"
+	| "execution";
 type TaskPlan = {
 	id: string;
 	kind: TaskKind;
@@ -67,6 +78,7 @@ type AnalysisOperation =
 	| "verify_apk_signature"
 	| "analyze"
 	| "decompile"
+	| "project_edit"
 	| "disassemble_smali";
 type DebugOperation =
 	| "inspect_dump"
@@ -84,6 +96,8 @@ const modes: Array<{
 	icon: typeof Activity;
 	label: string;
 }> = [
+	{ id: "execution", icon: Terminal, label: "Execution lab" },
+	{ id: "incidents", icon: Bug, label: "APK incidents" },
 	{ id: "investigation", icon: ListChecks, label: "Investigation" },
 	{ id: "tasks", icon: ListChecks, label: "Tasks" },
 	{ id: "analyze", icon: Binary, label: "Analyze" },
@@ -237,6 +251,13 @@ export function AnalysisWorkbench({
 
 	const approveAndRun = async () => {
 		if (!pendingPlan) return;
+		if (pendingPlan.kind === "device" || pendingPlan.kind === "execution") {
+			toast({
+				title:
+					"Use the APK incidents or Execution lab tab to approve this plan",
+			});
+			return;
+		}
 		if (
 			pendingPlan.kind === "dynamic" &&
 			(!uploadConfirmed || !runtimeConfirmed)
@@ -324,7 +345,10 @@ export function AnalysisWorkbench({
 				return;
 			}
 		let selectedOptions: Record<string, unknown> = {};
-		if (kind === "static" && operation === "decompile") {
+		if (
+			kind === "static" &&
+			["decompile", "project_edit"].includes(operation)
+		) {
 			try {
 				selectedOptions = JSON.parse(decompilerOptions);
 				if (
@@ -333,9 +357,14 @@ export function AnalysisWorkbench({
 					typeof selectedOptions !== "object" ||
 					Object.keys(selectedOptions).some(
 						(key) =>
-							!["function_selector", "jadx_single_class", "jadx_mode"].includes(
-								key,
-							),
+							![
+								"function_selector",
+								"jadx_single_class",
+								"jadx_mode",
+								"managed_worker",
+								"confirm_managed_worker",
+								"project_edit",
+							].includes(key),
 					)
 				)
 					throw new Error();
@@ -378,7 +407,7 @@ export function AnalysisWorkbench({
 		if (Number.isInteger(numericPid) && numericPid > 0)
 			request.pid = numericPid;
 		if (address.trim()) request.address = address.trim();
-		if (debugOperation === "continue" || debugOperation === "step") {
+		if (["launch", "continue", "step"].includes(debugOperation)) {
 			request.confirm_execution_control = executionConfirmed;
 		}
 		return prepare("debugger", request);
@@ -471,6 +500,12 @@ export function AnalysisWorkbench({
 							common={common}
 							onPrepare={(request) => prepare("static", request)}
 						/>
+					)}
+					{mode === "execution" && (
+						<ExecutionWorkspace cwd={cwd} environmentId={environmentId} />
+					)}
+					{mode === "incidents" && (
+						<ApkIncidentWorkspace cwd={cwd} environmentId={environmentId} />
 					)}
 					{mode === "investigation" && (
 						<InvestigationWorkspace
@@ -672,6 +707,9 @@ export function AnalysisWorkbench({
 										<option value="verify_apk_signature">APK signature</option>
 										<option value="analyze">Headless analysis</option>
 										<option value="decompile">Decompile</option>
+										<option value="project_edit">
+											Reviewed native project candidate
+										</option>
 										<option value="disassemble_smali">Smali</option>
 									</select>
 								</label>
@@ -689,7 +727,7 @@ export function AnalysisWorkbench({
 									</select>
 								</label>
 							</div>
-							{operation === "decompile" && (
+							{["decompile", "project_edit"].includes(operation) && (
 								<label className="block text-xs">
 									Targeted decompiler options JSON
 									<textarea
@@ -701,9 +739,16 @@ export function AnalysisWorkbench({
 										}
 									/>
 									<span className="mt-2 block text-muted-foreground">
-										Ghidra/IDA: function_selector with one symbol or hex entry
-										address. JADX: jadx_single_class. Requires an installed
-										compatible engine; no target execution or license bypass.
+										Project edit: use project_edit.mode preview first; candidate
+										requires exact before-state/head and reviewed changes.
+										Rollback changes only the active candidate pointer. Never
+										replaces your GUI database. Ghidra/IDA: function_selector
+										with one symbol or hex entry address. JADX:
+										jadx_single_class. Requires an installed compatible engine;
+										no target execution or license bypass. Opt in to a bounded
+										persistent Ghidra/IDA worker with managed_worker=true and
+										confirm_managed_worker=true; review the separate
+										process/private-project approvals.
 									</span>
 								</label>
 							)}

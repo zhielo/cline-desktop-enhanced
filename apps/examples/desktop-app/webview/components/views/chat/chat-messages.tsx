@@ -63,6 +63,7 @@ import { buildToolPresentation } from "./messages/tool-summaries";
 import { WorkBlock } from "./messages/work-block";
 import { SessionCompletionCard } from "./session-completion-card";
 import { SessionContent } from "./session-content";
+import { ArtifactWorkspaceProvider } from "@/lib/artifact-workspace";
 
 type ChatMessagesProps = {
 	sessionId: string | null;
@@ -1084,7 +1085,18 @@ function ChatMessagesImpl({
 	);
 }
 
-export const ChatMessages = memo(ChatMessagesImpl);
+export const ChatMessages = memo(function ChatMessages(
+	props: ChatMessagesProps,
+) {
+	return (
+		<ArtifactWorkspaceProvider
+			cwd={props.cwd}
+			environmentId={props.environmentId ?? "local"}
+		>
+			<ChatMessagesImpl {...props} />
+		</ArtifactWorkspaceProvider>
+	);
+});
 
 /**
  * Sending a message returns the reader to the newest content: whenever a new

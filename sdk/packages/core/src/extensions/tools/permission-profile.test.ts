@@ -236,3 +236,8 @@ describe("restricted profiles fail closed for arbitrary execution", () => {
 		}
 	});
 });
+
+
+it.each(["read-only","project-notion-bridge"] as const)("%s blocks native candidate writes and pointer rollback",async profile=>{
+ for(const mode of ["preview","candidate","rollback"])expect((await before(profile,"reverse_engineer",{operation:"project_edit",project_edit:{mode}}))?.skip).toBe(true);
+});

@@ -1,4 +1,10 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+	mkdtempSync,
+	realpathSync,
+	rmSync,
+	mkdirSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -136,5 +142,56 @@ describe("Android capture authorization before retrieval or execution", () => {
 				input: { action: "create", title: "Owned" },
 			}),
 		).rejects.toThrow();
+	});
+});
+
+describe("artifact workspace resolution", () => {
+	it("previews a project-relative Markdown report instead of the desktop startup directory", async () => {
+		const project = join(workspace, "owned-project"),
+			out = join(project, "out");
+		mkdirSync(out, { recursive: true });
+		writeFileSync(
+			join(out, "REPORT.md"),
+			"# Owned report\n\nVerified fixture.",
+		);
+		const result = await handleCommand(context, "read_artifact_preview", {
+			path: "out/REPORT.md",
+			cwd: project,
+			environmentId: "local",
+		});
+		expect(result).toMatchObject({
+			path: join(out, "REPORT.md"),
+			kind: "text",
+			content: "# Owned report\n\nVerified fixture.",
+		});
+	});
+	it.each([
+		"read_artifact_preview",
+		"open_artifact",
+		"reveal_artifact_in_folder",
+	])("keeps %s blocked for SSH artifacts", async (command) => {
+		context.runtimeBindings.set("ssh-owned", {
+			kind: "ssh",
+			environmentId: "ssh-owned",
+			workspaceRoot: "/owned/remote",
+		} as never);
+		await expect(
+			handleCommand(context, command, {
+				path: "out/REPORT.md",
+				cwd: "/owned/remote",
+				environmentId: "ssh-owned",
+			}),
+		).rejects.toThrow(/remote/i);
+	});
+	it("does not pretend an archive member is a standalone workspace file", async () => {
+		await expect(
+			handleCommand(context, "read_artifact_preview", {
+				path: "xl/worksheets/sheet1.xml",
+				cwd: workspace,
+				environmentId: "local",
+			}),
+		).rejects.toThrow(
+			`Artifact not found: ${join(workspace, "xl/worksheets/sheet1.xml")}`,
+		);
 	});
 });
