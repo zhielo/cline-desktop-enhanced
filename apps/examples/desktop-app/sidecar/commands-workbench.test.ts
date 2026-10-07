@@ -195,3 +195,18 @@ describe("artifact workspace resolution", () => {
 		);
 	});
 });
+
+
+describe("fixed project output routing",()=>{
+ it("previews an absolute generated report outside the source workspace",async()=>{
+  const output=mkdtempSync(join(tmpdir(),"cline-absolute-output-"));
+  try {const report=join(output,"REPORT.md");writeFileSync(report,"# Project output");
+   expect(await handleCommand(context,"read_artifact_preview",{path:report,cwd:workspace,environmentId:"local"})).toMatchObject({path:report,kind:"text",content:"# Project output"});
+  } finally {rmSync(output,{recursive:true,force:true});}
+ });
+
+ it.each(["get_project_output_location","open_project_output_folder"])("blocks %s for SSH before touching local files",async command=>{
+  context.runtimeBindings.set("ssh-owned",{kind:"ssh",environmentId:"ssh-owned",workspaceRoot:"/remote"} as never);
+  await expect(handleCommand(context,command,{cwd:"/remote",environmentId:"ssh-owned"})).rejects.toThrow(/local Windows only/);
+ });
+});

@@ -1,3 +1,4 @@
+import { projectOutputInstructions } from "./project-output";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -880,7 +881,7 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 	const inlineRules = mergeDesktopAiInstructions(
 		typeof config.rules === "string" ? config.rules : undefined,
 	);
-	return buildClineSystemPrompt({
+	const prompt = await buildClineSystemPrompt({
 		ide: "Terminal Shell",
 		workspaceRoot: cwd,
 		workspaceName: basename(cwd),
@@ -898,6 +899,7 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 					: undefined,
 		platform: process.platform || "unknown",
 	});
+	return prompt + projectOutputInstructions(String(config.workspaceRoot ?? config.workspace_root ?? "").trim() || cwd);
 }
 
 function resolveToolPolicies(

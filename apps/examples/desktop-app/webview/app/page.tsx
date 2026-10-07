@@ -1,4 +1,5 @@
 "use client";
+import { ProjectOutputBar } from "@/components/views/chat/project-output-bar";
 
 import { CLINE_DEFAULT_MODEL_ID } from "@cline/shared/browser";
 import { AttachmentDropZone } from "@cline/ui";
@@ -2699,6 +2700,7 @@ function ChatThreadPane({
 								status={headerStatus}
 								title={threadTitle}
 							/>
+        {!isCloudSession ? <ProjectOutputBar cwd={config.workspaceRoot || config.cwd} environmentId={environmentId} /> : null}
 						</div>
 					</WindowTitleBarContent>
 				) : null}

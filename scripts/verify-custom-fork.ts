@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/chat-session.ts",markers:["return prompt + projectOutputInstructions"]},
+ {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["get_project_output_location", "open_project_output_folder", "ensureProjectOutputDirectories(location)"]},
+ {path:"apps/examples/desktop-app/webview/app/page.tsx",markers:["ProjectOutputBar", "config.workspaceRoot || config.cwd"]},
+ {path:"apps/examples/desktop-app/sidecar/project-output.ts",markers:["WINDOWS_PROJECT_OUTPUT_ROOT", String.raw`C:\\Cline-Outputs`, "do not silently fall back", "links or junctions"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/project-output-bar.tsx",markers:["get_project_output_location", "open_project_output_folder", "Open outputs"]},
  {path:"apps/examples/desktop-app/webview/hooks/chat-session/helpers.ts",markers:["Assistant narration and completed tool calls are not turn-completion", "mapHistoryStatusToChatStatus(fallback)"]},
  {path:"apps/examples/desktop-app/webview/hooks/use-chat-session.ts",markers:["hydrationOwnsStatus", "hydrationStatusRevision", "hydrationTurnEpoch"]},
  {path:"docs/SESSION_NAVIGATION_STATUS.md",markers:["not a completion receipt", "does not replay"]},

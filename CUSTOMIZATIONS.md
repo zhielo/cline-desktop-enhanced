@@ -2,6 +2,13 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Fixed Windows project output location
+
+- New local Windows session prompts supply `C:\Cline-Outputs` as the generated-output default. Stable sanitized project names plus a workspace-path hash separate same-named projects; `deliverables`, `reports` and `logs` are explicit destinations. Source edits and existing build/private-evidence/native-project storage remain unchanged.
+- The session header shows the exact destination with Copy path and Open outputs. Reading/refresh does not create folders. The explicit button creates direct children only, rejects existing links/junctions, and surfaces permission failures without AppData fallback.
+- Local Windows only: SSH/cloud hosts are never routed to the desktop C drive. This is agent guidance plus folder controls, not interception of arbitrary shell/file operations or an OS sandbox; explicit existing tool output paths remain in effect. Existing sessions keep their persisted prompt until a new/rebuilt session is started.
+- Automated folder/RPC/UI regressions are mandatory. No automatic file migration or deletion. See `docs/PROJECT_OUTPUT_LOCATION.md`.
+
 ## Session navigation status restoration
 
 - Local/SSH hydration preserves explicit runtime status. Assistant narration and completed tool rows never infer completion; running sessions remain busy until authoritative runtime reconciliation.

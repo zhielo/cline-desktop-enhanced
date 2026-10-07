@@ -99,6 +99,8 @@ async function main() {
       "apps/examples/desktop-app/sidecar/engineering-worktree-manager.test.ts",
       "apps/examples/desktop-app/sidecar/browser-manager.test.ts",
       "apps/examples/desktop-app/sidecar/commands-workbench.test.ts",
+      "apps/examples/desktop-app/sidecar/project-output.test.ts",
+      "apps/examples/desktop-app/webview/components/views/chat/project-output-bar.test.tsx",
       "apps/examples/desktop-app/sidecar/repository-tool.test.ts",
       "apps/examples/desktop-app/sidecar/notion-agent-bridge.test.ts",
       "apps/examples/desktop-app/sidecar/notion-agent-patch.test.ts",
