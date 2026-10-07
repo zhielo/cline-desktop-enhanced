@@ -83,7 +83,8 @@ const requiredMarkers: Array<{
 
  {path:"sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",markers:["tool with spaces.exe", "fs.copyFile(process.execPath", "fixture.args"]},
  {path:"sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",markers:["sourceRepo: realpathSync.native(repo)"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts", "formatValidationHeartbeat", "recordValidationProgress", "progress.jsonl", "clearInterval(heartbeat)"]},
+ {path:"apps/examples/desktop-app/vitest.config.mts",markers:['maxWorkers: process.platform === "win32" && process.env.CI ? 2 : undefined']},
 
  {path:"workers/android-capture/capture_support.py",markers:["physical_preflight", "Root probe denied", "uid0-reported", "attestation"]},
  {path:"workers/android-capture/capture.py",markers:["Refusing to replace an existing app", "device.enumerate_processes()", "support.physical_preflight", "'exec-out','su','-c'"]},
@@ -369,6 +370,8 @@ const requiredMarkers: Array<{
 		path: ".github/workflows/build-custom-windows-installer.yml",
 		markers: [
 			"Run consolidated custom fork validation",
+			"timeout-minutes: 35",
+			'CLINE_VALIDATION_PARALLEL: "1"',
 			"validate:advanced",
 			"include-hidden-files: true",
 			"Build custom Windows installer",

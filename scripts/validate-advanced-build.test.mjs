@@ -1,8 +1,38 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
+import { formatValidationHeartbeat, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
 const jobs = [1, 2, 3, 4, 5].map(n => ({ name: String(n) }));
+test("heartbeats identify every active gate without exposing commands or environment", () => {
+  const active = new Map([[{}, { name: "sidecar", start: 1000, args: ["secret"] }], [{}, { name: "installer", start: 3000 }]]);
+  assert.equal(formatValidationHeartbeat(active, 5000), "[PROGRESS] sidecar: 4s; installer: 2s");
+  assert.equal(formatValidationHeartbeat(new Map(), 5000), "[PROGRESS] no active checks");
+});
+test("progress records are independently readable before a final summary exists", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "cline-validation-progress-"));
+  try {
+    const file = path.join(dir, "progress.jsonl");
+    recordValidationProgress(file, { event: "check-start", name: "sidecar" });
+    assert.equal(JSON.parse(readFileSync(file, "utf8")).event, "check-start");
+    recordValidationProgress(file, { event: "check-finish", name: "sidecar", status: "failed" });
+    const records = readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line));
+    assert.equal(records.length, 2);
+    assert.equal(records[1].status, "failed");
+    assert.ok(records.every(record => !Number.isNaN(Date.parse(record.timestamp))));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test("Windows validation has an external deadline and bounded workers without dropping suites", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/build-custom-windows-installer.yml", import.meta.url), "utf8");
+  assert.match(workflow, /name: Run consolidated custom fork validation[\s\S]*?timeout-minutes: 35[\s\S]*?CLINE_VALIDATION_PARALLEL: "1"[\s\S]*?run: bun run validate:advanced/);
+  const config = readFileSync(new URL("../apps/examples/desktop-app/vitest.config.mts", import.meta.url), "utf8");
+  assert.ok(config.includes('maxWorkers: process.platform === "win32" && process.env.CI ? 2 : undefined'));
+  const runner = readFileSync(new URL("./validate-advanced-build.mjs", import.meta.url), "utf8");
+  assert.ok(runner.includes('job("Run required desktop sidecar regression suite"'));
+  assert.ok(runner.includes('job("Test Windows installer configuration"'));
+  assert.ok(runner.includes("clearInterval(heartbeat)"));
+});
 test("parallelism is bounded and rejects malformed values", () => {
   assert.equal(parseParallel(), 2); assert.equal(parseParallel("4"), 4);
   for (const value of [0, -1, 5, 1.5, NaN, "bad"]) assert.throws(() => parseParallel(value));

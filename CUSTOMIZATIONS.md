@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Windows validation hang safeguards
+
+- The Windows installer workflow serializes consolidated gates and caps Windows CI Vitest pools at two workers without removing suites or changing assertions. An independent 35-minute Actions step deadline bounds validator hangs; the existing 20-minute per-check deadlines remain enforced.
+- Named 30-second heartbeats and append-and-close `progress.jsonl` records expose active checks and preserve intermediate start/finish evidence before a final summary exists. A lost hosted runner can still prevent artifact upload; these safeguards do not claim a diagnosed application defect or a successful installer.
+
 ## Reviewed native-project edit candidates
 
 - Fixed Ghidra/IDA adapters preview exact function state and create private name/comment/prototype candidates under separate Modify/state/project/pointer approvals. Original target bytes and GUI databases are never replaced. Every candidate is saved and independently reopened at the exact entry before publication.
