@@ -927,3 +927,13 @@ it.each([
 		),
 	).rejects.toThrow("Managed workers require");
 });
+
+
+it.each([
+ {engine:"auto",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"}},
+ {engine:"ghidra",operation:"project_edit",project_edit:{mode:"preview"}},
+ {engine:"ghidra",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"},script_path:"/untrusted.py"},
+ {engine:"ghidra",operation:"inspect",project_edit:{mode:"preview"}},
+])("rejects unsafe native edit envelopes before discovery: %j",async request=>{
+ await expect(createReverseEngineeringExecutor()(request as never,{sessionId:"owned-session"} as never)).rejects.toThrow(/Native project edits require|project_edit data/);
+});

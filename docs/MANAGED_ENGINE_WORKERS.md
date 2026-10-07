@@ -30,3 +30,7 @@ A later separately approved selected-function request with the same owning sessi
 Mandatory owned Node-process fixtures exercise live process reuse, coordination lifetime, capacity, cancellation, deadline, nonce/request mismatch, ambiguity/error, oversized output and unexpected exit. They are protocol/lifecycle tests, not IDA or Ghidra execution. Fixed adapter source-contract tests do not prove compatibility with every engine version. Real installed Ghidra and licensed IDA/Hex-Rays sessions remain operator validation requirements; inventory or a successful Windows installer build does not establish those capabilities.
 
 Transactional annotation/prototype editing is not implemented in these workers. Do not describe this phase as applying every recommendation. That work needs engine-specific commit/rollback semantics and verified compatibility; particularly, IDA edits must not be called transactional without a tested rollback mechanism. Physical KSUN-device validation also remains outstanding.
+
+## Subsequent guarded edit integration
+
+The read-only workers remain read-only. Separate one-shot, independently reopened native project candidates now support reviewed function name/comment/prototype edits and exact-head pointer rollback; see `docs/NATIVE_PROJECT_CANDIDATES.md`. Earlier remaining-work notes describe the initial worker phase. No in-place GUI replacement, native IDA undo guarantee or actual licensed-engine/device validation is implied.

@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-project-candidates.ts",markers:["runNativeProjectCandidate", "Persisted candidate read-back mismatch", "Candidate head changed since review", "pointerOnly: true"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/native-project-edit-scripts.ts",markers:["currentProgram.endTransaction(tx,commit)", "actual.equals_to(tif)", "save_database(DATABASE,0)"]},
+ {path:"docs/NATIVE_PROJECT_CANDIDATES.md",markers:["no native undo guarantee", "separate engine process", "not signatures", "physical KSUN-device"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.ts",markers:["class ManagedEnginePool", "Worker termination unconfirmed; project lease retained", "Managed engine request binding mismatch", "Managed engine pool capacity reached", "guardManagedBatchArguments"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-scripts.ts",markers:["MANAGED_GHIDRA_SCRIPT", "managedIdaScript", "Ambiguous exact function name", "finally: idc.qexit(0)"]},
  {path:"docs/MANAGED_ENGINE_WORKERS.md",markers:["90-second idle", "not an OS sandbox", "Transactional annotation/prototype editing is not implemented"]},

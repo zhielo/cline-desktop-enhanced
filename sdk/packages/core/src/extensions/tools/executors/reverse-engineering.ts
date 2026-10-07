@@ -19,6 +19,10 @@ import {
 	runAnalysisNotebook,
 } from "./analysis-notebook";
 import { programEvidenceResult } from "./analysis-program-evidence";
+import { readNativeCandidateReceipt, runNativeProjectCandidate } from "./native-project-candidates";
+import { NATIVE_GHIDRA_EDIT_SCRIPT, nativeIdaEditScript } from "./native-project-edit-scripts";
+import { NativeProjectEditSchema } from "../native-project-edits-schema";
+import { guardManagedBatchArguments } from "./managed-engine-pool";
 import { ManagedEnginePool } from "./managed-engine-pool";
 import { MANAGED_GHIDRA_SCRIPT, managedIdaScript } from "./managed-engine-scripts";
 import { withProjectLease } from "./analysis-project-lease";
@@ -2478,7 +2482,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				"Managed workers require an owning session, explicit acknowledgement, exact decompile and no user scripts",
 			);
 
-		if (input.function_selector && input.operation !== "decompile")
+		if (input.project_edit && input.operation !== "project_edit") throw new Error("project_edit data is only accepted for project_edit");
+		if (input.operation === "project_edit" && (!input.project_edit || !["ghidra","ida"].includes(input.engine ?? "") || input.script_path || input.script_args?.length || input.managed_worker === true || typeof context.sessionId !== "string" || !context.sessionId || (input.project_edit.mode !== "rollback" && !input.function_selector))) throw new Error("Native project edits require an owning session, explicit Ghidra/IDA engine, fixed edit data and exact function selector");
+		if (input.function_selector && !["decompile","project_edit"].includes(input.operation))
 			throw new Error("function_selector is only accepted for decompile");
 		if (input.operation === "advanced_analysis") {
 			if (!input.advanced_action)
@@ -3244,7 +3250,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		const gui = input.operation === "open_gui";
 		if (
 			input.function_selector &&
-			(input.operation !== "decompile" || engine === "jadx")
+			(!["decompile","project_edit"].includes(input.operation) || engine === "jadx")
 		)
 			throw new Error(
 				"function_selector is only supported for Ghidra/IDA decompile; use JADX single-class or exact DEX/Smali method retrieval instead",
@@ -3316,6 +3322,124 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			throw new Error(
 				"IDA decompile requires an installed Hex-Rays decompiler; no compatible plugin was detected.",
 			);
+		}
+
+		if (input.operation === "project_edit") {
+			if (engine !== "ghidra" && engine !== "ida")
+				throw new Error("Only native project engines are supported");
+			const edit = NativeProjectEditSchema.parse(input.project_edit);
+			const adapter =
+				engine === "ghidra"
+					? NATIVE_GHIDRA_EDIT_SCRIPT
+					: nativeIdaEditScript("", "", "");
+			const binding = createHash("sha256")
+				.update(JSON.stringify({ engineFingerprint, configFingerprint, adapter }))
+				.digest("hex");
+			const verifyTarget = async () => {
+				if ((await sha256(target)) !== hash)
+					throw new Error("Native edit target changed since approval");
+				if (
+					(await fingerprintFile(resolvedCommand)) !== engineFingerprint ||
+					(await fingerprintFile(
+						engineIdentity.versionSource &&
+							path.isAbsolute(engineIdentity.versionSource)
+							? engineIdentity.versionSource
+							: undefined,
+					)) !== configFingerprint
+				)
+					throw new Error("Native edit engine/config changed since approval");
+			};
+			const result = await runNativeProjectCandidate({
+				root: path.join(outputDir, "native-project-candidates"),
+				engine,
+				artifactSha256: hash,
+				engineSha256: binding,
+				selector: input.function_selector,
+				edit,
+				signal: context.signal,
+				prepareInput: async (stage) => {
+					await fs.copyFile(
+						target,
+						path.join(stage, "input.bin"),
+						(await import("node:fs")).constants.COPYFILE_EXCL,
+					);
+				},
+				verifyTarget,
+				run: async (stage, request) => {
+					await verifyTarget();
+					context.signal?.throwIfAborted();
+					const requestPath = path.join(
+							stage,
+							`${request.requestId}.request.json`,
+						),
+						receiptPath = path.join(stage, `${request.requestId}.receipt.json`);
+					const raw = JSON.stringify(request);
+					if (Buffer.byteLength(raw) > 65536)
+						throw new Error("Native edit request byte budget exceeded");
+					await fs.writeFile(requestPath, raw, { flag: "wx", mode: 0o600 });
+					let args: string[];
+					if (engine === "ghidra") {
+						const script = path.join(stage, "ClineNativeEdit.java");
+						await fs.writeFile(script, adapter, { mode: 0o600 });
+						const existing = await exists(path.join(stage, "candidate.gpr"));
+						args = [
+							stage,
+							"candidate",
+							...(existing
+								? ["-process", "input.bin", "-noanalysis"]
+								: ["-import", path.join(stage, "input.bin")]),
+							"-analysisTimeoutPerFile",
+							String(Math.max(1, Math.floor(timeoutMs / 1000))),
+							"-scriptPath",
+							stage,
+							"-postScript",
+							"ClineNativeEdit.java",
+							requestPath,
+							receiptPath,
+						];
+					} else {
+						const script = path.join(stage, `${request.requestId}.edit.py`),
+							database = path.join(stage, "candidate.i64");
+						await fs.writeFile(
+							script,
+							nativeIdaEditScript(requestPath, receiptPath, database),
+							{ flag: "wx", mode: 0o600 },
+						);
+						const existing = await exists(database);
+						args = [
+							"-A",
+							`-L${path.join(stage, "ida.log")}`,
+							...(existing ? [] : [`-o${database}`]),
+							`-S${shellLikeQuote(script)}`,
+							existing ? database : path.join(stage, "input.bin"),
+						];
+					}
+					if (
+						process.platform === "win32" &&
+						/\.(bat|cmd)$/i.test(resolvedCommand)
+					)
+						guardManagedBatchArguments(resolvedCommand, args);
+					const outcome = await runSupervised(
+						resolvedCommand,
+						args,
+						timeoutMs,
+						context.signal,
+					);
+					if (outcome.exitCode !== 0 || outcome.timedOut || outcome.cancelled)
+						throw new Error(
+							"Native edit engine failed/interrupted; candidate remains unpublished",
+						);
+					return await readNativeCandidateReceipt(receiptPath);
+				},
+			});
+			return JSON.stringify({
+				operation: input.operation,
+				engine,
+				target,
+				sha256: hash,
+				outputScope,
+				...result,
+			});
 		}
 
 		if (input.managed_worker === true) {

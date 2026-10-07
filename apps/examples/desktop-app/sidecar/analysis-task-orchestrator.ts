@@ -156,7 +156,7 @@ function permissionFor(
 ): AnalysisPermission {
 	if(kind==="execution")return "Execute";
 	if (kind === "device") return ["observe_apk","collect_apk_debug"].includes(operation) ? "Inspect" : "Execute";
-	if (kind === "static") return "Inspect";
+	if (kind === "static") return operation === "project_edit" ? "Modify" : "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
 	if (["launch", "continue", "step"].includes(operation)) return "Execute";
 	return "Debug";
@@ -194,6 +194,7 @@ function requirementsFor(
 		requirements.add("sensitive-plaintext-processing");
 	}
 	if (kind === "static" && request?.managed_worker === true) {requirements.add("managed-persistent-engine-process"); requirements.add("private-analysis-project-write");}
+	if (kind === "static" && operation === "project_edit") {requirements.add("authorized-target");requirements.add("isolated-analysis-project-write");requirements.add("reviewed-native-project-state");requirements.add("candidate-pointer-change-not-gui-replacement");}
 	if (kind === "debugger") requirements.add("authorized-target");
 	if (
 		kind === "gui" ||

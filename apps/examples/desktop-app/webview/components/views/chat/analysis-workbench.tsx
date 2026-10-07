@@ -78,6 +78,7 @@ type AnalysisOperation =
 	| "verify_apk_signature"
 	| "analyze"
 	| "decompile"
+	| "project_edit"
 	| "disassemble_smali";
 type DebugOperation =
 	| "inspect_dump"
@@ -344,7 +345,10 @@ export function AnalysisWorkbench({
 				return;
 			}
 		let selectedOptions: Record<string, unknown> = {};
-		if (kind === "static" && operation === "decompile") {
+		if (
+			kind === "static" &&
+			["decompile", "project_edit"].includes(operation)
+		) {
 			try {
 				selectedOptions = JSON.parse(decompilerOptions);
 				if (
@@ -359,6 +363,7 @@ export function AnalysisWorkbench({
 								"jadx_mode",
 								"managed_worker",
 								"confirm_managed_worker",
+								"project_edit",
 							].includes(key),
 					)
 				)
@@ -702,6 +707,9 @@ export function AnalysisWorkbench({
 										<option value="verify_apk_signature">APK signature</option>
 										<option value="analyze">Headless analysis</option>
 										<option value="decompile">Decompile</option>
+										<option value="project_edit">
+											Reviewed native project candidate
+										</option>
 										<option value="disassemble_smali">Smali</option>
 									</select>
 								</label>
@@ -719,7 +727,7 @@ export function AnalysisWorkbench({
 									</select>
 								</label>
 							</div>
-							{operation === "decompile" && (
+							{["decompile", "project_edit"].includes(operation) && (
 								<label className="block text-xs">
 									Targeted decompiler options JSON
 									<textarea
@@ -731,12 +739,16 @@ export function AnalysisWorkbench({
 										}
 									/>
 									<span className="mt-2 block text-muted-foreground">
-										Ghidra/IDA: function_selector with one symbol or hex entry
-										address. JADX: jadx_single_class. Requires an installed
-										compatible engine; no target execution or license bypass.
-										Opt in to a bounded persistent Ghidra/IDA worker with
-										managed_worker=true and confirm_managed_worker=true; review
-										the separate process/private-project approvals.
+										Project edit: use project_edit.mode preview first; candidate
+										requires exact before-state/head and reviewed changes.
+										Rollback changes only the active candidate pointer. Never
+										replaces your GUI database. Ghidra/IDA: function_selector
+										with one symbol or hex entry address. JADX:
+										jadx_single_class. Requires an installed compatible engine;
+										no target execution or license bypass. Opt in to a bounded
+										persistent Ghidra/IDA worker with managed_worker=true and
+										confirm_managed_worker=true; review the separate
+										process/private-project approvals.
 									</span>
 								</label>
 							)}

@@ -267,6 +267,10 @@ function evaluateTool(
 			);
 		}
 	}
+	if (toolName === "reverse_engineer" && !profile.allowFileWrites &&
+		typeof context.input === "object" && context.input !== null &&
+		(context.input as {operation?:unknown}).operation === "project_edit")
+		return blockedReason(profile.name,"native project candidate edits and pointer changes require a write-enabled profile");
 	const explicitlyAllowed = profile.allowedToolNames.has(toolName);
 	if (!isKnownTool(toolName) && !isCoordinationTool(toolName)) {
 		if (explicitlyAllowed) {

@@ -383,3 +383,10 @@ it("requires separate persistent engine process and private project acknowledgem
 	expect(plan.requirements).toContain("private-analysis-project-write");
 	expect(() => tasks.approve(plan.id, [], plan.requestHash)).toThrow();
 });
+
+
+it("classifies native project candidates as Modify with explicit state/pointer approvals",async()=>{
+ const root=workspace();writeFileSync(join(root,"owned.so"),"owned fixture");const tasks=new AnalysisTaskOrchestrator();
+ const plan=await tasks.prepare({workspaceRoot:root,kind:"static",request:{operation:"project_edit",target:"owned.so",engine:"ghidra",project_edit:{mode:"preview"},function_selector:{address:"0x10"}}});
+ expect(plan.permission).toBe("Modify");expect(plan.requirements).toContain("reviewed-native-project-state");expect(plan.requirements).toContain("candidate-pointer-change-not-gui-replacement");expect(()=>tasks.approve(plan.id,[],plan.requestHash)).toThrow();
+});

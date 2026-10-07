@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import { NativeProjectEditSchema } from "./native-project-edits-schema";
 
 export const INPUT_ARG_CHAR_LIMIT = 6000;
 
@@ -270,6 +271,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		"extract",
 		"analyze",
 		"decompile",
+		"project_edit",
 		"disassemble_smali",
 		"read_smali_method",
 		"search_smali",
@@ -292,6 +294,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		.describe(
 			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
 		),
+	project_edit: NativeProjectEditSchema.optional(),
 	managed_worker: z
 		.boolean()
 		.optional()
