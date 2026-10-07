@@ -127,13 +127,31 @@ export function packageFailures(text: string, pkg: string) {
 			return { kind, text: safe, sha256: digest(safe) };
 		});
 }
-async function readDiagnosticBytes(expected: string, hash: string) {
+async function readDiagnosticBytes(
+	cacheRoot: string,
+	caseId: string,
+	hash: string,
+) {
+	z.string().uuid().parse(caseId);
+	Hash.parse(hash);
+	// Canonicalize the trusted cache anchor first: Windows realpath expands
+	// legitimate drive/ancestor spelling and short-name aliases. Never relax
+	// equality for the incident directory or content-addressed report below it.
+	const cacheInfo = await lstat(cacheRoot);
+	if (!cacheInfo.isDirectory() || cacheInfo.isSymbolicLink())
+		throw new Error("Diagnostic cache must be a non-link directory");
+	const base = await realpath(cacheRoot),
+		directory = join(base, caseId),
+		directoryInfo = await lstat(directory);
+	if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink())
+		throw new Error("Diagnostic incident directory link not permitted");
+	const expected = join(directory, `${hash}.report.txt`),
+		before = await lstat(expected);
+	if (!before.isFile() || before.isSymbolicLink() || before.size > 524288)
+		throw new Error("Diagnostic report integrity/budget mismatch");
 	const path = await realpath(expected);
 	if (path !== expected)
 		throw new Error("Diagnostic report symlink not permitted");
-	const before = await lstat(path);
-	if (!before.isFile() || before.isSymbolicLink() || before.size > 524288)
-		throw new Error("Diagnostic report integrity/budget mismatch");
 	const handle = await open(
 		path,
 		constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
@@ -508,7 +526,11 @@ export class ApkIncidentService {
 						} catch (error) {
 							if ((error as NodeJS.ErrnoException).code !== "EEXIST")
 								throw error;
-							await readDiagnosticBytes(output, String(report.sha256));
+							await readDiagnosticBytes(
+								this.options.cacheRoot,
+								c.id,
+								String(report.sha256),
+							);
 						}
 						const parsed = parseAndroidDebugEvidence(text, c.request.package);
 						c.observations.push({
@@ -740,8 +762,7 @@ export class ApkIncidentService {
 			)
 		)
 			throw new Error("Report is not bound to this incident");
-		const expected = join(this.options.cacheRoot, c.id, `${hash}.report.txt`),
-			raw = await readDiagnosticBytes(expected, hash);
+		const raw = await readDiagnosticBytes(this.options.cacheRoot, c.id, hash);
 		const text = raw.toString("utf8");
 		return {
 			sha256: hash,

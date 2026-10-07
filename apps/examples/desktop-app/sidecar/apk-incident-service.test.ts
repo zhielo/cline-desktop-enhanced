@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -46,7 +46,9 @@ async function fixture() {
 	});
 	const options = {
 		dbPath: join(root, "cases.sqlite"),
-		cacheRoot: join(root, "private"),
+		// Exercise a valid non-canonical cache spelling on every OS; Windows also
+		// exercises its realpath drive/temp-directory normalization.
+		cacheRoot: join(root, "private") + "/../private",
 		tasks,
 		sleep: async () => {},
 		android: async (input: Record<string, unknown>) => {
@@ -417,4 +419,46 @@ it("collects separately approved diagnostic reports without launch, install or b
 	);
 	expect(viewed.text).toContain("com.example.app");
 	expect(viewed.parsed.scope).toContain("adb-file-observation");
+});
+
+it("rejects a diagnostic incident directory junction even when report bytes match", async () => {
+	const f = await fixture();
+	const p = await f.service.prepare(f.root, {
+		...f.request,
+		operation: "collect_apk_debug",
+		debug_report_paths: ["/data/anr/anr_owned"],
+	});
+	const approval = f.tasks.approve(p.id, p.requirements, p.requestHash),
+		accepted = await f.service.start(f.root, p.id, approval.executionToken),
+		c = await f.completed(accepted.id),
+		report = c.observations.find((o) => o.stage === "diagnostic-report")!,
+		directory = join(f.root, "private", c.id),
+		moved = join(f.root, "moved-reports");
+	await rename(directory, moved);
+	await symlink(moved, directory, "junction");
+	await expect(
+		f.service.diagnosticReport(f.root, c.id, String(report.sha256)),
+	).rejects.toThrow("Diagnostic incident directory link not permitted");
+});
+
+it("rejects modified and oversized private diagnostic reports", async () => {
+	const f = await fixture();
+	const p = await f.service.prepare(f.root, {
+		...f.request,
+		operation: "collect_apk_debug",
+		debug_report_paths: ["/data/anr/anr_owned"],
+	});
+	const approval = f.tasks.approve(p.id, p.requirements, p.requestHash),
+		accepted = await f.service.start(f.root, p.id, approval.executionToken),
+		c = await f.completed(accepted.id),
+		report = c.observations.find((o) => o.stage === "diagnostic-report")!,
+		path = join(f.root, "private", c.id, `${report.sha256}.report.txt`);
+	await writeFile(path, "tampered");
+	await expect(
+		f.service.diagnosticReport(f.root, c.id, String(report.sha256)),
+	).rejects.toThrow("Diagnostic report integrity mismatch");
+	await writeFile(path, Buffer.alloc(524289));
+	await expect(
+		f.service.diagnosticReport(f.root, c.id, String(report.sha256)),
+	).rejects.toThrow("Diagnostic report integrity/budget mismatch");
 });
