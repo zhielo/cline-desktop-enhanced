@@ -362,3 +362,24 @@ describe("approval races and bounded ledger retention", () => {
 		}
 	});
 });
+
+it("requires separate persistent engine process and private project acknowledgements", async () => {
+	const root = workspace();
+	writeFileSync(join(root, "owned.so"), "owned fixture");
+	const tasks = new AnalysisTaskOrchestrator();
+	const plan = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: {
+			operation: "decompile",
+			target: "owned.so",
+			engine: "ghidra",
+			function_selector: { address: "0x10" },
+			managed_worker: true,
+			confirm_managed_worker: true,
+		},
+	});
+	expect(plan.requirements).toContain("managed-persistent-engine-process");
+	expect(plan.requirements).toContain("private-analysis-project-write");
+	expect(() => tasks.approve(plan.id, [], plan.requestHash)).toThrow();
+});

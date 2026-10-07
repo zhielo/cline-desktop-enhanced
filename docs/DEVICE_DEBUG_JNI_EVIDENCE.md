@@ -29,3 +29,7 @@ If a registration references a captured native disk module, its approved output 
 Owned protocol fixtures cover signature/request/hash rejection, exact registration filtering, ambiguity, root consent, no-launch capture, private report reading, path/metadata/serial bounds and stale-workspace UI responses. The signed collector was already present; these fixtures are not real Android execution.
 
 No physical KSUN device, real Frida root authorization, device-specific toybox command corpus or actual crash reproduction was available in this agent environment. Persistent IDA/Ghidra worker pools and automatic transactional project/type edits are still not implemented by this phase. These remain distinct work items, not capabilities implied by a successful build.
+
+## Subsequent worker integration
+
+Managed selected-function Ghidra/IDA worker adapters and bounded process reuse are now implemented; see `docs/MANAGED_ENGINE_WORKERS.md`. This does not replace licensed-engine validation. Transactional type edits and real-device validation remain outstanding. Earlier remaining-work notes describe the initial device/JNI phase.

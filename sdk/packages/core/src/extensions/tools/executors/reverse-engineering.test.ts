@@ -890,3 +890,40 @@ done`,
 		expect(await run("example.First")).not.toBe(await run("example.Second"));
 	});
 });
+
+it.each([
+	{
+		engine: "auto",
+		operation: "inspect",
+		managed_worker: true,
+		confirm_managed_worker: true,
+	},
+	{
+		engine: "ghidra",
+		operation: "decompile",
+		managed_worker: true,
+		function_selector: { address: "0x10" },
+	},
+	{
+		engine: "ghidra",
+		operation: "decompile",
+		managed_worker: true,
+		confirm_managed_worker: true,
+		function_selector: { address: "0x10" },
+		script_path: "/untrusted.py",
+	},
+	{
+		engine: "jadx",
+		operation: "decompile",
+		managed_worker: true,
+		confirm_managed_worker: true,
+		function_selector: { address: "0x10" },
+	},
+])("rejects invalid managed-worker mode before discovery or engine execution: %j", async (request) => {
+	await expect(
+		createReverseEngineeringExecutor()(
+			request as never,
+			{ sessionId: "owned-session" } as never,
+		),
+	).rejects.toThrow("Managed workers require");
+});

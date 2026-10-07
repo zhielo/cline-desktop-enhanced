@@ -99,6 +99,7 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.test.ts",
+ "sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/live-debugger.test.ts",
  "sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.test.ts",

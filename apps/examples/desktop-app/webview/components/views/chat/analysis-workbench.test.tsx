@@ -249,7 +249,9 @@ it("keeps exact decompiler selectors in the approval request and rejects envelop
 			([c]) => c === "prepare_analysis_task" || c === "run_static_analysis",
 		),
 	).toBe(false);
-	await value('{"function_selector":{"address":"0x1000"}}');
+	await value(
+		'{"function_selector":{"address":"0x1000"},"managed_worker":true,"confirm_managed_worker":true}',
+	);
 	await clickText("Prepare static-analysis task");
 	expect(invoke).toHaveBeenCalledWith(
 		"prepare_analysis_task",
@@ -257,6 +259,8 @@ it("keeps exact decompiler selectors in the approval request and rejects envelop
 			request: expect.objectContaining({
 				operation: "decompile",
 				function_selector: { address: "0x1000" },
+				managed_worker: true,
+				confirm_managed_worker: true,
 			}),
 		}),
 	);

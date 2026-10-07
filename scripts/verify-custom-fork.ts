@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.ts",markers:["class ManagedEnginePool", "Worker termination unconfirmed; project lease retained", "Managed engine request binding mismatch", "Managed engine pool capacity reached", "guardManagedBatchArguments"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-scripts.ts",markers:["MANAGED_GHIDRA_SCRIPT", "managedIdaScript", "Ambiguous exact function name", "finally: idc.qexit(0)"]},
+ {path:"docs/MANAGED_ENGINE_WORKERS.md",markers:["90-second idle", "not an OS sandbox", "Transactional annotation/prototype editing is not implemented"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/android-debug-reports.ts",markers:["collectAndroidDebugReports", "Separate root-read acknowledgement", "no root fallback or retry", "unattributed-not-retained"]},
  {path:"apps/examples/desktop-app/sidecar/runtime-jni-evidence.ts",markers:["verifyAndroidObservationReceipt", "Completed approved Android capture plan required", "ambiguous-observations", "executeAutomatically: false"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/runtime-jni-workspace.tsx",markers:["query_runtime_jni", "Refresh completed JNI captures", "Verify and query signed registrations"]},

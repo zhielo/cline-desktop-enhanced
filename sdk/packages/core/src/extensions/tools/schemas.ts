@@ -292,6 +292,18 @@ export const ReverseEngineeringInputSchema = z.object({
 		.describe(
 			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
 		),
+	managed_worker: z
+		.boolean()
+		.optional()
+		.describe(
+			"Opt-in bounded persistent IDA/Ghidra process for exact selected-function decompilation only",
+		),
+	confirm_managed_worker: z
+		.boolean()
+		.optional()
+		.describe(
+			"Explicit acknowledgement of licensed-engine process lifetime and private project writes",
+		),
 	function_selector: z
 		.object({
 			symbol: z.string().min(1).max(4096).optional(),

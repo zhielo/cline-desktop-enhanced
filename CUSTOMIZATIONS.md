@@ -2,6 +2,14 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Managed selected-function native engine workers
+
+- Explicitly opted-in Ghidra/IDA exact decompilation can reuse a bounded native process and private imported project. Two workers per owning SDK process, serialized requests, finite idle/lifetime/deadlines, fixed data-only adapters and held cross-process leases prevent silent concurrent project reuse or automatic replay.
+- Reuse binds owning session, canonical target/hash, command/config/script identity, output root and CPU settings; new imports use a byte-verified snapshot. No arbitrary scripts, debugger actions, target execution, license bypass or annotation/type writes are accepted. Pseudocode, mailbox bytes and child diagnostic tails remain bounded.
+- Windows batch engine launches reject cmd.exe expansion/control characters before spawn; ordinary spaced paths remain supported.
+- Analysis workbench requires separate persistent-process/private-project acknowledgements. Opening/refresh never launches workers. Owned process lifecycle tests are mandatory on Linux and Windows; fixed script contracts are not real IDA/Ghidra validation.
+- Transactional native type/annotation editing and physical KSUN-device validation remain outstanding. See `docs/MANAGED_ENGINE_WORKERS.md` for limits and operational validation.
+
 ## Selected device diagnostics and signed live JNI evidence
 
 - A separate `collect_apk_debug` incident binds the workspace APK, installed base-APK hash, explicit device serial and 1–6 approved text tombstone/ANR paths. It does not install, launch, stop, clear logs or instrument an app. Root is off by default and requires an additional exact-plan acknowledgement; KernelSU policy is never changed or bypassed.
@@ -9,7 +17,7 @@ This file is the durable customization ledger for this repository. The source on
 - The existing signed RegisterNatives collector is reused. Queries reverify the pinned Ed25519 signature, approved capture request, nonce, original APK identity and captured module hashes. Exact class/name/descriptor, optional PID and loader identity preserve ambiguous observations rather than guessing an overload or address mapping.
 - Module-relative offsets are not automatically ELF virtual addresses. A unique existing-symbol candidate requires an explicit coordinate acknowledgement and remains an operator-reviewed disk candidate, not loaded-memory equivalence; query/refresh never attaches, resumes or replays a capture.
 - Diagnostic report viewing canonicalizes the trusted cache anchor before constructing UUID/hash paths, avoiding Windows drive/ancestor/short-name spelling false positives. Cache/incident links, report links, byte-budget violations and hash/handle identity changes remain rejected; junction and tamper regressions are mandatory.
-- Physical KSUN/Frida/ADB validation remains unavailable here. Persistent IDA/Ghidra workers and transactional type-edit adapters are still a later phase; this integration does not claim they are shipped. See `docs/DEVICE_DEBUG_JNI_EVIDENCE.md`.
+- Physical KSUN/Frida/ADB validation remains unavailable here. Managed read-only selected-function worker adapters are implemented in the subsequent worker phase above; real installed-engine compatibility remains unverified. Transactional type-edit adapters are still a later phase. See `docs/DEVICE_DEBUG_JNI_EVIDENCE.md`.
 
 ## Integrated execution and evidence lab
 
@@ -18,7 +26,7 @@ This file is the durable customization ledger for this repository. The source on
 - Opt-in Windows suspended-launch Job Objects enforce process count and memory; unsupported/interactive configurations fail explicitly, with no sandbox or Linux-hard-limit claim.
 - Debugger launch now requires execution-control confirmation; attaches bind/recheck process start-tokens. IDA/Ghidra project reuse uses cross-process leases and executable/config/script fingerprints; stale leases are not silently stolen.
 - Evidence-first plans, package-scoped imported ANR/tombstone/death reports and hash-bound patch review are available in Execution lab. Import/review never installs, resumes, roots or executes a target.
-- Persistent licensed workers, transactional automatic type edits and real-device validation remain unsupported/unverified. Signed JNI registration queries and selected device-report reads are implemented in the subsequent evidence integration below; disk-to-runtime equivalence is not inferred. See `docs/EXECUTION_EVIDENCE_LAB.md` for contracts and limits.
+- Managed read-only native workers are implemented above but require installed-engine validation; transactional automatic type edits and real-device validation remain outstanding. Signed JNI registration queries and selected device-report reads are implemented in the subsequent evidence integration below; disk-to-runtime equivalence is not inferred. See `docs/EXECUTION_EVIDENCE_LAB.md` for contracts and limits.
 
 ## Integrated APK incident workflow
 

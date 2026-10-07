@@ -19,6 +19,8 @@ import {
 	runAnalysisNotebook,
 } from "./analysis-notebook";
 import { programEvidenceResult } from "./analysis-program-evidence";
+import { ManagedEnginePool } from "./managed-engine-pool";
+import { MANAGED_GHIDRA_SCRIPT, managedIdaScript } from "./managed-engine-scripts";
 import { withProjectLease } from "./analysis-project-lease";
 import {
 	persistInvestigation,
@@ -35,6 +37,8 @@ import {
 	TARGETED_GHIDRA_SCRIPT,
 	targetedIdaScript,
 } from "./targeted-decompiler-scripts";
+
+const managedEnginePool = new ManagedEnginePool();
 
 const MAX_OUTPUT_CHARS = 200_000;
 const MAX_ZIP_ENTRIES = 100_000;
@@ -2459,6 +2463,21 @@ function chooseAuto(
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+		if (
+			input.managed_worker === true &&
+			(input.operation !== "decompile" ||
+				!input.function_selector ||
+				input.engine === "jadx" ||
+				input.script_path ||
+				(input.script_args?.length ?? 0) > 0 ||
+				input.confirm_managed_worker !== true ||
+				typeof context.sessionId !== "string" ||
+				!context.sessionId)
+		)
+			throw new Error(
+				"Managed workers require an owning session, explicit acknowledgement, exact decompile and no user scripts",
+			);
+
 		if (input.function_selector && input.operation !== "decompile")
 			throw new Error("function_selector is only accepted for decompile");
 		if (input.operation === "advanced_analysis") {
@@ -3210,6 +3229,18 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			throw new Error(
 				"No compatible reverse-engineering engine was found. Configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
 			);
+		if (
+			input.managed_worker === true &&
+			(input.operation !== "decompile" ||
+				!input.function_selector ||
+				(engine !== "ghidra" && engine !== "ida") ||
+				input.script_path ||
+				(input.script_args?.length ?? 0) > 0 ||
+				input.confirm_managed_worker !== true)
+		)
+			throw new Error(
+				"Managed workers require explicit acknowledgement, Ghidra/IDA exact decompile and no user scripts",
+			);
 		const gui = input.operation === "open_gui";
 		if (
 			input.function_selector &&
@@ -3285,6 +3316,113 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			throw new Error(
 				"IDA decompile requires an installed Hex-Rays decompiler; no compatible plugin was detected.",
 			);
+		}
+
+		if (input.managed_worker === true) {
+			const key = createHash("sha256")
+				.update(
+					JSON.stringify({
+						owner: context.sessionId,
+						target: await fs.realpath(target),
+						hash,
+						engine,
+						resolvedCommand,
+						engineFingerprint,
+						configFingerprint,
+						outputDir: await fs.realpath(outputDir),
+						maxCpu: input.max_cpu ?? null,
+						adapter:
+							engine === "ghidra"
+								? MANAGED_GHIDRA_SCRIPT
+								: managedIdaScript("", ""),
+					}),
+				)
+				.digest("hex");
+			const result = await managedEnginePool.query(
+				key,
+				outputDir,
+				async () => {
+					const root = await fs.realpath(
+						await fs.mkdtemp(path.join(outputDir, "managed-worker-")),
+					);
+					const nonce = (await import("node:crypto")).randomUUID();
+					const snapshot = path.join(
+						root,
+						`input${path.extname(target).slice(0, 16)}`,
+					);
+					await fs.copyFile(
+						target,
+						snapshot,
+						(await import("node:fs")).constants.COPYFILE_EXCL,
+					);
+					if ((await sha256(snapshot)) !== hash)
+						throw new Error("Target changed before managed-engine import");
+					if (
+						(await fingerprintFile(resolvedCommand)) !== engineFingerprint ||
+						(await fingerprintFile(
+							engineIdentity.versionSource &&
+								path.isAbsolute(engineIdentity.versionSource)
+								? engineIdentity.versionSource
+								: undefined,
+						)) !== configFingerprint
+					)
+						throw new Error(
+							"Engine identity changed before managed-worker launch",
+						);
+					let args: string[];
+					if (engine === "ghidra") {
+						const script = path.join(root, "ClineManagedSelected.java");
+						await fs.writeFile(script, MANAGED_GHIDRA_SCRIPT, {
+							flag: "wx",
+							mode: 0o600,
+						});
+						args = [
+							root,
+							"cline-managed",
+							"-import",
+							snapshot,
+							"-analysisTimeoutPerFile",
+							String(Math.max(1, Math.floor(timeoutMs / 1000))),
+							"-scriptPath",
+							root,
+							"-postScript",
+							"ClineManagedSelected.java",
+							root,
+							nonce,
+						];
+						if (input.max_cpu)
+							args.splice(2, 0, "-max-cpu", String(input.max_cpu));
+					} else {
+						const script = path.join(root, "cline-managed.py");
+						await fs.writeFile(script, managedIdaScript(root, nonce), {
+							flag: "wx",
+							mode: 0o600,
+						});
+						args = [
+							"-A",
+							`-L${path.join(root, "ida.log")}`,
+							`-o${path.join(root, "managed.i64")}`,
+							`-S${shellLikeQuote(script)}`,
+							snapshot,
+						];
+					}
+					return { root, command: resolvedCommand, args, nonce };
+				},
+				input.function_selector!,
+				context.signal,
+				timeoutMs,
+			);
+			return JSON.stringify({
+				engine,
+				operation: input.operation,
+				target,
+				sha256: hash,
+				managedWorker: true,
+				outputDirectory: outputDir,
+				outputScope,
+				succeeded: true,
+				...result,
+			});
 		}
 
 		return withAnalysisLock(

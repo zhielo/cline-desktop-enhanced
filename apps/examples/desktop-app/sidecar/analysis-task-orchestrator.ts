@@ -193,6 +193,7 @@ function requirementsFor(
 		requirements.add("authorized-decryption");
 		requirements.add("sensitive-plaintext-processing");
 	}
+	if (kind === "static" && request?.managed_worker === true) {requirements.add("managed-persistent-engine-process"); requirements.add("private-analysis-project-write");}
 	if (kind === "debugger") requirements.add("authorized-target");
 	if (
 		kind === "gui" ||
