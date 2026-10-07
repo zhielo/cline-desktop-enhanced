@@ -12,11 +12,19 @@ import {
 import { digest } from "./incident-artifacts";
 
 const resources: { root: string; service: ApkIncidentService }[] = [];
+async function cleanupFixtures(
+	fixtures: { root: string; service: Pick<ApkIncidentService, "close"> }[],
+	remove: (root: string) => Promise<void> = (root) =>
+		rm(root, { recursive: true, force: true }),
+) {
+	// Windows retains SQLite WAL locks until every connection to the shared root is closed.
+	// Close all owners first, then remove each unique root exactly once; no retry/skip hides a leak.
+	for (const fixture of fixtures) fixture.service.close();
+	for (const root of new Set(fixtures.map((fixture) => fixture.root)))
+		await remove(root);
+}
 afterEach(async () => {
-	for (const r of resources.splice(0)) {
-		r.service.close();
-		await rm(r.root, { recursive: true, force: true });
-	}
+	await cleanupFixtures(resources.splice(0));
 });
 async function fixture() {
 	const root = await mkdtemp(join(tmpdir(), "incident-case-")),
@@ -311,4 +319,51 @@ it("cancels observation without replaying or claiming a fix", async () => {
 	const count = f.calls.length;
 	f.service.get(f.root, c.id);
 	expect(f.calls.length).toBe(count);
+});
+
+it("closes every SQLite owner before deleting shared fixture directories", async () => {
+	const events: string[] = [];
+	await cleanupFixtures(
+		[
+			{
+				root: "shared-root",
+				service: {
+					close: () => {
+						events.push("close-first");
+					},
+				},
+			},
+			{
+				root: "shared-root",
+				service: {
+					close: () => {
+						events.push("close-second");
+					},
+				},
+			},
+			{
+				root: "other-root",
+				service: {
+					close: () => {
+						events.push("close-third");
+					},
+				},
+			},
+		],
+		async (root) => {
+			expect(events.slice(0, 3)).toEqual([
+				"close-first",
+				"close-second",
+				"close-third",
+			]);
+			events.push(`remove-${root}`);
+		},
+	);
+	expect(events).toEqual([
+		"close-first",
+		"close-second",
+		"close-third",
+		"remove-shared-root",
+		"remove-other-root",
+	]);
 });
