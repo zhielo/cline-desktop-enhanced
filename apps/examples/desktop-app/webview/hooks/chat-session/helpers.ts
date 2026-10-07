@@ -326,38 +326,18 @@ function mapHistoryStatusToChatStatus(
 
 export function inferHydratedChatStatus(
 	fallback: SessionHistoryStatus,
-	messages: ChatMessage[],
+	_messages: ChatMessage[],
 ): ChatSessionStatus {
-	if (fallback === "failed") {
-		return "failed";
-	}
-	if (fallback === "cancelled") {
-		return "cancelled";
-	}
-	const meaningfulMessages = messages.filter((message) => {
-		if (message.role !== "user" && message.role !== "assistant") {
-			return false;
-		}
-		return message.content.trim().length > 0;
-	});
-	if (meaningfulMessages.length === 0) {
-		return mapHistoryStatusToChatStatus(fallback);
-	}
-	if (fallback === "running") {
-		const lastMeaningful = meaningfulMessages[meaningfulMessages.length - 1];
-		if (lastMeaningful?.role === "assistant") {
-			return "completed";
-		}
-	}
+	// Assistant narration and completed tool calls are not turn-completion
+	// receipts. Reopening a pane must preserve the runtime record's status;
+	// a stale running record requires reconciliation, never guessed success.
 	return mapHistoryStatusToChatStatus(fallback);
 }
 
 /**
  * The session record's status mapped verbatim — no transcript inference. For
- * callers observing a session whose record is actively maintained by the
- * executing host (the stale-stream poll), the record is the authority;
- * inferHydratedChatStatus's stale-record heuristic would misread a mid-run
- * snapshot that happens to end on assistant narration as a finished session.
+ * both hydration and stale-stream polling, the record is the authority.
+ * Transcript shape cannot establish that the executing turn has finished.
  */
 export function mapSessionRecordStatus(
 	status: SessionHistoryStatus,

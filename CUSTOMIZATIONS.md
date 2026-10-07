@@ -2,6 +2,12 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Session navigation status restoration
+
+- Local/SSH hydration preserves explicit runtime status. Assistant narration and completed tool rows never infer completion; running sessions remain busy until authoritative runtime reconciliation.
+- Status revisions and turn epochs prevent delayed history/attach snapshots or errors from overwriting newer live events. Returning to a pane does not replay, stop or submit a task.
+- Mandatory regressions cover pane remounts, live terminal events racing attachment, and queued follow-ups racing stale completed attachment. See `docs/SESSION_NAVIGATION_STATUS.md`.
+
 ## Windows validation hang safeguards
 
 - The Windows installer workflow serializes consolidated gates and caps Windows CI Vitest pools at two workers without removing suites or changing assertions. An independent 35-minute Actions step deadline bounds validator hangs; the existing 20-minute per-check deadlines remain enforced.

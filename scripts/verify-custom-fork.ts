@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/webview/hooks/chat-session/helpers.ts",markers:["Assistant narration and completed tool calls are not turn-completion", "mapHistoryStatusToChatStatus(fallback)"]},
+ {path:"apps/examples/desktop-app/webview/hooks/use-chat-session.ts",markers:["hydrationOwnsStatus", "hydrationStatusRevision", "hydrationTurnEpoch"]},
+ {path:"docs/SESSION_NAVIGATION_STATUS.md",markers:["not a completion receipt", "does not replay"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/native-project-candidates.ts",markers:["runNativeProjectCandidate", "Persisted candidate read-back mismatch", "Candidate head changed since review", "pointerOnly: true"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/native-project-edit-scripts.ts",markers:["currentProgram.endTransaction(tx,commit)", "actual.equals_to(tif)", "save_database(DATABASE,0)"]},
  {path:"docs/NATIVE_PROJECT_CANDIDATES.md",markers:["no native undo guarantee", "separate engine process", "not signatures", "physical KSUN-device"]},
