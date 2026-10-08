@@ -385,8 +385,10 @@ export function ensureSessionSchema(
 	db: SqliteDb,
 	options: SessionSchemaOptions = {},
 ): void {
-	db.exec("PRAGMA journal_mode = WAL;");
+	// WAL recovery can need a lock after an owned Hub crashes. Configure the
+	// bounded wait before the first lock-taking pragma, not after it.
 	db.exec("PRAGMA busy_timeout = 5000;");
+	db.exec("PRAGMA journal_mode = WAL;");
 	for (const stmt of SCHEMA_STATEMENTS) {
 		db.exec(stmt);
 	}

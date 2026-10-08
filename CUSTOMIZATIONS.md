@@ -680,3 +680,5 @@ Do not hide a new regression by weakening assertions or making a required custom
 Bundled repair selection resolves the verified cache to its canonical Windows path so long and 8.3 directory aliases do not change the selected interpreter across restarts.
 
 Bundled runtime manifest IDs accept bounded dotted Python versions (for example cpython-3.13.12-windows-x64-v1) while forbidding path separators/traversal. The installed acceptance records the actual readiness receipt before asserting success, so failed owned fixtures remain diagnosable without bypassing the gate.
+
+Session SQLite schema initialization installs the existing five-second busy handler before the WAL pragma, covering crash-recovery lock admission without deleting/replacing history. Installed acceptance retains the bounded, redacted fixture-owned backend log tail and the backend RPC failure detail; Hub restart and saved-session assertions remain mandatory.

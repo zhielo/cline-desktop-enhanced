@@ -4,7 +4,7 @@
  */
 
 import { spawn } from "node:child_process"
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { basename, isAbsolute, join, resolve } from "node:path"
@@ -278,7 +278,10 @@ ConvertTo-Json -InputObject @($rows) -Compress
 						if (reply.type !== "response" || reply.id !== id) return
 						finish()
 						if (reply.ok) resolve(reply.result)
-						else reject(new Error(`Installed command failed: ${command}`))
+						else {
+ const detail = String(reply.error ?? "Unknown backend error").replace(/approval_token=[^&\s]+/gi, "approval_token=[REDACTED]").replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]").replace(/\b[0-9a-f]{32,}\b/gi, "[REDACTED]").slice(0, 1500)
+ reject(new Error(`Installed command failed: ${command}: ${detail}`))
+}
 					}
 					socket.onerror = () => {
 						finish()
@@ -436,6 +439,18 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		const reason = (error instanceof Error ? error.message : String(error))
 			.replace(/approval_token=[^&\s]+/g, "approval_token=[REDACTED]")
 			.slice(0, 2000)
+		// Only this fixture's known log is read, at most 64 KiB, with tokens redacted.
+  try {
+   const log = await open(join(root, "data", "logs", "code.log"), "r");
+   try {
+    const info = await log.stat();
+    if (info.isFile() && info.size <= 50 * 1024 * 1024) {
+     const buffer = Buffer.alloc(Math.min(info.size, 64 * 1024));
+     const {bytesRead} = await log.read(buffer, 0, buffer.length, Math.max(0, info.size - buffer.length));
+     await writeFile(join(evidence, "owned-backend-tail.log"), redactedLaunchText(buffer.subarray(0, bytesRead).toString("utf8")));
+    }
+   } finally { await log.close(); }
+  } catch { /* Diagnostics do not substitute for the strict acceptance result. */ }
 		await writeFile(join(evidence, "summary.json"), JSON.stringify({ status: "failed", stages, reason }, null, 2))
 		throw new Error(reason)
 	} finally {

@@ -2114,3 +2114,16 @@ if (failures.length > 0) {
 console.log(
 	`Custom fork preservation check passed (${requiredMarkers.length} source contracts; ${forbiddenPaths.length} obsolete path blocked).`,
 );
+
+const sqliteRestartSource = readFileSync(
+	"sdk/packages/shared/src/db/sqlite-db.ts",
+	"utf8",
+);
+if (
+	sqliteRestartSource.indexOf('db.exec("PRAGMA busy_timeout = 5000;")') >
+	sqliteRestartSource.indexOf('db.exec("PRAGMA journal_mode = WAL;")')
+) {
+	throw new Error(
+		"Session WAL recovery must configure bounded busy handling first",
+	);
+}
