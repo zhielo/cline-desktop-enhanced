@@ -1,14 +1,33 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { supportedBunVersion } from "./read-bun-version.mjs";
-const load = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+const load = (path) =>
+	readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 test("supported Bun has one exact canonical package metadata value", () => {
 	expect(supportedBunVersion(JSON.parse(load("package.json")))).toBe("1.3.14");
-	expect(() => supportedBunVersion({ packageManager: "bun@latest", engines: { bun: "1.3.14" } })).toThrow();
-	expect(() => supportedBunVersion({ packageManager: "bun@1.3.14", engines: { bun: "1.3.13" } })).toThrow();
-	for (const path of [".github/workflows/build-custom-windows-installer.yml", ".github/workflows/custom-desktop-validation.yml", ".github/workflows/desktop-test.yml", ".github/workflows/sdk-test.yml"]) {
+	expect(() =>
+		supportedBunVersion({
+			packageManager: "bun@latest",
+			engines: { bun: "1.3.14" },
+		}),
+	).toThrow();
+	expect(() =>
+		supportedBunVersion({
+			packageManager: "bun@1.3.14",
+			engines: { bun: "1.3.13" },
+		}),
+	).toThrow();
+	for (const path of [
+		".github/workflows/build-custom-windows-installer.yml",
+		".github/workflows/custom-desktop-validation.yml",
+		".github/workflows/desktop-test.yml",
+		".github/workflows/sdk-test.yml",
+	]) {
 		expect(load(path)).toContain("scripts/read-bun-version.mjs");
-		expect(load(path)).toContain("bun-version: ${{ steps.toolchain.outputs.version }}");
+		expect(load(path)).toContain(
+			"bun-version: ${{ steps.toolchain.outputs.version }}",
+		);
 	}
 });
 test("every main PR gets an unsigned installer gate without signing secrets or publication", () => {
@@ -27,6 +46,16 @@ test("PR regression has no path-filter blind spots and one blocking validator", 
 	const source = load(".github/workflows/custom-desktop-validation.yml");
 	expect(source).not.toContain("paths:");
 	expect(source).toContain("run: bun run validate:advanced");
+	expect(source).not.toContain("continue-on-error");
+});
+test("upstream JetBrains dispatch does not demand upstream App credentials on desktop forks", () => {
+	const source = load(".github/workflows/ext-jb-test-integration.yml");
+	expect(source).toContain("github.repository == 'cline/cline'");
+	expect(source).toContain("vars.CLINE_JETBRAINS_APP_ID != ''");
+	expect(source).toContain("github.event.pull_request.author_association");
+	expect(source).toContain("github.event.comment.author_association");
+	expect(source).toContain("curl --fail-with-body");
+	expect(source).not.toContain("actions/checkout");
 	expect(source).not.toContain("continue-on-error");
 });
 test("setup installs only with explicit consent and fails before changing interpreter", () => {

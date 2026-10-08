@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.ts",markers:["diagnostics: _diagnostics", "digest(indexedResult)", "result: indexedResult"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",markers:["keeps host execution diagnostics outside immutable evidence and identity", 'not.toHaveProperty("diagnostics")']},
+ {path:".github/workflows/ext-jb-test-integration.yml",markers:["github.repository == 'cline/cline'", "vars.CLINE_JETBRAINS_APP_ID != ''", "curl --fail-with-body"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["createStreamingSecretRedactor", "retainWorkerDiagnostics", '"abnormal-exit"', '"invalid-output"', "terminationConfirmed"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/analysis-worker-diagnostics.ts",markers:["slice(0, -32)", "mode: 0o600", "never arguments"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.ts",markers:["runObservedIda", "termination-unconfirmed", "No script phase observed", "auto-analysis-waiting"]},
