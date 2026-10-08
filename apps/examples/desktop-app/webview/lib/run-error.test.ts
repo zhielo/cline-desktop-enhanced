@@ -54,7 +54,6 @@ it.each([
 	expect(formatRunError(text, "claude-code")).toBe(text);
 });
 
-
 describe("fork transport recovery", () => {
 	it.each([
 		"Desktop command timed out waiting for chat_session_command",
@@ -82,10 +81,16 @@ describe("fork transport recovery", () => {
 
 	it("uses the completed fork after a timeout instead of creating another one", async () => {
 		let calls = 0;
-		const result = await retryRecoverableFork(async () => {
-			calls += 1;
-			throw new Error("Desktop command timed out waiting for chat_session_command");
-		}, 0, async () => ({ sessionId: "already-restored" }));
+		const result = await retryRecoverableFork(
+			async () => {
+				calls += 1;
+				throw new Error(
+					"Desktop command timed out waiting for chat_session_command",
+				);
+			},
+			0,
+			async () => ({ sessionId: "already-restored" }),
+		);
 		expect(result).toEqual({ sessionId: "already-restored" });
 		expect(calls).toBe(1);
 	});
@@ -135,4 +140,26 @@ describe("fork transport recovery", () => {
 		expect(result).toBe("recovered");
 		expect(attempts).toBe(2);
 	});
+});
+
+it("gives preserved-history guidance for 1006 without auth guesses or automatic replay", () => {
+	const text = formatRunError(
+		"Hub connection closed (code=1006, reason=Connection ended)",
+	);
+	expect(text).toContain("saved chat is preserved");
+	expect(text).toContain("not automatically replayed");
+	expect(text).not.toContain("API Providers");
+});
+
+it("retains canonical close text and strict reconciliation identity when adding guidance", () => {
+	const original = "Hub connection closed (code=1006, reason=Connection ended)";
+	const text = formatRunError(original);
+	expect(text).toContain(original);
+	expect(isTransientHubDisconnect(text)).toBe(true);
+	expect(formatRunError(text)).toBe(text);
+	expect(
+		isTransientHubDisconnect(
+			formatRunError("Hub connection closed (code=1008, reason=Unauthorized)"),
+		),
+	).toBe(false);
 });

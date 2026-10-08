@@ -51,6 +51,7 @@ export const GraphQuerySchema = z
 		startId: z.string().max(80).optional(),
 		depth: z.number().int().min(0).max(8).optional(),
 		limit: z.number().int().min(1).max(1000).optional(),
+		maxOutputBytes: z.number().int().min(4096).max(262144).optional(),
 	})
 	.strict();
 export type GraphQuery = z.infer<typeof GraphQuerySchema>;
@@ -334,15 +335,46 @@ export function queryEvidenceGraph(
 			(!query.text ||
 				node.label.toLowerCase().includes(query.text.toLowerCase())),
 	);
-	const nodes = matches.slice(0, limit);
+	const budget = query.maxOutputBytes ?? 65536;
+	const nodes: typeof graph.nodes = [];
+	let used =
+		2048 +
+		Buffer.byteLength(
+			JSON.stringify({
+				coverage: graph.coverage,
+				sourceHashes: graph.sourceHashes,
+			}),
+		);
+	if (used > budget)
+		throw new Error(
+			"Requested output budget cannot contain graph provenance; increase maxOutputBytes",
+		);
+	for (const node of matches.slice(0, limit)) {
+		const bytes = Buffer.byteLength(JSON.stringify(node)) + 2;
+		if (used + bytes > budget) break;
+		nodes.push(node);
+		used += bytes;
+	}
 	const selected = new Set(nodes.map((node) => node.id));
+	const edges: typeof graph.edges = [];
+	let edgeTruncated = false;
+	for (const edge of graph.edges) {
+		if (!selected.has(edge.source) || !selected.has(edge.target)) continue;
+		const bytes = Buffer.byteLength(JSON.stringify(edge)) + 2;
+		if (edges.length >= 2000 || used + bytes > budget) {
+			edgeTruncated = true;
+			break;
+		}
+		edges.push(edge);
+		used += bytes;
+	}
 	return {
 		nodes,
-		edges: graph.edges
-			.filter((edge) => selected.has(edge.source) && selected.has(edge.target))
-			.slice(0, 2000),
+		edges,
 		matchedNodes: matches.length,
-		truncated: matches.length > limit,
+		truncated: matches.length > nodes.length || edgeTruncated,
+		maxOutputBytes: budget,
+		sourceHashes: graph.sourceHashes,
 		coverage: graph.coverage,
 		graphSha256: hash(JSON.stringify(graph)),
 		integrity: "content-identity-not-authentication",

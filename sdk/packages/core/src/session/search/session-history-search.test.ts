@@ -405,3 +405,24 @@ describe("SessionHistorySearchService", () => {
 		await service.dispose();
 	});
 });
+
+it("refreshes one ended session without scanning the entire history", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "session-incremental-"));
+	tempDirs.push(dir);
+	const listSessions = vi.fn(async () => [session()]);
+	const getSession = vi.fn(async () => session());
+	const service = new SessionHistorySearchService(
+		{
+			listSessions,
+			getSession,
+			readSessionMessages: async () => [
+				{ role: "user", content: "incrementalmarker" },
+			],
+		},
+		{ dbPath: join(dir, "search.db") },
+	);
+	await service.refreshSession("session-1");
+	expect(listSessions).not.toHaveBeenCalled();
+	expect(service.search({ query: "incrementalmarker" })).toHaveLength(1);
+	await service.dispose();
+});

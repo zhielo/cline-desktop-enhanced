@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { desktopClient } from "@/lib/desktop-client";
+import { OptimizationPanel } from "./optimization-panel";
 import { PageFrame, PageHeader } from "../page-layout";
 const EXTERNAL_STATUS_LABEL = "Configuration / acceptance required";
 
@@ -16,6 +17,7 @@ type Check = {
 type Result = {
 	checkedAt: string;
 	configured: boolean;
+	runtime?: { source: string; runtimeId?: string };
 	interpreter: { executable?: string | null; version?: string | null };
 	readiness: {
 		status: string;
@@ -41,6 +43,31 @@ type Result = {
 export function AnalysisEnvironmentView() {
 	const [result, setResult] = useState<Result | null>(null);
 	const [busy, setBusy] = useState(false);
+	const [repairMessage, setRepairMessage] = useState("");
+	const repair = async () => {
+		if (
+			!window.confirm(
+				"Restore the bundled analysis runtime from installed app resources? This does not install IDA, change licenses, or run a target binary. Restart the app afterwards.",
+			)
+		)
+			return;
+		setBusy(true);
+		setError("");
+		try {
+			const reply = await desktopClient.invoke<{ message: string }>(
+				"repair_analysis_runtime",
+				{ environmentId: "local", confirmed: true },
+				{ timeoutMs: 180000 },
+			);
+			setRepairMessage(reply.message);
+		} catch (cause) {
+			setError(
+				cause instanceof Error ? cause.message : "Runtime repair failed",
+			);
+		} finally {
+			setBusy(false);
+		}
+	};
 	const [error, setError] = useState("");
 	const [jobs, setJobs] = useState<
 		{
@@ -100,6 +127,10 @@ export function AnalysisEnvironmentView() {
 				<Button onClick={() => void check()} disabled={busy}>
 					{busy ? "Checking environment…" : "Check analysis readiness"}
 				</Button>
+				<Button onClick={() => void repair()} disabled={busy} variant="outline">
+					Repair bundled runtime
+				</Button>
+				{repairMessage && <output aria-live="polite">{repairMessage}</output>}
 				<Button onClick={() => void refreshJobs()} variant="outline">
 					Refresh IDA jobs
 				</Button>
@@ -121,6 +152,7 @@ export function AnalysisEnvironmentView() {
 					))}
 				</ul>
 				{error && <p role="alert">{error}</p>}
+				<OptimizationPanel />
 				{result && (
 					<div aria-live="polite" className="space-y-4">
 						<p>
@@ -129,9 +161,11 @@ export function AnalysisEnvironmentView() {
 							<br />
 							Version: {result.interpreter.version ?? "Not verified"}
 							<br />
-							{result.configured
-								? "Explicit CLINE_RE_PYTHON"
-								: "PATH fallback — configure an absolute CLINE_RE_PYTHON path"}
+							{result.runtime?.source === "bundled"
+								? "Bundled isolated runtime — no manual setup"
+								: result.configured
+									? "External configured interpreter"
+									: "Development PATH fallback — installed Windows app includes its runtime"}
 						</p>
 						<p>
 							Package inventory: {result.toolchain.status}. Fixture execution:{" "}
@@ -172,7 +206,8 @@ export function AnalysisEnvironmentView() {
 						<ul>
 							{result.externalCapabilities.map((item) => (
 								<li key={item.id}>
-									<strong>{item.id}</strong>: {EXTERNAL_STATUS_LABEL}. {item.reason}
+									<strong>{item.id}</strong>: {EXTERNAL_STATUS_LABEL}.{" "}
+									{item.reason}
 								</li>
 							))}
 						</ul>

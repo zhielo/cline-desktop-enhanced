@@ -97,3 +97,6 @@ apps/examples/desktop-app/.cursor/settings.json
 
 # Consolidated validation logs are run artifacts, not source
 /.cline-validation/
+
+# Generated private Windows analysis runtime
+apps/examples/desktop-app/src-tauri/resources/analysis-runtime/

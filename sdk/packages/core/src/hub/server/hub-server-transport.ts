@@ -472,9 +472,11 @@ export class HubServerTransport implements NativeHubTransport {
 				});
 			});
 			if (event.type === "ended") {
-				void this.sessionSearch.refreshNow().catch((error) => {
-					logHubBoundaryError("session search indexing failed", error);
-				});
+				void this.sessionSearch
+					.refreshSession(event.payload.sessionId)
+					.catch((error) => {
+						logHubBoundaryError("session search indexing failed", error);
+					});
 			}
 		});
 	}

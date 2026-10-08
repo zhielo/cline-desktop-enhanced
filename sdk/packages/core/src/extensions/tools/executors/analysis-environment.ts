@@ -1,3 +1,4 @@
+import { getAnalysisRuntimeIdentity } from "./analysis-runtime";
 import { runAdvancedAnalysis } from "./advanced-analysis";
 
 /** Explicit, bounded execution of owned fixtures only. No installs or target analysis. */
@@ -11,6 +12,7 @@ export async function checkAnalysisEnvironment(signal?: AbortSignal) {
 	]);
 	return {
 		checkedAt: new Date().toISOString(),
+		runtime: getAnalysisRuntimeIdentity(),
 		configured: Boolean(process.env.CLINE_RE_PYTHON?.trim()),
 		interpreter: toolchain.evidence.interpreter ?? {
 			executable: toolchain.diagnostics?.interpreter ?? null,
@@ -38,6 +40,8 @@ export async function checkAnalysisEnvironment(signal?: AbortSignal) {
 			},
 		],
 		setup:
-			"Use scripts/setup-analysis-environment.ps1 from a trusted checkout. It requires -Apply to install pinned packages. Restart the desktop and backend after setting CLINE_RE_PYTHON.",
+			getAnalysisRuntimeIdentity().source === "bundled"
+				? "Bundled analysis runtime. No system Python, pip, scripts, or environment variables required. IDA/Hex-Rays and physical devices require separate configuration."
+				: "Development/external interpreter mode. Install the Windows app to use its bundled runtime; advanced external engines require separate acceptance.",
 	};
 }

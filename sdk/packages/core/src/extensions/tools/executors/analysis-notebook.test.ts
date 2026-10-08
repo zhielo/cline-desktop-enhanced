@@ -222,3 +222,19 @@ describe("durable static notebooks", () => {
 		await expect(readAnalysisJson(f.target, 4)).rejects.toThrow("byte budget");
 	});
 });
+
+it("reuses static evidence when only worker diagnostic receipts change", async () => {
+	const f = await fixture();
+	const base = runner();
+	let serial = 0;
+	const run: NotebookRunner = async (request, signal) => ({
+		...(await base(request, signal)),
+		diagnostics: { jobId: String(++serial) } as never,
+	});
+	await runAnalysisNotebook(f.target, f.cache, run);
+	base.mockClear();
+	await runAnalysisNotebook(f.target, f.cache, run);
+	expect(base.mock.calls.map(([request]) => request.action)).toEqual([
+		"toolchain",
+	]);
+});

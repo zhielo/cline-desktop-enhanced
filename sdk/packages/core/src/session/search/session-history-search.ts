@@ -189,7 +189,8 @@ export class SessionHistorySearchService {
 		private readonly host: Pick<
 			RuntimeHost,
 			"listSessions" | "readSessionMessages"
-		>,
+		> &
+			Partial<Pick<RuntimeHost, "getSession">>,
 		options: SessionHistorySearchOptions = {},
 	) {
 		const initialized = initializeSearchDatabase(
@@ -216,9 +217,11 @@ export class SessionHistorySearchService {
 	}
 
 	async dispose(): Promise<void> {
+		this.disposed = true;
 		if (this.timer) clearInterval(this.timer);
 		this.timer = undefined;
 		await this.refreshPromise?.catch(() => undefined);
+		await Promise.allSettled([...this.refreshingSessions.values()]);
 		this.db?.close?.();
 	}
 
@@ -227,7 +230,9 @@ export class SessionHistorySearchService {
 		if (!db) return Promise.resolve();
 		if (!this.refreshPromise) {
 			this.refreshPromise = this.reconcile(db).finally(() => {
-				this.removedDuringRefresh.clear();
+				for (const id of this.removedDuringRefresh)
+					if (!this.refreshingSessions.has(id))
+						this.removedDuringRefresh.delete(id);
 				this.refreshPromise = undefined;
 			});
 		}
@@ -244,7 +249,8 @@ export class SessionHistorySearchService {
 		if (!db) return;
 		const normalized = sessionId.trim();
 		if (!normalized) return;
-		if (this.refreshPromise) this.removedDuringRefresh.add(normalized);
+		if (this.refreshPromise || this.refreshingSessions.has(normalized))
+			this.removedDuringRefresh.add(normalized);
 		try {
 			this.deleteIndexedSession(db, normalized);
 			this.failedEvictionSessionIds.delete(normalized);
@@ -256,6 +262,38 @@ export class SessionHistorySearchService {
 		}
 	}
 
+	private readonly refreshingSessions = new Map<string, Promise<void>>();
+	private disposed = false;
+	refreshSession(sessionId: string): Promise<void> {
+		if (this.disposed || !this.db) return Promise.resolve();
+		if (!this.host.getSession) return this.refreshNow();
+		const existing = this.refreshingSessions.get(sessionId);
+		if (existing) return existing;
+		const promise = (async () => {
+			await this.refreshPromise;
+			const session = await this.host.getSession!(sessionId);
+			if (this.disposed) return;
+			if (!session) {
+				this.removeSession(sessionId);
+				return;
+			}
+			if (this.isSessionSuppressed(sessionId)) return;
+			const revision = await this.sourceRevision(session);
+			const current = this.db!.prepare(
+				"SELECT source_revision,index_version FROM indexed_sessions WHERE session_id = ?",
+			).get(sessionId) as Record<string, unknown> | undefined;
+			if (
+				current?.source_revision !== revision ||
+				Number(current?.index_version) !== INDEX_VERSION
+			)
+				await this.indexSession(this.db!, session, revision);
+		})().finally(() => {
+			this.refreshingSessions.delete(sessionId);
+			if (!this.refreshPromise) this.removedDuringRefresh.delete(sessionId);
+		});
+		this.refreshingSessions.set(sessionId, promise);
+		return promise;
+	}
 	async waitUntilReady(): Promise<void> {
 		await this.readyPromise;
 	}
@@ -359,7 +397,10 @@ export class SessionHistorySearchService {
 			indexed.map((row) => [String(row.session_id), row] as const),
 		);
 
+		let batch = 0;
 		for (const session of sessions) {
+			if (++batch % 25 === 0)
+				await new Promise<void>((resolve) => setTimeout(resolve, 0));
 			if (this.isSessionSuppressed(session.sessionId)) continue;
 			const revision = await this.sourceRevision(session);
 			if (this.isSessionSuppressed(session.sessionId)) continue;

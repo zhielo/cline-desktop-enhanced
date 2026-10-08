@@ -4,75 +4,592 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"apps/vscode/src/test/e2e/utils/build.mjs",markers:["require.resolve(\"playwright/package.json\")", "cancelSignal: signal", "clearTimeout(timer)", "pending:"]},
- {path:"scripts/e2e-dependency-install.test.mjs",markers:["requires both installations", "cancels the child signal", "cannot become successful acceptance"]},
- {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["verifyRestartInstructions", "trial: true", "Installed backend setting did not survive restart", "Date.parse(p.createdAt) >= Date.parse(parent.createdAt)"]},
- {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",markers:["runNativeFixture", "timeout: 60000", "killed: failure.killed"]},
- {path:"sdk/packages/core/src/hub/daemon/__fixtures__/singleton-daemon.ts",markers:["listSessions: async () => []", "sessionSearchOptions:", "startup failed:"]},
- {path:"apps/examples/desktop-app/src-tauri/src/installed_webview_launch.rs",markers:['enabled != Some("1")', "--remote-debugging-address=127.0.0.1", "data_directory.is_absolute()", "normal_launch_does_not_apply_debugging_options"]},
- {path:"apps/examples/desktop-app/src-tauri/src/main.rs",markers:['std::env::var("CLINE_INSTALLED_ACCEPTANCE")', "window.additional_browser_args = Some", "window.data_directory = Some", ".build(context)"]},
- {path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate opt-in native WebView launch settings", "rustc --edition=2021 --test", "Native WebView launch option fixtures failed"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["Test real Hub singleton crash recovery", "Test native Node installed process harness", "Test native Bun SQLite memory startup", "Test SQLite database path boundaries"]},
- {path:"sdk/packages/shared/src/db/sqlite-db.ts",markers:['filePath !== ":memory:"', "dirname(resolve(filePath))"]},
- {path:"sdk/packages/shared/src/db/sqlite-db-paths.test.ts",markers:["without any mkdir operation", "absolute parent", "propagates a real disk-directory failure"]},
- {path:"sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs",markers:["native Bun SQLite", 'loadSqliteDb(":memory:")']},
- {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["startAcceptanceProcess", "debuggingArgumentObserved", "descendantProbeExitCode", "redactedLaunchText", "shell: false"]},
- {path:"scripts/installed-node-process.test.mjs",markers:["exact per-process WebView2 environment", "launch failure is observed", "output retention is bounded"]},
- {path:"scripts/install-pinned-windows-tool.ps1",markers:["$attempt -le 3", '"--version=$Version"', "failed after 3 attempts", "$PSNativeCommandUseErrorActionPreference = $false"]},
- {path:"scripts/install-pinned-windows-tool.test.ps1",markers:["ExpectedFailure $true", "ExpectedDelays @(5, 10)", "no installs"]},
- {path:".github/workflows/build-custom-windows-installer.yml",markers:['"CLINE_TEST_INSTALLED_APP=$($appExe.FullName)" >> $env:GITHUB_ENV', "IsPathFullyQualified", "Test-Path -LiteralPath $path -PathType Leaf", "scripts/install-pinned-windows-tool.test.ps1"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",markers:["def apply_transform_steps(data,steps,max_bytes=None):", "if max_bytes is None: max_bytes=MAX_BYTES"]},
- {path:"sdk/packages/core/scripts/advanced-analysis-worker.test.py",markers:["--engine-profile", "windows-portable", "owned-native-elf.json", "test_expansion_exact_and_explicit_budgets", "Missing optional engine: triton", "Missing optional engine: qbindiff"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["engineCorpusArgs", 'platform === "win32" ? "windows-portable" : "full"', "engineProfile:"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.ts",markers:["diagnostics: _diagnostics", "digest(indexedResult)", "result: indexedResult"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",markers:["keeps host execution diagnostics outside immutable evidence and identity", 'not.toHaveProperty("diagnostics")']},
- {path:".github/workflows/ext-jb-test-integration.yml",markers:["github.repository == 'cline/cline'", "vars.CLINE_JETBRAINS_APP_ID != ''", "curl --fail-with-body"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["createStreamingSecretRedactor", "retainWorkerDiagnostics", '"abnormal-exit"', '"invalid-output"', "terminationConfirmed"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/analysis-worker-diagnostics.ts",markers:["slice(0, -32)", "mode: 0o600", "never arguments"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.ts",markers:["runObservedIda", "termination-unconfirmed", "No script phase observed", "auto-analysis-waiting"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",markers:["retainLease", "never automatically stolen"]},
- {path:"apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.tsx",markers:["Check analysis readiness", "Refresh IDA jobs", "Configuration / acceptance required"]},
- {path:"apps/examples/desktop-app/sidecar/analysis-environment.ts",markers:["checkAnalysisEnvironment", "active = undefined"]},
- {path:"scripts/setup-analysis-environment.ps1",markers:["if (-not $Apply)", "CLINE_RE_PYTHON was not changed", "-I -c"]},
- {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["CLINE_TEST_INSTALLED_APP", "get_desktop_backend_endpoint", "restart-setting-and-session-persistence-passed", "owned-offline-fixture"]},
- {path:".github/workflows/build-custom-windows-installer.yml",markers:["pull_request:", '"fix/**"', "Select unsigned private installer", "validate:advanced --engines", "steps.ui_acceptance.outcome == 'success'"]},
- {path:".github/workflows/custom-desktop-validation.yml",markers:["Consolidated blocking regression gates", "run: bun run validate:advanced"]},
- {path:"docs/ANALYSIS_RUNTIME_HARDENING.md",markers:["not progress evidence", "synthetic merge", "does not silently alter administrator branch protection"]},
- {path:"apps/examples/desktop-app/sidecar/chat-session.ts",markers:["return prompt + projectOutputInstructions"]},
- {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["get_project_output_location", "open_project_output_folder", "ensureProjectOutputDirectories(location)"]},
- {path:"apps/examples/desktop-app/webview/app/page.tsx",markers:["ProjectOutputBar", "config.workspaceRoot || config.cwd"]},
- {path:"apps/examples/desktop-app/sidecar/project-output.ts",markers:["WINDOWS_PROJECT_OUTPUT_ROOT", String.raw`C:\\Cline-Outputs`, "do not silently fall back", "links or junctions", "bigint: true", "parent.ino !== canonicalParent.ino"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/project-output-bar.tsx",markers:["get_project_output_location", "open_project_output_folder", "Open outputs"]},
- {path:"apps/examples/desktop-app/webview/hooks/chat-session/helpers.ts",markers:["Assistant narration and completed tool calls are not turn-completion", "mapHistoryStatusToChatStatus(fallback)"]},
- {path:"apps/examples/desktop-app/webview/hooks/use-chat-session.ts",markers:["hydrationOwnsStatus", "hydrationStatusRevision", "hydrationTurnEpoch"]},
- {path:"docs/SESSION_NAVIGATION_STATUS.md",markers:["not a completion receipt", "does not replay"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/native-project-candidates.ts",markers:["runNativeProjectCandidate", "Persisted candidate read-back mismatch", "Candidate head changed since review", "pointerOnly: true"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/native-project-edit-scripts.ts",markers:["currentProgram.endTransaction(tx,commit)", "actual.equals_to(tif)", "save_database(DATABASE,0)"]},
- {path:"docs/NATIVE_PROJECT_CANDIDATES.md",markers:["no native undo guarantee", "separate engine process", "not signatures", "physical KSUN-device"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.ts",markers:["class ManagedEnginePool", "Worker termination unconfirmed; project lease retained", "Managed engine request binding mismatch", "Managed engine pool capacity reached", "guardManagedBatchArguments"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/managed-engine-scripts.ts",markers:["MANAGED_GHIDRA_SCRIPT", "managedIdaScript", "Ambiguous exact function name", "finally: idc.qexit(0)"]},
- {path:"docs/MANAGED_ENGINE_WORKERS.md",markers:["90-second idle", "not an OS sandbox", "Transactional annotation/prototype editing is not implemented"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/android-debug-reports.ts",markers:["collectAndroidDebugReports", "Separate root-read acknowledgement", "no root fallback or retry", "unattributed-not-retained"]},
- {path:"apps/examples/desktop-app/sidecar/runtime-jni-evidence.ts",markers:["verifyAndroidObservationReceipt", "Completed approved Android capture plan required", "ambiguous-observations", "executeAutomatically: false"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/runtime-jni-workspace.tsx",markers:["query_runtime_jni", "Refresh completed JNI captures", "Verify and query signed registrations"]},
- {path:"docs/DEVICE_DEBUG_JNI_EVIDENCE.md",markers:["Root is off by default", "existing signed", "not hardware attestation", "Persistent IDA/Ghidra"]},
- {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",markers:["processLimitProbe", "const permitted = await run(2)", "const blocked = await run(1)"]},
- {path:"apps/examples/desktop-app/sidecar/execution-control-service.ts",markers:["ExecutionControlService", "Execution receipt integrity mismatch", "Termination requested but exit was not confirmed", "Reconciliation is read-only"]},
- {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.ts",markers:["CreateProcess suspended", "AssignProcessToJobObject", "no silent hard-limit fallback"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/execution-workspace.tsx",markers:["Prepare exact task", "Approve and start once", "Reconcile without replay"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",markers:["withProjectLease", "Stale leases are never automatically stolen"]},
- {path:"docs/EXECUTION_EVIDENCE_LAB.md",markers:["uncertain", "not a security boundary", "No physical KSUN device"]},
- {path:"apps/examples/desktop-app/sidecar/apk-incident-service.ts",markers:["class ApkIncidentService", "No new matching failure observed", "candidate-installed", "controlUnavailable", "pull_apk_bounded", "const base = await realpath(cacheRoot)", "Diagnostic incident directory link not permitted", "if (path !== expected)"]},
- {path:"apps/examples/desktop-app/sidecar/apk-incident-service.test.ts",markers:["rejects a diagnostic incident directory junction even when report bytes match", "rejects modified and oversized private diagnostic reports", "symlink(moved, directory, \"junction\")"]},
- {path:"apps/examples/desktop-app/sidecar/incident-correlation.ts",markers:["module SHA-256/ABI/build-ID mismatch", "candidate-match", "symbol-range-match"]},
- {path:"apps/examples/desktop-app/sidecar/incident-artifacts.ts",markers:["Archive changed since inspection", "Archive member integrity mismatch", "blocked-archive"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/apk-incident-workspace.tsx",markers:["Approve and start once", "Prepare separately approved rollback", "prepare_apk_incident"]},
- {path:"docs/APK_INCIDENT_WORKFLOW.md",markers:["No physical KSUN device", "fixed", "explicit bounded member preview"]},
- { path: "apps/examples/desktop-app/webview/lib/artifact-workspace.tsx", markers: ["ArtifactWorkspaceProvider", "ArtifactWorkspaceContext.Provider", "useArtifactWorkspace", "useMemo"] },
- { path: "apps/examples/desktop-app/webview/components/ui/markdown.tsx", markers: ["useArtifactWorkspace()", "workspace.cwd", "workspace.environmentId"] },
- { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx", markers: ["<ArtifactWorkspaceProvider", "cwd={props.cwd}", "environmentId={props.environmentId"] },
- { path: "apps/examples/desktop-app/webview/components/views/chat/artifact-context-menu.tsx", markers: ["suppliedCwd", "suppliedEnvironmentId", "useArtifactWorkspace()"] },
- { path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.test.tsx", markers: ["transcript artifact workspace context", "right-click %s", "unchanged", "originating SSH environment"] },
+	{
+		path: "apps/examples/desktop-app/webview/lib/run-error.ts",
+		markers: ["HUB_RECOVERY_GUIDANCE", "normalizedFailureDetail(description)"],
+	},
+	{
+		path: "scripts/package-analysis-runtime.ps1",
+		markers: [
+			"76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0",
+			"python313._pth",
+			"Bundled execution corpus failed",
+			"Freeze the shipped inventory",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/bundled-analysis-runtime.ts",
+		markers: [
+			"verifyRuntime",
+			"repairBundledAnalysisRuntime",
+			"manifest changed",
+			"coding remains available",
+			"preferBundled",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/resource-governor.ts",
+		markers: [
+			"class ResourceGovernor",
+			"Resource admission timed out",
+			"hardMemoryEnforcement: false",
+		],
+	},
+	{
+		path: "docs/INTEGRATED_ENHANCEMENT_DELIVERY.md",
+		markers: [
+			"baseline-required",
+			"Machine-wide",
+			"Downloads and activation remain disabled",
+		],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			"hub-restart-saved-session-reattached-without-prompt-replay",
+			"bundled",
+		],
+	},
+	{
+		path: "apps/vscode/src/test/e2e/utils/build.mjs",
+		markers: [
+			'require.resolve("playwright/package.json")',
+			"cancelSignal: signal",
+			"clearTimeout(timer)",
+			"pending:",
+		],
+	},
+	{
+		path: "scripts/e2e-dependency-install.test.mjs",
+		markers: [
+			"requires both installations",
+			"cancels the child signal",
+			"cannot become successful acceptance",
+		],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			"verifyRestartInstructions",
+			"trial: true",
+			"Installed backend setting did not survive restart",
+			"Date.parse(p.createdAt) >= Date.parse(parent.createdAt)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",
+		markers: ["runNativeFixture", "timeout: 60000", "killed: failure.killed"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/daemon/__fixtures__/singleton-daemon.ts",
+		markers: [
+			"listSessions: async () => []",
+			"sessionSearchOptions:",
+			"startup failed:",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/src-tauri/src/installed_webview_launch.rs",
+		markers: [
+			'enabled != Some("1")',
+			"--remote-debugging-address=127.0.0.1",
+			"data_directory.is_absolute()",
+			"normal_launch_does_not_apply_debugging_options",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/src-tauri/src/main.rs",
+		markers: [
+			'std::env::var("CLINE_INSTALLED_ACCEPTANCE")',
+			"window.additional_browser_args = Some",
+			"window.data_directory = Some",
+			".build(context)",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"Validate opt-in native WebView launch settings",
+			"rustc --edition=2021 --test",
+			"Native WebView launch option fixtures failed",
+		],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"Test real Hub singleton crash recovery",
+			"Test native Node installed process harness",
+			"Test native Bun SQLite memory startup",
+			"Test SQLite database path boundaries",
+		],
+	},
+	{
+		path: "sdk/packages/shared/src/db/sqlite-db.ts",
+		markers: ['filePath !== ":memory:"', "dirname(resolve(filePath))"],
+	},
+	{
+		path: "sdk/packages/shared/src/db/sqlite-db-paths.test.ts",
+		markers: [
+			"without any mkdir operation",
+			"absolute parent",
+			"propagates a real disk-directory failure",
+		],
+	},
+	{
+		path: "sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs",
+		markers: ["native Bun SQLite", 'loadSqliteDb(":memory:")'],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			"startAcceptanceProcess",
+			"debuggingArgumentObserved",
+			"descendantProbeExitCode",
+			"redactedLaunchText",
+			"shell: false",
+		],
+	},
+	{
+		path: "scripts/installed-node-process.test.mjs",
+		markers: [
+			"exact per-process WebView2 environment",
+			"launch failure is observed",
+			"output retention is bounded",
+		],
+	},
+	{
+		path: "scripts/install-pinned-windows-tool.ps1",
+		markers: [
+			"$attempt -le 3",
+			'"--version=$Version"',
+			"failed after 3 attempts",
+			"$PSNativeCommandUseErrorActionPreference = $false",
+		],
+	},
+	{
+		path: "scripts/install-pinned-windows-tool.test.ps1",
+		markers: [
+			"ExpectedFailure $true",
+			"ExpectedDelays @(5, 10)",
+			"no installs",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			'"CLINE_TEST_INSTALLED_APP=$($appExe.FullName)" >> $env:GITHUB_ENV',
+			"IsPathFullyQualified",
+			"Test-Path -LiteralPath $path -PathType Leaf",
+			"scripts/install-pinned-windows-tool.test.ps1",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",
+		markers: [
+			"def apply_transform_steps(data,steps,max_bytes=None):",
+			"if max_bytes is None: max_bytes=MAX_BYTES",
+		],
+	},
+	{
+		path: "sdk/packages/core/scripts/advanced-analysis-worker.test.py",
+		markers: [
+			"--engine-profile",
+			"windows-portable",
+			"owned-native-elf.json",
+			"test_expansion_exact_and_explicit_budgets",
+			"Missing optional engine: triton",
+			"Missing optional engine: qbindiff",
+		],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"engineCorpusArgs",
+			'platform === "win32" ? "windows-portable" : "full"',
+			"engineProfile:",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/android-investigation-index.ts",
+		markers: [
+			"diagnostics: _diagnostics",
+			"digest(indexedResult)",
+			"result: indexedResult",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",
+		markers: [
+			"keeps host execution diagnostics outside immutable evidence and identity",
+			'not.toHaveProperty("diagnostics")',
+		],
+	},
+	{
+		path: ".github/workflows/ext-jb-test-integration.yml",
+		markers: [
+			"github.repository == 'cline/cline'",
+			"vars.CLINE_JETBRAINS_APP_ID != ''",
+			"curl --fail-with-body",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",
+		markers: [
+			"createStreamingSecretRedactor",
+			"retainWorkerDiagnostics",
+			'"abnormal-exit"',
+			'"invalid-output"',
+			"terminationConfirmed",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/analysis-worker-diagnostics.ts",
+		markers: ["slice(0, -32)", "mode: 0o600", "never arguments"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.ts",
+		markers: [
+			"runObservedIda",
+			"termination-unconfirmed",
+			"No script phase observed",
+			"auto-analysis-waiting",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",
+		markers: ["retainLease", "never automatically stolen"],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.tsx",
+		markers: [
+			"Check analysis readiness",
+			"Refresh IDA jobs",
+			"Configuration / acceptance required",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-environment.ts",
+		markers: ["checkAnalysisEnvironment", "active = undefined"],
+	},
+	{
+		path: "scripts/setup-analysis-environment.ps1",
+		markers: ["if (-not $Apply)", "CLINE_RE_PYTHON was not changed", "-I -c"],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			"CLINE_TEST_INSTALLED_APP",
+			"get_desktop_backend_endpoint",
+			"restart-setting-and-session-persistence-passed",
+			"owned-offline-fixture",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"pull_request:",
+			'"fix/**"',
+			"Select unsigned private installer",
+			"validate:advanced --engines",
+			"steps.ui_acceptance.outcome == 'success'",
+		],
+	},
+	{
+		path: ".github/workflows/custom-desktop-validation.yml",
+		markers: [
+			"Consolidated blocking regression gates",
+			"run: bun run validate:advanced",
+		],
+	},
+	{
+		path: "docs/ANALYSIS_RUNTIME_HARDENING.md",
+		markers: [
+			"not progress evidence",
+			"synthetic merge",
+			"does not silently alter administrator branch protection",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/chat-session.ts",
+		markers: ["return prompt + projectOutputInstructions"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/commands.ts",
+		markers: [
+			"get_project_output_location",
+			"open_project_output_folder",
+			"ensureProjectOutputDirectories(location)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/app/page.tsx",
+		markers: ["ProjectOutputBar", "config.workspaceRoot || config.cwd"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/project-output.ts",
+		markers: [
+			"WINDOWS_PROJECT_OUTPUT_ROOT",
+			String.raw`C:\\Cline-Outputs`,
+			"do not silently fall back",
+			"links or junctions",
+			"bigint: true",
+			"parent.ino !== canonicalParent.ino",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/project-output-bar.tsx",
+		markers: [
+			"get_project_output_location",
+			"open_project_output_folder",
+			"Open outputs",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/hooks/chat-session/helpers.ts",
+		markers: [
+			"Assistant narration and completed tool calls are not turn-completion",
+			"mapHistoryStatusToChatStatus(fallback)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/hooks/use-chat-session.ts",
+		markers: [
+			"hydrationOwnsStatus",
+			"hydrationStatusRevision",
+			"hydrationTurnEpoch",
+		],
+	},
+	{
+		path: "docs/SESSION_NAVIGATION_STATUS.md",
+		markers: ["not a completion receipt", "does not replay"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/native-project-candidates.ts",
+		markers: [
+			"runNativeProjectCandidate",
+			"Persisted candidate read-back mismatch",
+			"Candidate head changed since review",
+			"pointerOnly: true",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/native-project-edit-scripts.ts",
+		markers: [
+			"currentProgram.endTransaction(tx,commit)",
+			"actual.equals_to(tif)",
+			"save_database(DATABASE,0)",
+		],
+	},
+	{
+		path: "docs/NATIVE_PROJECT_CANDIDATES.md",
+		markers: [
+			"no native undo guarantee",
+			"separate engine process",
+			"not signatures",
+			"physical KSUN-device",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.ts",
+		markers: [
+			"class ManagedEnginePool",
+			"Worker termination unconfirmed; project lease retained",
+			"Managed engine request binding mismatch",
+			"Managed engine pool capacity reached",
+			"guardManagedBatchArguments",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/managed-engine-scripts.ts",
+		markers: [
+			"MANAGED_GHIDRA_SCRIPT",
+			"managedIdaScript",
+			"Ambiguous exact function name",
+			"finally: idc.qexit(0)",
+		],
+	},
+	{
+		path: "docs/MANAGED_ENGINE_WORKERS.md",
+		markers: [
+			"90-second idle",
+			"not an OS sandbox",
+			"Transactional annotation/prototype editing is not implemented",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/android-debug-reports.ts",
+		markers: [
+			"collectAndroidDebugReports",
+			"Separate root-read acknowledgement",
+			"no root fallback or retry",
+			"unattributed-not-retained",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/runtime-jni-evidence.ts",
+		markers: [
+			"verifyAndroidObservationReceipt",
+			"Completed approved Android capture plan required",
+			"ambiguous-observations",
+			"executeAutomatically: false",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/runtime-jni-workspace.tsx",
+		markers: [
+			"query_runtime_jni",
+			"Refresh completed JNI captures",
+			"Verify and query signed registrations",
+		],
+	},
+	{
+		path: "docs/DEVICE_DEBUG_JNI_EVIDENCE.md",
+		markers: [
+			"Root is off by default",
+			"existing signed",
+			"not hardware attestation",
+			"Persistent IDA/Ghidra",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",
+		markers: [
+			"processLimitProbe",
+			"const permitted = await run(2)",
+			"const blocked = await run(1)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/execution-control-service.ts",
+		markers: [
+			"ExecutionControlService",
+			"Execution receipt integrity mismatch",
+			"Termination requested but exit was not confirmed",
+			"Reconciliation is read-only",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/windows-job-launcher.ts",
+		markers: [
+			"CreateProcess suspended",
+			"AssignProcessToJobObject",
+			"no silent hard-limit fallback",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/execution-workspace.tsx",
+		markers: [
+			"Prepare exact task",
+			"Approve and start once",
+			"Reconcile without replay",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",
+		markers: [
+			"withProjectLease",
+			"Stale leases are never automatically stolen",
+		],
+	},
+	{
+		path: "docs/EXECUTION_EVIDENCE_LAB.md",
+		markers: [
+			"uncertain",
+			"not a security boundary",
+			"No physical KSUN device",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/apk-incident-service.ts",
+		markers: [
+			"class ApkIncidentService",
+			"No new matching failure observed",
+			"candidate-installed",
+			"controlUnavailable",
+			"pull_apk_bounded",
+			"const base = await realpath(cacheRoot)",
+			"Diagnostic incident directory link not permitted",
+			"if (path !== expected)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/apk-incident-service.test.ts",
+		markers: [
+			"rejects a diagnostic incident directory junction even when report bytes match",
+			"rejects modified and oversized private diagnostic reports",
+			'symlink(moved, directory, "junction")',
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/incident-correlation.ts",
+		markers: [
+			"module SHA-256/ABI/build-ID mismatch",
+			"candidate-match",
+			"symbol-range-match",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/incident-artifacts.ts",
+		markers: [
+			"Archive changed since inspection",
+			"Archive member integrity mismatch",
+			"blocked-archive",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/apk-incident-workspace.tsx",
+		markers: [
+			"Approve and start once",
+			"Prepare separately approved rollback",
+			"prepare_apk_incident",
+		],
+	},
+	{
+		path: "docs/APK_INCIDENT_WORKFLOW.md",
+		markers: [
+			"No physical KSUN device",
+			"fixed",
+			"explicit bounded member preview",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/artifact-workspace.tsx",
+		markers: [
+			"ArtifactWorkspaceProvider",
+			"ArtifactWorkspaceContext.Provider",
+			"useArtifactWorkspace",
+			"useMemo",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/ui/markdown.tsx",
+		markers: [
+			"useArtifactWorkspace()",
+			"workspace.cwd",
+			"workspace.environmentId",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.tsx",
+		markers: [
+			"<ArtifactWorkspaceProvider",
+			"cwd={props.cwd}",
+			"environmentId={props.environmentId",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/artifact-context-menu.tsx",
+		markers: ["suppliedCwd", "suppliedEnvironmentId", "useArtifactWorkspace()"],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/chat-messages.test.tsx",
+		markers: [
+			"transcript artifact workspace context",
+			"right-click %s",
+			"unchanged",
+			"originating SSH environment",
+		],
+	},
 
 	{
 		path: "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.ts",
@@ -123,44 +640,246 @@ const requiredMarkers: Array<{
 		markers: ["preserves UTF-8 and exact omitted-byte accounting"],
 	},
 
- {path:"sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",markers:["tool with spaces.exe", "fs.copyFile(process.execPath", "fixture.args"]},
- {path:"sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",markers:["sourceRepo: realpathSync.native(repo)"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["supervised-process.test.ts", "writer-worktree.test.ts", "formatValidationHeartbeat", "recordValidationProgress", "progress.jsonl", "clearInterval(heartbeat)"]},
- {path:"apps/examples/desktop-app/vitest.config.mts",markers:['maxWorkers: process.platform === "win32" && process.env.CI ? 2 : undefined']},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",
+		markers: [
+			"tool with spaces.exe",
+			"fs.copyFile(process.execPath",
+			"fixture.args",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/team/writer-worktree.test.ts",
+		markers: ["sourceRepo: realpathSync.native(repo)"],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"supervised-process.test.ts",
+			"writer-worktree.test.ts",
+			"formatValidationHeartbeat",
+			"recordValidationProgress",
+			"progress.jsonl",
+			"clearInterval(heartbeat)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/vitest.config.mts",
+		markers: [
+			'maxWorkers: process.platform === "win32" && process.env.CI ? 2 : undefined',
+		],
+	},
 
- {path:"workers/android-capture/capture_support.py",markers:["physical_preflight", "Root probe denied", "uid0-reported", "attestation"]},
- {path:"workers/android-capture/capture.py",markers:["Refusing to replace an existing app", "device.enumerate_processes()", "support.physical_preflight", "'exec-out','su','-c'"]},
- {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["device_serial_sha256", "Physical device changed", "Physical device observation differs"]},
+	{
+		path: "workers/android-capture/capture_support.py",
+		markers: [
+			"physical_preflight",
+			"Root probe denied",
+			"uid0-reported",
+			"attestation",
+		],
+	},
+	{
+		path: "workers/android-capture/capture.py",
+		markers: [
+			"Refusing to replace an existing app",
+			"device.enumerate_processes()",
+			"support.physical_preflight",
+			"'exec-out','su','-c'",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.ts",
+		markers: [
+			"device_serial_sha256",
+			"Physical device changed",
+			"Physical device observation differs",
+		],
+	},
 
- {path:"workers/android-capture/capture_support.py",markers:["authorized_module_path", "MAX_MODULE=2*1024*1024", "captured-disk-file-not-loaded-memory-proof", "len(attempted)>=4"]},
- {path:"workers/android-capture/server.py",markers:["sweep_retention", "PRAGMA secure_delete=ON", "def do_DELETE", "physicalErasure", "confirmPlaintextRemoval"]},
- {path:"workers/android-capture/setup-controller.py",markers:["ALREADY isolated Linux controller", "--apply", "os.O_EXCL", "No server, VM or target was started"]},
- {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["capture_native", "without capture consent", "observation session", "android-native-capture"]},
- {path:".github/workflows/build-custom-windows-installer.yml",markers:["capture_support.test.py", "setup-controller.test.py", "not VM provisioning evidence"]},
+	{
+		path: "workers/android-capture/capture_support.py",
+		markers: [
+			"authorized_module_path",
+			"MAX_MODULE=2*1024*1024",
+			"captured-disk-file-not-loaded-memory-proof",
+			"len(attempted)>=4",
+		],
+	},
+	{
+		path: "workers/android-capture/server.py",
+		markers: [
+			"sweep_retention",
+			"PRAGMA secure_delete=ON",
+			"def do_DELETE",
+			"physicalErasure",
+			"confirmPlaintextRemoval",
+		],
+	},
+	{
+		path: "workers/android-capture/setup-controller.py",
+		markers: [
+			"ALREADY isolated Linux controller",
+			"--apply",
+			"os.O_EXCL",
+			"No server, VM or target was started",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.ts",
+		markers: [
+			"capture_native",
+			"without capture consent",
+			"observation session",
+			"android-native-capture",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"capture_support.test.py",
+			"setup-controller.test.py",
+			"not VM provisioning evidence",
+		],
+	},
 
- {path:"workers/android-capture/server.py",markers:["@contextmanager", "with connection:yield connection", "finally:connection.close()"]},
- {path:"workers/android-capture/server.test.py",markers:["test_database_connections_close_after_success", "test_database_connections_close_and_rollback_after_failure"]},
- {path:"sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",markers:["probeBunRuntimeVersion", "daemon.runtimeVersion", "forced exit:", "toBeLessThan(5_000)"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["Test real Hub shutdown runtime identity", "vitest.e2e.config.ts"]},
+	{
+		path: "workers/android-capture/server.py",
+		markers: [
+			"@contextmanager",
+			"with connection:yield connection",
+			"finally:connection.close()",
+		],
+	},
+	{
+		path: "workers/android-capture/server.test.py",
+		markers: [
+			"test_database_connections_close_after_success",
+			"test_database_connections_close_and_rollback_after_failure",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",
+		markers: [
+			"probeBunRuntimeVersion",
+			"daemon.runtimeVersion",
+			"forced exit:",
+			"toBeLessThan(5_000)",
+		],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"Test real Hub shutdown runtime identity",
+			"vitest.e2e.config.ts",
+		],
+	},
 
- {path:"sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",markers:["ConPTY can deliver trailing data", "setTimeout(resolve, 250)"]},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
+		markers: ["ConPTY can deliver trailing data", "setTimeout(resolve, 250)"],
+	},
 
- {path:"apps/examples/desktop-app/sidecar/android-runtime-client.ts",markers:["verifyAndroidCapture", "receipt.json", "Worker capability changed before upload", "Capture directory must not contain symlinks"]},
- {path:"apps/examples/desktop-app/sidecar/analysis-investigation-store.ts",markers:["BEGIN IMMEDIATE", "Investigation changed; reload before writing", "metadataCoverage", "equivalent-under-expression-model-only", "forked-with-inherited-evidence"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/investigation-workspace.tsx",markers:["Fork without replay", "correlateEvidence", "ambiguous-static-descriptor-matches", "unresolved-module-hash"]},
- {path:"workers/android-capture/server.py",markers:["Nonce identity conflict", "expired", "bounded_collect", "get_all('Authorization'", "operator-enforced-disposable-android-and-denied-egress"]},
- {path:"workers/android-capture/hooks.js",markers:["RegisterNatives", "InMemoryDexClassLoader", "rpc.exports"]},
- {path:"workers/android-capture/README.md",markers:["NOT hardware attestation", "GET-only", "No such live-device result"]},
- {path:"docs/ADVANCED_INVESTIGATION_INTEGRATION.md",markers:["No original binary is rewritten", "Exact-head", "not a token-refresh implementation"]},
- {path:"scripts/validate-advanced-build.mjs",markers:["analysis-investigation-store.test.ts", "android-runtime-client.test.ts", "investigation-workspace.test.tsx"]},
- {path:".github/workflows/build-custom-windows-installer.yml",markers:["server.test.py", "Build pinned Android instrumentation bundle", "bun install --frozen-lockfile"]},
+	{
+		path: "apps/examples/desktop-app/sidecar/android-runtime-client.ts",
+		markers: [
+			"verifyAndroidCapture",
+			"receipt.json",
+			"Worker capability changed before upload",
+			"Capture directory must not contain symlinks",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-investigation-store.ts",
+		markers: [
+			"BEGIN IMMEDIATE",
+			"Investigation changed; reload before writing",
+			"metadataCoverage",
+			"equivalent-under-expression-model-only",
+			"forked-with-inherited-evidence",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/investigation-workspace.tsx",
+		markers: [
+			"Fork without replay",
+			"correlateEvidence",
+			"ambiguous-static-descriptor-matches",
+			"unresolved-module-hash",
+		],
+	},
+	{
+		path: "workers/android-capture/server.py",
+		markers: [
+			"Nonce identity conflict",
+			"expired",
+			"bounded_collect",
+			"get_all('Authorization'",
+			"operator-enforced-disposable-android-and-denied-egress",
+		],
+	},
+	{
+		path: "workers/android-capture/hooks.js",
+		markers: ["RegisterNatives", "InMemoryDexClassLoader", "rpc.exports"],
+	},
+	{
+		path: "workers/android-capture/README.md",
+		markers: [
+			"NOT hardware attestation",
+			"GET-only",
+			"No such live-device result",
+		],
+	},
+	{
+		path: "docs/ADVANCED_INVESTIGATION_INTEGRATION.md",
+		markers: [
+			"No original binary is rewritten",
+			"Exact-head",
+			"not a token-refresh implementation",
+		],
+	},
+	{
+		path: "scripts/validate-advanced-build.mjs",
+		markers: [
+			"analysis-investigation-store.test.ts",
+			"android-runtime-client.test.ts",
+			"investigation-workspace.test.tsx",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"server.test.py",
+			"Build pinned Android instrumentation bundle",
+			"bun install --frozen-lockfile",
+		],
+	},
 
- {path:"sdk/packages/core/package.json",markers:["bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit"]},
+	{
+		path: "sdk/packages/core/package.json",
+		markers: [
+			"bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit",
+		],
+	},
 
- {path:"package.json",markers:["bun --sequential -F '*' typecheck"]},
- {path:"sdk/packages/core/tsconfig.bun-smoke.json",markers:['"types": ["node", "bun"]']},
- {path:".github/workflows/sdk-test.yml",markers:['bun-version: ${{ steps.toolchain.outputs.version }}', "bun install --frozen-lockfile", "bun run types", "run: bun run lint"]},
- {path:"apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",markers:["const controlPrefix = useId()", "htmlFor={", "field-21"]},
+	{ path: "package.json", markers: ["bun --sequential -F '*' typecheck"] },
+	{
+		path: "sdk/packages/core/tsconfig.bun-smoke.json",
+		markers: ['"types": ["node", "bun"]'],
+	},
+	{
+		path: ".github/workflows/sdk-test.yml",
+		markers: [
+			"bun-version: ${{ steps.toolchain.outputs.version }}",
+			"bun install --frozen-lockfile",
+			"bun run types",
+			"run: bun run lint",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",
+		markers: ["const controlPrefix = useId()", "htmlFor={", "field-21"],
+	},
 
 	{
 		path: "scripts/build-windows.ps1",
@@ -1395,3 +2114,16 @@ if (failures.length > 0) {
 console.log(
 	`Custom fork preservation check passed (${requiredMarkers.length} source contracts; ${forbiddenPaths.length} obsolete path blocked).`,
 );
+
+const sqliteRestartSource = readFileSync(
+	"sdk/packages/shared/src/db/sqlite-db.ts",
+	"utf8",
+);
+if (
+	sqliteRestartSource.indexOf('db.exec("PRAGMA busy_timeout = 5000;")') >
+	sqliteRestartSource.indexOf('db.exec("PRAGMA journal_mode = WAL;")')
+) {
+	throw new Error(
+		"Session WAL recovery must configure bounded busy handling first",
+	);
+}

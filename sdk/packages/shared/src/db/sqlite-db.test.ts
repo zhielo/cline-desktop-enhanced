@@ -77,6 +77,27 @@ describe("withSqliteBusyRetry", () => {
 });
 
 describe("ensureSessionSchema", () => {
+	it("sets bounded busy handling before WAL recovery can acquire a lock", () => {
+		const calls: string[] = [];
+		ensureSessionSchema({
+			exec(sql) {
+				if (
+					sql === "PRAGMA journal_mode = WAL;" &&
+					calls[0] !== "PRAGMA busy_timeout = 5000;"
+				)
+					throw new Error("SQLITE_BUSY: WAL recovery lock before busy handler");
+				calls.push(sql);
+			},
+			prepare() {
+				throw new Error("No legacy migration expected in this fixture");
+			},
+		});
+		expect(calls.slice(0, 2)).toEqual([
+			"PRAGMA busy_timeout = 5000;",
+			"PRAGMA journal_mode = WAL;",
+		]);
+	});
+
 	const sqliteIt = sqliteAvailable ? it : it.skip;
 
 	sqliteIt("enforces one persisted session per fork operation", () => {

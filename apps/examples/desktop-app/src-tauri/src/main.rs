@@ -527,6 +527,15 @@ fn spawn_desktop_backend_process(context: &AppContext) -> Result<Child, String> 
         ));
     };
 
+    #[cfg(windows)]
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let runtime = parent.join("resources").join("analysis-runtime");
+            if runtime.join("runtime-manifest.json").is_file() {
+                command.env("CLINE_BUNDLED_ANALYSIS_ROOT", runtime);
+            }
+        }
+    }
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

@@ -147,3 +147,5 @@ test("native WebView options require exact acceptance opt-in and preserve normal
 	expect(workflow).toContain("Native WebView launch option fixtures failed");
 	expect(workflow).toContain("steps.ui_acceptance.outcome == 'success'");
 });
+
+test("bundled runtime freezes its inventory after fixture subprocesses and cache cleanup",()=>{const script=load("scripts/package-analysis-runtime.ps1");expect(script.indexOf("scripts/write-analysis-runtime-manifest.ts")).toBeGreaterThan(script.indexOf("android-investigation-worker.test.py"));expect(script.lastIndexOf("Get-ChildItem $root")).toBeGreaterThan(script.indexOf("android-investigation-worker.test.py"));expect(script).toContain("-I -B -c");expect(script).not.toContain("SetEnvironmentVariable");});

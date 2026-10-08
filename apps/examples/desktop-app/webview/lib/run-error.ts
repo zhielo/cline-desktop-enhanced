@@ -3,6 +3,9 @@ import {
 	resolveCredentialFailureHint,
 } from "@/hooks/chat-session/helpers";
 
+const HUB_RECOVERY_GUIDANCE =
+	"Your saved chat is preserved. Wait for reconnection, reopen this session, then send a new message. The previous task is not automatically replayed.";
+
 const TRANSIENT_HUB_DISCONNECT =
 	/^Hub connection closed \(code=1006,\s*reason=Connection ended\)$/i;
 
@@ -16,7 +19,10 @@ const FORK_LIFECYCLE_TIMEOUT =
 	/^(?:Desktop command timed out waiting for chat_session_command|Hub command session\.(?:create|restore) timed out after \d+ms(?: .*)?)$/i;
 
 function normalizedFailureDetail(detail: string): string {
-	return detail
+	const raw = detail.endsWith(` ${HUB_RECOVERY_GUIDANCE}`)
+		? detail.slice(0, -HUB_RECOVERY_GUIDANCE.length - 1)
+		: detail;
+	return raw
 		.trim()
 		.replace(/^The run failed:\s*/i, "")
 		.trim();
@@ -72,6 +78,8 @@ export async function retryRecoverableFork<T>(
 /** The same presentation for live failures and restored transcript errors. */
 export function formatRunError(detail: string, providerId = ""): string {
 	const description = detail.trim();
+	if (isTransientHubDisconnect(description))
+		return `The run failed: ${normalizedFailureDetail(description)} ${HUB_RECOVERY_GUIDANCE}`;
 	const guidance = resolveCredentialFailureHint(providerId);
 	const looksCredentialRelated =
 		!description || isCredentialFailure(description);

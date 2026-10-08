@@ -44,6 +44,12 @@ type Mission = {
 	}>;
 };
 type GitReview = {
+	impact?: {
+		affectedFiles: string[];
+		suggestedTestFiles: string[];
+		truncated: boolean;
+		limitations: string[];
+	};
 	branch: string;
 	summary: {
 		filesChanged: number;
@@ -426,6 +432,28 @@ When finished, summarize changed files, commands/tests, remaining risk, and whet
 										<p className="text-sm text-muted-foreground">
 											No deterministic risk flags detected.
 										</p>
+									)}
+									{review.impact && (
+										<details>
+											<summary>
+												Bounded import impact and suggested tests
+												{review.impact.truncated ? " (partial)" : ""}
+											</summary>
+											<p>
+												{review.impact.affectedFiles.length} affected-file
+												candidates. No tests executed.
+											</p>
+											<ul>
+												{review.impact.suggestedTestFiles.map((path) => (
+													<li key={path}>
+														<code>{path}</code>
+													</li>
+												))}
+											</ul>
+											{review.impact.limitations.map((text) => (
+												<p key={text}>{text}</p>
+											))}
+										</details>
 									)}
 									<div className="grid gap-2 md:grid-cols-2">
 										{review.files.slice(0, 12).map((file) => (

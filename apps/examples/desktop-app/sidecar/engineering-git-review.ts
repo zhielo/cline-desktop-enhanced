@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, relative, resolve, sep } from "node:path";
+import { analyzeChangedImpact } from "./engineering-impact";
 import { scoreReviewRisk } from "./engineering-control-plane";
 
 export type EngineeringGitFile = {
@@ -186,6 +187,10 @@ export function buildEngineeringGitReview(
 			sensitiveFiles: files.filter((file) => file.sensitive).length,
 		},
 		risk,
+		impact: analyzeChangedImpact(
+			repositoryRoot,
+			files.filter((f) => f.category === "code").map((f) => f.path),
+		),
 		generatedAt: new Date().toISOString(),
 	};
 }

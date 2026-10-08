@@ -413,6 +413,21 @@ export class NodeHubClient {
 	}
 
 	async connect(): Promise<void> {
+		try {
+			await this.connectOnce();
+		} catch (error) {
+			// Health probes must not recursively start recovery. No task command is replayed.
+			if (
+				this.closedByClient ||
+				this.options.clientType === "hub-healthcheck" ||
+				this.options.resolveConnectionHeaders ||
+				!(await this.recoverLocalHubTransport(error))
+			)
+				throw error;
+			await this.connectOnce();
+		}
+	}
+	private async connectOnce(): Promise<void> {
 		if (this.connectPromise) {
 			return this.connectPromise;
 		}

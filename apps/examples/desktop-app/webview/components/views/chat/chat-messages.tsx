@@ -62,6 +62,7 @@ import { ToolMessageBlock } from "./messages/tool-message-block";
 import { buildToolPresentation } from "./messages/tool-summaries";
 import { WorkBlock } from "./messages/work-block";
 import { SessionCompletionCard } from "./session-completion-card";
+import { TranscriptRow } from "./transcript-row";
 import { SessionContent } from "./session-content";
 import { ArtifactWorkspaceProvider } from "@/lib/artifact-workspace";
 
@@ -744,141 +745,153 @@ function ChatMessagesImpl({
 									status={status}
 									transportState={chatTransportState}
 								/>
-								{renderItems.map((item, itemIndex) => {
-									// Working rows — live (`run`) or folded (`work`) — render
-									// through one child renderer so a row keeps its exact look
-									// and position when the run collapses. Those rows keep
-									// copy/expand but drop the session-versioning actions
-									// (edit, restore, fork), which belong to top-level
-									// transcript rows.
-									const renderWorkingRow = (child: typeof item) => {
-										if (child.type === "tools") {
+								{renderItems
+									.map((item, itemIndex) => {
+										// Working rows — live (`run`) or folded (`work`) — render
+										// through one child renderer so a row keeps its exact look
+										// and position when the run collapses. Those rows keep
+										// copy/expand but drop the session-versioning actions
+										// (edit, restore, fork), which belong to top-level
+										// transcript rows.
+										const renderWorkingRow = (child: typeof item) => {
+											if (child.type === "tools") {
+												return (
+													<ToolMessageBlock
+														isRunActive={
+															isRunActive && itemIndex > lastUserItemIndex
+														}
+														key={`tools_${child.messages[0]?.id ?? "empty"}`}
+														messages={child.messages}
+														onExpandImage={handleExpandImage}
+														onProceedWhileRunning={onProceedWhileRunning}
+													/>
+												);
+											}
+											if (child.type !== "message") {
+												return null;
+											}
 											return (
-												<ToolMessageBlock
-													isRunActive={
-														isRunActive && itemIndex > lastUserItemIndex
+												<MessageBubble
+													agentRole={child.agentRole}
+													isLastAssistantMessage={
+														child.message.role === "assistant" &&
+														lastConversationMessage === child.message
 													}
-													key={`tools_${child.messages[0]?.id ?? "empty"}`}
-													messages={child.messages}
+													isStreaming={streamingMessageId === child.message.id}
+													key={child.message.id}
+													message={child.message}
+													onCopyMessage={handleCopyMessage}
 													onExpandImage={handleExpandImage}
-													onProceedWhileRunning={onProceedWhileRunning}
+													wasCopied={copiedMessageId === child.message.id}
+													{...getReasoningProps(child.reasoningMessages)}
 												/>
 											);
+										};
+										if (item.type === "tools") {
+											return renderWorkingRow(item);
 										}
-										if (child.type !== "message") {
-											return null;
+										if (item.type === "run") {
+											return (
+												<div
+													className="flex flex-col gap-1"
+													key={`run_${item.id}`}
+												>
+													{item.items.map(renderWorkingRow)}
+												</div>
+											);
 										}
+										if (item.type === "work") {
+											return (
+												<WorkBlock
+													durationMilliseconds={item.durationMilliseconds}
+													key={`work_${item.id}`}
+													toolCallCount={item.toolCallCount}
+												>
+													{item.items.map(renderWorkingRow)}
+												</WorkBlock>
+											);
+										}
+										const { agentRole, message, reasoningMessages } = item;
+										// An answer directly under its run's working rows belongs
+										// to them — pull it closer than the full transcript gap.
+										const previousItem = renderItems[itemIndex - 1];
+										const followsWorkingRows =
+											message.role === "assistant" &&
+											previousItem !== undefined &&
+											previousItem.type !== "message";
 										return (
 											<MessageBubble
-												agentRole={child.agentRole}
+												agentRole={agentRole}
+												followsWorkingRows={followsWorkingRows}
 												isLastAssistantMessage={
-													child.message.role === "assistant" &&
-													lastConversationMessage === child.message
+													message.role === "assistant" &&
+													lastConversationMessage === message
 												}
-												isStreaming={streamingMessageId === child.message.id}
-												key={child.message.id}
-												message={child.message}
-												onCopyMessage={handleCopyMessage}
+												isStreaming={streamingMessageId === message.id}
+												key={message.id}
+												message={message}
+												runCount={userRunCountByMessage.get(message)}
 												onExpandImage={handleExpandImage}
-												wasCopied={copiedMessageId === child.message.id}
-												{...getReasoningProps(child.reasoningMessages)}
+												onCopyMessage={handleCopyMessage}
+												onEditMessage={
+													onEditMessage ? requestEditMessage : undefined
+												}
+												editDisabled={
+													!onEditMessage ||
+													status === "starting" ||
+													status === "running" ||
+													status === "stopping" ||
+													isSessionSwitching ||
+													sessionVersioningPending
+												}
+												editError={editErrors[message.id]}
+												editPending={editingMessageId === message.id}
+												onRestoreCheckpoint={
+													onRestoreCheckpoint
+														? requestRestoreCheckpoint
+														: undefined
+												}
+												restoreDisabled={
+													!onRestoreCheckpoint ||
+													status === "starting" ||
+													status === "running" ||
+													status === "stopping" ||
+													isSessionSwitching ||
+													sessionVersioningPending
+												}
+												restoreError={checkpointErrors[message.id]}
+												restorePending={
+													checkpointActions[message.id] === "undoing"
+												}
+												wasCopied={copiedMessageId === message.id}
+												onForkSession={
+													onForkSession ? handleForkSession : undefined
+												}
+												forkDisabled={
+													status === "starting" ||
+													status === "running" ||
+													status === "stopping" ||
+													isSessionSwitching ||
+													sessionVersioningPending
+												}
+												forkPending={forkingMessageId === message.id}
+												forkError={forkErrors[message.id]}
+												onFixCredentials={onFixCredentials}
+												{...getReasoningProps(reasoningMessages)}
 											/>
 										);
-									};
-									if (item.type === "tools") {
-										return renderWorkingRow(item);
-									}
-									if (item.type === "run") {
-										return (
-											<div
-												className="flex flex-col gap-1"
-												key={`run_${item.id}`}
-											>
-												{item.items.map(renderWorkingRow)}
-											</div>
-										);
-									}
-									if (item.type === "work") {
-										return (
-											<WorkBlock
-												durationMilliseconds={item.durationMilliseconds}
-												key={`work_${item.id}`}
-												toolCallCount={item.toolCallCount}
-											>
-												{item.items.map(renderWorkingRow)}
-											</WorkBlock>
-										);
-									}
-									const { agentRole, message, reasoningMessages } = item;
-									// An answer directly under its run's working rows belongs
-									// to them — pull it closer than the full transcript gap.
-									const previousItem = renderItems[itemIndex - 1];
-									const followsWorkingRows =
-										message.role === "assistant" &&
-										previousItem !== undefined &&
-										previousItem.type !== "message";
-									return (
-										<MessageBubble
-											agentRole={agentRole}
-											followsWorkingRows={followsWorkingRows}
-											isLastAssistantMessage={
-												message.role === "assistant" &&
-												lastConversationMessage === message
+									})
+									.map((row, index) => (
+										<TranscriptRow
+											key={row?.key ?? index}
+											deferred={
+												renderItems.length > 80 &&
+												index < renderItems.length - 12
 											}
-											isStreaming={streamingMessageId === message.id}
-											key={message.id}
-											message={message}
-											runCount={userRunCountByMessage.get(message)}
-											onExpandImage={handleExpandImage}
-											onCopyMessage={handleCopyMessage}
-											onEditMessage={
-												onEditMessage ? requestEditMessage : undefined
-											}
-											editDisabled={
-												!onEditMessage ||
-												status === "starting" ||
-												status === "running" ||
-												status === "stopping" ||
-												isSessionSwitching ||
-												sessionVersioningPending
-											}
-											editError={editErrors[message.id]}
-											editPending={editingMessageId === message.id}
-											onRestoreCheckpoint={
-												onRestoreCheckpoint
-													? requestRestoreCheckpoint
-													: undefined
-											}
-											restoreDisabled={
-												!onRestoreCheckpoint ||
-												status === "starting" ||
-												status === "running" ||
-												status === "stopping" ||
-												isSessionSwitching ||
-												sessionVersioningPending
-											}
-											restoreError={checkpointErrors[message.id]}
-											restorePending={
-												checkpointActions[message.id] === "undoing"
-											}
-											wasCopied={copiedMessageId === message.id}
-											onForkSession={
-												onForkSession ? handleForkSession : undefined
-											}
-											forkDisabled={
-												status === "starting" ||
-												status === "running" ||
-												status === "stopping" ||
-												isSessionSwitching ||
-												sessionVersioningPending
-											}
-											forkPending={forkingMessageId === message.id}
-											forkError={forkErrors[message.id]}
-											onFixCredentials={onFixCredentials}
-											{...getReasoningProps(reasoningMessages)}
-										/>
-									);
-								})}
+										>
+											{row}
+										</TranscriptRow>
+									))}
 								{/* Lives inside the transcript column and mirrors a
 								    reasoning/tool trigger's geometry exactly (icon slot,
 								    min-height, padding), so the first real row replaces it

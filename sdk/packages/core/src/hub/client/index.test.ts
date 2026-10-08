@@ -1588,3 +1588,62 @@ describe("requestHubDrain", () => {
 		expect(requested.searchParams.get("off")).toBe("1");
 	});
 });
+
+describe("registration recovery before session metadata preflight", () => {
+	it("retries only connection registration after a recoverable 1006-like failure", async () => {
+		MockWebSocket.reset();
+		vi.stubGlobal("WebSocket", MockWebSocket);
+		MockWebSocket.failNextOpen = true;
+		const client = new NodeHubClient({ url: "ws://127.0.0.1:25463/hub" });
+		const recovery = vi
+			.spyOn(
+				client as unknown as {
+					recoverLocalHubTransport: (error: unknown) => Promise<boolean>;
+				},
+				"recoverLocalHubTransport",
+			)
+			.mockResolvedValueOnce(true);
+		try {
+			await client.connect();
+			expect(recovery).toHaveBeenCalledTimes(1);
+			const commands = MockWebSocket.instances
+				.flatMap((s) => s.sentFrames)
+				.map(
+					(f) => (f as { envelope?: { command?: string } }).envelope?.command,
+				)
+				.filter(Boolean);
+			expect(commands).toEqual(["client.register"]);
+		} finally {
+			await client.dispose();
+			vi.unstubAllGlobals();
+		}
+	});
+	it("does not recover remote/header-auth connections through local Hub discovery", async () => {
+		MockWebSocket.reset();
+		vi.stubGlobal("WebSocket", MockWebSocket);
+		MockWebSocket.failNextOpen = true;
+		const client = new NodeHubClient({
+			url: "wss://owned.example/hub",
+			resolveConnectionHeaders: async () => ({ authorization: "fixture" }),
+		});
+		vi.spyOn(
+			client as unknown as { connectOnce: () => Promise<void> },
+			"connectOnce",
+		).mockRejectedValueOnce(
+			new HubTransportError("hub_connect_failed", "Owned header fixture"),
+		);
+		const recovery = vi.spyOn(
+			client as unknown as {
+				recoverLocalHubTransport: (error: unknown) => Promise<boolean>;
+			},
+			"recoverLocalHubTransport",
+		);
+		try {
+			await expect(client.connect()).rejects.toThrow();
+			expect(recovery).not.toHaveBeenCalled();
+		} finally {
+			client.close();
+			vi.unstubAllGlobals();
+		}
+	});
+});
