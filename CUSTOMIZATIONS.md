@@ -625,6 +625,9 @@ Do not hide a new regression by weakening assertions or making a required custom
 
 ## Confirmed CI blocker repair after advanced integration
 
+- The installed Windows build's Python corpus uses the explicit `windows-portable` pin-set profile. Every shipped engine remains execution-tested and blocking; unshipped Triton/QBinDiff receive required missing-engine boundary tests rather than success claims or skips. The default full profile keeps their real execution tests. LIEF uses a hash-verified owned ELF fixture across platforms instead of skipping the Linux executable fixture on Windows.
+- Transform helpers resolve their default expansion budget at call time, avoiding stale Python default-argument capture. The public worker reduced-budget regression and exact/over-budget helper tests remain required; production byte ceilings are unchanged and no caller-selected transform budget is exposed.
+
 - PR #105's host execution diagnostics are excluded from the strict Android v1 evidence manifest and its content hash. Identical static evidence still reuses the same immutable index across different jobs; diagnostics remain available on the execution result and in their separate receipt store. Regressions enforce reuse, diagnostic exclusion and rejection of unexpected stored-manifest fields without relaxing schema, integrity or no-overwrite checks.
 - The upstream JetBrains integration dispatch runs only in `cline/cline` with its configured App ID, retaining trusted-author/comment authorization and adding HTTP failure detection. Personal desktop forks do not require credentials for `cline/intellij-plugin`. Desktop, SDK, Windows regression and installer acceptance gates remain mandatory. Because the integration uses `pull_request_target`, an existing run evaluates the base branch workflow; this PR's guard takes effect once that workflow reaches the base branch.
 

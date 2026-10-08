@@ -74,7 +74,13 @@ separately and its receipt reviewed when changing IDA adapters.
   Feature/fix branch pushes and manual runs remain available.
 - Regression validation has no path-filter blind spots and uses the single consolidated
   runner, avoiding multiline PowerShell native-command failure masking.
-- The Windows build runs optional Python fixture corpora in the pinned engine environment.
+- The Windows build runs Python fixture corpora in the pinned `windows-portable` engine
+  profile: LIEF, Capstone, Z3, Androguard, Miasm and cryptography execution remain required.
+  Triton and QBinDiff are not shipped in that pin set; explicit negative-capability tests
+  require them to report missing-engine blocking, not successful execution. The default
+  `full` Python corpus still requires their real execution in the full pinned environment.
+  The hash-verified owned ELF LIEF fixture runs on both Windows and Linux; no ELF target
+  is executed. Missing shipped engines never become skips or successful capability claims.
 - Verified artifacts require both installed sidecar smoke and installed WebView acceptance.
   The UI harness uses a fresh isolated profile, actual installed Tauri transport, an owned
   workspace/idle session seeded with owned fixture history, local-setting persistence,

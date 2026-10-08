@@ -3,8 +3,20 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatValidationHeartbeat, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
+import { engineCorpusArgs, formatValidationHeartbeat, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
 const jobs = [1, 2, 3, 4, 5].map(n => ({ name: String(n) }));
+test("engine corpus explicitly selects the shipped Windows profile without weakening full-engine execution", () => {
+  const corpus = "advanced-analysis-worker.test.py";
+  assert.deepEqual(engineCorpusArgs(corpus, "/owned", "win32").slice(1), ["--engine-profile", "windows-portable"]);
+  assert.deepEqual(engineCorpusArgs(corpus, "/owned", "linux").slice(1), ["--engine-profile", "full"]);
+  assert.equal(engineCorpusArgs("advanced-ir.test.py", "/owned", "win32").length, 1);
+  assert.equal(engineCorpusArgs("advanced-crypto.test.py", "/owned", "win32").length, 1);
+  const python = readFileSync(new URL("../sdk/packages/core/scripts/advanced-analysis-worker.test.py", import.meta.url), "utf8");
+  assert.ok(python.includes("Missing optional engine: triton"));
+  assert.ok(python.includes("Missing optional engine: qbindiff"));
+  assert.ok(python.includes("owned-native-elf.json"));
+  assert.ok(!python.includes("unittest.skip"));
+});
 test("heartbeats identify every active gate without exposing commands or environment", () => {
   const active = new Map([[{}, { name: "sidecar", start: 1000, args: ["secret"] }], [{}, { name: "installer", start: 3000 }]]);
   assert.equal(formatValidationHeartbeat(active, 5000), "[PROGRESS] sidecar: 4s; installer: 2s");

@@ -10,6 +10,13 @@ export function parseParallel(value = "2") {
   return n;
 }
 
+export function engineCorpusArgs(corpus, root, platform = process.platform) {
+  const args = [path.join(root, "sdk/packages/core/scripts", corpus)];
+  if (corpus === "advanced-analysis-worker.test.py")
+    args.push("--engine-profile", platform === "win32" ? "windows-portable" : "full");
+  return args;
+}
+
 export function formatValidationHeartbeat(active, now = Date.now()) {
   return `[PROGRESS] ${Array.from(active.values(), step =>
     `${step.name}: ${Math.max(0, Math.floor((now - step.start) / 1000))}s`
@@ -142,8 +149,10 @@ async function main() {
     if (!python || !path.isAbsolute(python)) throw new Error("--engines requires an absolute trusted CLINE_RE_PYTHON");
     for (const corpus of ["server.test.py", "capture_support.test.py", "setup-controller.test.py"])
       checks.push({ ...job(`Android controller corpus: ${corpus}`, [path.join(root, "workers/android-capture", corpus)]), executable: python });
-    for (const corpus of ["advanced-analysis-worker.test.py", "advanced-ir.test.py", "advanced-crypto.test.py"])
-      checks.push({ ...job(`Engine corpus: ${corpus}`, [path.join(root, "sdk/packages/core/scripts", corpus)]), executable: python });
+    for (const corpus of ["advanced-analysis-worker.test.py", "advanced-ir.test.py", "advanced-crypto.test.py"]) {
+      const args = engineCorpusArgs(corpus, root);
+      checks.push({ ...job(`Engine corpus: ${corpus}`, args), executable: python });
+    }
   }
   const active = new Map();
   const progressFile = path.join(output, "progress.jsonl");
@@ -200,6 +209,7 @@ async function main() {
   await writeFile(path.join(output, "summary.json"), JSON.stringify({
     schemaVersion: 1, started, finished: new Date().toISOString(), sourceCommit, parallel,
     engineValidation: flags.includes("--engines") ? "requested-see-corpus-results" : "not-requested",
+    engineProfile: flags.includes("--engines") ? (process.platform === "win32" ? "windows-portable" : "full") : "not-requested",
     windowsInstallerBuilt: false, ...report,
   }, null, 2) + "\n");
   console.log(`Validation ${report.status}: ${path.relative(root, output)}/summary.json`);

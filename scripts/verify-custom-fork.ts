@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",markers:["def apply_transform_steps(data,steps,max_bytes=None):", "if max_bytes is None: max_bytes=MAX_BYTES"]},
+ {path:"sdk/packages/core/scripts/advanced-analysis-worker.test.py",markers:["--engine-profile", "windows-portable", "owned-native-elf.json", "test_expansion_exact_and_explicit_budgets", "Missing optional engine: triton", "Missing optional engine: qbindiff"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["engineCorpusArgs", 'platform === "win32" ? "windows-portable" : "full"', "engineProfile:"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.ts",markers:["diagnostics: _diagnostics", "digest(indexedResult)", "result: indexedResult"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation-index.test.ts",markers:["keeps host execution diagnostics outside immutable evidence and identity", 'not.toHaveProperty("diagnostics")']},
  {path:".github/workflows/ext-jb-test-integration.yml",markers:["github.repository == 'cline/cline'", "vars.CLINE_JETBRAINS_APP_ID != ''", "curl --fail-with-body"]},
