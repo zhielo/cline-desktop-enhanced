@@ -6,7 +6,7 @@ const requiredMarkers: Array<{
 }> = [
  {path:"apps/examples/desktop-app/webview/lib/run-error.ts",markers:["HUB_RECOVERY_GUIDANCE", "normalizedFailureDetail(description)"]},
  {path:"scripts/package-analysis-runtime.ps1",markers:["76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0","python313._pth","Bundled execution corpus failed", "Freeze the shipped inventory"]},
- {path:"apps/examples/desktop-app/sidecar/bundled-analysis-runtime.ts",markers:["verifyRuntime","repairBundledAnalysisRuntime","manifest changed","coding remains available"]},
+ {path:"apps/examples/desktop-app/sidecar/bundled-analysis-runtime.ts",markers:["verifyRuntime","repairBundledAnalysisRuntime","manifest changed","coding remains available", "preferBundled"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/resource-governor.ts",markers:["class ResourceGovernor","Resource admission timed out","hardMemoryEnforcement: false"]},
  {path:"docs/INTEGRATED_ENHANCEMENT_DELIVERY.md",markers:["baseline-required","Machine-wide","Downloads and activation remain disabled"]},
  {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["hub-restart-saved-session-reattached-without-prompt-replay","bundled"]},

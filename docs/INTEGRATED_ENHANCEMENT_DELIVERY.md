@@ -22,7 +22,7 @@ Codex-relative or before/after performance score.
 - **Readiness and repair:** Settings → Analysis environment tests owned fixtures
   and offers explicitly confirmed, offline repair from validated installed
   resources. An existing repaired runtime is verified rather than overwritten
-  while an engine might own it. Restart is required for an existing Hub to pick
+  while an engine might own it. The explicit bundled selection persists across app launches without changing user environment variables. A backend restart is required for an existing shared Hub to pick
   up a repaired interpreter. Corrupt installed resources require reinstalling
   the trusted installer; no arbitrary pip install is performed. Analysis failure
   does not prevent ordinary coding startup.

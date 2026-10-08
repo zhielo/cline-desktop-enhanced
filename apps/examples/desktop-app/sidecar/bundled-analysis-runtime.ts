@@ -8,6 +8,7 @@ import {
 	realpath,
 	rename,
 	rm,
+	writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { resolveClineDataDir } from "@cline/shared/storage";
@@ -101,8 +102,10 @@ export async function verifyRuntime(
 	}
 	return { manifest, digest };
 }
-export async function initializeBundledAnalysisRuntime() {
-	if (process.platform !== "win32") return;
+export async function initializeBundledAnalysisRuntime(
+	platform: NodeJS.Platform = process.platform,
+) {
+	if (platform !== "win32") return;
 	const root =
 		process.env.CLINE_BUNDLED_ANALYSIS_ROOT ||
 		join(dirname(process.execPath), "resources", "analysis-runtime");
@@ -127,8 +130,36 @@ export async function initializeBundledAnalysisRuntime() {
 		return;
 	}
 	manifestHash = verified.digest;
-	if (!process.env.CLINE_RE_PYTHON?.trim()) {
-		process.env.CLINE_RE_PYTHON = join(configuredRoot, "python.exe");
+	let preferBundled = false;
+	try {
+		const preference = join(
+			resolveClineDataDir(),
+			"analysis-runtime",
+			"preference.json",
+		);
+		const info = await lstat(preference);
+		if (info.isFile() && !info.isSymbolicLink() && info.size <= 1024)
+			preferBundled =
+				JSON.parse(await readFile(preference, "utf8")).preferBundled === true;
+	} catch {
+		/* No saved selection; explicit external developer overrides remain intact. */
+	}
+	let selectedRoot = configuredRoot;
+	if (preferBundled) {
+		const cached = join(
+			resolveClineDataDir(),
+			"analysis-runtime",
+			`${verified.manifest.runtimeId}-${verified.digest.slice(0, 16)}`,
+		);
+		try {
+			await verifyRuntime(cached, verified.digest);
+			selectedRoot = cached;
+		} catch {
+			/* Only the independently verified installed resources are a safe fallback. */
+		}
+	}
+	if (!process.env.CLINE_RE_PYTHON?.trim() || preferBundled) {
+		process.env.CLINE_RE_PYTHON = join(selectedRoot, "python.exe");
 		process.env.CLINE_ANALYSIS_RUNTIME_ID = `${verified.manifest.runtimeId}:${verified.digest}`;
 		configureAnalysisRuntime({
 			source: "bundled",
@@ -171,6 +202,14 @@ export async function repairBundledAnalysisRuntime() {
 				if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 				await rename(temporary, destination);
 			}
+			const preference = join(await realpath(parent), "preference.json");
+			const stagedPreference = `${preference}.${process.pid}.tmp`;
+			await writeFile(
+				stagedPreference,
+				JSON.stringify({ schemaVersion: 1, preferBundled: true }),
+				{ mode: 0o600 },
+			);
+			await rename(stagedPreference, preference);
 			process.env.CLINE_RE_PYTHON = join(destination, "python.exe");
 			process.env.CLINE_ANALYSIS_RUNTIME_ID = `${source.manifest.runtimeId}:${manifestHash}`;
 			configureAnalysisRuntime({
@@ -182,7 +221,7 @@ export async function repairBundledAnalysisRuntime() {
 				status: "repaired",
 				restartRequired: true,
 				message:
-					"Bundled runtime restored without network access. Restart the app to refresh any existing Hub workers.",
+					"Bundled runtime restored and its selection saved without network access. Existing shared Hub workers retain their interpreter until the backend restarts; running tasks were not interrupted.",
 			};
 		} finally {
 			await rm(temporary, { recursive: true, force: true });

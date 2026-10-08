@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, it, expect } from "vitest";
-import { verifyRuntime } from "./bundled-analysis-runtime";
+import { afterEach, it, expect, vi } from "vitest";
+import {
+	verifyRuntime,
+	initializeBundledAnalysisRuntime,
+	repairBundledAnalysisRuntime,
+} from "./bundled-analysis-runtime";
 const roots: string[] = [];
 afterEach(async () => {
+	vi.unstubAllEnvs();
 	await Promise.all(
 		roots.splice(0).map((p) => rm(p, { recursive: true, force: true })),
 	);
@@ -64,4 +69,50 @@ it("rejects untracked imported files", async () => {
 	const f = await fixture();
 	await writeFile(join(f.root, "unexpected.py"), "# owned but untracked");
 	await expect(verifyRuntime(f.root)).rejects.toThrow("Untracked");
+});
+
+it("preserves an explicit external interpreter until the user chooses bundled repair", async () => {
+	const f = await fixture();
+	vi.stubEnv("CLINE_BUNDLED_ANALYSIS_ROOT", f.root);
+	vi.stubEnv("CLINE_DATA_DIR", join(f.root, "../", `data-${Date.now()}`));
+	roots.push(process.env.CLINE_DATA_DIR!);
+	vi.stubEnv("CLINE_RE_PYTHON", "C:\\external\\python.exe");
+	await initializeBundledAnalysisRuntime("win32");
+	expect(process.env.CLINE_RE_PYTHON).toBe("C:\\external\\python.exe");
+	const repaired = await repairBundledAnalysisRuntime();
+	expect(repaired).toMatchObject({ status: "repaired", restartRequired: true });
+	const selected = process.env.CLINE_RE_PYTHON;
+	expect(selected).not.toBe(join(f.root, "python.exe"));
+	vi.stubEnv("CLINE_RE_PYTHON", "C:\\external\\python.exe");
+	await initializeBundledAnalysisRuntime("win32");
+	expect(process.env.CLINE_RE_PYTHON).toBe(selected);
+});
+it("uses only verified installed resources when a saved repair cache is missing", async () => {
+	const f = await fixture();
+	const data = join(f.root, "../", `data-fallback-${Date.now()}`);
+	roots.push(data);
+	await mkdir(join(data, "analysis-runtime"), { recursive: true });
+	await writeFile(
+		join(data, "analysis-runtime", "preference.json"),
+		JSON.stringify({
+			schemaVersion: 1,
+			preferBundled: true,
+			path: "C:\\untrusted.exe",
+		}),
+	);
+	vi.stubEnv("CLINE_BUNDLED_ANALYSIS_ROOT", f.root);
+	vi.stubEnv("CLINE_DATA_DIR", data);
+	vi.stubEnv("CLINE_RE_PYTHON", "C:\\external\\python.exe");
+	await initializeBundledAnalysisRuntime("win32");
+	expect(process.env.CLINE_RE_PYTHON).toBe(join(f.root, "python.exe"));
+});
+it("blocks damaged bundled analysis without throwing during coding startup", async () => {
+	const f = await fixture();
+	await writeFile(join(f.root, "python.exe"), "damaged");
+	vi.stubEnv("CLINE_BUNDLED_ANALYSIS_ROOT", f.root);
+	vi.stubEnv("CLINE_RE_PYTHON", "");
+	await expect(
+		initializeBundledAnalysisRuntime("win32"),
+	).resolves.toBeUndefined();
+	expect(process.env.CLINE_RE_PYTHON).toBe(join(f.root, "blocked-runtime.exe"));
 });
