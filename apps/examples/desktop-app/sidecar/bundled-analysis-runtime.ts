@@ -150,7 +150,10 @@ export async function repairBundledAnalysisRuntime() {
 		await mkdir(parent, { recursive: true, mode: 0o700 });
 		if ((await lstat(parent)).isSymbolicLink())
 			throw new Error("Runtime repair directory link forbidden");
-		const destination = join(await realpath(parent), source.manifest.runtimeId);
+		const destination = join(
+			await realpath(parent),
+			`${source.manifest.runtimeId}-${manifestHash.slice(0, 16)}`,
+		);
 		const temporary = `${destination}.${process.pid}.repair`;
 		await rm(temporary, { recursive: true, force: true });
 		try {

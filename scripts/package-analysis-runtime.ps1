@@ -21,9 +21,12 @@ Get-ChildItem $root -Directory -Filter '__pycache__' -Recurse | Remove-Item -Rec
 $python = Join-Path $root 'python.exe'
 & $python -I -B -c "import sys,lief,capstone,androguard,z3,miasm,cryptography; assert sys.flags.isolated; assert not __import__('site').ENABLE_USER_SITE; print(sys.version)"
 if ($LASTEXITCODE -ne 0) { throw 'Bundled isolated imports failed' }
-& bun scripts/write-analysis-runtime-manifest.ts $root
-if ($LASTEXITCODE -ne 0) { throw 'Runtime integrity manifest failed' }
 & $python -I -B sdk/packages/core/scripts/advanced-analysis-worker.test.py --engine-profile windows-portable
 if ($LASTEXITCODE -ne 0) { throw 'Bundled execution corpus failed' }
 & $python -I -B sdk/packages/core/scripts/android-investigation-worker.test.py
 if ($LASTEXITCODE -ne 0) { throw 'Bundled Android owned fixtures failed' }
+# Corpus subprocesses may create bytecode even if the outer Python uses -B.
+# Freeze the shipped inventory only after all execution acceptance completes.
+Get-ChildItem $root -Directory -Filter '__pycache__' -Recurse | Remove-Item -Recurse -Force
+& bun scripts/write-analysis-runtime-manifest.ts $root
+if ($LASTEXITCODE -ne 0) { throw 'Runtime integrity manifest failed' }

@@ -130,7 +130,7 @@ export function AnalysisEnvironmentView() {
 				<Button onClick={() => void repair()} disabled={busy} variant="outline">
 					Repair bundled runtime
 				</Button>
-				{repairMessage && <p role="status">{repairMessage}</p>}
+				{repairMessage && <output aria-live="polite">{repairMessage}</output>}
 				<Button onClick={() => void refreshJobs()} variant="outline">
 					Refresh IDA jobs
 				</Button>

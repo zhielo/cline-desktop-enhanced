@@ -350,7 +350,7 @@ export function queryEvidenceGraph(
 			"Requested output budget cannot contain graph provenance; increase maxOutputBytes",
 		);
 	for (const node of matches.slice(0, limit)) {
-		const bytes = Buffer.byteLength(JSON.stringify(node));
+		const bytes = Buffer.byteLength(JSON.stringify(node)) + 2;
 		if (used + bytes > budget) break;
 		nodes.push(node);
 		used += bytes;
@@ -360,7 +360,7 @@ export function queryEvidenceGraph(
 	let edgeTruncated = false;
 	for (const edge of graph.edges) {
 		if (!selected.has(edge.source) || !selected.has(edge.target)) continue;
-		const bytes = Buffer.byteLength(JSON.stringify(edge));
+		const bytes = Buffer.byteLength(JSON.stringify(edge)) + 2;
 		if (edges.length >= 2000 || used + bytes > budget) {
 			edgeTruncated = true;
 			break;
