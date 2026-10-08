@@ -40,7 +40,9 @@ test("every main PR gets an unsigned installer gate without signing secrets or p
 	expect(source).not.toContain("contents: write");
 	expect(source).toContain("steps.ui_acceptance.outcome == 'success'");
 	expect(source).toContain("validate:advanced --engines");
-	expect(source).toContain("installed-ui-acceptance.ts");
+	expect(source).toContain(
+		"node --experimental-strip-types ../../vscode/scripts/desktop-installed-acceptance.ts",
+	);
 });
 test("PR regression has no path-filter blind spots and one blocking validator", () => {
 	const source = load(".github/workflows/custom-desktop-validation.yml");
@@ -101,4 +103,25 @@ test("pinned packaging installation retries are bounded and exhaustion fails clo
 	expect(workflow).toContain("scripts/install-pinned-windows-tool.test.ps1");
 	expect(workflow).toContain("steps.consolidated.outcome == 'failure'");
 	expect(workflow).toContain("if-no-files-found: error");
+});
+test("installed harness runs under native Node and retains bounded startup evidence", () => {
+	const source = load("apps/vscode/scripts/desktop-installed-acceptance.ts");
+	expect(source).toContain('from "node:child_process"');
+	expect(source).toContain("startAcceptanceProcess");
+	expect(source).toContain("shell: false");
+	expect(source).toContain("windowsHide: false");
+	expect(source).toContain("lastConnectionError");
+	expect(source).toContain("debuggingArgumentObserved");
+	expect(source).toContain("descendantProbeExitCode");
+	expect(source).not.toContain("Bun.spawn");
+	expect(source).not.toContain("Bun.sleep");
+	const workflow = load(".github/workflows/build-custom-windows-installer.yml");
+	expect(workflow).toContain(
+		"node --experimental-strip-types ../../vscode/scripts/desktop-installed-acceptance.ts",
+	);
+	expect(workflow).toContain("steps.ui_acceptance.outcome == 'success'");
+	const runner = load("scripts/validate-advanced-build.mjs");
+	expect(runner).toContain("Test native Node installed process harness");
+	expect(runner).toContain("Test native Bun SQLite memory startup");
+	expect(runner).toContain("Test SQLite database path boundaries");
 });

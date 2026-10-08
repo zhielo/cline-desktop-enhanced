@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { getErrorCode, getErrorMessage } from "../parse/error";
 
 export type SqliteStatement = {
@@ -130,7 +130,11 @@ function wrapNodeDb(db: {
 }
 
 export function loadSqliteDb(filePath: string): SqliteDb {
-	mkdirSync(dirname(filePath), { recursive: true });
+	// In-memory SQLite has no parent directory. In particular, mkdir(".")
+	// can fail with EEXIST under Bun on Windows during real-process startup.
+	if (filePath !== ":memory:") {
+		mkdirSync(dirname(resolve(filePath)), { recursive: true });
+	}
 	const require = createRequire(import.meta.url);
 
 	if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {

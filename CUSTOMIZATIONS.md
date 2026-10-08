@@ -625,6 +625,9 @@ Do not hide a new regression by weakening assertions or making a required custom
 
 ## Confirmed CI blocker repair after advanced integration
 
+- In-memory SQLite (`:memory:`) performs no filesystem setup. Real file databases create their absolute parent path and propagate failures; no `EEXIST`/permission error is swallowed. Node path-boundary regressions and a repeated native Bun memory-database fixture are blocking, preserving real singleton crash/successor tests.
+- Installed WebView acceptance runs its owning TypeScript harness under native Node's type stripping, using shell-free child-process launch with explicit WebView2 environment and visible windows. The CDP port is allocated after isolated Hub startup, immediately before each app launch. Bounded, redacted launch receipts capture startup output, connection failures, and read-only metadata for owned descendants (never raw command lines or foreign-process control). Real Node child fixtures verify environment handoff, failed spawn handling and bounded output. A missing CDP endpoint remains a failure; no simulated/dev webview fallback or production debugger configuration is added.
+
 - Installed WebView acceptance consumes the exact installed app/sidecar paths validated by the preceding hash/startup smoke instead of repeating the quoted registry `InstallLocation` lookup. The UI step requires absolute existing files and its success remains mandatory for verified artifacts.
 - Pinned UPX/Gitleaks installation allows at most three attempts with bounded backoff for transient Chocolatey feed failures; exhausted retries still fail. Owned PowerShell fixtures verify immediate success, recovery and exhaustion without network/install actions. Consolidated evidence upload runs only when its validator started; missing evidence after a started validator remains an error.
 

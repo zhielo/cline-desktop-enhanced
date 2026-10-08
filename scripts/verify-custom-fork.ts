@@ -4,6 +4,12 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"scripts/validate-advanced-build.mjs",markers:["Test real Hub singleton crash recovery", "Test native Node installed process harness", "Test native Bun SQLite memory startup", "Test SQLite database path boundaries"]},
+ {path:"sdk/packages/shared/src/db/sqlite-db.ts",markers:['filePath !== ":memory:"', "dirname(resolve(filePath))"]},
+ {path:"sdk/packages/shared/src/db/sqlite-db-paths.test.ts",markers:["without any mkdir operation", "absolute parent", "propagates a real disk-directory failure"]},
+ {path:"sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs",markers:["native Bun SQLite", 'loadSqliteDb(":memory:")']},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["startAcceptanceProcess", "debuggingArgumentObserved", "descendantProbeExitCode", "redactedLaunchText", "shell: false"]},
+ {path:"scripts/installed-node-process.test.mjs",markers:["exact per-process WebView2 environment", "launch failure is observed", "output retention is bounded"]},
  {path:"scripts/install-pinned-windows-tool.ps1",markers:["$attempt -le 3", '"--version=$Version"', "failed after 3 attempts", "$PSNativeCommandUseErrorActionPreference = $false"]},
  {path:"scripts/install-pinned-windows-tool.test.ps1",markers:["ExpectedFailure $true", "ExpectedDelays @(5, 10)", "no installs"]},
  {path:".github/workflows/build-custom-windows-installer.yml",markers:['"CLINE_TEST_INSTALLED_APP=$($appExe.FullName)" >> $env:GITHUB_ENV', "IsPathFullyQualified", "Test-Path -LiteralPath $path -PathType Leaf", "scripts/install-pinned-windows-tool.test.ps1"]},

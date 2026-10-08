@@ -442,7 +442,7 @@ jobs:
               throw "Verified installed binary path is missing or invalid: $name"
             }
           }
-          bun run scripts/installed-ui-acceptance.ts
+          node --experimental-strip-types ../../vscode/scripts/desktop-installed-acceptance.ts
           if ($LASTEXITCODE -ne 0) { throw 'Installed WebView acceptance failed' }
 
       - name: Upload installed UI acceptance evidence

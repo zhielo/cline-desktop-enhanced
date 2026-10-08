@@ -2,13 +2,48 @@
  * Windows CI only: attach to the installed app's own WebView2.
  * No dev web server, model credential, browser download, or production test bypass.
  */
-import { chromium, type Browser, type Page } from "playwright"
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join, isAbsolute } from "node:path"
-import { createServer } from "node:net"
 
-async function main() {
+import { spawn } from "node:child_process"
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { createServer } from "node:net"
+import { tmpdir } from "node:os"
+import { isAbsolute, join, resolve } from "node:path"
+import { setTimeout as delay } from "node:timers/promises"
+import { fileURLToPath } from "node:url"
+import { type Browser, chromium, type Page } from "playwright"
+
+export function startAcceptanceProcess(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv) {
+	const child = spawn(executable, args, { cwd, env, shell: false, windowsHide: false, stdio: ["ignore", "pipe", "pipe"] })
+	const diagnostics = { stdoutTail: "", stderrTail: "", launchError: "" }
+	const limit = 16 * 1024
+	child.stdout?.setEncoding("utf8")
+	child.stderr?.setEncoding("utf8")
+	child.stdout?.on("data", (data: string) => {
+		diagnostics.stdoutTail = (diagnostics.stdoutTail + data).slice(-limit)
+	})
+	child.stderr?.on("data", (data: string) => {
+		diagnostics.stderrTail = (diagnostics.stderrTail + data).slice(-limit)
+	})
+	const exited = new Promise<number | null>((done) => {
+		child.once("error", (error) => {
+			diagnostics.launchError = error.message
+			done(null)
+		})
+		child.once("exit", (code) => done(code))
+	})
+	const closed = new Promise<void>((done) => child.once("close", () => done()))
+	return { child, exited, closed, diagnostics }
+}
+
+function redactedLaunchText(text: string) {
+	return text
+		.replace(/approval_token=[^&\s]+/gi, "approval_token=[REDACTED]")
+		.replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
+		.replace(/("(?:authToken|token|apiKey|password|secret)"\s*:\s*")[^"]*"/gi, '$1[REDACTED]"')
+		.replace(/\b[0-9a-f]{32,}\b/gi, "[REDACTED]")
+}
+
+export async function main() {
 	const executable = process.env.CLINE_TEST_INSTALLED_APP
 	const sidecar = process.env.CLINE_TEST_INSTALLED_SIDECAR
 	if (process.platform !== "win32" || !executable || !isAbsolute(executable))
@@ -22,10 +57,7 @@ async function main() {
 	await mkdir(workspace)
 	await mkdir(evidence, { recursive: true })
 	await writeFile(join(workspace, "OWNED_FIXTURE.txt"), "Deterministic installer acceptance fixture.\n")
-	const listener = createServer()
-	await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve))
-	const port = (listener.address() as { port: number }).port
-	await new Promise<void>((resolve) => listener.close(() => resolve()))
+	let port = 0
 	const discoveryPath = join(root, "hub.json")
 	const environment = Object.fromEntries(
 		Object.entries(process.env).filter(
@@ -40,28 +72,112 @@ async function main() {
 		CLINE_HUB_DISCOVERY_PATH: discoveryPath,
 		CLINE_RE_PYTHON: process.env.CLINE_RE_PYTHON,
 		WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-profile"),
-		WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`,
 	})
-	let app: ReturnType<typeof Bun.spawn> | undefined
+	let app: ReturnType<typeof startAcceptanceProcess> | undefined
 	let browser: Browser | undefined
 	const stages: string[] = []
+	let launchNumber = 0
+	const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe")
+
+	async function killOwnedProcess(pid: number) {
+		const killer = startAcceptanceProcess(taskkill, ["/PID", String(pid), "/T", "/F"], workspace, environment)
+		await killer.exited
+	}
+
+	async function retainLaunchReceipt(lastConnectionError: string, lastHttpStatus: number | null) {
+		if (!app) return
+		// Read-only diagnostics about this launched app's descendants. Never emit
+		// raw command lines, other processes or environment values.
+		const command = `
+$all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+$ids = @([int]$env:ACCEPTANCE_APP_PID)
+$rows = @()
+for ($depth = 0; $depth -lt 5; $depth++) {
+  $children = @($all | Where-Object { $ids -contains [int]$_.ParentProcessId } | Select-Object -First 64)
+  if (-not $children.Count) { break }
+  foreach ($p in $children) {
+    $rows += [ordered]@{ name = $p.Name; pid = $p.ProcessId; parentPid = $p.ParentProcessId;
+      debuggingArgumentObserved = [bool]($p.CommandLine -like "*--remote-debugging-port=$env:ACCEPTANCE_CDP_PORT*");
+      ownedProfileObserved = [bool]($p.CommandLine -like "*$env:ACCEPTANCE_PROFILE*") }
+  }
+  $ids = @($children | ForEach-Object { [int]$_.ProcessId })
+}
+ConvertTo-Json -InputObject @($rows) -Compress
+`
+		const powershell = join(
+			process.env.SystemRoot ?? "C:\\Windows",
+			"System32",
+			"WindowsPowerShell",
+			"v1.0",
+			"powershell.exe",
+		)
+		const probe = startAcceptanceProcess(powershell, ["-NoProfile", "-NonInteractive", "-Command", command], workspace, {
+			...environment,
+			ACCEPTANCE_APP_PID: String(app.child.pid),
+			ACCEPTANCE_CDP_PORT: String(port),
+			ACCEPTANCE_PROFILE: environment.WEBVIEW2_USER_DATA_FOLDER,
+		})
+		const probeCode = await Promise.race([probe.exited, delay(10_000, null, { ref: false })])
+		if (probeCode === null && probe.child.pid) await killOwnedProcess(probe.child.pid)
+		let descendants: unknown = []
+		try {
+			if (probeCode === 0) descendants = JSON.parse(probe.diagnostics.stdoutTail)
+		} catch {
+			/* Mark probe unavailable below. */
+		}
+		await writeFile(
+			join(evidence, `launch-${launchNumber}.json`),
+			JSON.stringify(
+				{
+					nodeVersion: process.version,
+					pid: app.child.pid,
+					exitCode: app.child.exitCode,
+					debuggingPort: port,
+					lastHttpStatus,
+					lastConnectionError: redactedLaunchText(lastConnectionError),
+					stdoutTail: redactedLaunchText(app.diagnostics.stdoutTail),
+					stderrTail: redactedLaunchText(app.diagnostics.stderrTail),
+					launchError: redactedLaunchText(app.diagnostics.launchError),
+					descendantProbeExitCode: probeCode,
+					descendants,
+				},
+				null,
+				2,
+			),
+		)
+	}
 
 	async function launch() {
-		app = Bun.spawn([executable!], { cwd: workspace, env: environment, stdout: "ignore", stderr: "ignore" })
+		// Allocate only after Hub bootstrap, immediately before app launch. The
+		// isolated Hub must not claim a port reserved and released much earlier.
+		const listener = createServer()
+		await new Promise<void>((done) => listener.listen(0, "127.0.0.1", done))
+		port = (listener.address() as { port: number }).port
+		await new Promise<void>((done) => listener.close(() => done()))
+		environment.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = `--remote-debugging-port=${port} --remote-debugging-address=127.0.0.1`
+		launchNumber++
+		app = startAcceptanceProcess(executable!, [], workspace, environment)
+		let lastConnectionError = ""
+		let lastHttpStatus: number | null = null
 		const deadline = Date.now() + 60_000
 		while (Date.now() < deadline) {
-			if (app.exitCode !== null) throw new Error(`Installed app exited: ${app.exitCode}`)
+			if (app.diagnostics.launchError || app.child.exitCode !== null) {
+				await retainLaunchReceipt(lastConnectionError, lastHttpStatus)
+				throw new Error("Installed app launch failed; inspect the bounded launch receipt")
+			}
 			try {
 				const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) })
+				lastHttpStatus = response.status
 				if (response.ok) {
 					browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 10_000 })
 					break
 				}
-			} catch {
-				/* Bounded cold WebView2 startup. No unbounded retries. */
+			} catch (error) {
+				lastConnectionError = error instanceof Error ? error.message : String(error)
 			}
-			await Bun.sleep(250)
+			await delay(250)
 		}
+		await retainLaunchReceipt(lastConnectionError, lastHttpStatus)
 		if (!browser) throw new Error("Installed WebView2 did not expose its test-only CDP port")
 		const pageDeadline = Date.now() + 30_000
 		let page: Page | undefined
@@ -70,7 +186,7 @@ async function main() {
 				.contexts()
 				.flatMap((context) => context.pages())
 				.find((candidate) => /tauri\.localhost|tauri:\/\/localhost/.test(candidate.url()))
-			if (!page) await Bun.sleep(100)
+			if (!page) await delay(100)
 		}
 		if (!page) throw new Error("Installed app webview page unavailable")
 		page.setDefaultTimeout(30_000)
@@ -130,8 +246,8 @@ async function main() {
 			await browser.close()
 			browser = undefined
 		}
-		if (app && app.exitCode === null) {
-			await Bun.spawn(["taskkill", "/PID", String(app.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" }).exited
+		if (app && app.child.exitCode === null && app.child.pid) {
+			await killOwnedProcess(app.child.pid)
 			await app.exited
 		}
 		app = undefined
@@ -140,17 +256,15 @@ async function main() {
 	try {
 		// Use the installed sidecar to bootstrap an isolated Hub on an OS-assigned port.
 		// A default Hub left by the earlier GUI smoke must never satisfy this fixture.
-		const bootstrap = Bun.spawn([sidecar, "--remote-hub-ensure", "--discovery-path", discoveryPath, "--cwd", workspace], {
-			cwd: workspace,
-			env: environment,
-			stdin: "ignore",
-			stdout: "ignore",
-			stderr: "ignore",
-		})
-		const bootCode = await Promise.race([bootstrap.exited, Bun.sleep(45_000).then(() => null)])
+		const bootstrap = startAcceptanceProcess(
+			sidecar,
+			["--remote-hub-ensure", "--discovery-path", discoveryPath, "--cwd", workspace],
+			workspace,
+			environment,
+		)
+		const bootCode = await Promise.race([bootstrap.exited, delay(45_000, null, { ref: false })])
 		if (bootCode === null) {
-			await Bun.spawn(["taskkill", "/PID", String(bootstrap.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" })
-				.exited
+			if (bootstrap.child.pid) await killOwnedProcess(bootstrap.child.pid)
 			throw new Error("Installed sidecar isolated Hub bootstrap timed out")
 		}
 		if (bootCode !== 0) throw new Error(`Installed sidecar isolated Hub bootstrap failed: ${bootCode}`)
@@ -211,7 +325,8 @@ async function main() {
 		if (
 			!ready.configured ||
 			ready.readiness.status !== "completed" ||
-			ready.interpreter.executable.replaceAll("\\", "/").toLowerCase() !== process.env.CLINE_RE_PYTHON!.replaceAll("\\", "/").toLowerCase()
+			ready.interpreter.executable.replaceAll("\\", "/").toLowerCase() !==
+				process.env.CLINE_RE_PYTHON!.replaceAll("\\", "/").toLowerCase()
 		)
 			throw new Error("Installed application did not validate its configured interpreter")
 		stages.push("installed-interpreter-owned-fixtures-passed")
@@ -257,14 +372,18 @@ async function main() {
 		// This fixture created the discovery directory; no arbitrary user PID is read.
 		try {
 			const hub = JSON.parse(await readFile(discoveryPath, "utf8"))
-			if (Number.isInteger(hub.pid) && hub.pid > 0)
-				await Bun.spawn(["taskkill", "/PID", String(hub.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" }).exited
+			if (Number.isInteger(hub.pid) && hub.pid > 0) await killOwnedProcess(hub.pid)
 		} catch {
 			/* Empty isolated fixture; retain files for runner diagnostics. */
 		}
 	}
 }
-void main().catch((error) => {
-	console.error(error instanceof Error ? error.message : String(error))
-	process.exitCode = 1
-})
+export async function runAcceptance() {
+	try {
+		await main()
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error))
+		process.exitCode = 1
+	}
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) void runAcceptance()

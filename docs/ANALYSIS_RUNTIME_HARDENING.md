@@ -89,6 +89,11 @@ separately and its receipt reviewed when changing IDA adapters.
   It does not claim a live model/tool turn, physical-device test or licensed IDA validation.
   The test-only WebView2 CDP port exists only for the app process launched by the harness;
   normal application configuration is not changed.
+  Native Node launches the installed executable with explicit per-process WebView2 flags;
+  the port is allocated after isolated Hub bootstrap. If CDP startup fails, review the
+  bounded redacted launch receipt and owned-descendant flag observations, not just the
+  timeout. The harness never falls back to a development web page or treats absent CDP
+  as successful acceptance.
 - Private packages remain unsigned and artifact-only; no signing secrets or release write
   permissions are available to this workflow. Version/tag consistency checks remain.
 - Provenance identifies `GITHUB_SHA`. For a PR event this is the tested synthetic merge
