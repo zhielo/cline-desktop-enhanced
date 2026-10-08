@@ -21,18 +21,21 @@ const Manifest = z.object({
 	fixtureVersion: z.string(),
 	files: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)),
 });
+let installedCoreRoot: string | undefined;
 let configuredRoot: string | undefined;
+let selectedPack: "core" | "full" = "core";
 let manifestHash: string | undefined;
 let repairing: Promise<unknown> | undefined;
 export async function verifyRuntime(
 	root: string,
 	expectedManifestHash?: string,
+  requiredFiles: readonly string[] = ["python.exe", "python313._pth"],
 ) {
 	if (!isAbsolute(root) || (await lstat(root)).isSymbolicLink())
 		throw new Error("Absolute non-linked runtime root required");
 	const canonical = await realpath(root);
 	const bytes = await readFile(join(canonical, "runtime-manifest.json"));
-	if (bytes.length > 4 * 1024 * 1024)
+  if (bytes.length > 8 * 1024 * 1024)
 		throw new Error("Runtime manifest budget exceeded");
 	const digest = createHash("sha256").update(bytes).digest("hex");
 	if (expectedManifestHash && digest !== expectedManifestHash)
@@ -42,9 +45,8 @@ export async function verifyRuntime(
 	const manifest = Manifest.parse(JSON.parse(bytes.toString("utf8")));
 	const entries = Object.entries(manifest.files);
 	if (
-		entries.length > 30000 ||
-		!manifest.files["python.exe"] ||
-		!manifest.files["python313._pth"]
+    entries.length > 60000 ||
+    requiredFiles.some((name) => !manifest.files[name])
 	)
 		throw new Error("Invalid runtime file inventory");
 	const expectedPaths = new Set(entries.map(([name]) => name));
@@ -52,7 +54,7 @@ export async function verifyRuntime(
 	let totalBytes = 0;
 	async function inspect(directory: string, prefix = "") {
 		for (const entry of await readdir(directory, { withFileTypes: true })) {
-			if (++walked > 40000)
+      if (++walked > 80000)
 				throw new Error("Runtime directory budget exceeded");
 			if (entry.isSymbolicLink())
 				throw new Error("Runtime directory link forbidden");
@@ -81,7 +83,7 @@ export async function verifyRuntime(
 		const rel = relative(canonical, canonicalPath);
 		const info = await lstat(path);
 		totalBytes += info.size;
-		if (totalBytes > 512 * 1024 * 1024)
+    if (totalBytes > 2 * 1024 * 1024 * 1024)
 			throw new Error("Runtime total byte budget exceeded");
 		if (
 			rel.startsWith(`..${sep}`) ||
@@ -114,7 +116,9 @@ export async function initializeBundledAnalysisRuntime(
 		!(await lstat(join(root, "runtime-manifest.json")).catch(() => undefined))
 	)
 		return;
-	configuredRoot = resolve(root);
+  installedCoreRoot = resolve(root);
+  configuredRoot = installedCoreRoot;
+  selectedPack = "core";
 	// Installed resource integrity is checked once per backend start, not per tool call.
 	let verified: Awaited<ReturnType<typeof verifyRuntime>>;
 	try {
@@ -138,11 +142,51 @@ export async function initializeBundledAnalysisRuntime(
 			"preference.json",
 		);
 		const info = await lstat(preference);
-		if (info.isFile() && !info.isSymbolicLink() && info.size <= 1024)
-			preferBundled =
-				JSON.parse(await readFile(preference, "utf8")).preferBundled === true;
+    if (info.isFile() && !info.isSymbolicLink() && info.size <= 1024) {
+      const saved = JSON.parse(await readFile(preference, "utf8"));
+      preferBundled = saved.preferBundled === true;
+      if (preferBundled && saved.pack === "full") selectedPack = "full";
+    }
 	} catch {
 		/* No saved selection; explicit external developer overrides remain intact. */
+  }
+  if (selectedPack === "full") {
+    try {
+      configuredRoot = join(
+        dirname(installedCoreRoot),
+        "analysis-runtime-full",
+      );
+      verified = await verifyRuntime(configuredRoot);
+      manifestHash = verified.digest;
+      const angrRoot = join(
+        dirname(installedCoreRoot),
+        "analysis-runtime-angr",
+      );
+      const angr = await verifyRuntime(angrRoot);
+      const cache = join(
+        resolveClineDataDir(),
+        "analysis-runtime",
+        `${angr.manifest.runtimeId}-${angr.digest.slice(0, 16)}`,
+      );
+      let chosen = angrRoot;
+      try {
+        await verifyRuntime(cache, angr.digest);
+        chosen = await realpath(cache);
+      } catch {
+        /* Independently verified resources remain the only fallback. */
+      }
+      process.env.CLINE_ANGR_PYTHON = join(chosen, "python.exe");
+      process.env.CLINE_ANGR_RUNTIME_ID = `${angr.manifest.runtimeId}:${angr.digest}`;
+    } catch {
+      process.env.CLINE_RE_PYTHON = join(configuredRoot, "blocked-runtime.exe");
+      configureAnalysisRuntime({
+        source: "bundled",
+        integrity: "failed",
+        reason:
+          "Selected full capability pack failed integrity; choose core rollback or reinstall the trusted installer. Coding remains available.",
+      });
+      return;
+    }
 	}
 	let selectedRoot = configuredRoot;
 	if (preferBundled) {
@@ -169,65 +213,106 @@ export async function initializeBundledAnalysisRuntime(
 		});
 	}
 }
-export async function repairBundledAnalysisRuntime() {
-	if (repairing) return repairing;
+
+export function installedCapabilityPackRoot(pack: "core" | "full" | "angr") {
+  if (!installedCoreRoot) return undefined;
+  return pack === "core"
+    ? installedCoreRoot
+    : join(dirname(installedCoreRoot), `analysis-runtime-${pack}`);
+}
+export async function activateBundledCapabilityPack(pack: "core" | "full") {
+  if (repairing)
+    throw new Error("A capability pack operation is already running");
 	repairing = (async () => {
-		if (!configuredRoot || !manifestHash)
+    const root = installedCapabilityPackRoot(pack);
+    if (!root)
 			throw new Error(
 				"Trusted bundled runtime unavailable. Reinstall the app; no pip or scripts are required.",
 			);
-		const source = await verifyRuntime(configuredRoot, manifestHash);
+    const source = await verifyRuntime(
+      root,
+      pack === selectedPack ? manifestHash : undefined,
+    );
 		const parent = join(resolveClineDataDir(), "analysis-runtime");
 		await mkdir(parent, { recursive: true, mode: 0o700 });
 		if ((await lstat(parent)).isSymbolicLink())
 			throw new Error("Runtime repair directory link forbidden");
+    async function stage(
+      sourceRoot: string,
+      verified: Awaited<ReturnType<typeof verifyRuntime>>,
+    ) {
 		const destination = join(
 			await realpath(parent),
-			`${source.manifest.runtimeId}-${manifestHash.slice(0, 16)}`,
+        `${verified.manifest.runtimeId}-${verified.digest.slice(0, 16)}`,
 		);
 		const temporary = `${destination}.${process.pid}.repair`;
 		await rm(temporary, { recursive: true, force: true });
 		try {
-			await cp(configuredRoot, temporary, {
+        await cp(sourceRoot, temporary, {
 				recursive: true,
 				dereference: false,
 			});
-			await verifyRuntime(temporary, manifestHash);
-			// Keep old runtime files intact while a worker may own them. First repair only;
-			// an existing validated version is reused, never overwritten under active work.
+        await verifyRuntime(temporary, verified.digest);
 			try {
 				await lstat(destination);
-				await verifyRuntime(destination, manifestHash);
+          await verifyRuntime(destination, verified.digest);
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 				await rename(temporary, destination);
+        }
+        return destination;
+      } finally {
+        await rm(temporary, { recursive: true, force: true });
+      }
+    }
+    const destination = await stage(root, source);
+    let angrDestination: string | undefined;
+    let angrIdentity: string | undefined;
+    if (pack === "full") {
+      const angrRoot = installedCapabilityPackRoot("angr");
+      if (!angrRoot) throw new Error("Trusted angr pack unavailable");
+      const angr = await verifyRuntime(angrRoot);
+      angrDestination = await stage(angrRoot, angr);
+      angrIdentity = `${angr.manifest.runtimeId}:${angr.digest}`;
 			}
 			const preference = join(await realpath(parent), "preference.json");
 			const stagedPreference = `${preference}.${process.pid}.tmp`;
 			await writeFile(
 				stagedPreference,
-				JSON.stringify({ schemaVersion: 1, preferBundled: true }),
+      JSON.stringify({ schemaVersion: 1, preferBundled: true, pack }),
 				{ mode: 0o600 },
 			);
 			await rename(stagedPreference, preference);
+    configuredRoot = root;
+    manifestHash = source.digest;
+    selectedPack = pack;
 			process.env.CLINE_RE_PYTHON = join(destination, "python.exe");
-			process.env.CLINE_ANALYSIS_RUNTIME_ID = `${source.manifest.runtimeId}:${manifestHash}`;
+    if (angrDestination) {
+      process.env.CLINE_ANGR_PYTHON = join(angrDestination, "python.exe");
+      process.env.CLINE_ANGR_RUNTIME_ID = angrIdentity;
+    } else {
+      delete process.env.CLINE_ANGR_PYTHON;
+      delete process.env.CLINE_ANGR_RUNTIME_ID;
+    }
+    process.env.CLINE_ANALYSIS_RUNTIME_ID = `${source.manifest.runtimeId}:${source.digest}`;
 			configureAnalysisRuntime({
 				source: "bundled",
 				runtimeId: source.manifest.runtimeId,
-				manifestHash,
+      manifestHash: source.digest,
+      integrity: "verified",
 			});
 			return {
 				status: "repaired",
+      pack,
 				restartRequired: true,
 				message:
 					"Bundled runtime restored and its selection saved without network access. Existing shared Hub workers retain their interpreter until the backend restarts; running tasks were not interrupted.",
 			};
-		} finally {
-			await rm(temporary, { recursive: true, force: true });
-		}
 	})().finally(() => {
 		repairing = undefined;
 	});
 	return repairing;
+}
+export async function repairBundledAnalysisRuntime() {
+  return activateBundledCapabilityPack(selectedPack);
 }

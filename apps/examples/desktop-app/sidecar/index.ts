@@ -1,3 +1,4 @@
+import { loadSetupPreferences } from "./setup-center";
 import { loadResourceProfile } from "./optimization-status";
 import { initializeBundledAnalysisRuntime } from "./bundled-analysis-runtime";
 import { homedir } from "node:os";
@@ -34,8 +35,7 @@ import { BunRuntime, SIDECAR_HOST, SIDECAR_MODE, SIDECAR_PORT } from "./types";
 
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 let activeObservability:
-	| ReturnType<typeof createDesktopObservability>
-	| undefined;
+  ReturnType<typeof createDesktopObservability> | undefined;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 	let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -244,6 +244,7 @@ async function runEntrypoint(): Promise<void> {
 	setClineClientIdentity(DESKTOP_CLIENT_CONTEXT);
 
 	disableCurrentDirectoryExecutableSearch();
+  await loadSetupPreferences();
 	await initializeBundledAnalysisRuntime();
 	loadResourceProfile();
 	// Claim the Hub daemon sentinel here, not in the shared remote helper: its

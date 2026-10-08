@@ -4,6 +4,40 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+  {
+    path: "apps/examples/desktop-app/sidecar/setup-center.ts",
+    markers: [
+      "FULL_ENGINE_IDS",
+      "fullReceiptPassed",
+      "executionVerified === true",
+      "-----BEGIN PUBLIC KEY-----",
+      "deviceSerialSha256",
+      "testLicensedIda",
+      "platformToolsNotices",
+    ],
+  },
+  {
+    path: "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",
+    markers: [
+      "Install all supported components",
+      "acceptedPlatformToolsLicense: true",
+      "Roll back to core",
+      "Package presence alone is not execution proof",
+    ],
+  },
+  {
+    path: "sdk/packages/core/scripts/full-analysis-readiness.test.py",
+    markers: ["executionVerified", "angr", "full"],
+  },
+  {
+    path: "scripts/package-android-platform-tools.ps1",
+    markers: [
+      "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99",
+      "adb.exe",
+      "NOTICE.txt",
+    ],
+  },
+
 	{
 		path: "apps/examples/desktop-app/webview/lib/run-error.ts",
 		markers: ["HUB_RECOVERY_GUIDANCE", "normalizedFailureDetail(description)"],

@@ -83,6 +83,8 @@ const Cell = z
 			"simplify_expression",
 			"compare_expressions",
 			"triton_expression",
+      "unicorn_emulate",
+      "angr_lift",
 			"match_native_functions",
 			"transform_blob",
 			"lift_native_ir",
@@ -339,6 +341,7 @@ export async function runAnalysisNotebook(
 			JSON.stringify({
 				engineIdentity,
 				runtimeIdentity: process.env.CLINE_ANALYSIS_RUNTIME_ID ?? "external",
+        angrRuntimeIdentity: process.env.CLINE_ANGR_RUNTIME_ID ?? "external",
 			}),
 		);
 		const done = new Map<string, z.infer<typeof Receipt>>();

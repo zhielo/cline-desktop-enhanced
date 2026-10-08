@@ -1184,3 +1184,5 @@ export {
 	buildEvidenceGraph,
 	EvidenceGraphSchema,
 } from "./extensions/tools/executors/analysis-evidence-graph";
+
+export { runAdvancedAnalysis } from "./extensions/tools/executors/advanced-analysis";

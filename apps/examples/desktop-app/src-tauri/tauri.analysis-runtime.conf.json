@@ -4,7 +4,10 @@
 			"icons/app/*.png",
 			"icons/app/macos/*.png",
 			"bin/remote-helpers/*",
-			"resources/analysis-runtime/**/*"
+      "resources/analysis-runtime/**/*",
+      "resources/analysis-runtime-full/**/*",
+      "resources/analysis-runtime-angr/**/*",
+      "resources/android-platform-tools/**/*"
 		]
 	}
 }

@@ -21,7 +21,9 @@ afterEach(() => {
 	mock.mockReset();
 	vi.unstubAllEnvs();
 });
-afterEach(async () => { await rm(diagnosticRoot, { recursive: true, force: true }); });
+afterEach(async () => {
+  await rm(diagnosticRoot, { recursive: true, force: true });
+});
 const evidence = {
 	protocol: "cline-advanced-analysis/v1",
 	status: "completed",
@@ -98,7 +100,12 @@ describe("advanced worker contracts", () => {
 	it("retains redacted stderr, exit status and a private receipt on abnormal exit", async () => {
 		vi.stubEnv("OPENAI_API_KEY", "fixture-private-value");
 		mock.mockImplementation(() => {
-			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: 42, kill: vi.fn() });
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        pid: 42,
+        kill: vi.fn(),
+      });
 			process.nextTick(() => {
 				child.stderr.write("Traceback: fixture-private-");
 				child.stderr.write("value failed\n");
@@ -108,15 +115,27 @@ describe("advanced worker contracts", () => {
 		});
 		const result = await runAdvancedAnalysis({ action: "toolchain" });
 		expect(result.status).toBe("failed");
-		expect(result.diagnostics).toMatchObject({ category: "abnormal-exit", pid: 42, exitCode: 7, signal: null });
+    expect(result.diagnostics).toMatchObject({
+      category: "abnormal-exit",
+      pid: 42,
+      exitCode: 7,
+      signal: null,
+    });
 		expect(result.diagnostics?.stderrTail).toContain("[REDACTED]");
 		expect(JSON.stringify(result)).not.toContain("fixture-private-value");
 		expect(result.diagnostics?.receiptPath).toContain("worker-diagnostics");
 	});
 	it("does not accept completed evidence from a nonzero child", async () => {
 		mock.mockImplementation(() => {
-			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined });
-			process.nextTick(() => { child.stdout.write(JSON.stringify(evidence)); child.emit("close", 9, "SIGTERM"); });
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        pid: undefined,
+      });
+      process.nextTick(() => {
+        child.stdout.write(JSON.stringify(evidence));
+        child.emit("close", 9, "SIGTERM");
+      });
 			return child;
 		});
 		const result = await runAdvancedAnalysis({ action: "toolchain" });
@@ -125,21 +144,44 @@ describe("advanced worker contracts", () => {
 		expect(result.diagnostics?.signal).toBe("SIGTERM");
 	});
 	it("reports missing dependency distinctly without inventing an IDA failure", async () => {
-		fake(JSON.stringify({ ...evidence, status: "blocked", evidence: { reason: "Missing optional engine: lief" } }));
-		expect((await runAdvancedAnalysis({ action: "toolchain" })).diagnostics?.category).toBe("missing-dependency");
+    fake(
+      JSON.stringify({
+        ...evidence,
+        status: "blocked",
+        evidence: { reason: "Missing optional engine: lief" },
+      }),
+    );
+    expect(
+      (await runAdvancedAnalysis({ action: "toolchain" })).diagnostics
+        ?.category,
+    ).toBe("missing-dependency");
 	});
 	it("reports interpreter launch failure with diagnostics", async () => {
 		mock.mockImplementation(() => {
-			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined });
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        pid: undefined,
+      });
 			process.nextTick(() => child.emit("error", new Error("ENOENT")));
 			return child;
 		});
-		expect((await runAdvancedAnalysis({ action: "toolchain" })).diagnostics?.category).toBe("launch-failure");
+    expect(
+      (await runAdvancedAnalysis({ action: "toolchain" })).diagnostics
+        ?.category,
+    ).toBe("launch-failure");
 	});
 	it("bounds stderr after streaming redaction", async () => {
 		mock.mockImplementation(() => {
-			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined });
-			process.nextTick(() => { child.stderr.write("x".repeat(100_000)); child.emit("close", 1); });
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        pid: undefined,
+      });
+      process.nextTick(() => {
+        child.stderr.write("x".repeat(100_000));
+        child.emit("close", 1);
+      });
 			return child;
 		});
 		const result = await runAdvancedAnalysis({ action: "toolchain" });
@@ -149,8 +191,15 @@ describe("advanced worker contracts", () => {
 	it("reports timeout separately and requests termination", async () => {
 		const kill = vi.fn();
 		mock.mockImplementation(() => {
-			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined, kill });
-			kill.mockImplementation(() => { process.nextTick(() => child.emit("close", null, "SIGKILL")); });
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        pid: undefined,
+        kill,
+      });
+      kill.mockImplementation(() => {
+        process.nextTick(() => child.emit("close", null, "SIGKILL"));
+      });
 			setTimeout(() => child.emit("close", null, "SIGKILL"), 30);
 			return child;
 		});
@@ -296,4 +345,16 @@ describe("known-key host decryption boundary", () => {
 		).rejects.toThrow("Plaintext export is not enabled");
 		expect(mock).not.toHaveBeenCalled();
 	});
+});
+
+it("uses separate absolute angr interpreter without target execution", async () => {
+  vi.stubEnv("CLINE_RE_PYTHON", join(diagnosticRoot, "core.exe"));
+  vi.stubEnv("CLINE_ANGR_PYTHON", join(diagnosticRoot, "angr.exe"));
+  fake(JSON.stringify(evidence));
+  await runAdvancedAnalysis({ action: "angr_readiness" });
+  expect(mock.mock.calls[0][0]).toBe(join(diagnosticRoot, "angr.exe"));
+  vi.stubEnv("CLINE_ANGR_PYTHON", "relative.exe");
+  await expect(
+    runAdvancedAnalysis({ action: "angr_readiness" }),
+  ).rejects.toThrow("absolute interpreter");
 });

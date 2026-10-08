@@ -100,3 +100,7 @@ apps/examples/desktop-app/.cursor/settings.json
 
 # Generated private Windows analysis runtime
 apps/examples/desktop-app/src-tauri/resources/analysis-runtime/
+
+apps/examples/desktop-app/src-tauri/resources/analysis-runtime-full/
+apps/examples/desktop-app/src-tauri/resources/analysis-runtime-angr/
+apps/examples/desktop-app/src-tauri/resources/android-platform-tools/

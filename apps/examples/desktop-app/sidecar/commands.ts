@@ -1,4 +1,17 @@
 import {
+  getSetupCenterStatus,
+  platformToolsNotices,
+  saveSetupPreferences,
+  detectInstalledTools,
+  installFullCapabilityPack,
+  testFullCapabilityPack,
+  rollbackToCorePack,
+  listSetupDevices,
+  testSetupDevice,
+  testLicensedIda,
+  testSetupWorker,
+} from "./setup-center";
+import {
 	getProjectOutputLocation,
 	ensureProjectOutputDirectories,
 } from "./project-output";
@@ -4195,6 +4208,40 @@ export async function handleCommand(
 		}
 		return optimizationStatus();
 	}
+  if (command.startsWith("setup_center_")) {
+    if (getCommandRuntimeBinding(ctx, args).kind !== "local")
+      throw new Error("Setup Center is local-only");
+    if (command === "setup_center_status") return await getSetupCenterStatus();
+    if (command === "setup_center_licenses")
+      return await platformToolsNotices();
+    if (command === "setup_center_detect") return await detectInstalledTools();
+    if (command === "setup_center_devices") return await listSetupDevices();
+    if (args?.confirmed !== true)
+      throw new Error("Explicit Setup Center confirmation required");
+    if (command === "setup_center_save")
+      return await saveSetupPreferences(args.preferences);
+    if (command === "setup_center_install_full") {
+      if (args.acceptedPlatformToolsLicense !== true)
+        throw new Error(
+          "Review and accept bundled platform-tools notices before installation",
+        );
+      return await installFullCapabilityPack();
+    }
+    if (command === "setup_center_test_full")
+      return await testFullCapabilityPack();
+    if (command === "setup_center_rollback_core")
+      return await rollbackToCorePack();
+    if (command === "setup_center_test_worker") return await testSetupWorker();
+    if (command === "setup_center_test_device") return await testSetupDevice();
+    if (command === "setup_center_test_ida") {
+      if (args.authorizedLicense !== true)
+        throw new Error(
+          "Confirm your authorized IDA/Hex-Rays license before the owned fixture test",
+        );
+      return await testLicensedIda();
+    }
+    throw new Error("Unknown Setup Center operation");
+  }
 	if (command === "repair_analysis_runtime") {
 		if (
 			getCommandRuntimeBinding(ctx, args).kind !== "local" ||
@@ -5101,10 +5148,7 @@ export async function handleCommand(
 					taskId: String(args?.taskId ?? "").trim(),
 					agentId: String(args?.agentId ?? "").trim(),
 					status: String(args?.status ?? "") as
-						| "completed"
-						| "failed"
-						| "blocked"
-						| "cancelled",
+            "completed" | "failed" | "blocked" | "cancelled",
 					resultSummary:
 						typeof args?.resultSummary === "string"
 							? args.resultSummary

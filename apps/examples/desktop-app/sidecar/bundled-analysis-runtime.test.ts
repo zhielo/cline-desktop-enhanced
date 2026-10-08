@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, writeFile, rm, symlink, mkdir } from "node:fs/promises";
+import {
+  mkdtemp,
+  writeFile,
+  readFile,
+  cp,
+  rm,
+  symlink,
+  mkdir,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, it, expect, vi } from "vitest";
@@ -7,6 +15,7 @@ import {
 	verifyRuntime,
 	initializeBundledAnalysisRuntime,
 	repairBundledAnalysisRuntime,
+  activateBundledCapabilityPack,
 } from "./bundled-analysis-runtime";
 const roots: string[] = [];
 afterEach(async () => {
@@ -135,4 +144,43 @@ it("rejects unsafe runtime identifiers even with valid owned file hashes", async
 		);
 		await expect(verifyRuntime(f.root)).rejects.toThrow();
 	}
+});
+
+it("activates separate immutable full/angr packs, persists and rolls back without deleting old packs", async () => {
+  const f = await fixture();
+  const full = join(f.root, "..", "analysis-runtime-full"),
+    angr = join(f.root, "..", "analysis-runtime-angr");
+  // Unique parent avoids conflicting shared temporary paths across tests.
+  const parent = await mkdtemp(join(tmpdir(), "owned-packs-"));
+  roots.push(parent);
+  const core = join(parent, "analysis-runtime");
+  await cp(f.root, core, { recursive: true });
+  for (const pack of ["full", "angr"]) {
+    const dir = join(parent, `analysis-runtime-${pack}`);
+    await cp(f.root, dir, { recursive: true });
+    await writeFile(
+      join(dir, "runtime-manifest.json"),
+      JSON.stringify({
+        ...f.manifest,
+        runtimeId: `cpython-3.13.12-${pack}-owned`,
+      }),
+    );
+  }
+  const data = join(parent, "private");
+  vi.stubEnv("CLINE_DATA_DIR", data);
+  vi.stubEnv("CLINE_BUNDLED_ANALYSIS_ROOT", core);
+  vi.stubEnv("CLINE_RE_PYTHON", "");
+  await initializeBundledAnalysisRuntime("win32");
+  await activateBundledCapabilityPack("full");
+  const selected = process.env.CLINE_RE_PYTHON;
+  const selectedAngr = process.env.CLINE_ANGR_PYTHON;
+  expect(selectedAngr).toContain("angr-owned");
+  await initializeBundledAnalysisRuntime("win32");
+  expect(process.env.CLINE_RE_PYTHON).toBe(selected);
+  expect(process.env.CLINE_ANGR_PYTHON).toBe(selectedAngr);
+  await activateBundledCapabilityPack("core");
+  expect(process.env.CLINE_ANGR_PYTHON).toBeUndefined();
+  expect(await readFile(selected!, "utf8")).toBe(
+    "owned fixture not executable",
+  );
 });

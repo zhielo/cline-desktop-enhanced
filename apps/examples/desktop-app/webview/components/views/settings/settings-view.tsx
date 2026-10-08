@@ -1,3 +1,5 @@
+import dynamic from "next/dynamic";
+const SetupCenter = dynamic(() => import("./setup-center-view").then(m => m.SetupCenter));
 import { providerOffersModelTool } from "@cline/llms/browser";
 import { Switch } from "@cline/ui";
 import { Minus, Plus, RotateCcw } from "lucide-react";
@@ -76,10 +78,7 @@ import { AnalysisEnvironmentView } from "./analysis-environment-view";
 import { AddProviderContent, type AddProviderPayload } from "./add-provider";
 import { ChannelsContent } from "./channels-view";
 import { CustomizeView } from "./customize-view";
-import {
-	FunctionsView,
-	type FunctionLaunchRequest,
-} from "./functions-view";
+import { FunctionsView, type FunctionLaunchRequest } from "./functions-view";
 import { ImportContent } from "./import-view";
 import { NotificationSettings } from "./notification-settings";
 import {
@@ -104,10 +103,7 @@ type GlobalSettingsResponse = {
 	telemetryOptOut: boolean;
 	autoUpdateEnabled: boolean;
 	permissionProfile?:
-		| "read-only"
-		| "workspace"
-		| "workspace-network"
-		| "full-access";
+    "read-only" | "workspace" | "workspace-network" | "full-access";
 	tools?: Partial<Record<"web_search", { enabled: boolean }>>;
 };
 
@@ -711,6 +707,8 @@ export function SettingsView({
 			<RemoteEnvironmentsContent />
 		) : activeNav === "Diagnostics" ? (
 			<DiagnosticsContent />
+    ) : activeNav === "Setup Center" ? (
+      <SetupCenter />
 		) : activeNav === "Analysis environment" ? (
 			<AnalysisEnvironmentView />
 		) : activeNav === "Account" ? (

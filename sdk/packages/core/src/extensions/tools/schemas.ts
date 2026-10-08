@@ -123,6 +123,8 @@ export const ReverseEngineeringInputSchema = z.object({
 			"compare_expressions",
 			"transform_blob",
 			"triton_expression",
+      "unicorn_emulate",
+      "angr_lift",
 			"match_native_functions",
 			"trace_native_region",
 			"trace_input_influence",
@@ -445,7 +447,7 @@ export const LiveDebuggerInputSchema = z.object({
 	target: z.string().min(1).optional(),
 	args: z.array(z.string().max(32_768)).max(256).optional(),
 	pid: z.number().int().positive().optional(),
- pid_start_token:z.string().min(1).max(300).optional(),
+  pid_start_token: z.string().min(1).max(300).optional(),
 	breakpoint: z
 		.string()
 		.min(1)
@@ -504,10 +506,20 @@ export const AndroidDeviceInputSchema = z.object({
 		"bugreport",
 		"processes",
 	]),
- debug_report_paths:z.array(z.string().regex(/^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/)).min(1).max(6).optional(),
- use_root:z.boolean().optional(),
- confirm_sensitive_reports:z.boolean().optional(),
- acknowledge_root_read:z.boolean().optional(),
+  debug_report_paths: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/,
+        ),
+    )
+    .min(1)
+    .max(6)
+    .optional(),
+  use_root: z.boolean().optional(),
+  confirm_sensitive_reports: z.boolean().optional(),
+  acknowledge_root_read: z.boolean().optional(),
 
 	device_serial: z.string().min(1).optional(),
 	process_id: z.number().int().positive().optional(),

@@ -3,6 +3,9 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 const root = resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("Runtime root required");
+const pack = process.argv[3] ?? "core";
+if (!["core", "full", "angr"].includes(pack))
+  throw new Error("Unknown fixed runtime pack");
 const files: Record<string, string> = {};
 async function walk(directory: string, prefix = "") {
 	for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -36,7 +39,11 @@ for (const entry of await readdir(join(root, "Lib/site-packages"))) {
 }
 const manifest = {
 	schemaVersion: 1,
-	runtimeId: "cpython-3.13.12-windows-x64-v1",
+  runtimeId:
+    pack === "core"
+      ? "cpython-3.13.12-windows-x64-v1"
+      : `cpython-3.13.12-windows-x64-${pack}-v1`,
+  pack,
 	pythonVersion: "3.13.12",
 	platform: "win32",
 	archiveSha256:
