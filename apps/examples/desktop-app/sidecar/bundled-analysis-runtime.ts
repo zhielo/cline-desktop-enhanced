@@ -153,7 +153,7 @@ export async function initializeBundledAnalysisRuntime(
 		);
 		try {
 			await verifyRuntime(cached, verified.digest);
-			selectedRoot = cached;
+			selectedRoot = await realpath(cached);
 		} catch {
 			/* Only the independently verified installed resources are a safe fallback. */
 		}

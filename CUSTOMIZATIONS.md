@@ -676,3 +676,5 @@ Do not hide a new regression by weakening assertions or making a required custom
 - Model capabilities/context and optional cost ceilings are hard eligibility filters. Static notebook cache identity excludes volatile diagnostics and includes packaged runtime identity. Graph retrieval is byte-budgeted with provenance. Engineering exposes bounded import-impact and non-executing test candidates.
 - Performance budget policy and three installed startup samples are delivered without inventing a controlled baseline or claiming measured speed gains. Signed-update metadata checks are delivered with activation/publication disabled; owner signing and tested rollback remain required.
 - See `docs/INTEGRATED_ENHANCEMENT_DELIVERY.md` for exact implementation, acceptance and remaining boundaries. Preserve every earlier customization and the unsigned artifact-only workflow.
+
+Bundled repair selection resolves the verified cache to its canonical Windows path so long and 8.3 directory aliases do not change the selected interpreter across restarts.
