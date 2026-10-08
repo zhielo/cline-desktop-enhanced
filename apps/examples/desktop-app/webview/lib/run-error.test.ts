@@ -150,3 +150,16 @@ it("gives preserved-history guidance for 1006 without auth guesses or automatic 
 	expect(text).toContain("not automatically replayed");
 	expect(text).not.toContain("API Providers");
 });
+
+it("retains canonical close text and strict reconciliation identity when adding guidance", () => {
+	const original = "Hub connection closed (code=1006, reason=Connection ended)";
+	const text = formatRunError(original);
+	expect(text).toContain(original);
+	expect(isTransientHubDisconnect(text)).toBe(true);
+	expect(formatRunError(text)).toBe(text);
+	expect(
+		isTransientHubDisconnect(
+			formatRunError("Hub connection closed (code=1008, reason=Unauthorized)"),
+		),
+	).toBe(false);
+});

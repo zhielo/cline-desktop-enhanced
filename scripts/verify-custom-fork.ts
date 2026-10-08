@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/webview/lib/run-error.ts",markers:["HUB_RECOVERY_GUIDANCE", "normalizedFailureDetail(description)"]},
  {path:"scripts/package-analysis-runtime.ps1",markers:["76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0","python313._pth","Bundled execution corpus failed"]},
  {path:"apps/examples/desktop-app/sidecar/bundled-analysis-runtime.ts",markers:["verifyRuntime","repairBundledAnalysisRuntime","manifest changed","coding remains available"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/resource-governor.ts",markers:["class ResourceGovernor","Resource admission timed out","hardMemoryEnforcement: false"]},
