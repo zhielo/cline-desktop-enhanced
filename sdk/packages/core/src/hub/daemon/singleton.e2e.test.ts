@@ -68,6 +68,7 @@ function spawnFixture(
 	child: ChildProcess;
 	exit: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 	stderr: () => string;
+	closed: Promise<unknown>;
 } {
 	const entryPath = fileURLToPath(
 		new URL("./__fixtures__/singleton-daemon.ts", import.meta.url),
@@ -95,6 +96,7 @@ function spawnFixture(
 	child.stderr?.on("data", (chunk: string) => {
 		stderr += chunk;
 	});
+	const closed = once(child, "close");
 	const exit = once(child, "exit").then(([code, signal]) => {
 		children.delete(child);
 		return {
@@ -102,12 +104,13 @@ function spawnFixture(
 			signal: signal as NodeJS.Signals | null,
 		};
 	});
-	return { child, exit, stderr: () => stderr };
+	return { child, exit, stderr: () => stderr, closed };
 }
 
 async function waitForDiscovery(
 	discoveryPath: string,
 	childExit: Promise<{ code: number | null; signal: NodeJS.Signals | null }>,
+	childClosed: Promise<unknown>,
 	readStderr: () => string,
 	/** A SIGKILLed predecessor leaves its record behind; skip that pid. */
 	notPid?: number,
@@ -141,6 +144,7 @@ async function waitForDiscovery(
 			delay(25).then(() => undefined),
 		]);
 		if (earlyExit) {
+			await Promise.race([childClosed, delay(5_000)]);
 			throw new Error(
 				`Hub daemon exited before readiness (${JSON.stringify(earlyExit.result)}): ${readStderr()}`,
 			);
@@ -160,10 +164,11 @@ async function startDaemon(existing?: {
 	tempDirs.add(dataDir);
 	const discoveryPath =
 		existing?.discoveryPath ?? join(dataDir, "hub-discovery.json");
-	const { child, exit, stderr } = spawnFixture(dataDir, discoveryPath);
+	const { child, exit, stderr, closed } = spawnFixture(dataDir, discoveryPath);
 	const discovery = await waitForDiscovery(
 		discoveryPath,
 		exit,
+		closed,
 		stderr,
 		existing?.notPid,
 	);

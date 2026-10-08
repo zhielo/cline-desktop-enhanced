@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { startAcceptanceProcess } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
+import {
+	ownedDescendantMetadata,
+	startAcceptanceProcess,
+	verifyRestartInstructions,
+} from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("native Node child receives exact per-process WebView2 environment and reports exit/output", async () => {
 	const profile = "owned fixture profile with spaces";
@@ -66,4 +70,80 @@ test("native Node process output retention is bounded", async () => {
 	await child.closed;
 	assert.equal(child.diagnostics.stdoutTail.length, 16384);
 	assert.equal(child.diagnostics.stderrTail.length, 16384);
+});
+
+test("restart assertion waits for enabled hydrated UI and still rejects data loss", async () => {
+	let ready = false;
+	const instructions = {
+		async click(options) {
+			assert.deepEqual(options, { trial: true, timeout: 30000 });
+			ready = true;
+		},
+		async inputValue() {
+			assert.equal(ready, true);
+			return "persisted";
+		},
+	};
+	await verifyRestartInstructions(instructions, "persisted");
+	await assert.rejects(
+		verifyRestartInstructions(instructions, "lost"),
+		/did not survive restart/,
+	);
+	await assert.rejects(
+		verifyRestartInstructions(
+			{
+				async click() {
+					throw new Error("not hydrated");
+				},
+			},
+			"persisted",
+		),
+		/not hydrated/,
+	);
+});
+test("descendant diagnostics reject recycled parent PIDs and unrelated processes", () => {
+	const row = (pid, parentPid, createdAt) => ({
+		name: "owned",
+		pid,
+		parentPid,
+		createdAt,
+		debuggingArgumentObserved: false,
+		ownedProfileObserved: false,
+	});
+	const snapshot = [
+		row(40, 1, "2026-10-08T12:00:00Z"),
+		row(41, 40, "2026-10-08T12:00:01Z"),
+		row(42, 41, "2026-10-08T12:00:02Z"),
+		row(9, 40, "2026-10-07T00:00:00Z"),
+		row(10, 9, "2026-10-08T12:01:00Z"),
+		row(43, 41, "invalid"),
+		row(90, 1, "2026-10-08T12:01:00Z"),
+	];
+	assert.deepEqual(
+		ownedDescendantMetadata(snapshot, 40, "2026-10-08T12:00:00Z", "owned").map(
+			(p) => p.pid,
+		),
+		[41, 42],
+	);
+	assert.deepEqual(
+		ownedDescendantMetadata(snapshot, 40, "2026-10-09T12:00:00Z", "owned"),
+		[],
+	);
+	assert.deepEqual(
+		ownedDescendantMetadata(snapshot, 40, "2026-10-08T12:00:00Z", "foreign"),
+		[],
+	);
+	assert.deepEqual(
+		ownedDescendantMetadata(snapshot, 999, "2026-10-08T12:00:00Z", "owned"),
+		[],
+	);
+	assert.deepEqual(
+		ownedDescendantMetadata(
+			[row(40, 1, "invalid")],
+			40,
+			"2026-10-08T12:00:00Z",
+			"owned",
+		),
+		[],
+	);
 });

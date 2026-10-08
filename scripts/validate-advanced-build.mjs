@@ -74,7 +74,7 @@ async function main() {
   ];
   const checks = [
     job("Test real Hub singleton crash recovery", ["x", "vitest", "run", "src/hub/daemon/singleton.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
-    { ...job("Test native Node installed process harness", ["--experimental-strip-types", "--test", "scripts/installed-node-process.test.mjs"]), executable: "node" },
+    { ...job("Test native Node installed process harness", ["--experimental-strip-types", "--test", "scripts/installed-node-process.test.mjs", "scripts/e2e-dependency-install.test.mjs"]), executable: "node" },
     job("Test native Bun SQLite memory startup", ["test", "sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs"]),
     job("Test SQLite database path boundaries", ["x", "vitest", "run", "sdk/packages/shared/src/db/sqlite-db-paths.test.ts", "--config", "vitest.config.mts"]),
     job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),

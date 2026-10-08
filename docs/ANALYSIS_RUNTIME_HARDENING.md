@@ -89,6 +89,10 @@ separately and its receipt reviewed when changing IDA adapters.
   It does not claim a live model/tool turn, physical-device test or licensed IDA validation.
   The test-only WebView2 CDP port exists only for the app process launched by the harness;
   normal application configuration is not changed.
+  Restart acceptance checks the authenticated persisted backend value, then waits for
+  the disabled settings control to finish hydration before comparing its exact UI value.
+  Wrong backend/UI data or failed hydration still fail. Diagnostic parent-child metadata
+  is creation-time checked so recycled Windows parent PIDs do not imply ownership.
   Native Node launches the installed executable with explicit per-process WebView2 flags;
   the port is allocated after isolated Hub bootstrap. If CDP startup fails, review the
   bounded redacted launch receipt and owned-descendant flag observations, not just the

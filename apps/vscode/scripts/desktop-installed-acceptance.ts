@@ -7,12 +7,13 @@ import { spawn } from "node:child_process"
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
-import { isAbsolute, join, resolve } from "node:path"
+import { basename, isAbsolute, join, resolve } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
-import { type Browser, chromium, type Page } from "playwright"
+import { type Browser, chromium, type Locator, type Page } from "playwright"
 
 export function startAcceptanceProcess(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv) {
+	const startedAt = new Date().toISOString()
 	const child = spawn(executable, args, { cwd, env, shell: false, windowsHide: false, stdio: ["ignore", "pipe", "pipe"] })
 	const diagnostics = { stdoutTail: "", stderrTail: "", launchError: "" }
 	const limit = 16 * 1024
@@ -32,7 +33,55 @@ export function startAcceptanceProcess(executable: string, args: string[], cwd: 
 		child.once("exit", (code) => done(code))
 	})
 	const closed = new Promise<void>((done) => child.once("close", () => done()))
-	return { child, exited, closed, diagnostics }
+	return { child, exited, closed, diagnostics, startedAt }
+}
+
+// A settings textbox is disabled until the asynchronous persisted-settings read settles.
+// Trial click waits for that actual UI readiness, not an arbitrary sleep or value retry.
+export async function verifyRestartInstructions(instructions: Locator, expected: string) {
+	await instructions.click({ trial: true, timeout: 30_000 })
+	if ((await instructions.inputValue()) !== expected) throw new Error("Installed UI setting did not survive restart")
+}
+
+type ProcessMetadata = {
+	name: string
+	pid: number
+	parentPid: number
+	createdAt: string
+	debuggingArgumentObserved: boolean
+	ownedProfileObserved: boolean
+}
+export function ownedDescendantMetadata(snapshot: ProcessMetadata[], rootPid: number, startedAt: string, rootName: string) {
+	const root = snapshot.find((p) => p.pid === rootPid)
+	if (
+		!root ||
+		root.name.toLowerCase() !== rootName.toLowerCase() ||
+		!Number.isFinite(Date.parse(root.createdAt)) ||
+		!Number.isFinite(Date.parse(startedAt)) ||
+		Date.parse(root.createdAt) < Date.parse(startedAt) - 1000
+	)
+		return []
+	const seen = new Set([rootPid])
+	let parents = [root]
+	const owned: ProcessMetadata[] = []
+	for (let depth = 0; depth < 5 && parents.length; depth++) {
+		const children = snapshot.filter(
+			(p) =>
+				!seen.has(p.pid) &&
+				parents.some(
+					(parent) =>
+						p.parentPid === parent.pid &&
+						Number.isFinite(Date.parse(p.createdAt)) &&
+						Date.parse(p.createdAt) >= Date.parse(parent.createdAt),
+				),
+		)
+		for (const child of children) {
+			seen.add(child.pid)
+			owned.push(child)
+		}
+		parents = children
+	}
+	return owned.slice(0, 64)
 }
 
 function redactedLaunchText(text: string) {
@@ -91,18 +140,16 @@ export async function main() {
 		// raw command lines, other processes or environment values.
 		const command = `
 $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
-$ids = @([int]$env:ACCEPTANCE_APP_PID)
-$rows = @()
-for ($depth = 0; $depth -lt 5; $depth++) {
-  $children = @($all | Where-Object { $ids -contains [int]$_.ParentProcessId } | Select-Object -First 64)
-  if (-not $children.Count) { break }
-  foreach ($p in $children) {
-    $rows += [ordered]@{ name = $p.Name; pid = $p.ProcessId; parentPid = $p.ParentProcessId;
-      debuggingArgumentObserved = [bool]($p.CommandLine -like "*--remote-debugging-port=$env:ACCEPTANCE_CDP_PORT*");
-      ownedProfileObserved = [bool]($p.CommandLine -like "*$env:ACCEPTANCE_PROFILE*") }
-  }
-  $ids = @($children | ForEach-Object { [int]$_.ProcessId })
-}
+# Only bounded candidate metadata is transferred; never command lines.
+# Parent PID alone is not ownership: Windows can reuse an old process PID.
+$candidates = @($all | Where-Object { $_.ProcessId -eq [int]$env:ACCEPTANCE_APP_PID })
+$candidates += @($all | Where-Object { $_.Name -in @('msedgewebview2.exe', 'code-sidecar.exe', 'conhost.exe') -and $_.ProcessId -ne [int]$env:ACCEPTANCE_APP_PID } | Select-Object -First 32)
+$rows = @($candidates | ForEach-Object {
+  [ordered]@{ name = $_.Name; pid = $_.ProcessId; parentPid = $_.ParentProcessId;
+    createdAt = $_.CreationDate.ToUniversalTime().ToString('o');
+    debuggingArgumentObserved = [bool]($_.CommandLine -like "*--remote-debugging-port=$env:ACCEPTANCE_CDP_PORT*");
+    ownedProfileObserved = [bool]($_.CommandLine -like "*$env:ACCEPTANCE_PROFILE*") }
+})
 ConvertTo-Json -InputObject @($rows) -Compress
 `
 		const powershell = join(
@@ -122,7 +169,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		if (probeCode === null && probe.child.pid) await killOwnedProcess(probe.child.pid)
 		let descendants: unknown = []
 		try {
-			if (probeCode === 0) descendants = JSON.parse(probe.diagnostics.stdoutTail)
+			if (probeCode === 0)
+				descendants = ownedDescendantMetadata(
+					JSON.parse(probe.diagnostics.stdoutTail),
+					app.child.pid!,
+					app.startedAt,
+					basename(executable!),
+				)
 		} catch {
 			/* Mark probe unavailable below. */
 		}
@@ -140,6 +193,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 					stderrTail: redactedLaunchText(app.diagnostics.stderrTail),
 					launchError: redactedLaunchText(app.diagnostics.launchError),
 					descendantProbeExitCode: probeCode,
+					descendantCandidateLimit: 32,
 					descendants,
 				},
 				null,
@@ -335,11 +389,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		await stop()
 		page = await launch()
 		await settings(page, "General")
-		if (
-			(await page.getByRole("textbox", { name: "Custom AI instructions", exact: true }).inputValue()) !==
-			"Installer acceptance: preserve this owned local setting."
+		const persisted = await rpc<{ customAiInstructions?: string }>(page, "get_desktop_settings")
+		if (persisted.customAiInstructions !== "Installer acceptance: preserve this owned local setting.")
+			throw new Error("Installed backend setting did not survive restart")
+		await verifyRestartInstructions(
+			page.getByRole("textbox", { name: "Custom AI instructions", exact: true }),
+			"Installer acceptance: preserve this owned local setting.",
 		)
-			throw new Error("Installed UI setting did not survive restart")
 		const sessions = await rpc<Array<{ sessionId: string }>>(page, "list_chat_sessions")
 		if (!sessions.some((item) => item.sessionId === session.sessionId))
 			throw new Error("Owned session did not survive installed-app restart")

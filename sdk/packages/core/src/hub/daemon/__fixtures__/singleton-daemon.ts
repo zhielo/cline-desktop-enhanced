@@ -35,7 +35,7 @@ const sessionHost = {
 	abort: unusedRuntimeMethod,
 	stopSession: unusedRuntimeMethod,
 	getSession: unusedRuntimeMethod,
-	listSessions: unusedRuntimeMethod,
+	listSessions: async () => [],
 	deleteSession: unusedRuntimeMethod,
 	updateSession: unusedRuntimeMethod,
 	updateSessionCompactionState: unusedRuntimeMethod,
@@ -60,6 +60,7 @@ try {
 		sessionHost,
 		runtimeHandlers,
 		scheduleOptions: { dbPath: join(dataDir, "schedules.db") },
+		sessionSearchOptions: { dbPath: join(dataDir, "session-search.db") },
 		eventLog: { dbPath: join(dataDir, "hub-events.db") },
 		runQueue: { dbPath: join(dataDir, "hub-runs.db") },
 	});
@@ -69,7 +70,14 @@ try {
 		process.stderr.write("[singleton-fixture] lock held by a live hub\n");
 		process.exit(HUB_LOCK_HELD_EXIT_CODE);
 	}
-	throw error;
+	// Drain startup diagnostics before exit so the parent does not lose the actual cause.
+	await new Promise<void>((done) =>
+		process.stderr.write(
+			`[singleton-fixture] startup failed: ${error instanceof Error ? error.stack : String(error)}\n`,
+			() => done(),
+		),
+	);
+	process.exit(1);
 }
 
 await new Promise<void>(() => undefined);

@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/vscode/src/test/e2e/utils/build.mjs",markers:["require.resolve(\"playwright/package.json\")", "cancelSignal: signal", "clearTimeout(timer)", "pending:"]},
+ {path:"scripts/e2e-dependency-install.test.mjs",markers:["requires both installations", "cancels the child signal", "cannot become successful acceptance"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["verifyRestartInstructions", "trial: true", "Installed backend setting did not survive restart", "Date.parse(p.createdAt) >= Date.parse(parent.createdAt)"]},
+ {path:"apps/examples/desktop-app/sidecar/windows-job-launcher.test.ts",markers:["runNativeFixture", "timeout: 60000", "killed: failure.killed"]},
+ {path:"sdk/packages/core/src/hub/daemon/__fixtures__/singleton-daemon.ts",markers:["listSessions: async () => []", "sessionSearchOptions:", "startup failed:"]},
  {path:"apps/examples/desktop-app/src-tauri/src/installed_webview_launch.rs",markers:['enabled != Some("1")', "--remote-debugging-address=127.0.0.1", "data_directory.is_absolute()", "normal_launch_does_not_apply_debugging_options"]},
  {path:"apps/examples/desktop-app/src-tauri/src/main.rs",markers:['std::env::var("CLINE_INSTALLED_ACCEPTANCE")', "window.additional_browser_args = Some", "window.data_directory = Some", ".build(context)"]},
  {path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate opt-in native WebView launch settings", "rustc --edition=2021 --test", "Native WebView launch option fixtures failed"]},

@@ -9,6 +9,36 @@ import {
 	windowsJobInvocation,
 } from "./windows-job-launcher";
 
+// CI recorded a 30,265 ms native invocation timeout, not an argv assertion failure.
+// The previous log did not retain the exact internal startup phase.
+// A bounded 60s startup guard retains real native execution; errors expose exit/kill details.
+async function runNativeFixture(
+	executable: string,
+	args: string[],
+	options: { cwd?: string; timeout: number; maxBuffer: number },
+) {
+	try {
+		return await promisify(execFile)(executable, args, options);
+	} catch (error) {
+		const failure = error as {
+			code?: unknown;
+			signal?: unknown;
+			killed?: unknown;
+			stdout?: string;
+			stderr?: string;
+		};
+		throw new Error(
+			`Native Windows fixture failed: ${JSON.stringify({
+				code: failure.code,
+				signal: failure.signal,
+				killed: failure.killed,
+				stdout: String(failure.stdout ?? "").slice(-4096),
+				stderr: String(failure.stderr ?? "").slice(-4096),
+			})}`,
+		);
+	}
+}
+
 it("uses suspended launch before assignment and has no hard-limit fallback", () => {
 	expect(WINDOWS_JOB_SOURCE.indexOf("if(!CreateProcess")).toBeLessThan(
 		WINDOWS_JOB_SOURCE.indexOf("if(!AssignProcess"),
@@ -39,10 +69,10 @@ it.runIf(process.platform === "win32")(
 					512,
 					4,
 				),
-				result = await promisify(execFile)(
+				result = await runNativeFixture(
 					invocation.executable,
 					invocation.args,
-					{ cwd: root, timeout: 30000, maxBuffer: 65536 },
+					{ cwd: root, timeout: 60000, maxBuffer: 65536 },
 				);
 			expect(JSON.parse(result.stdout)).toEqual([
 				"space value",
@@ -53,7 +83,7 @@ it.runIf(process.platform === "win32")(
 			await rm(root, { recursive: true, force: true });
 		}
 	},
-	40000,
+	75000,
 );
 // A Windows Job Object violation may synchronously throw UNKNOWN or emit an error event.
 // The two-process control must actually run this identical owned child, so unrelated spawn failure cannot pass.
@@ -74,7 +104,7 @@ it("handles synchronous and asynchronous spawn denials without swallowing unexpe
 		"()=>{const {EventEmitter}=require('node:events');const c=new EventEmitter();c.stdout=new EventEmitter();queueMicrotask(()=>{const e=new Error('owned fixture denial');e.code='EACCES';e.syscall='spawn';c.emit('error',e);c.emit('close',-1);});return c;}",
 	];
 	for (const probe of probes) {
-		const result = await promisify(execFile)(
+		const result = await runNativeFixture(
 			process.execPath,
 			["-e", processLimitProbe(probe)],
 			{ timeout: 10000, maxBuffer: 65536 },
@@ -107,10 +137,10 @@ it.runIf(process.platform === "win32")(
 				512,
 				maxProcesses,
 			);
-			const result = await promisify(execFile)(
+			const result = await runNativeFixture(
 				invocation.executable,
 				invocation.args,
-				{ timeout: 30000, maxBuffer: 65536 },
+				{ timeout: 60000, maxBuffer: 65536 },
 			);
 			return JSON.parse(result.stdout);
 		};
@@ -128,5 +158,5 @@ it.runIf(process.platform === "win32")(
 		});
 		expect(["UNKNOWN", "EPERM", "EACCES"]).toContain(blocked.code);
 	},
-	70000,
+	135000,
 );
