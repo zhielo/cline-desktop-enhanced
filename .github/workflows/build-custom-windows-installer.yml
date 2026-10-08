@@ -100,10 +100,10 @@ jobs:
       - name: Install Windows packaging tools
         shell: pwsh
         run: |
-          choco install upx --version=$env:UPX_VERSION --no-progress -y
-          if ($LASTEXITCODE -ne 0) { throw 'UPX installation failed' }
-          choco install gitleaks --version=$env:GITLEAKS_VERSION --no-progress -y
-          if ($LASTEXITCODE -ne 0) { throw 'Gitleaks installation failed' }
+          & pwsh -NoProfile -File scripts/install-pinned-windows-tool.test.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned tool retry fixtures failed' }
+          & scripts/install-pinned-windows-tool.ps1 -Package upx -Version $env:UPX_VERSION
+          & scripts/install-pinned-windows-tool.ps1 -Package gitleaks -Version $env:GITLEAKS_VERSION
           $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
           $nsisUrl = "https://github.com/tauri-apps/binary-releases/releases/download/nsis-$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
           Invoke-WebRequest $nsisUrl -OutFile $zip
@@ -139,6 +139,7 @@ jobs:
         run: gitleaks git --redact --no-banner --config .gitleaks.toml
 
       - name: Run consolidated custom fork validation
+        id: consolidated
         # Outer guard remains effective if the validator or hosted runner stops
         # servicing its own per-check timers. Do not bypass any required gate.
         timeout-minutes: 35
@@ -199,7 +200,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Android instrumentation compilation failed (not live-device validation)" }
 
       - name: Upload consolidated validation evidence
-        if: ${{ always() }}
+        if: ${{ always() && (steps.consolidated.outcome == 'success' || steps.consolidated.outcome == 'failure' || steps.consolidated.outcome == 'cancelled') }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: consolidated-validation-${{ github.run_id }}
@@ -424,6 +425,10 @@ jobs:
 
           Write-Host 'Installer, installed app, and sidecar verified successfully.'
           Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+          # Reuse the exact binaries whose installed hashes/startup were verified.
+          # Registry InstallLocation can be quoted; never rediscover it in the UI step.
+          "CLINE_TEST_INSTALLED_APP=$($appExe.FullName)" >> $env:GITHUB_ENV
+          "CLINE_TEST_INSTALLED_SIDECAR=$($sidecarExe.FullName)" >> $env:GITHUB_ENV
 
       - name: Installed WebView acceptance journey
         timeout-minutes: 10
@@ -431,17 +436,12 @@ jobs:
         shell: pwsh
         working-directory: apps/examples/desktop-app
         run: |
-          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-            Where-Object { $_.DisplayName -eq 'Cline Enhanced' } | Select-Object -First 1
-          if (-not $entry) { throw 'Installed app registry entry missing' }
-          $location = $entry.InstallLocation
-          if (-not $location) { $location = Split-Path ($entry.UninstallString -replace '^"|"$', '') -Parent }
-          $app = Get-ChildItem $location -Filter 'cline-app.exe' -Recurse | Select-Object -First 1
-          if (-not $app) { throw 'Installed application missing' }
-          $sidecar = Get-ChildItem $location -Filter 'code-sidecar.exe' -Recurse | Select-Object -First 1
-          if (-not $sidecar) { throw 'Installed sidecar missing' }
-          $env:CLINE_TEST_INSTALLED_APP = $app.FullName
-          $env:CLINE_TEST_INSTALLED_SIDECAR = $sidecar.FullName
+          foreach ($name in @('CLINE_TEST_INSTALLED_APP', 'CLINE_TEST_INSTALLED_SIDECAR')) {
+            $path = [Environment]::GetEnvironmentVariable($name)
+            if (-not $path -or -not [IO.Path]::IsPathFullyQualified($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Verified installed binary path is missing or invalid: $name"
+            }
+          }
           bun run scripts/installed-ui-acceptance.ts
           if ($LASTEXITCODE -ne 0) { throw 'Installed WebView acceptance failed' }
 

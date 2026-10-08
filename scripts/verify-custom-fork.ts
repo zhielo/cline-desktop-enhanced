@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"scripts/install-pinned-windows-tool.ps1",markers:["$attempt -le 3", '"--version=$Version"', "failed after 3 attempts", "$PSNativeCommandUseErrorActionPreference = $false"]},
+ {path:"scripts/install-pinned-windows-tool.test.ps1",markers:["ExpectedFailure $true", "ExpectedDelays @(5, 10)", "no installs"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:['"CLINE_TEST_INSTALLED_APP=$($appExe.FullName)" >> $env:GITHUB_ENV', "IsPathFullyQualified", "Test-Path -LiteralPath $path -PathType Leaf", "scripts/install-pinned-windows-tool.test.ps1"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis-worker.ts",markers:["def apply_transform_steps(data,steps,max_bytes=None):", "if max_bytes is None: max_bytes=MAX_BYTES"]},
  {path:"sdk/packages/core/scripts/advanced-analysis-worker.test.py",markers:["--engine-profile", "windows-portable", "owned-native-elf.json", "test_expansion_exact_and_explicit_budgets", "Missing optional engine: triton", "Missing optional engine: qbindiff"]},
  {path:"scripts/validate-advanced-build.mjs",markers:["engineCorpusArgs", 'platform === "win32" ? "windows-portable" : "full"', "engineProfile:"]},

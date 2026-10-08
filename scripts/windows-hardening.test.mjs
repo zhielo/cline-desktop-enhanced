@@ -72,3 +72,33 @@ test("installed UI acceptance uses installed Tauri transport and fixture-only co
 	expect(source).toContain("restart-setting-and-session-persistence-passed");
 	expect(source).toContain("No dev web server");
 });
+test("installed UI consumes verified smoke paths rather than quoted registry paths", () => {
+	const workflow = load(".github/workflows/build-custom-windows-installer.yml");
+	expect(workflow).toContain(
+		'"CLINE_TEST_INSTALLED_APP=$($appExe.FullName)" >> $env:GITHUB_ENV',
+	);
+	expect(workflow).toContain(
+		'"CLINE_TEST_INSTALLED_SIDECAR=$($sidecarExe.FullName)" >> $env:GITHUB_ENV',
+	);
+	const ui = workflow
+		.split("name: Installed WebView acceptance journey")[1]
+		.split("name: Upload installed UI")[0];
+	expect(ui).not.toContain("Get-ItemProperty");
+	expect(ui).not.toContain("InstallLocation");
+	expect(ui).toContain("IsPathFullyQualified");
+	expect(ui).toContain("Test-Path -LiteralPath $path -PathType Leaf");
+	expect(workflow).toContain("steps.ui_acceptance.outcome == 'success'");
+});
+test("pinned packaging installation retries are bounded and exhaustion fails closed", () => {
+	const source = load("scripts/install-pinned-windows-tool.ps1");
+	expect(source).toContain("$attempt -le 3");
+	expect(source).toContain('"--version=$Version"');
+	expect(source).toContain("if ($code -eq 0) { return }");
+	expect(source).toContain("throw");
+	expect(source).toContain("failed after 3 attempts");
+	expect(source).not.toContain("continue-on-error");
+	const workflow = load(".github/workflows/build-custom-windows-installer.yml");
+	expect(workflow).toContain("scripts/install-pinned-windows-tool.test.ps1");
+	expect(workflow).toContain("steps.consolidated.outcome == 'failure'");
+	expect(workflow).toContain("if-no-files-found: error");
+});

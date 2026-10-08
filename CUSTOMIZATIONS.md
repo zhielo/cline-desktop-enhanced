@@ -625,6 +625,9 @@ Do not hide a new regression by weakening assertions or making a required custom
 
 ## Confirmed CI blocker repair after advanced integration
 
+- Installed WebView acceptance consumes the exact installed app/sidecar paths validated by the preceding hash/startup smoke instead of repeating the quoted registry `InstallLocation` lookup. The UI step requires absolute existing files and its success remains mandatory for verified artifacts.
+- Pinned UPX/Gitleaks installation allows at most three attempts with bounded backoff for transient Chocolatey feed failures; exhausted retries still fail. Owned PowerShell fixtures verify immediate success, recovery and exhaustion without network/install actions. Consolidated evidence upload runs only when its validator started; missing evidence after a started validator remains an error.
+
 - The installed Windows build's Python corpus uses the explicit `windows-portable` pin-set profile. Every shipped engine remains execution-tested and blocking; unshipped Triton/QBinDiff receive required missing-engine boundary tests rather than success claims or skips. The default full profile keeps their real execution tests. LIEF uses a hash-verified owned ELF fixture across platforms instead of skipping the Linux executable fixture on Windows.
 - Transform helpers resolve their default expansion budget at call time, avoiding stale Python default-argument capture. The public worker reduced-budget regression and exact/over-budget helper tests remain required; production byte ceilings are unchanged and no caller-selected transform budget is exposed.
 
