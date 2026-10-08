@@ -199,6 +199,12 @@ jobs:
           try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }
           finally { Pop-Location }
 
+      - name: Package isolated analysis runtime for install-and-use
+        shell: pwsh
+        run: |
+          ./scripts/package-analysis-runtime.ps1 -EnginePython $env:CLINE_RE_PYTHON
+          if ($LASTEXITCODE -ne 0) { throw "Bundled runtime packaging failed" }
+
       - name: Build pinned Android instrumentation bundle
         working-directory: workers/android-capture
         shell: pwsh
@@ -233,7 +239,7 @@ jobs:
           # Cargo cache includes old bundle outputs. Never select an old installer
           # merely because its filename/version still matches this source.
           Remove-Item 'src-tauri/target/release/bundle/nsis' -Recurse -Force -ErrorAction SilentlyContinue
-          & bunx tauri build --bundles nsis
+          & bunx tauri build --bundles nsis --config src-tauri/tauri.analysis-runtime.conf.json
           if ($LASTEXITCODE -ne 0) { throw "Tauri build failed with exit code $LASTEXITCODE" }
 
       - name: Select unsigned private installer

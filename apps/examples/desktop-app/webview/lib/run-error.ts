@@ -72,6 +72,8 @@ export async function retryRecoverableFork<T>(
 /** The same presentation for live failures and restored transcript errors. */
 export function formatRunError(detail: string, providerId = ""): string {
 	const description = detail.trim();
+	if (isTransientHubDisconnect(description))
+		return "The connection to the local Hub was interrupted. Your saved chat is preserved. Wait for reconnection, reopen this session, then send a new message. The previous task is not automatically replayed.";
 	const guidance = resolveCredentialFailureHint(providerId);
 	const looksCredentialRelated =
 		!description || isCredentialFailure(description);

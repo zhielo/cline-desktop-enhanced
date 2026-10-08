@@ -334,7 +334,13 @@ export async function runAnalysisNotebook(
 					"Notebook could not establish an engine fingerprint.",
 				],
 			};
-		const fingerprint = hash(JSON.stringify(toolchain));
+		const { diagnostics: _diagnostics, ...engineIdentity } = toolchain;
+		const fingerprint = hash(
+			JSON.stringify({
+				engineIdentity,
+				runtimeIdentity: process.env.CLINE_ANALYSIS_RUNTIME_ID ?? "external",
+			}),
+		);
 		const done = new Map<string, z.infer<typeof Receipt>>();
 		const pending = new Set(notebook.cells.map((cell) => cell.id));
 		await persist(checkpoint, state);

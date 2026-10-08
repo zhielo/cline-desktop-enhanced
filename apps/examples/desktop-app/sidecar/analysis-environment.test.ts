@@ -13,7 +13,7 @@ it("coalesces simultaneous checks but does not retain stale results", async () =
 	const first = getAnalysisEnvironment(),
 		second = getAnalysisEnvironment();
 	expect(first).toBe(second);
-	expect(check).toHaveBeenCalledTimes(1);
+	await vi.waitFor(() => expect(check).toHaveBeenCalledTimes(1));
 	finish({ status: "owned" });
 	await first;
 	check.mockResolvedValueOnce({ status: "new-check" });

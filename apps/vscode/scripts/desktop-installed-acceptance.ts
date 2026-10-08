@@ -97,8 +97,6 @@ export async function main() {
 	const sidecar = process.env.CLINE_TEST_INSTALLED_SIDECAR
 	if (process.platform !== "win32" || !executable || !isAbsolute(executable))
 		throw new Error("Absolute installed Windows application path required")
-	if (!process.env.CLINE_RE_PYTHON || !isAbsolute(process.env.CLINE_RE_PYTHON))
-		throw new Error("Installed-app readiness requires a trusted absolute CLINE_RE_PYTHON")
 	if (!sidecar || !isAbsolute(sidecar)) throw new Error("Absolute installed sidecar path required for isolated Hub bootstrap")
 	const root = await mkdtemp(join(tmpdir(), "cline-installed-ui-"))
 	const workspace = join(root, "owned-workspace")
@@ -120,13 +118,13 @@ export async function main() {
 		CLINE_DIR: root,
 		CLINE_DATA_DIR: join(root, "data"),
 		CLINE_HUB_DISCOVERY_PATH: discoveryPath,
-		CLINE_RE_PYTHON: process.env.CLINE_RE_PYTHON,
 		WEBVIEW2_USER_DATA_FOLDER: join(root, "webview-profile"),
 	})
 	let app: ReturnType<typeof startAcceptanceProcess> | undefined
 	let browser: Browser | undefined
 	const stages: string[] = []
 	let launchNumber = 0
+ const startupSamples:number[]=[]
 	const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe")
 
 	async function killOwnedProcess(pid: number) {
@@ -203,6 +201,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 	}
 
 	async function launch() {
+  const startupStarted=performance.now()
 		// Allocate only after Hub bootstrap, immediately before app launch. The
 		// isolated Hub must not claim a port reserved and released much earlier.
 		const listener = createServer()
@@ -252,6 +251,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		)
 		await page.reload()
 		await page.getByRole("button", { name: "Settings", exact: true }).first().waitFor()
+  startupSamples.push(performance.now()-startupStarted)
 		return page
 	}
 
@@ -372,7 +372,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		await settings(page, "Analysis environment")
 		await page.getByRole("button", { name: "Check analysis readiness", exact: true }).click()
 		await page.getByText("Fixture execution: completed.", { exact: false }).waitFor({ timeout: 90_000 })
-		const ready = await rpc<{ configured: boolean; readiness: { status: string }; interpreter: { executable: string } }>(
+		const ready = await rpc<{ configured: boolean; runtime: { source: string }; readiness: { status: string }; interpreter: { executable: string } }>(
 			page,
 			"get_analysis_environment",
 			{ environmentId: "local" },
@@ -380,10 +380,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		if (
 			!ready.configured ||
 			ready.readiness.status !== "completed" ||
-			ready.interpreter.executable.replaceAll("\\", "/").toLowerCase() !==
-				process.env.CLINE_RE_PYTHON!.replaceAll("\\", "/").toLowerCase()
+			ready.runtime?.source !== "bundled" || !ready.interpreter.executable.replaceAll("\\", "/").toLowerCase().includes("/resources/analysis-runtime/python.exe")
 		)
-			throw new Error("Installed application did not validate its configured interpreter")
+			throw new Error("Installed application did not validate its bundled interpreter without CLINE_RE_PYTHON")
 		stages.push("installed-interpreter-owned-fixtures-passed")
 		await page.screenshot({ path: join(evidence, "readiness.png") })
 		await stop()
@@ -403,6 +402,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			request: { action: "attach", sessionId: session.sessionId, config: { environmentId: "local" } },
 		})
 		stages.push("restart-setting-and-session-persistence-passed")
+  const beforeHub=JSON.parse(await readFile(discoveryPath,"utf8"))
+  if(!Number.isInteger(beforeHub.pid)||beforeHub.pid<1)throw new Error("Owned isolated Hub PID unavailable")
+  // This discovery belongs only to this fixture. No user Hub is killed.
+  await killOwnedProcess(beforeHub.pid)
+  const recoveredSessions=await rpc<Array<{sessionId:string}>>(page,"list_chat_sessions")
+  if(!recoveredSessions.some(item=>item.sessionId===session.sessionId))throw new Error("Saved session missing after Hub restart")
+  await rpc(page,"chat_session_command",{request:{action:"attach",sessionId:session.sessionId,config:{environmentId:"local"}}})
+  const afterHub=JSON.parse(await readFile(discoveryPath,"utf8"))
+  if(afterHub.pid===beforeHub.pid&&afterHub.authToken===beforeHub.authToken)throw new Error("Hub restart did not refresh discovery identity")
+  stages.push("hub-restart-saved-session-reattached-without-prompt-replay")
+  await stop();page=await launch()
+  await rpc(page,"chat_session_command",{request:{action:"attach",sessionId:session.sessionId,config:{environmentId:"local"}}})
+  await writeFile(join(evidence,"performance.json"),JSON.stringify({schemaVersion:1,sourceCommit:process.env.GITHUB_SHA,environmentId:`${process.platform}-${process.arch}-${process.env.RUNNER_OS??"local"}`,workloadVersion:"installed-owned-ui-startup/v1",metrics:{installedReadyMs:startupSamples},baselineStatus:"not-established",limitations:["Three candidate startup samples, not an improvement claim or idle/peak RAM benchmark."]},null,2))
 		await writeFile(
 			join(evidence, "summary.json"),
 			JSON.stringify(

@@ -197,3 +197,19 @@ it("includes exact selections outside truncated inventory with original artifact
 		}),
 	);
 });
+it("bounds selected evidence bytes without dropping provenance silently", () => {
+	const graph = buildEvidenceGraph(manifest);
+	for (let i = 0; i < 100; i++)
+		graph.nodes.push({
+			...graph.nodes[0],
+			id: `owned-${i}`,
+			label: "x".repeat(2000),
+		});
+	const selected = queryEvidenceGraph(graph, {
+		limit: 1000,
+		maxOutputBytes: 4096,
+	});
+	expect(Buffer.byteLength(JSON.stringify(selected))).toBeLessThanOrEqual(4096);
+	expect(selected.truncated).toBe(true);
+	expect(selected.sourceHashes).toEqual(graph.sourceHashes);
+});

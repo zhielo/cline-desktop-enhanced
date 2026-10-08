@@ -1,4 +1,7 @@
-import { getProjectOutputLocation, ensureProjectOutputDirectories } from "./project-output";
+import {
+	getProjectOutputLocation,
+	ensureProjectOutputDirectories,
+} from "./project-output";
 import { getAnalysisEnvironment } from "./analysis-environment";
 import { queryRuntimeJni } from "./runtime-jni-evidence";
 import { ExecutionControlService } from "./execution-control-service";
@@ -7,11 +10,18 @@ import { importAndroidDebugEvidence } from "./android-debug-evidence";
 import { reviewPatchArtifacts } from "./execution-patch-lab";
 import { ApkIncidentService } from "./apk-incident-service";
 import { incidentReadiness } from "./incident-readiness";
-import { inspectArtifactEvidence, previewArchiveMember } from "./incident-artifacts";
+import {
+	inspectArtifactEvidence,
+	previewArchiveMember,
+} from "./incident-artifacts";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { InvestigationStore } from "./analysis-investigation-store";
-import { AndroidCaptureInput, bindAndroidCapture, runAndroidCapture } from "./android-runtime-client";
-import {saveAnalysisDocument} from "./analysis-document-store";
+import {
+	AndroidCaptureInput,
+	bindAndroidCapture,
+	runAndroidCapture,
+} from "./android-runtime-client";
+import { saveAnalysisDocument } from "./analysis-document-store";
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
@@ -56,8 +66,8 @@ import {
 	clearAccountTelemetryIdentity,
 	createConfiguredStreamingTranscriptionSession,
 	createLiveDebuggerExecutor,
- createAndroidDeviceExecutor,
- AndroidDeviceInputSchema,
+	createAndroidDeviceExecutor,
+	AndroidDeviceInputSchema,
 	createReverseEngineeringExecutor,
 	listObservedIdaJobs,
 	createUserInstructionConfigService,
@@ -67,7 +77,7 @@ import {
 	getCoreBuiltinToolCatalog,
 	getLocalProviderModels,
 	getPowerShellWorkerBaselineDecision,
-  getProcessSessionRuntimeCapabilities,
+	getProcessSessionRuntimeCapabilities,
 	getProviderAuthHandler,
 	identifyAccount,
 	LiveDebuggerInputSchema,
@@ -75,7 +85,7 @@ import {
 	listLocalProviders,
 	normalizeOAuthProvider,
 	ProcessSessionManager,
- probeProcessStartTokenAsync,
+	probeProcessStartTokenAsync,
 	ProviderSettingsManager,
 	parseMcpServerRegistration,
 	persistClineAccountTelemetryIdentity,
@@ -147,10 +157,15 @@ import {
 	parseComposioToolkitSlug,
 } from "./composio";
 import { readComputerUseMetrics } from "./computer-use-metrics";
-import {probeAnalysisSandbox,RuntimeAnalysisInputSchema,bindRuntimeAnalysisRequest,submitAnalysisSandbox} from "./analysis-sandbox-client";
 import {
-  type AnalysisTaskKind,
-  desktopAnalysisTaskOrchestrator,
+	probeAnalysisSandbox,
+	RuntimeAnalysisInputSchema,
+	bindRuntimeAnalysisRequest,
+	submitAnalysisSandbox,
+} from "./analysis-sandbox-client";
+import {
+	type AnalysisTaskKind,
+	desktopAnalysisTaskOrchestrator,
 } from "./analysis-task-orchestrator";
 import {
 	connectorChannelsPayload,
@@ -188,6 +203,8 @@ import {
 	routeEngineeringModel,
 	scoreReviewRisk,
 } from "./engineering-control-plane";
+import { optimizationStatus, setResourceProfile } from "./optimization-status";
+import { repairBundledAnalysisRuntime } from "./bundled-analysis-runtime";
 import { buildEngineeringGitReview } from "./engineering-git-review";
 import { EngineeringWorktreeManager } from "./engineering-worktree-manager";
 import { clearLegacyProviderCredentials } from "./legacy-provider-credentials";
@@ -2347,8 +2364,28 @@ async function openArtifactWithSystem(filePath: string): Promise<string> {
 }
 
 let investigationStore: InvestigationStore | undefined;
-function investigations(){return investigationStore ??= new InvestigationStore(join(resolveClineDataDir(),"analysis","investigations.sqlite"));}
-function recordInvestigation(args:Record<string,unknown>|undefined,root:string,plan:Parameters<InvestigationStore["record"]>[2],result:unknown,signed=false){if(typeof args?.investigationId!=="string")return;try{investigations().record(root,args.investigationId,plan,result,signed);}catch{console.warn("Investigation metadata recording failed; completed execution must not be replayed to repair metadata.");return "Analysis finished, but investigation metadata was not saved. Reload/export evidence; do not replay execution to repair metadata.";}}
+function investigations() {
+	return (investigationStore ??= new InvestigationStore(
+		join(resolveClineDataDir(), "analysis", "investigations.sqlite"),
+	));
+}
+function recordInvestigation(
+	args: Record<string, unknown> | undefined,
+	root: string,
+	plan: Parameters<InvestigationStore["record"]>[2],
+	result: unknown,
+	signed = false,
+) {
+	if (typeof args?.investigationId !== "string") return;
+	try {
+		investigations().record(root, args.investigationId, plan, result, signed);
+	} catch {
+		console.warn(
+			"Investigation metadata recording failed; completed execution must not be replayed to repair metadata.",
+		);
+		return "Analysis finished, but investigation metadata was not saved. Reload/export evidence; do not replay execution to repair metadata.";
+	}
+}
 
 export function windowsExplorerRevealArgs(
 	filePath: string,
@@ -2621,24 +2658,53 @@ const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
 const desktopAndroidDeviceExecutor = createAndroidDeviceExecutor();
 let desktopIncidentService: ApkIncidentService | undefined;
 function incidents() {
- return desktopIncidentService ??= new ApkIncidentService({
-  dbPath:join(resolveClineDataDir(), "analysis", "apk-incidents.sqlite"),
-  cacheRoot:join(resolveClineDataDir(), "analysis", "incident-private"),
-  tasks:desktopAnalysisTaskOrchestrator,
-  android:async(input,signal)=>JSON.parse(await desktopAndroidDeviceExecutor(AndroidDeviceInputSchema.parse(input),{...desktopToolContext("desktop-apk-incidents"),signal})),
-  reverse:async(input,signal)=>JSON.parse(await desktopReverseEngineeringExecutor(ReverseEngineeringInputSchema.parse(input),{...desktopToolContext("desktop-apk-incidents"),signal})),
- });
+	return (desktopIncidentService ??= new ApkIncidentService({
+		dbPath: join(resolveClineDataDir(), "analysis", "apk-incidents.sqlite"),
+		cacheRoot: join(resolveClineDataDir(), "analysis", "incident-private"),
+		tasks: desktopAnalysisTaskOrchestrator,
+		android: async (input, signal) =>
+			JSON.parse(
+				await desktopAndroidDeviceExecutor(
+					AndroidDeviceInputSchema.parse(input),
+					{ ...desktopToolContext("desktop-apk-incidents"), signal },
+				),
+			),
+		reverse: async (input, signal) =>
+			JSON.parse(
+				await desktopReverseEngineeringExecutor(
+					ReverseEngineeringInputSchema.parse(input),
+					{ ...desktopToolContext("desktop-apk-incidents"), signal },
+				),
+			),
+	}));
 }
 
 let executionService: ExecutionControlService | undefined;
 function executions() {
- return executionService ??= new ExecutionControlService({
- dbPath: join(resolveClineDataDir(),"analysis","execution-receipts.sqlite"),
- logRoot: join(resolveClineDataDir(),"analysis","execution-private"),
- tasks: desktopAnalysisTaskOrchestrator, processes: desktopWorkspaceProcessManager,
- static: async(input,signal)=>JSON.parse(await desktopReverseEngineeringExecutor(ReverseEngineeringInputSchema.parse(input),{...desktopToolContext("desktop-execution"),signal})),
- debugger: async(input,signal)=>JSON.parse(await desktopLiveDebuggerExecutor(LiveDebuggerInputSchema.parse(input),{...desktopToolContext("desktop-execution"),signal})),
- });
+	return (executionService ??= new ExecutionControlService({
+		dbPath: join(
+			resolveClineDataDir(),
+			"analysis",
+			"execution-receipts.sqlite",
+		),
+		logRoot: join(resolveClineDataDir(), "analysis", "execution-private"),
+		tasks: desktopAnalysisTaskOrchestrator,
+		processes: desktopWorkspaceProcessManager,
+		static: async (input, signal) =>
+			JSON.parse(
+				await desktopReverseEngineeringExecutor(
+					ReverseEngineeringInputSchema.parse(input),
+					{ ...desktopToolContext("desktop-execution"), signal },
+				),
+			),
+		debugger: async (input, signal) =>
+			JSON.parse(
+				await desktopLiveDebuggerExecutor(
+					LiveDebuggerInputSchema.parse(input),
+					{ ...desktopToolContext("desktop-execution"), signal },
+				),
+			),
+	}));
 }
 function workspaceProcessOwner(baseDir: string): string {
 	const normalized = resolve(baseDir);
@@ -4116,15 +4182,40 @@ export async function handleCommand(
 	if (command === "get_desktop_settings") {
 		return readDesktopSettings();
 	}
+	if (
+		command === "get_optimization_status" ||
+		command === "set_resource_profile"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
+			throw new Error("Optimization settings are local-only");
+		if (command === "set_resource_profile") {
+			if (args?.confirmed !== true)
+				throw new Error("Explicit confirmation required");
+			return setResourceProfile(args.profile);
+		}
+		return optimizationStatus();
+	}
+	if (command === "repair_analysis_runtime") {
+		if (
+			getCommandRuntimeBinding(ctx, args).kind !== "local" ||
+			args?.confirmed !== true
+		)
+			throw new Error("Explicit local runtime repair confirmation required");
+		return await repairBundledAnalysisRuntime();
+	}
 	if (command === "get_analysis_environment") {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
 			throw new Error("Analysis environment readiness is local-only.");
-		return await getAnalysisEnvironment();
+		return await getAnalysisEnvironment(args?.force !== false);
 	}
 	if (command === "get_ida_job_diagnostics") {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
 			throw new Error("IDA job diagnostics are local-only.");
-		return { jobs: listObservedIdaJobs(), recovery: "No PID-only control or automatic lease stealing. Confirm the exact process exited before operator recovery." };
+		return {
+			jobs: listObservedIdaJobs(),
+			recovery:
+				"No PID-only control or automatic lease stealing. Confirm the exact process exited before operator recovery.",
+		};
 	}
 	if (command === "set_custom_ai_instructions") {
 		if (typeof args?.custom_ai_instructions !== "string") {
@@ -4647,16 +4738,28 @@ export async function handleCommand(
 			};
 		}
 	}
-	if (command === "get_project_output_location" || command === "open_project_output_folder") {
-  if (getCommandRuntimeBinding(ctx, args).kind === "ssh") throw new Error("Project output folders are local Windows only; SSH outputs are not local files");
-  const workspace = typeof args?.cwd === "string" && args.cwd.trim() ? args.cwd.trim() : ctx.localWorkspaceRoot;
-  const location = getProjectOutputLocation(workspace);
-  if (command === "get_project_output_location") return location;
-  if (!location) throw new Error("The fixed C:\\Cline-Outputs folder is available on Windows only");
-  const directory = ensureProjectOutputDirectories(location);
-  await revealArtifactInFolder(directory);
-  return location;
- }
+	if (
+		command === "get_project_output_location" ||
+		command === "open_project_output_folder"
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh")
+			throw new Error(
+				"Project output folders are local Windows only; SSH outputs are not local files",
+			);
+		const workspace =
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot;
+		const location = getProjectOutputLocation(workspace);
+		if (command === "get_project_output_location") return location;
+		if (!location)
+			throw new Error(
+				"The fixed C:\\Cline-Outputs folder is available on Windows only",
+			);
+		const directory = ensureProjectOutputDirectories(location);
+		await revealArtifactInFolder(directory);
+		return location;
+	}
 	if (command === "pick_workspace_directory") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") return null;
 		return await pickWorkspaceDirectory();
@@ -4912,8 +5015,8 @@ export async function handleCommand(
 		command === "claim_engineering_tasks" ||
 		command === "update_engineering_task" ||
 		command === "inspect_engineering_worktree" ||
-		command === "release_engineering_worktree"
-		|| command === "get_engineering_git_review"
+		command === "release_engineering_worktree" ||
+		command === "get_engineering_git_review"
 	) {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
 			throw new Error(
@@ -4933,10 +5036,7 @@ export async function handleCommand(
 			return desktopEngineeringControlPlane.getWorkspace(baseDir);
 		}
 		if (command === "update_engineering_policy") {
-			return desktopEngineeringControlPlane.updatePolicy(
-				baseDir,
-				args?.policy,
-			);
+			return desktopEngineeringControlPlane.updatePolicy(baseDir, args?.policy);
 		}
 		if (command === "plan_engineering_mission") {
 			return desktopEngineeringControlPlane.planMission(baseDir, {
@@ -4982,17 +5082,13 @@ export async function handleCommand(
 						{ path: lease.path, branch: lease.branch },
 					);
 				} catch (error) {
-					desktopEngineeringControlPlane.updateMissionTask(
-						baseDir,
-						missionId,
-						{
-							taskId: task.id,
-							agentId: task.ownerAgentId,
-							status: "failed",
-							resultSummary:
-								error instanceof Error ? error.message : String(error),
-						},
-					);
+					desktopEngineeringControlPlane.updateMissionTask(baseDir, missionId, {
+						taskId: task.id,
+						agentId: task.ownerAgentId,
+						status: "failed",
+						resultSummary:
+							error instanceof Error ? error.message : String(error),
+					});
 				}
 			}
 			return desktopEngineeringControlPlane.getMission(baseDir, missionId);
@@ -5152,53 +5248,171 @@ export async function handleCommand(
 			processId,
 		};
 	}
- if (["prepare_execution_pipeline","start_execution_pipeline","list_execution_receipts","get_execution_receipt","cancel_execution_receipt","reconcile_execution_receipt","execution_stdin","execution_resize","plan_evidence_analysis","import_android_debug_evidence","review_patch_artifacts"].includes(command)) {
- if(getCommandRuntimeBinding(ctx,args).kind==="ssh")throw new Error("Execution workspace is local-only; no local execution on an SSH workspace");
- const root=resolve(typeof args?.cwd==="string"&&args.cwd.trim()?args.cwd.trim():ctx.localWorkspaceRoot);
- if(command==="plan_evidence_analysis")return planEvidenceAnalysis(root,args?.input);
- if(command==="import_android_debug_evidence")return importAndroidDebugEvidence(root,args?.input);
- if(command==="review_patch_artifacts")return reviewPatchArtifacts(root,args?.input);
- if(command==="prepare_execution_pipeline")return executions().prepare(root,args?.input);
- if(command==="start_execution_pipeline")return executions().start(root,String(args?.planId??""),String(args?.executionToken??""));
- if(command==="list_execution_receipts")return executions().list(root);
- const id=String(args?.id??"");
- if(command==="get_execution_receipt")return executions().get(root,id);
- if(command==="cancel_execution_receipt")return executions().cancel(root,id);
- if(command==="reconcile_execution_receipt")return executions().reconcile(root,id);
- if(command==="execution_resize")return executions().resize(root,id,String(args?.stageId??""),Number(args?.columns),Number(args?.rows));
- return executions().input(root,id,String(args?.stageId??""),String(args?.text??""));
- }
- if (["prepare_apk_incident", "start_apk_incident", "list_apk_incidents", "get_apk_incident", "review_apk_incident", "correlate_apk_incident", "get_incident_readiness", "inspect_artifact_evidence", "preview_archive_member", "get_apk_diagnostic_report", "query_runtime_jni"].includes(command)) {
-  if(getCommandRuntimeBinding(ctx,args).kind === "ssh") throw new Error("Incident workflows and evidence are local-only; remote artifacts are not local files");
-  const root=resolve(typeof args?.cwd==="string" && args.cwd.trim()?args.cwd.trim():ctx.localWorkspaceRoot);
-  if(command==="query_runtime_jni")return queryRuntimeJni(root,args?.input,desktopAnalysisTaskOrchestrator);
- if(command==="get_apk_diagnostic_report")return incidents().diagnosticReport(root,String(args?.id??""),String(args?.sha256??""));
- if(command==="inspect_artifact_evidence")return inspectArtifactEvidence(root,String(args?.path??""));
-  if(command==="preview_archive_member")return previewArchiveMember(root,String(args?.path??""),String(args?.member??""),String(args?.expectedHash??""));
-  if(command==="prepare_apk_incident")return incidents().prepare(root,args?.input);
-  if(command==="start_apk_incident")return incidents().start(root,String(args?.planId??""),String(args?.executionToken??""));
-  if(command==="list_apk_incidents")return incidents().list(root);
-  if(command==="get_apk_incident")return incidents().get(root,String(args?.id??""));
-  if(command==="review_apk_incident")return incidents().review(root,args?.input);
-  if(command==="correlate_apk_incident")return incidents().correlate(root,String(args?.id??""),Number(args?.revision),args?.input);
-  const toolContext=desktopToolContext(workspaceProcessOwner(root));
-  const discovery=JSON.parse(await desktopReverseEngineeringExecutor(ReverseEngineeringInputSchema.parse({operation:"discover",engine:"auto",discovery_depth:"fast"}),toolContext));
-  let adb:Record<string,unknown>|undefined;try{adb=JSON.parse(await desktopAndroidDeviceExecutor(AndroidDeviceInputSchema.parse({operation:"discover"}),toolContext));}catch{ /* truthful blocked readiness */ }
-  // Opening the dashboard never executes fixtures. This reuses discovery, not an installed==verified shortcut.
-  return incidentReadiness(discovery,adb,undefined);
- }
 	if (
-    command === "prepare_analysis_task" ||
-    command === "approve_analysis_task" ||
-    command === "cancel_analysis_task" ||
-    command === "export_analysis_evidence" ||
-    command === "list_analysis_tasks" ||
-    command === "get_analysis_diagnostics" ||
+		[
+			"prepare_execution_pipeline",
+			"start_execution_pipeline",
+			"list_execution_receipts",
+			"get_execution_receipt",
+			"cancel_execution_receipt",
+			"reconcile_execution_receipt",
+			"execution_stdin",
+			"execution_resize",
+			"plan_evidence_analysis",
+			"import_android_debug_evidence",
+			"review_patch_artifacts",
+		].includes(command)
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh")
+			throw new Error(
+				"Execution workspace is local-only; no local execution on an SSH workspace",
+			);
+		const root = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		if (command === "plan_evidence_analysis")
+			return planEvidenceAnalysis(root, args?.input);
+		if (command === "import_android_debug_evidence")
+			return importAndroidDebugEvidence(root, args?.input);
+		if (command === "review_patch_artifacts")
+			return reviewPatchArtifacts(root, args?.input);
+		if (command === "prepare_execution_pipeline")
+			return executions().prepare(root, args?.input);
+		if (command === "start_execution_pipeline")
+			return executions().start(
+				root,
+				String(args?.planId ?? ""),
+				String(args?.executionToken ?? ""),
+			);
+		if (command === "list_execution_receipts") return executions().list(root);
+		const id = String(args?.id ?? "");
+		if (command === "get_execution_receipt") return executions().get(root, id);
+		if (command === "cancel_execution_receipt")
+			return executions().cancel(root, id);
+		if (command === "reconcile_execution_receipt")
+			return executions().reconcile(root, id);
+		if (command === "execution_resize")
+			return executions().resize(
+				root,
+				id,
+				String(args?.stageId ?? ""),
+				Number(args?.columns),
+				Number(args?.rows),
+			);
+		return executions().input(
+			root,
+			id,
+			String(args?.stageId ?? ""),
+			String(args?.text ?? ""),
+		);
+	}
+	if (
+		[
+			"prepare_apk_incident",
+			"start_apk_incident",
+			"list_apk_incidents",
+			"get_apk_incident",
+			"review_apk_incident",
+			"correlate_apk_incident",
+			"get_incident_readiness",
+			"inspect_artifact_evidence",
+			"preview_archive_member",
+			"get_apk_diagnostic_report",
+			"query_runtime_jni",
+		].includes(command)
+	) {
+		if (getCommandRuntimeBinding(ctx, args).kind === "ssh")
+			throw new Error(
+				"Incident workflows and evidence are local-only; remote artifacts are not local files",
+			);
+		const root = resolve(
+			typeof args?.cwd === "string" && args.cwd.trim()
+				? args.cwd.trim()
+				: ctx.localWorkspaceRoot,
+		);
+		if (command === "query_runtime_jni")
+			return queryRuntimeJni(
+				root,
+				args?.input,
+				desktopAnalysisTaskOrchestrator,
+			);
+		if (command === "get_apk_diagnostic_report")
+			return incidents().diagnosticReport(
+				root,
+				String(args?.id ?? ""),
+				String(args?.sha256 ?? ""),
+			);
+		if (command === "inspect_artifact_evidence")
+			return inspectArtifactEvidence(root, String(args?.path ?? ""));
+		if (command === "preview_archive_member")
+			return previewArchiveMember(
+				root,
+				String(args?.path ?? ""),
+				String(args?.member ?? ""),
+				String(args?.expectedHash ?? ""),
+			);
+		if (command === "prepare_apk_incident")
+			return incidents().prepare(root, args?.input);
+		if (command === "start_apk_incident")
+			return incidents().start(
+				root,
+				String(args?.planId ?? ""),
+				String(args?.executionToken ?? ""),
+			);
+		if (command === "list_apk_incidents") return incidents().list(root);
+		if (command === "get_apk_incident")
+			return incidents().get(root, String(args?.id ?? ""));
+		if (command === "review_apk_incident")
+			return incidents().review(root, args?.input);
+		if (command === "correlate_apk_incident")
+			return incidents().correlate(
+				root,
+				String(args?.id ?? ""),
+				Number(args?.revision),
+				args?.input,
+			);
+		const toolContext = desktopToolContext(workspaceProcessOwner(root));
+		const discovery = JSON.parse(
+			await desktopReverseEngineeringExecutor(
+				ReverseEngineeringInputSchema.parse({
+					operation: "discover",
+					engine: "auto",
+					discovery_depth: "fast",
+				}),
+				toolContext,
+			),
+		);
+		let adb: Record<string, unknown> | undefined;
+		try {
+			adb = JSON.parse(
+				await desktopAndroidDeviceExecutor(
+					AndroidDeviceInputSchema.parse({ operation: "discover" }),
+					toolContext,
+				),
+			);
+		} catch {
+			/* truthful blocked readiness */
+		}
+		// Opening the dashboard never executes fixtures. This reuses discovery, not an installed==verified shortcut.
+		return incidentReadiness(discovery, adb, undefined);
+	}
+	if (
+		command === "prepare_analysis_task" ||
+		command === "approve_analysis_task" ||
+		command === "cancel_analysis_task" ||
+		command === "export_analysis_evidence" ||
+		command === "list_analysis_tasks" ||
+		command === "get_analysis_diagnostics" ||
 		command === "discover_analysis_tools" ||
 		command === "save_analysis_document" ||
-        command === "list_investigations" || command === "get_investigation" || command === "mutate_investigation" || command === "recover_android_capture" ||
- command === "run_dynamic_analysis" ||
- command === "run_static_analysis" ||
+		command === "list_investigations" ||
+		command === "get_investigation" ||
+		command === "mutate_investigation" ||
+		command === "recover_android_capture" ||
+		command === "run_dynamic_analysis" ||
+		command === "run_static_analysis" ||
 		command === "open_analysis_gui" ||
 		command === "run_debugger_action"
 	) {
@@ -5210,109 +5424,171 @@ export async function handleCommand(
 				? args.cwd.trim()
 				: ctx.localWorkspaceRoot,
 		);
-    if(command === "list_investigations")return investigations().list(baseDir);
-    if(command === "get_investigation"){const c=investigations().get(baseDir,String(args?.id??""));return {...c,jobCurrentStatuses:Object.fromEntries(desktopAnalysisTaskOrchestrator.list(baseDir).map(p=>[p.id,p.status]))};}
-    if(command === "mutate_investigation")return investigations().mutate(baseDir,args?.input);
-    if(command === "recover_android_capture"){
-      if(args?.confirmCaptureWrite!==true)throw new Error("Explicit captured-plaintext write confirmation required");
-      const plan=desktopAnalysisTaskOrchestrator.list(baseDir).find(p=>p.id===args?.planId);
-      if(!plan||plan.kind!=="dynamic"||plan.operation!=="android_capture"||!plan.approvedAt||!plan.targetIdentity?.sha256)throw new Error("Previously approved Android job required");
-      // GET retrieves a previously authorized job; it cannot upload or execute an APK again.
-      const result=await runAndroidCapture(plan.request,undefined,plan.requestHash,baseDir,undefined,true,plan.targetIdentity.sha256);
-      if(typeof args?.investigationId==="string"){const recovered={...plan,status:"completed" as const,evidence:{requestHash:plan.requestHash,resultHash:createHash("sha256").update(JSON.stringify(result)).digest("hex"),tool:"recovered-android-worker-report",outputPaths:result.outputPaths}};recordInvestigation(args,baseDir,recovered,result,true);}
-      return result;
-    }
-    if(command === "save_analysis_document"){const {cwd:_cwd,environmentId:_environmentId,...input}=args??{};return await saveAnalysisDocument(baseDir,input);}
+		if (command === "list_investigations")
+			return investigations().list(baseDir);
+		if (command === "get_investigation") {
+			const c = investigations().get(baseDir, String(args?.id ?? ""));
+			return {
+				...c,
+				jobCurrentStatuses: Object.fromEntries(
+					desktopAnalysisTaskOrchestrator
+						.list(baseDir)
+						.map((p) => [p.id, p.status]),
+				),
+			};
+		}
+		if (command === "mutate_investigation")
+			return investigations().mutate(baseDir, args?.input);
+		if (command === "recover_android_capture") {
+			if (args?.confirmCaptureWrite !== true)
+				throw new Error(
+					"Explicit captured-plaintext write confirmation required",
+				);
+			const plan = desktopAnalysisTaskOrchestrator
+				.list(baseDir)
+				.find((p) => p.id === args?.planId);
+			if (
+				!plan ||
+				plan.kind !== "dynamic" ||
+				plan.operation !== "android_capture" ||
+				!plan.approvedAt ||
+				!plan.targetIdentity?.sha256
+			)
+				throw new Error("Previously approved Android job required");
+			// GET retrieves a previously authorized job; it cannot upload or execute an APK again.
+			const result = await runAndroidCapture(
+				plan.request,
+				undefined,
+				plan.requestHash,
+				baseDir,
+				undefined,
+				true,
+				plan.targetIdentity.sha256,
+			);
+			if (typeof args?.investigationId === "string") {
+				const recovered = {
+					...plan,
+					status: "completed" as const,
+					evidence: {
+						requestHash: plan.requestHash,
+						resultHash: createHash("sha256")
+							.update(JSON.stringify(result))
+							.digest("hex"),
+						tool: "recovered-android-worker-report",
+						outputPaths: result.outputPaths,
+					},
+				};
+				recordInvestigation(args, baseDir, recovered, result, true);
+			}
+			return result;
+		}
+		if (command === "save_analysis_document") {
+			const { cwd: _cwd, environmentId: _environmentId, ...input } = args ?? {};
+			return await saveAnalysisDocument(baseDir, input);
+		}
 		const owner = workspaceProcessOwner(baseDir);
 		const toolContext = desktopToolContext(owner);
-    if (command === "prepare_analysis_task") {
-      const kind = String(args?.kind ?? "") as AnalysisTaskKind;
-      if (!["static", "debugger", "gui", "dynamic"].includes(kind)) {
-        throw new Error("kind must be static, debugger, gui, or dynamic");
-      }
-      const suppliedRequest: Record<string, unknown> =
-        typeof args?.request === "object" && args.request
-          ? { ...(args.request as Record<string, unknown>) }
-          : {
-              operation: args?.operation,
-              ...(typeof args?.target === "string" ? { target: args.target } : {}),
-            };
-      const operation = String(suppliedRequest.operation ?? "").trim();
-      if (!operation) throw new Error("operation is required");
-      if (suppliedRequest.timeout_ms === undefined) {
-        suppliedRequest.timeout_ms = 120_000;
-      }
-      let request: Record<string, unknown>;
-      if (kind === "debugger") {
-        request = LiveDebuggerInputSchema.parse(suppliedRequest);
- if(typeof request.pid==="number" && request.operation!=="process_identity"){
-  const identity=await probeProcessStartTokenAsync(request.pid);if(identity.status!=="found")throw new Error("Debugger process identity unavailable");request.pid_start_token=identity.token;
- }
-      } else if (kind === "dynamic") {
-        request = suppliedRequest.operation === "android_capture" ? await bindAndroidCapture(suppliedRequest) : await bindRuntimeAnalysisRequest(RuntimeAnalysisInputSchema.parse(suppliedRequest));
-      } else {
-        if (kind === "gui") suppliedRequest.operation = "open_gui";
-        request = ReverseEngineeringInputSchema.parse(suppliedRequest);
-      }
-      const prepared = await desktopAnalysisTaskOrchestrator.prepare({
-        workspaceRoot: baseDir,
-        kind,
-        request,
-        allowExternalTarget: args?.allowExternalTarget === true,
-        timeoutMs: kind === "dynamic" && operation === "android_capture" ? Math.min(300000,Number(suppliedRequest.timeout_ms)+180000) : Number(suppliedRequest.timeout_ms),
-      });
-      if(typeof args?.investigationId==="string")investigations().bind(baseDir,args.investigationId,prepared);
-      return prepared;
-    }
-    if (command === "approve_analysis_task") {
-      const planId = String(args?.planId ?? "").trim();
-      const requirements = Array.isArray(args?.requirements)
-        ? args.requirements.map(String)
-        : [];
-      return desktopAnalysisTaskOrchestrator.approve(
-        planId,
-        requirements,
-        String(args?.requestHash ?? ""),
-      );
-    }
-    if (command === "cancel_analysis_task") {
-      return desktopAnalysisTaskOrchestrator.cancel(
-        String(args?.planId ?? "").trim(),
-      );
-    }
-    if (command === "export_analysis_evidence") {
-      const planId = String(args?.planId ?? "").trim();
-      const bundle = desktopAnalysisTaskOrchestrator.evidenceBundle(
-        planId,
-        baseDir,
-      );
-      const outputDirectory = join(baseDir, ".cline", "analysis-evidence");
-      mkdirSync(outputDirectory, { recursive: true });
-      const outputPath = join(outputDirectory, `${planId}.json`);
-      writeFileSync(
-        outputPath,
-        `${JSON.stringify(bundle, null, 2)}\n`,
-        "utf8",
-      );
-      return { outputPath, bundleHash: bundle.bundleHash };
-    }
-    if (command === "list_analysis_tasks") {
-      return desktopAnalysisTaskOrchestrator.list(baseDir);
-    }
-    if (command === "get_analysis_diagnostics") {
-      return {
-        ...desktopAnalysisTaskOrchestrator.diagnostics(),
-        sandboxHealth: await probeAnalysisSandbox(),
-        processSessions: getProcessSessionRuntimeCapabilities(),
-      };
-    }
+		if (command === "prepare_analysis_task") {
+			const kind = String(args?.kind ?? "") as AnalysisTaskKind;
+			if (!["static", "debugger", "gui", "dynamic"].includes(kind)) {
+				throw new Error("kind must be static, debugger, gui, or dynamic");
+			}
+			const suppliedRequest: Record<string, unknown> =
+				typeof args?.request === "object" && args.request
+					? { ...(args.request as Record<string, unknown>) }
+					: {
+							operation: args?.operation,
+							...(typeof args?.target === "string"
+								? { target: args.target }
+								: {}),
+						};
+			const operation = String(suppliedRequest.operation ?? "").trim();
+			if (!operation) throw new Error("operation is required");
+			if (suppliedRequest.timeout_ms === undefined) {
+				suppliedRequest.timeout_ms = 120_000;
+			}
+			let request: Record<string, unknown>;
+			if (kind === "debugger") {
+				request = LiveDebuggerInputSchema.parse(suppliedRequest);
+				if (
+					typeof request.pid === "number" &&
+					request.operation !== "process_identity"
+				) {
+					const identity = await probeProcessStartTokenAsync(request.pid);
+					if (identity.status !== "found")
+						throw new Error("Debugger process identity unavailable");
+					request.pid_start_token = identity.token;
+				}
+			} else if (kind === "dynamic") {
+				request =
+					suppliedRequest.operation === "android_capture"
+						? await bindAndroidCapture(suppliedRequest)
+						: await bindRuntimeAnalysisRequest(
+								RuntimeAnalysisInputSchema.parse(suppliedRequest),
+							);
+			} else {
+				if (kind === "gui") suppliedRequest.operation = "open_gui";
+				request = ReverseEngineeringInputSchema.parse(suppliedRequest);
+			}
+			const prepared = await desktopAnalysisTaskOrchestrator.prepare({
+				workspaceRoot: baseDir,
+				kind,
+				request,
+				allowExternalTarget: args?.allowExternalTarget === true,
+				timeoutMs:
+					kind === "dynamic" && operation === "android_capture"
+						? Math.min(300000, Number(suppliedRequest.timeout_ms) + 180000)
+						: Number(suppliedRequest.timeout_ms),
+			});
+			if (typeof args?.investigationId === "string")
+				investigations().bind(baseDir, args.investigationId, prepared);
+			return prepared;
+		}
+		if (command === "approve_analysis_task") {
+			const planId = String(args?.planId ?? "").trim();
+			const requirements = Array.isArray(args?.requirements)
+				? args.requirements.map(String)
+				: [];
+			return desktopAnalysisTaskOrchestrator.approve(
+				planId,
+				requirements,
+				String(args?.requestHash ?? ""),
+			);
+		}
+		if (command === "cancel_analysis_task") {
+			return desktopAnalysisTaskOrchestrator.cancel(
+				String(args?.planId ?? "").trim(),
+			);
+		}
+		if (command === "export_analysis_evidence") {
+			const planId = String(args?.planId ?? "").trim();
+			const bundle = desktopAnalysisTaskOrchestrator.evidenceBundle(
+				planId,
+				baseDir,
+			);
+			const outputDirectory = join(baseDir, ".cline", "analysis-evidence");
+			mkdirSync(outputDirectory, { recursive: true });
+			const outputPath = join(outputDirectory, `${planId}.json`);
+			writeFileSync(outputPath, `${JSON.stringify(bundle, null, 2)}\n`, "utf8");
+			return { outputPath, bundleHash: bundle.bundleHash };
+		}
+		if (command === "list_analysis_tasks") {
+			return desktopAnalysisTaskOrchestrator.list(baseDir);
+		}
+		if (command === "get_analysis_diagnostics") {
+			return {
+				...desktopAnalysisTaskOrchestrator.diagnostics(),
+				sandboxHealth: await probeAnalysisSandbox(),
+				processSessions: getProcessSessionRuntimeCapabilities(),
+			};
+		}
 		if (command === "discover_analysis_tools") {
 			const [reverseEngineering, debuggerTools] = await Promise.all([
 				desktopReverseEngineeringExecutor(
 					ReverseEngineeringInputSchema.parse({
 						engine: "auto",
 						operation: "discover",
-            discovery_depth: args?.depth === "deep" ? "deep" : "fast",
+						discovery_depth: args?.depth === "deep" ? "deep" : "fast",
 					}),
 					toolContext,
 				),
@@ -5336,41 +5612,128 @@ export async function handleCommand(
 				);
 			}
 			const input = LiveDebuggerInputSchema.parse(args?.input);
-      const planId = String(args?.planId ?? "").trim();
-      const executionToken = String(args?.executionToken ?? "").trim();
-      await desktopAnalysisTaskOrchestrator.consume({
-        planId,
-        executionToken,
-        workspaceRoot: baseDir,
+			const planId = String(args?.planId ?? "").trim();
+			const executionToken = String(args?.executionToken ?? "").trim();
+			await desktopAnalysisTaskOrchestrator.consume({
+				planId,
+				executionToken,
+				workspaceRoot: baseDir,
 				kind: "debugger",
-        request: input,
-      });
-      const executionContext = {
-        ...toolContext,
-        signal: desktopAnalysisTaskOrchestrator.signal(planId),
-      };
-      try {
-        const result = JSON.parse(
+				request: input,
+			});
+			const executionContext = {
+				...toolContext,
+				signal: desktopAnalysisTaskOrchestrator.signal(planId),
+			};
+			try {
+				const result = JSON.parse(
 					await desktopLiveDebuggerExecutor(input, executionContext),
-        );
-        const plan = desktopAnalysisTaskOrchestrator.complete(
-          planId,
-          result,
-          "live-debugger",
-        );
-        return { kind: "debugger", result, plan };
-      } catch (error) {
-        desktopAnalysisTaskOrchestrator.fail(planId, error);
-        throw error;
-      }
+				);
+				const plan = desktopAnalysisTaskOrchestrator.complete(
+					planId,
+					result,
+					"live-debugger",
+				);
+				return { kind: "debugger", result, plan };
+			} catch (error) {
+				desktopAnalysisTaskOrchestrator.fail(planId, error);
+				throw error;
+			}
 		}
-    if(command === "run_dynamic_analysis"){
-      if(args?.confirmExecution!==true||args?.confirmArtifactUpload!==true)throw new Error("Explicit authorized execution and artifact upload confirmation required");
-      const input=(args?.input as {operation?:string})?.operation==="android_capture"?AndroidCaptureInput.parse(args?.input):RuntimeAnalysisInputSchema.parse(args?.input),planId=String(args?.planId??""),executionToken=String(args?.executionToken??"");
-      const plan=await desktopAnalysisTaskOrchestrator.consume({planId,executionToken,workspaceRoot:baseDir,kind:"dynamic",request:input});
-      try{const fs=await import("node:fs/promises"),file=await fs.open(plan.target!,"r");let artifact:Buffer;try{const info=await file.stat();if(!info.isFile()||info.size>16777216)throw new Error("Runtime upload budget exceeded");const buffer=Buffer.alloc(16777217);let n=0;while(n<buffer.length){const {bytesRead}=await file.read(buffer,n,buffer.length-n,n);if(!bytesRead)break;n+=bytesRead;}if(n>16777216)throw new Error("Artifact grew beyond budget");artifact=buffer.subarray(0,n);}finally{await file.close();}
-      if(!plan.targetIdentity?.sha256||createHash("sha256").update(artifact).digest("hex")!==plan.targetIdentity.sha256)throw new Error("Artifact changed since approval");const result=input.operation==="android_capture"?await runAndroidCapture(input,artifact,plan.requestHash,baseDir,desktopAnalysisTaskOrchestrator.signal(planId)):await submitAnalysisSandbox(input,artifact,plan.requestHash,desktopAnalysisTaskOrchestrator.signal(planId));const finished=result.status==="failed"?desktopAnalysisTaskOrchestrator.fail(planId,"Worker failed"):desktopAnalysisTaskOrchestrator.complete(planId,result,input.operation==="android_capture"?"isolated-android-worker":"isolated-qbdi-worker",input.operation==="android_capture"?(result as {outputPaths?:string[]}).outputPaths??[]:[]);const investigationWarning=recordInvestigation(args,baseDir,finished,result,input.operation==="android_capture");return {result,plan:finished,investigationWarning};}catch(error){desktopAnalysisTaskOrchestrator.fail(planId,error);throw error;}
-    }
+		if (command === "run_dynamic_analysis") {
+			if (
+				args?.confirmExecution !== true ||
+				args?.confirmArtifactUpload !== true
+			)
+				throw new Error(
+					"Explicit authorized execution and artifact upload confirmation required",
+				);
+			const input =
+					(args?.input as { operation?: string })?.operation ===
+					"android_capture"
+						? AndroidCaptureInput.parse(args?.input)
+						: RuntimeAnalysisInputSchema.parse(args?.input),
+				planId = String(args?.planId ?? ""),
+				executionToken = String(args?.executionToken ?? "");
+			const plan = await desktopAnalysisTaskOrchestrator.consume({
+				planId,
+				executionToken,
+				workspaceRoot: baseDir,
+				kind: "dynamic",
+				request: input,
+			});
+			try {
+				const fs = await import("node:fs/promises"),
+					file = await fs.open(plan.target!, "r");
+				let artifact: Buffer;
+				try {
+					const info = await file.stat();
+					if (!info.isFile() || info.size > 16777216)
+						throw new Error("Runtime upload budget exceeded");
+					const buffer = Buffer.alloc(16777217);
+					let n = 0;
+					while (n < buffer.length) {
+						const { bytesRead } = await file.read(
+							buffer,
+							n,
+							buffer.length - n,
+							n,
+						);
+						if (!bytesRead) break;
+						n += bytesRead;
+					}
+					if (n > 16777216) throw new Error("Artifact grew beyond budget");
+					artifact = buffer.subarray(0, n);
+				} finally {
+					await file.close();
+				}
+				if (
+					!plan.targetIdentity?.sha256 ||
+					createHash("sha256").update(artifact).digest("hex") !==
+						plan.targetIdentity.sha256
+				)
+					throw new Error("Artifact changed since approval");
+				const result =
+					input.operation === "android_capture"
+						? await runAndroidCapture(
+								input,
+								artifact,
+								plan.requestHash,
+								baseDir,
+								desktopAnalysisTaskOrchestrator.signal(planId),
+							)
+						: await submitAnalysisSandbox(
+								input,
+								artifact,
+								plan.requestHash,
+								desktopAnalysisTaskOrchestrator.signal(planId),
+							);
+				const finished =
+					result.status === "failed"
+						? desktopAnalysisTaskOrchestrator.fail(planId, "Worker failed")
+						: desktopAnalysisTaskOrchestrator.complete(
+								planId,
+								result,
+								input.operation === "android_capture"
+									? "isolated-android-worker"
+									: "isolated-qbdi-worker",
+								input.operation === "android_capture"
+									? ((result as { outputPaths?: string[] }).outputPaths ?? [])
+									: [],
+							);
+				const investigationWarning = recordInvestigation(
+					args,
+					baseDir,
+					finished,
+					result,
+					input.operation === "android_capture",
+				);
+				return { result, plan: finished, investigationWarning };
+			} catch (error) {
+				desktopAnalysisTaskOrchestrator.fail(planId, error);
+				throw error;
+			}
+		}
 		const rawInput = {
 			...(typeof args?.input === "object" && args.input ? args.input : {}),
 		} as Record<string, unknown>;
@@ -5399,7 +5762,7 @@ export async function handleCommand(
 			if (
 				![
 					"inspect",
-          "advanced_analysis",
+					"advanced_analysis",
 					"forensic_report",
 					"apk_security_report",
 					"compare_apks",
@@ -5416,57 +5779,73 @@ export async function handleCommand(
 			}
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
-    const planId = String(args?.planId ?? "").trim();
-    const executionToken = String(args?.executionToken ?? "").trim();
-    await desktopAnalysisTaskOrchestrator.consume({
-      planId,
-      executionToken,
-      workspaceRoot: baseDir,
-      kind: command === "open_analysis_gui" ? "gui" : "static",
-      request: input,
-    });
-    const executionContext = {
-      ...toolContext,
-      signal: desktopAnalysisTaskOrchestrator.signal(planId),
-    };
-    let result: string;
+		const planId = String(args?.planId ?? "").trim();
+		const executionToken = String(args?.executionToken ?? "").trim();
+		await desktopAnalysisTaskOrchestrator.consume({
+			planId,
+			executionToken,
+			workspaceRoot: baseDir,
+			kind: command === "open_analysis_gui" ? "gui" : "static",
+			request: input,
+		});
+		const executionContext = {
+			...toolContext,
+			signal: desktopAnalysisTaskOrchestrator.signal(planId),
+		};
+		let result: string;
 		try {
-      result = await desktopReverseEngineeringExecutor(input, executionContext);
-    } catch (error) {
-      desktopAnalysisTaskOrchestrator.fail(planId, error);
-      throw error;
-    }
-    try {
-      const parsed = JSON.parse(result);
-      if(input.operation === "advanced_analysis" && ["blocked","failed","cancelled"].includes(parsed?.result?.status)) {
-        const plan=desktopAnalysisTaskOrchestrator.fail(planId,`Advanced analysis ${parsed.result.status}; inspect evidence for details.`);
-        return {kind:"reverse-engineering",result:parsed,plan};
-      }
-      const outputPaths =
-        parsed && typeof parsed === "object"
-          ? [
-              parsed.outputDirectory,
-              parsed.outputFile,
-              parsed.reportOutputFile,
-            ].filter((value): value is string => typeof value === "string")
-          : [];
-      const plan = desktopAnalysisTaskOrchestrator.complete(
-        planId,
-        parsed,
-        command === "open_analysis_gui"
-          ? "external-analysis-gui"
-          : "reverse-engineering",
-        outputPaths,
-      );
-      const investigationWarning=recordInvestigation(args,baseDir,plan,parsed);
-      return { kind: "reverse-engineering", result: parsed, plan, investigationWarning };
+			result = await desktopReverseEngineeringExecutor(input, executionContext);
+		} catch (error) {
+			desktopAnalysisTaskOrchestrator.fail(planId, error);
+			throw error;
+		}
+		try {
+			const parsed = JSON.parse(result);
+			if (
+				input.operation === "advanced_analysis" &&
+				["blocked", "failed", "cancelled"].includes(parsed?.result?.status)
+			) {
+				const plan = desktopAnalysisTaskOrchestrator.fail(
+					planId,
+					`Advanced analysis ${parsed.result.status}; inspect evidence for details.`,
+				);
+				return { kind: "reverse-engineering", result: parsed, plan };
+			}
+			const outputPaths =
+				parsed && typeof parsed === "object"
+					? [
+							parsed.outputDirectory,
+							parsed.outputFile,
+							parsed.reportOutputFile,
+						].filter((value): value is string => typeof value === "string")
+					: [];
+			const plan = desktopAnalysisTaskOrchestrator.complete(
+				planId,
+				parsed,
+				command === "open_analysis_gui"
+					? "external-analysis-gui"
+					: "reverse-engineering",
+				outputPaths,
+			);
+			const investigationWarning = recordInvestigation(
+				args,
+				baseDir,
+				plan,
+				parsed,
+			);
+			return {
+				kind: "reverse-engineering",
+				result: parsed,
+				plan,
+				investigationWarning,
+			};
 		} catch {
-      const plan = desktopAnalysisTaskOrchestrator.complete(
-        planId,
-        result,
-        "reverse-engineering",
-      );
-      return { kind: "reverse-engineering", result, plan };
+			const plan = desktopAnalysisTaskOrchestrator.complete(
+				planId,
+				result,
+				"reverse-engineering",
+			);
+			return { kind: "reverse-engineering", result, plan };
 		}
 	}
 

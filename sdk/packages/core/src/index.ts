@@ -3,6 +3,14 @@
  *
  * Core contracts, shared state utilities, and Node runtime services.
  */
+export {
+	analysisResourceGovernor,
+	ResourceGovernor,
+} from "./extensions/tools/executors/resource-governor";
+export {
+	configureAnalysisRuntime,
+	getAnalysisRuntimeIdentity,
+} from "./extensions/tools/executors/analysis-runtime";
 export { checkAnalysisEnvironment } from "./extensions/tools/executors/analysis-environment";
 export { listObservedIdaJobs } from "./extensions/tools/executors/ida-job-diagnostics";
 
@@ -990,7 +998,7 @@ export {
 	PATCH_MARKERS,
 	PatchActionType,
 	type PatchFileChange,
-  getProcessSessionRuntimeCapabilities,
+	getProcessSessionRuntimeCapabilities,
 	ProcessSessionManager,
 	type ProcessSessionReadResult,
 	type ProcessSessionSignal,
@@ -1171,5 +1179,8 @@ export type {
 } from "./types/sessions";
 export type { ArtifactStore, SessionStore, TeamStore } from "./types/storage";
 
-export {validateNotebook} from "./extensions/tools/executors/analysis-notebook";
-export {buildEvidenceGraph,EvidenceGraphSchema} from "./extensions/tools/executors/analysis-evidence-graph";
+export { validateNotebook } from "./extensions/tools/executors/analysis-notebook";
+export {
+	buildEvidenceGraph,
+	EvidenceGraphSchema,
+} from "./extensions/tools/executors/analysis-evidence-graph";

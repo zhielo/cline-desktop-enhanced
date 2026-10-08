@@ -119,6 +119,7 @@ export type ModelCandidate = {
 	latencyMs?: number;
 	successRate?: number;
 	toolReliability?: number;
+	sampleCount?: number;
 };
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -946,6 +947,15 @@ export function routeEngineeringModel(
 		? task.requiredCapabilities.map(String)
 		: [];
 	const minimumContext = Math.max(0, Number(task.minimumContext ?? 0));
+	const maxCost =
+		task.maxCostPerMillionTokens === undefined
+			? undefined
+			: Number(task.maxCostPerMillionTokens);
+	if (
+		!Number.isFinite(minimumContext) ||
+		(maxCost !== undefined && (!Number.isFinite(maxCost) || maxCost < 0))
+	)
+		throw new Error("Invalid model routing budget");
 	const ranked = candidates
 		.map((candidate) => {
 			const missing = required.filter(
@@ -963,13 +973,27 @@ export function routeEngineeringModel(
 				candidate,
 				score: Math.round(score * 100) / 100,
 				missingCapabilities: missing,
+				eligible:
+					missing.length === 0 &&
+					Number.isFinite(candidate.contextWindow) &&
+					candidate.contextWindow >= minimumContext &&
+					(maxCost === undefined ||
+						(typeof candidate.costPerMillionTokens === "number" &&
+							candidate.costPerMillionTokens >= 0 &&
+							candidate.costPerMillionTokens <= maxCost)),
+				measurements:
+					candidate.sampleCount && candidate.sampleCount >= 20
+						? "supplied-measured-outcomes"
+						: "estimates-or-low-sample",
+				sampleCount: Math.max(0, Math.trunc(candidate.sampleCount ?? 0)),
 			};
 		})
 		.sort((a, b) => b.score - a.score);
 	return {
-		selected: ranked[0]?.candidate,
-		reason:
-			"Highest evidence-weighted capability, reliability, context, latency, and cost score",
+		selected: ranked.find((item) => item.eligible)?.candidate,
+		reason: ranked.some((item) => item.eligible)
+			? "Highest-ranked eligible model; missing-capability and insufficient-context models cannot be selected"
+			: "No eligible model meets the required capabilities and minimum context",
 		ranked,
 	};
 }

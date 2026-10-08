@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join, isAbsolute } from "node:path";
 import { z } from "zod";
 import { StringDecoder } from "node:string_decoder";
-import { retainWorkerDiagnostics, type WorkerDiagnostics, type WorkerFailureCategory } from "./analysis-worker-diagnostics";
+import {
+	retainWorkerDiagnostics,
+	type WorkerDiagnostics,
+	type WorkerFailureCategory,
+} from "./analysis-worker-diagnostics";
 import { ADVANCED_ANALYSIS_WORKER } from "./advanced-analysis-worker";
 import { ANDROID_INVESTIGATION_WORKER } from "./android-investigation-worker";
 import {
@@ -154,7 +158,31 @@ function killTree(child: ChildProcess) {
 		}
 	}
 }
+import { getAnalysisRuntimeIdentity } from "./analysis-runtime";
+import { analysisResourceGovernor } from "./resource-governor";
 export async function runAdvancedAnalysis(
+	request: AdvancedRequest,
+	signal?: AbortSignal,
+): Promise<AdvancedResult> {
+	if (getAnalysisRuntimeIdentity().integrity === "failed")
+		return outcome(
+			"blocked",
+			"Bundled runtime integrity failed. Reinstall the trusted app; no fallback interpreter is used.",
+		);
+	if (signal?.aborted)
+		return outcome("cancelled", "Cancelled before resource admission");
+	const release = await analysisResourceGovernor.acquire(
+		128,
+		signal,
+		Math.min(request.timeoutMs ?? 60000, 60000),
+	);
+	try {
+		return await runAdvancedAnalysisOwned(request, signal);
+	} finally {
+		release();
+	}
+}
+async function runAdvancedAnalysisOwned(
 	request: AdvancedRequest,
 	signal?: AbortSignal,
 ): Promise<AdvancedResult> {
@@ -220,9 +248,15 @@ export async function runAdvancedAnalysis(
 		throw new Error("CLINE_RE_PYTHON must be an absolute interpreter path");
 	const started = Date.now();
 	const diagnostics: WorkerDiagnostics = {
-		jobId: randomUUID(), action: request.action, interpreter: executable,
-		pid: null, exitCode: null, signal: null, durationMs: 0,
-		stderrTail: "", stderrTruncated: false,
+		jobId: randomUUID(),
+		action: request.action,
+		interpreter: executable,
+		pid: null,
+		exitCode: null,
+		signal: null,
+		durationMs: 0,
+		stderrTail: "",
+		stderrTruncated: false,
 	};
 	const directory = await mkdtemp(join(tmpdir(), "cline-advanced-"));
 	const script = join(directory, "worker.py");
@@ -253,6 +287,7 @@ export async function runAdvancedAnalysis(
 					executable,
 					[
 						"-I",
+						"-B",
 						script,
 						JSON.stringify({
 							action: request.action,
@@ -301,8 +336,14 @@ export async function runAdvancedAnalysis(
 				terminationTimer = setTimeout(() => {
 					diagnostics.terminationConfirmed = false;
 					diagnostics.cleanup = "Deferred: worker termination unconfirmed";
-					finish(outcome(status, detail),
-						status === "cancelled" ? "cancelled" : detail.includes("time budget") ? "timeout" : "output-budget");
+					finish(
+						outcome(status, detail),
+						status === "cancelled"
+							? "cancelled"
+							: detail.includes("time budget")
+								? "timeout"
+								: "output-budget",
+					);
 				}, 2000);
 			};
 			const timer = setTimeout(
@@ -310,7 +351,10 @@ export async function runAdvancedAnalysis(
 				Math.min(request.timeoutMs ?? 120000, 300000),
 			);
 			const abort = () => stop("cancelled", "Analysis cancelled");
-			const finish = (result: AdvancedResult, category?: WorkerFailureCategory) => {
+			const finish = (
+				result: AdvancedResult,
+				category?: WorkerFailureCategory,
+			) => {
 				if (settled) return;
 				settled = true;
 				clearTimeout(timer);
@@ -319,14 +363,26 @@ export async function runAdvancedAnalysis(
 				appendStderr(stderrRedactor.push(stderrDecoder.end()));
 				appendStderr(stderrRedactor.finish());
 				diagnostics.durationMs = Date.now() - started;
-				diagnostics.interpreter = redactSensitiveText(executable, policy.secretValues);
-				if (!category && result.status === "blocked" &&
-					String(result.evidence.reason ?? "").startsWith("Missing optional engine:"))
+				diagnostics.interpreter = redactSensitiveText(
+					executable,
+					policy.secretValues,
+				);
+				if (
+					!category &&
+					result.status === "blocked" &&
+					String(result.evidence.reason ?? "").startsWith(
+						"Missing optional engine:",
+					)
+				)
 					category = "missing-dependency";
 				diagnostics.category = category;
 				// The child cannot supply or override host diagnostic metadata.
 				result.diagnostics = diagnostics;
-				if (result.status === "failed" || result.status === "blocked" || result.status === "cancelled")
+				if (
+					result.status === "failed" ||
+					result.status === "blocked" ||
+					result.status === "cancelled"
+				)
 					void retainWorkerDiagnostics(diagnostics).then(() => resolve(result));
 				else resolve(result);
 			};
@@ -344,7 +400,10 @@ export async function runAdvancedAnalysis(
 				appendStderr(stderrRedactor.push(stderrDecoder.write(chunk))),
 			);
 			child.on("error", () =>
-				finish(outcome("blocked", "Configured interpreter unavailable"), "launch-failure"),
+				finish(
+					outcome("blocked", "Configured interpreter unavailable"),
+					"launch-failure",
+				),
 			);
 			child.on("close", (code, signalName) => {
 				if (settled) return;
@@ -353,18 +412,27 @@ export async function runAdvancedAnalysis(
 				diagnostics.terminationConfirmed = true;
 				stdout += stdoutDecoder.end();
 				if (interrupted) {
-					finish(outcome(interrupted, reason),
-						interrupted === "cancelled" ? "cancelled" :
-						reason.includes("time budget") ? "timeout" : "output-budget");
+					finish(
+						outcome(interrupted, reason),
+						interrupted === "cancelled"
+							? "cancelled"
+							: reason.includes("time budget")
+								? "timeout"
+								: "output-budget",
+					);
 					return;
 				}
 				if (code !== 0) {
 					let result = outcome("failed", "Worker exited unsuccessfully");
 					try {
-						result = ResultSchema.parse(JSON.parse(redactSensitiveText(stdout, policy.secretValues)));
+						result = ResultSchema.parse(
+							JSON.parse(redactSensitiveText(stdout, policy.secretValues)),
+						);
 						// Preserve valid evidence, but never accept success from a failed child.
 						result.status = "failed";
-					} catch { /* stderr and exit status remain authoritative diagnostics */ }
+					} catch {
+						/* stderr and exit status remain authoritative diagnostics */
+					}
 					finish(result, "abnormal-exit");
 					return;
 				}
@@ -375,7 +443,10 @@ export async function runAdvancedAnalysis(
 						),
 					);
 				} catch {
-					finish(outcome("failed", "Worker returned invalid evidence"), "invalid-output");
+					finish(
+						outcome("failed", "Worker returned invalid evidence"),
+						"invalid-output",
+					);
 				}
 			});
 		});

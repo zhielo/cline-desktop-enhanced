@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { analysisResourceGovernor } from "./resource-governor";
 import { withProjectLease } from "./analysis-project-lease";
 import { redactSensitiveText } from "./process-environment-policy";
 import type { FunctionSelector } from "./targeted-decompiler-scripts";
@@ -190,15 +191,28 @@ export class ManagedEnginePool {
 		);
 		lease.catch(acquiredReject);
 		let worker: Worker | undefined;
+		let releaseResource: (() => void) | undefined;
+		let releaseStartup: (() => void) | undefined;
 		try {
 			await acquired;
 			signal?.throwIfAborted();
+			releaseResource = await analysisResourceGovernor.acquire(
+				256,
+				signal,
+				Math.min(timeoutMs, 60000),
+				true,
+			);
 			const launch = await factory();
 			launch.root = await realpath(launch.root);
 			signal?.throwIfAborted();
 			const batch =
 				process.platform === "win32" && /\.(bat|cmd)$/i.test(launch.command);
 			if (batch) guardManagedBatchArguments(launch.command, launch.args);
+			releaseStartup = await analysisResourceGovernor.acquire(
+				1,
+				signal,
+				Math.min(timeoutMs, 60000),
+			);
 			const child = spawn(
 				batch ? (process.env.ComSpec ?? "cmd.exe") : launch.command,
 				batch
@@ -240,6 +254,9 @@ export class ManagedEnginePool {
 				clearTimeout(current.idle);
 				clearTimeout(current.lifetime);
 				current.release();
+				releaseResource?.();
+				releaseStartup?.();
+				releaseStartup = undefined;
 				this.workers.delete(key);
 				resolveClosed();
 			};
@@ -253,10 +270,14 @@ export class ManagedEnginePool {
 				this.options.lifetimeMs ?? 900000,
 			);
 			await this.waitFor(current, "ready.json", timeoutMs, signal, 4096);
+			releaseStartup?.();
+			releaseStartup = undefined;
 			return current;
 		} catch (error) {
 			if (worker) await this.stop(worker);
 			else {
+				releaseResource?.();
+				releaseStartup?.();
 				release();
 				await lease;
 			}
@@ -321,7 +342,13 @@ export class ManagedEnginePool {
 		} else worker = await this.create(key, project, factory, signal, timeoutMs);
 		const current = worker,
 			id = randomUUID();
+		let releaseExecution: (() => void) | undefined;
 		try {
+			releaseExecution = await analysisResourceGovernor.acquire(
+				128,
+				signal,
+				Math.min(timeoutMs, 60000),
+			);
 			if (current.exited)
 				throw new Error("Managed engine exited; no automatic restart");
 			const request = {
@@ -376,9 +403,10 @@ export class ManagedEnginePool {
 					"Not a semantic equivalence proof, OS sandbox or loaded-memory observation",
 			};
 		} catch (error) {
-			await this.stop(current);
+			if (releaseExecution) await this.stop(current);
 			throw error;
 		} finally {
+			releaseExecution?.();
 			current.busy = false;
 			if (!current.exited && !current.stopping) this.armIdle(current);
 		}

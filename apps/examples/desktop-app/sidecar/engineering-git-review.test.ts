@@ -49,3 +49,20 @@ describe("buildEngineeringGitReview", () => {
 		expect(() => buildEngineeringGitReview(root, "--dangerous")).toThrow();
 	});
 });
+
+it("returns bounded import-impact and non-executing suggested tests", () => {
+	const root = repository();
+	writeFileSync(
+		join(root, "consumer.ts"),
+		"import { authorize } from './auth'; export const value = authorize();",
+	);
+	writeFileSync(join(root, "consumer.test.ts"), "// owned test candidate");
+	writeFileSync(
+		join(root, "auth.ts"),
+		"export function authorize(){return false}",
+	);
+	const review = buildEngineeringGitReview(root);
+	expect(review.impact.affectedFiles).toContain("consumer.ts");
+	expect(review.impact.suggestedTestFiles).toContain("consumer.test.ts");
+	expect(review.impact.executedTests).toBe(false);
+});

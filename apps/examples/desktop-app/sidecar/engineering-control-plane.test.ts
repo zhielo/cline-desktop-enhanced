@@ -151,3 +151,30 @@ describe("engineering policies", () => {
 		expect(result.selected?.id).toBe("strong");
 	});
 });
+
+it("never selects a model that lacks required capabilities, context, or a declared cost budget", () => {
+	const candidate = {
+		id: "cheap",
+		provider: "owned",
+		capabilities: [],
+		contextWindow: 4096,
+		successRate: 1,
+		toolReliability: 1,
+		costPerMillionTokens: 1,
+	};
+	expect(
+		routeEngineeringModel({ requiredCapabilities: ["tools"] }, [candidate])
+			.selected,
+	).toBeUndefined();
+	expect(
+		routeEngineeringModel({ minimumContext: 8192 }, [candidate]).selected,
+	).toBeUndefined();
+	expect(
+		routeEngineeringModel({ maxCostPerMillionTokens: 0.5 }, [candidate])
+			.selected,
+	).toBeUndefined();
+	expect(routeEngineeringModel({}, [candidate]).ranked[0]).toMatchObject({
+		eligible: true,
+		measurements: "estimates-or-low-sample",
+	});
+});

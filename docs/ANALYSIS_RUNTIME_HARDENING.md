@@ -2,14 +2,12 @@
 
 ## Windows setup and repair
 
-The installer is lightweight: CI's temporary engine environment is **not** bundled into the desktop.
-Use a trusted committed checkout and inspect `scripts/setup-analysis-environment.ps1`.
-Without `-Apply`, it prints a plan and changes nothing. With `-Apply`, it creates/reuses
-a dedicated Python 3.13 venv, installs the committed pinned requirements, checks imports
-under `-I`, and only then sets the user's absolute `CLINE_RE_PYTHON`.
-Native Miasm installation may require the supported x64 Visual C++ development environment.
-Failures are blocking and do not change the interpreter setting. No automatic package
-installation occurs during an analysis request.
+The private Windows installer now bundles the isolated analysis runtime described
+in `docs/INTEGRATED_ENHANCEMENT_DELIVERY.md`. Normal installed use requires no
+system Python, pip, script or environment setup. Settings offers explicitly
+confirmed offline repair; damaged installer resources require trusted reinstall.
+The following script remains an **optional developer/external-interpreter** path,
+not a prerequisite for the installed Windows app.
 
 Fully stop the desktop and backend; launch from the configured environment or sign out/in
 so the launch parent inherits the new variable. SDK changes also require rebuild/restart.

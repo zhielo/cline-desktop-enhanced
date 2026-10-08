@@ -1,3 +1,5 @@
+import { loadResourceProfile } from "./optimization-status";
+import { initializeBundledAnalysisRuntime } from "./bundled-analysis-runtime";
 import { homedir } from "node:os";
 import {
 	checkManagedHubBuildMismatch,
@@ -242,6 +244,8 @@ async function runEntrypoint(): Promise<void> {
 	setClineClientIdentity(DESKTOP_CLIENT_CONTEXT);
 
 	disableCurrentDirectoryExecutableSearch();
+	await initializeBundledAnalysisRuntime();
+	loadResourceProfile();
 	// Claim the Hub daemon sentinel here, not in the shared remote helper: its
 	// daemon import resolves to the dist build of @cline/core while this bundle
 	// resolves the source build, and a daemon from the other copy publishes a
