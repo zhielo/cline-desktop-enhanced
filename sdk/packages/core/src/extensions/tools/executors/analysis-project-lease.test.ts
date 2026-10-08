@@ -1,8 +1,16 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { withProjectLease } from "./analysis-project-lease";
+it("retains a lease when process termination is uncertain", async () => {
+	const root = await mkdtemp(join(tmpdir(), "uncertain-lease-"));
+	try {
+		await withProjectLease(join(root, "project"), async () => {}, undefined, { root, retainLease: () => true });
+		expect(await readdir(root)).toHaveLength(1);
+		await expect(withProjectLease(join(root, "project"), async () => {}, undefined, { root, waitMs: 1 })).rejects.toThrow("never automatically stolen");
+	} finally { await rm(root, { recursive: true, force: true }); }
+});
 
 it("serializes independent owners and releases only after work finishes", async () => {
 	const root = await mkdtemp(join(tmpdir(), "project-lease-"));

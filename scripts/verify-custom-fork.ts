@@ -4,6 +4,17 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/advanced-analysis.ts",markers:["createStreamingSecretRedactor", "retainWorkerDiagnostics", '"abnormal-exit"', '"invalid-output"', "terminationConfirmed"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-worker-diagnostics.ts",markers:["slice(0, -32)", "mode: 0o600", "never arguments"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.ts",markers:["runObservedIda", "termination-unconfirmed", "No script phase observed", "auto-analysis-waiting"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.ts",markers:["retainLease", "never automatically stolen"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.tsx",markers:["Check analysis readiness", "Refresh IDA jobs", "Configuration / acceptance required"]},
+ {path:"apps/examples/desktop-app/sidecar/analysis-environment.ts",markers:["checkAnalysisEnvironment", "active = undefined"]},
+ {path:"scripts/setup-analysis-environment.ps1",markers:["if (-not $Apply)", "CLINE_RE_PYTHON was not changed", "-I -c"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["CLINE_TEST_INSTALLED_APP", "get_desktop_backend_endpoint", "restart-setting-and-session-persistence-passed", "owned-offline-fixture"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["pull_request:", '"fix/**"', "Select unsigned private installer", "validate:advanced --engines", "steps.ui_acceptance.outcome == 'success'"]},
+ {path:".github/workflows/custom-desktop-validation.yml",markers:["Consolidated blocking regression gates", "run: bun run validate:advanced"]},
+ {path:"docs/ANALYSIS_RUNTIME_HARDENING.md",markers:["not progress evidence", "synthetic merge", "does not silently alter administrator branch protection"]},
  {path:"apps/examples/desktop-app/sidecar/chat-session.ts",markers:["return prompt + projectOutputInstructions"]},
  {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["get_project_output_location", "open_project_output_folder", "ensureProjectOutputDirectories(location)"]},
  {path:"apps/examples/desktop-app/webview/app/page.tsx",markers:["ProjectOutputBar", "config.workspaceRoot || config.cwd"]},
@@ -125,7 +136,7 @@ const requiredMarkers: Array<{
 
  {path:"package.json",markers:["bun --sequential -F '*' typecheck"]},
  {path:"sdk/packages/core/tsconfig.bun-smoke.json",markers:['"types": ["node", "bun"]']},
- {path:".github/workflows/sdk-test.yml",markers:['bun-version: "1.3.14"', "bun install --frozen-lockfile", "bun run types", "run: bun run lint"]},
+ {path:".github/workflows/sdk-test.yml",markers:['bun-version: ${{ steps.toolchain.outputs.version }}', "bun install --frozen-lockfile", "bun run types", "run: bun run lint"]},
  {path:"apps/examples/desktop-app/webview/components/views/settings/functions-view.tsx",markers:["const controlPrefix = useId()", "htmlFor={", "field-21"]},
 
 	{
@@ -393,10 +404,11 @@ const requiredMarkers: Array<{
 			"Run process-session terminal smoke test",
 			"always() && steps.installer.outcome == 'success'",
 			"process-session-terminal-smoke.ts",
-			'BUN_VERSION: "1.3.14"',
-			"bun-version: ${{ env.BUN_VERSION }}",
+			"scripts/read-bun-version.mjs",
+			"bun-version: ${{ steps.toolchain.outputs.version }}",
 			"SBOM.spdx.json",
-			"actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+			"Select unsigned private installer",
+			"steps.ui_acceptance.outcome == 'success'",
 		],
 	},
 	{

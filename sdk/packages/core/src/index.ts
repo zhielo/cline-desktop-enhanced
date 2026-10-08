@@ -3,6 +3,8 @@
  *
  * Core contracts, shared state utilities, and Node runtime services.
  */
+export { checkAnalysisEnvironment } from "./extensions/tools/executors/analysis-environment";
+export { listObservedIdaJobs } from "./extensions/tools/executors/ida-job-diagnostics";
 
 export * as Llms from "@cline/llms";
 export {

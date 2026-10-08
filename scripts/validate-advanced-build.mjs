@@ -66,6 +66,7 @@ async function main() {
     job("Build SDK packages", ["run", "build:sdk"]),
   ];
   const checks = [
+    job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),
     job("Test consolidated runner", ["test", "scripts/validate-advanced-build.test.mjs"]),
     job("Type-check desktop", ["x", "tsc", "-p", "apps/examples/desktop-app/tsconfig.dev.json", "--noEmit"]),
     job("Type-check core", ["x", "tsc", "-p", "sdk/packages/core/tsconfig.build.json", "--noEmit"]),
@@ -83,6 +84,8 @@ async function main() {
       "sdk/packages/shared/src/hub.test.ts", "--config", "vitest.config.mts"]),
     job("Test desktop chat UI", ["x", ...pkg.scripts["test:chat-ui"].split(/\s+/)], desktop),
     job("Run desktop customization tests", ["x", "vitest", "run",
+      "apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.test.tsx",
+      "apps/examples/desktop-app/sidecar/analysis-environment.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts",
       "apps/examples/desktop-app/sidecar/android-runtime-client.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-investigation-store.test.ts",
@@ -109,6 +112,9 @@ async function main() {
       "--config", "apps/examples/desktop-app/vitest.config.mts"]),
     job("Test real Hub shutdown runtime identity", ["x", "vitest", "run", "src/hub/daemon/shutdown.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
     job("Run focused SDK safety tests", ["x", "vitest", "run",
+      "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/analysis-environment.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.test.ts",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",

@@ -2,6 +2,17 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Integrated analysis runtime and Windows merge hardening
+
+- Python workers retain bounded streaming-redacted stderr, exact host job/interpreter/PID/exit/signal metadata and distinct failure categories. Failed/blocked receipts are private and bounded; nonzero exit never counts as success. Unconfirmed termination is explicit and defers script cleanup.
+- Settings → Analysis environment performs explicit, coalesced owned-fixture readiness and package inventory using the backend interpreter. No installs or target execution occur on refresh; IDA/Hex-Rays/device readiness remains separately unverified.
+- `scripts/setup-analysis-environment.ps1` requires explicit `-Apply`, pinned dependencies and isolated imports before setting the user's absolute interpreter. Python CI environments are not bundled into the installer. Keystone is not required by Capstone disassembly or IDA.
+- Normal supervised IDA runs publish exact PID receipts and fixed decompiler script phases; the read-only job view never uses CPU totals or missing output as progress proof. Unconfirmed termination/drain retains the cross-process project lease; no automatic stealing or PID-only recovery is added.
+- Every main PR gets an unsigned installer check; fix branches are included. Regression filters are removed and consolidated checks replace failure-masking multiline PowerShell commands. Hosted CI additionally runs optional Python fixture corpora.
+- Verified installer upload now requires installed sidecar smoke AND an installed WebView2 acceptance journey with isolated workspace/profile, idle session, local setting, readiness, navigation and restart. No live model turn, physical-device or licensed IDA test is claimed.
+- Private installer signing secrets and release publication are removed from this workflow, aligning it with artifact-only policy. The supported Bun version is centralized in root packageManager/engines.bun; custom Windows, installer tests and SDK CI read it through scripts/read-bun-version.mjs (currently 1.3.14). Hosted runner versions remain pinned in workflows.
+- Licensed selected-function acceptance is an explicit local script on an authorized IDA/Hex-Rays machine; it is not run by hosted CI and must supply a reviewed receipt when changing adapters. See `docs/ANALYSIS_RUNTIME_HARDENING.md` for setup, evidence and required GitHub administrator settings.
+
 ## Fixed Windows project output location
 
 - Windows canonical directory spelling is accepted only when bigint filesystem directory and parent identities match; existing junction/link and distinct-identity redirection tests remain mandatory. Build #174 exposed the former spelling-only false positive; no failing suite was skipped.
@@ -564,7 +575,7 @@ Do not hide a new regression by weakening assertions or making a required custom
 
 - `bun run validate:advanced` verifies preservation and builds SDK prerequisites before running all previously required desktop/core checks with bounded parallelism (default 2; maximum 4). It never counts a blocked prerequisite as passed and collects every required check failure in a machine-readable summary and separate logs.
 - Required sidecar, installer configuration, task report, chat UI, customization and focused SDK safety suites remain blocking. The Windows workflow then performs its existing process smoke, NSIS build, installation/startup smoke and verified artifact upload. No release or merge is enabled.
-- `bun run validate:advanced --engines` additionally requires a trusted absolute CLINE_RE_PYTHON and runs the real static engine, Miasm and cryptography fixture corpora. Default CI reports these optional engines as not requested, not validated. A passed consolidated source test is not proof of installer or whole-platform completion.
+- `bun run validate:advanced --engines` additionally requires a trusted absolute CLINE_RE_PYTHON and runs the real static engine, Miasm and cryptography fixture corpora. Source-only gates report these optional engines as not requested, not validated; the Windows installer now additionally provisions the pinned interpreter and invokes --engines. A passed consolidated source test is not proof of installer or whole-platform completion.
 
 - Validation evidence upload explicitly includes the scoped hidden .cline-validation folder and fails if no report is present; it never uploads other hidden repository files.
 

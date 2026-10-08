@@ -1,0 +1,198 @@
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { desktopClient } from "@/lib/desktop-client";
+import { PageFrame, PageHeader } from "../page-layout";
+const EXTERNAL_STATUS_LABEL = "Configuration / acceptance required";
+
+type Check = {
+	engine: string;
+	status: string;
+	executionVerified: boolean;
+	version?: string;
+	reason?: string;
+};
+type Result = {
+	checkedAt: string;
+	configured: boolean;
+	interpreter: { executable?: string | null; version?: string | null };
+	readiness: {
+		status: string;
+		evidence: { checks?: Check[]; reason?: string };
+		diagnostics?: { receiptPath?: string; stderrTail?: string };
+	};
+	toolchain: {
+		status: string;
+		evidence: {
+			reason?: string;
+			engines?: { id: string; installedVersion: string | null }[];
+		};
+		diagnostics?: {
+			receiptPath?: string;
+			stderrTail?: string;
+			category?: string;
+		};
+	};
+	externalCapabilities: { id: string; status: string; reason: string }[];
+	setup: string;
+};
+
+export function AnalysisEnvironmentView() {
+	const [result, setResult] = useState<Result | null>(null);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	const [jobs, setJobs] = useState<
+		{
+			id: string;
+			pid: number | null;
+			status: string;
+			lastPhase: string;
+			receiptPath: string;
+		}[]
+	>([]);
+	const refreshJobs = async () => {
+		try {
+			const reply = await desktopClient.invoke<{ jobs: typeof jobs }>(
+				"get_ida_job_diagnostics",
+				{ environmentId: "local" },
+			);
+			setJobs(reply.jobs);
+		} catch (cause) {
+			setError(
+				cause instanceof Error
+					? cause.message
+					: "IDA job diagnostics unavailable",
+			);
+		}
+	};
+	const check = async () => {
+		setBusy(true);
+		setError("");
+		setResult(null);
+		try {
+			setResult(
+				await desktopClient.invoke<Result>(
+					"get_analysis_environment",
+					{ environmentId: "local" },
+					{ timeoutMs: 90_000 },
+				),
+			);
+		} catch (cause) {
+			setError(
+				cause instanceof Error ? cause.message : "Readiness check failed",
+			);
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<PageFrame>
+			<PageHeader title="Analysis environment" />
+			<div
+				className="space-y-4 overflow-auto p-6"
+				data-testid="analysis-environment"
+			>
+				<p>
+					Check the desktop backend’s actual Python interpreter and owned static
+					fixtures. No target binary runs and no packages are installed.
+				</p>
+				<Button onClick={() => void check()} disabled={busy}>
+					{busy ? "Checking environment…" : "Check analysis readiness"}
+				</Button>
+				<Button onClick={() => void refreshJobs()} variant="outline">
+					Refresh IDA jobs
+				</Button>
+				<p>
+					IDA progress is based on explicit script phases, not CPU totals or
+					output-file existence. No process is killed or restarted by refresh.
+				</p>
+				<p>
+					Job status is the last recorded host state, not a fresh
+					process-identity or liveness check. Receipts from the Hub remain
+					visible after desktop restart.
+				</p>
+				<ul>
+					{jobs.map((job) => (
+						<li key={job.id}>
+							Job {job.id}: PID {job.pid ?? "not launched"} — {job.status};{" "}
+							{job.lastPhase}. Receipt: <code>{job.receiptPath}</code>
+						</li>
+					))}
+				</ul>
+				{error && <p role="alert">{error}</p>}
+				{result && (
+					<div aria-live="polite" className="space-y-4">
+						<p>
+							Interpreter:{" "}
+							<code>{result.interpreter.executable ?? "Unavailable"}</code>
+							<br />
+							Version: {result.interpreter.version ?? "Not verified"}
+							<br />
+							{result.configured
+								? "Explicit CLINE_RE_PYTHON"
+								: "PATH fallback — configure an absolute CLINE_RE_PYTHON path"}
+						</p>
+						<p>
+							Package inventory: {result.toolchain.status}. Fixture execution:{" "}
+							{result.readiness.status}.
+						</p>
+						{result.toolchain.evidence.reason && (
+							<p role="alert">{result.toolchain.evidence.reason}</p>
+						)}
+						{result.readiness.evidence.reason && (
+							<p role="alert">{result.readiness.evidence.reason}</p>
+						)}
+						<ul>
+							{result.readiness.evidence.checks?.map((item) => (
+								<li key={item.engine}>
+									<strong>{item.engine}</strong>:{" "}
+									{item.executionVerified
+										? "Ready — owned fixture passed"
+										: item.status === "blocked"
+											? "Missing dependency"
+											: "Failed"}{" "}
+									{item.version && `(${item.version})`}
+									{item.reason && <p>{item.reason}</p>}
+								</li>
+							))}
+						</ul>
+						<details>
+							<summary>
+								Package versions (inventory is not execution proof)
+							</summary>
+							<ul>
+								{result.toolchain.evidence.engines?.map((engine) => (
+									<li key={engine.id}>
+										{engine.id}: {engine.installedVersion ?? "Not installed"}
+									</li>
+								))}
+							</ul>
+						</details>
+						<ul>
+							{result.externalCapabilities.map((item) => (
+								<li key={item.id}>
+									<strong>{item.id}</strong>: {EXTERNAL_STATUS_LABEL}. {item.reason}
+								</li>
+							))}
+						</ul>
+						{[result.toolchain, result.readiness].map(
+							(item, index) =>
+								item.diagnostics?.receiptPath && (
+									<p key={index}>
+										Redacted diagnostic receipt:{" "}
+										<code>{item.diagnostics.receiptPath}</code>
+									</p>
+								),
+						)}
+						<p>{result.setup}</p>
+						<p>
+							Keystone is not required for the built-in Capstone disassembly
+							path. Missing Python packages do not establish an IDA failure.
+						</p>
+					</div>
+				)}
+			</div>
+		</PageFrame>
+	);
+}

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createReverseEngineeringExecutor } from "./reverse-engineering";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 const mock = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ spawn: mock }));
 import {
@@ -12,10 +12,16 @@ import {
 	advancedEvidenceBundle,
 } from "./advanced-analysis";
 import { ReverseEngineeringInputSchema } from "../schemas";
+let diagnosticRoot: string;
+beforeEach(async () => {
+	diagnosticRoot = await mkdtemp(join(tmpdir(), "analysis-diagnostics-"));
+	vi.stubEnv("CLINE_DATA_DIR", diagnosticRoot);
+});
 afterEach(() => {
 	mock.mockReset();
 	vi.unstubAllEnvs();
 });
+afterEach(async () => { await rm(diagnosticRoot, { recursive: true, force: true }); });
 const evidence = {
 	protocol: "cline-advanced-analysis/v1",
 	status: "completed",
@@ -88,6 +94,69 @@ describe("advanced worker contracts", () => {
 		expect((await runAdvancedAnalysis({ action: "toolchain" })).status).toBe(
 			"blocked",
 		);
+	});
+	it("retains redacted stderr, exit status and a private receipt on abnormal exit", async () => {
+		vi.stubEnv("OPENAI_API_KEY", "fixture-private-value");
+		mock.mockImplementation(() => {
+			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: 42, kill: vi.fn() });
+			process.nextTick(() => {
+				child.stderr.write("Traceback: fixture-private-");
+				child.stderr.write("value failed\n");
+				child.emit("close", 7, null);
+			});
+			return child;
+		});
+		const result = await runAdvancedAnalysis({ action: "toolchain" });
+		expect(result.status).toBe("failed");
+		expect(result.diagnostics).toMatchObject({ category: "abnormal-exit", pid: 42, exitCode: 7, signal: null });
+		expect(result.diagnostics?.stderrTail).toContain("[REDACTED]");
+		expect(JSON.stringify(result)).not.toContain("fixture-private-value");
+		expect(result.diagnostics?.receiptPath).toContain("worker-diagnostics");
+	});
+	it("does not accept completed evidence from a nonzero child", async () => {
+		mock.mockImplementation(() => {
+			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined });
+			process.nextTick(() => { child.stdout.write(JSON.stringify(evidence)); child.emit("close", 9, "SIGTERM"); });
+			return child;
+		});
+		const result = await runAdvancedAnalysis({ action: "toolchain" });
+		expect(result.status).toBe("failed");
+		expect(result.evidence).toEqual({});
+		expect(result.diagnostics?.signal).toBe("SIGTERM");
+	});
+	it("reports missing dependency distinctly without inventing an IDA failure", async () => {
+		fake(JSON.stringify({ ...evidence, status: "blocked", evidence: { reason: "Missing optional engine: lief" } }));
+		expect((await runAdvancedAnalysis({ action: "toolchain" })).diagnostics?.category).toBe("missing-dependency");
+	});
+	it("reports interpreter launch failure with diagnostics", async () => {
+		mock.mockImplementation(() => {
+			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined });
+			process.nextTick(() => child.emit("error", new Error("ENOENT")));
+			return child;
+		});
+		expect((await runAdvancedAnalysis({ action: "toolchain" })).diagnostics?.category).toBe("launch-failure");
+	});
+	it("bounds stderr after streaming redaction", async () => {
+		mock.mockImplementation(() => {
+			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined });
+			process.nextTick(() => { child.stderr.write("x".repeat(100_000)); child.emit("close", 1); });
+			return child;
+		});
+		const result = await runAdvancedAnalysis({ action: "toolchain" });
+		expect(result.diagnostics?.stderrTail.length).toBe(16_384);
+		expect(result.diagnostics?.stderrTruncated).toBe(true);
+	});
+	it("reports timeout separately and requests termination", async () => {
+		const kill = vi.fn();
+		mock.mockImplementation(() => {
+			const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), pid: undefined, kill });
+			kill.mockImplementation(() => { process.nextTick(() => child.emit("close", null, "SIGKILL")); });
+			setTimeout(() => child.emit("close", null, "SIGKILL"), 30);
+			return child;
+		});
+		// PID-less fixtures cannot simulate tree termination; close at the budget boundary.
+		const promise = runAdvancedAnalysis({ action: "toolchain", timeoutMs: 1 });
+		expect((await promise).diagnostics?.category).toBe("timeout");
 	});
 	it("bounds worker output", async () => {
 		fake("x".repeat(1024 * 1024 + 1));

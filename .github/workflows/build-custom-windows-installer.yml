@@ -2,10 +2,13 @@ name: Build custom Windows installer
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches:
       - main
       - "feat/**"
+      - "fix/**"
     tags:
       - "desktop-v*"
 
@@ -15,11 +18,8 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
 
 env:
-  BUN_VERSION: "1.3.14"
   RUST_TOOLCHAIN: "1.98.0"
   UPX_VERSION: "4.2.4"
   GITLEAKS_VERSION: "8.28.0"
@@ -38,10 +38,19 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
+      - name: Read supported Bun version
+
+        id: toolchain
+
+        shell: bash
+
+        run: echo "version=$(node "$GITHUB_WORKSPACE/scripts/read-bun-version.mjs")" >> "$GITHUB_OUTPUT"
+
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
+          bun-version: ${{ steps.toolchain.outputs.version }}
 
       - name: Read and validate desktop version
         id: version
@@ -92,7 +101,9 @@ jobs:
         shell: pwsh
         run: |
           choco install upx --version=$env:UPX_VERSION --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'UPX installation failed' }
           choco install gitleaks --version=$env:GITLEAKS_VERSION --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'Gitleaks installation failed' }
           $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
           $nsisUrl = "https://github.com/tauri-apps/binary-releases/releases/download/nsis-$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
           Invoke-WebRequest $nsisUrl -OutFile $zip
@@ -136,6 +147,8 @@ jobs:
         run: bun run validate:advanced
 
       - name: Validate portable Windows analysis engines
+        env:
+          CLINE_VALIDATION_PARALLEL: "1"
         shell: pwsh
         run: |
           # Miasm uses clang-cl plus the first link.exe on PATH. Import the
@@ -169,6 +182,9 @@ jobs:
           & $python workers/android-capture/setup-controller.test.py
           if ($LASTEXITCODE -ne 0) { throw "Controller setup plan fixtures failed (not VM provisioning evidence)" }
           $env:CLINE_RE_PYTHON = $python
+          "CLINE_RE_PYTHON=$python" >> $env:GITHUB_ENV
+          & bun run validate:advanced --engines
+          if ($LASTEXITCODE -ne 0) { throw 'Real optional engine fixture corpora failed' }
           Push-Location sdk
           try { bun test packages/core/scripts/advanced-windows-engine-smoke.test.ts; if ($LASTEXITCODE -ne 0) { throw "Real portable engine execution failed" } }
           finally { Pop-Location }
@@ -210,49 +226,19 @@ jobs:
           & bunx tauri build --bundles nsis
           if ($LASTEXITCODE -ne 0) { throw "Tauri build failed with exit code $LASTEXITCODE" }
 
-      - name: Optionally Authenticode-sign installer
+      - name: Select unsigned private installer
         id: signing
         shell: pwsh
         working-directory: apps/examples/desktop-app
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          $bundleRoot = 'src-tauri/target/release/bundle/nsis'
-          $setup = Get-ChildItem $bundleRoot -Filter '*-setup.exe' -Recurse | Select-Object -First 1
-          if (-not $setup) { throw "No setup.exe was produced under $bundleRoot" }
-
-          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)
-          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)
-          if ($hasCertificate -ne $hasPassword) {
-            throw 'Both WINDOWS_CERTIFICATE_BASE64 and WINDOWS_CERTIFICATE_PASSWORD must be configured together'
-          }
-          if ($env:GITHUB_REF -like 'refs/tags/desktop-v*' -and -not $hasCertificate) {
-            throw 'Tagged releases require the Authenticode certificate secrets'
-          }
-
-          if ($hasCertificate) {
-            $pfx = Join-Path $env:RUNNER_TEMP 'cline-enhanced-signing.pfx'
-            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
-            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
-              Sort-Object FullName -Descending | Select-Object -First 1
-            if (-not $signtool) { throw 'signtool.exe was not found on the Windows runner' }
-            & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD $setup.FullName
-            if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
-            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
-            $status = (Get-AuthenticodeSignature $setup.FullName).Status
-            if ($status -ne 'Valid') { throw "Signed installer verification failed: $status" }
-            "signed=true" >> $env:GITHUB_OUTPUT
-            "filename=Cline-Enhanced_$env:VERSION`_x64-signed-setup.exe" >> $env:GITHUB_OUTPUT
-            "artifact_name=cline-enhanced-windows-x64-signed-$env:VERSION" >> $env:GITHUB_OUTPUT
-          } else {
-            $status = (Get-AuthenticodeSignature $setup.FullName).Status
-            if ($status -ne 'NotSigned') { throw "Expected unsigned installer, got: $status" }
-            "signed=false" >> $env:GITHUB_OUTPUT
-            "filename=Cline-Enhanced_$env:VERSION`_x64-unsigned-setup.exe" >> $env:GITHUB_OUTPUT
-            "artifact_name=cline-enhanced-windows-x64-unsigned-$env:VERSION" >> $env:GITHUB_OUTPUT
-          }
+          $setups = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' -Recurse)
+          if ($setups.Count -ne 1) { throw 'Expected exactly one fresh installer' }
+          if ((Get-AuthenticodeSignature $setups[0].FullName).Status -ne 'NotSigned') { throw 'Private installer must be unsigned' }
+          "signed=false" >> $env:GITHUB_OUTPUT
+          "filename=Cline-Enhanced_$env:VERSION`_x64-unsigned-setup.exe" >> $env:GITHUB_OUTPUT
+          "artifact_name=cline-enhanced-windows-x64-unsigned-$env:VERSION-${{ github.run_id }}-${{ github.run_attempt }}" >> $env:GITHUB_OUTPUT
 
       - name: Collect and verify installer
         id: installer
@@ -345,17 +331,11 @@ jobs:
             "Rust: $(rustc --version)"
             "UPX: $(upx --version | Select-Object -First 1)"
             "NSIS: $env:NSIS_VERSION"
-            "Purpose: private testing when unsigned; tagged distribution when signed"
+            "Purpose: unsigned private testing; artifact-only; no release"
             "Customization ledger: CUSTOMIZATIONS.md"
           ) | Out-File (Join-Path $out 'BUILD-INFO.txt') -Encoding utf8
           "path=$destination" >> $env:GITHUB_OUTPUT
           Get-ChildItem $out | Format-Table Name, Length
-
-      - name: Attest tagged release installer provenance
-        if: ${{ startsWith(github.ref, 'refs/tags/desktop-v') }}
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
-        with:
-          subject-path: ${{ steps.installer.outputs.path }}
 
       - name: Smoke-test installer and installed binaries
         id: smoke
@@ -445,16 +425,45 @@ jobs:
           Write-Host 'Installer, installed app, and sidecar verified successfully.'
           Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
 
+      - name: Installed WebView acceptance journey
+        timeout-minutes: 10
+        id: ui_acceptance
+        shell: pwsh
+        working-directory: apps/examples/desktop-app
+        run: |
+          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'Cline Enhanced' } | Select-Object -First 1
+          if (-not $entry) { throw 'Installed app registry entry missing' }
+          $location = $entry.InstallLocation
+          if (-not $location) { $location = Split-Path ($entry.UninstallString -replace '^"|"$', '') -Parent }
+          $app = Get-ChildItem $location -Filter 'cline-app.exe' -Recurse | Select-Object -First 1
+          if (-not $app) { throw 'Installed application missing' }
+          $sidecar = Get-ChildItem $location -Filter 'code-sidecar.exe' -Recurse | Select-Object -First 1
+          if (-not $sidecar) { throw 'Installed sidecar missing' }
+          $env:CLINE_TEST_INSTALLED_APP = $app.FullName
+          $env:CLINE_TEST_INSTALLED_SIDECAR = $sidecar.FullName
+          bun run scripts/installed-ui-acceptance.ts
+          if ($LASTEXITCODE -ne 0) { throw 'Installed WebView acceptance failed' }
+
+      - name: Upload installed UI acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: installed-ui-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/examples/desktop-app/dist/installed-ui-evidence/**
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Record installer smoke-test result
         if: ${{ always() && steps.installer.outcome == 'success' }}
         shell: pwsh
         working-directory: apps/examples/desktop-app
         run: |
-          "Smoke test: ${{ steps.smoke.outcome }}" |
+          "Smoke test: ${{ steps.smoke.outcome }}; Installed UI: ${{ steps.ui_acceptance.outcome }}" |
             Out-File 'dist/custom-installer/BUILD-INFO.txt' -Encoding utf8 -Append
 
       - name: Upload verified setup.exe
-        if: ${{ steps.installer.outcome == 'success' && steps.smoke.outcome == 'success' }}
+        if: ${{ steps.installer.outcome == 'success' && steps.smoke.outcome == 'success' && steps.ui_acceptance.outcome == 'success' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{ steps.signing.outputs.artifact_name }}
@@ -463,34 +472,10 @@ jobs:
           retention-days: 30
 
       - name: Upload failed-smoke diagnostics
-        if: ${{ always() && steps.installer.outcome == 'success' && steps.smoke.outcome == 'failure' }}
+        if: ${{ always() && steps.installer.outcome == 'success' && (steps.smoke.outcome == 'failure' || steps.ui_acceptance.outcome == 'failure') }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: failed-smoke-${{ steps.version.outputs.version }}-${{ github.run_id }}
           path: apps/examples/desktop-app/dist/custom-installer/*
           if-no-files-found: error
           retention-days: 7
-
-  publish-release:
-    name: Publish signed GitHub Release
-    if: ${{ startsWith(github.ref, 'refs/tags/desktop-v') }}
-    needs: build-windows-installer
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download verified installer
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          name: ${{ needs.build-windows-installer.outputs.artifact-name }}
-          path: release-assets
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ github.ref_name }}" release-assets/* \
-            --repo "${{ github.repository }}" \
-            --title "Cline Enhanced ${{ needs.build-windows-installer.outputs.version }}" \
-            --generate-notes \
-            --verify-tag

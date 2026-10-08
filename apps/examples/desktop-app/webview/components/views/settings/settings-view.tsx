@@ -72,6 +72,7 @@ import { cn } from "@/lib/utils";
 import { MarketplaceExplorerView } from "../marketplace-explorer-view";
 import { PageFrame, PageHeader } from "../page-layout";
 import { AccountView } from "./account-view";
+import { AnalysisEnvironmentView } from "./analysis-environment-view";
 import { AddProviderContent, type AddProviderPayload } from "./add-provider";
 import { ChannelsContent } from "./channels-view";
 import { CustomizeView } from "./customize-view";
@@ -710,6 +711,8 @@ export function SettingsView({
 			<RemoteEnvironmentsContent />
 		) : activeNav === "Diagnostics" ? (
 			<DiagnosticsContent />
+		) : activeNav === "Analysis environment" ? (
+			<AnalysisEnvironmentView />
 		) : activeNav === "Account" ? (
 			<AccountView />
 		) : activeNav === "General" ? (

@@ -23,6 +23,31 @@ const SIDECAR_READY_TIMEOUT_MS = 30_000;
 // Include bounded cold executable/antivirus startup overhead on Windows.
 const HUB_BOOTSTRAP_TIMEOUT_MS = 45_000;
 
+async function installedCommand<T>(
+	endpoint: string,
+	command: string,
+	args: Record<string, unknown> = {},
+): Promise<T> {
+	return await new Promise<T>((resolve, reject) => {
+		const socket = new WebSocket(endpoint);
+		const id = crypto.randomUUID();
+		const timer = setTimeout(() => {
+			socket.close();
+			reject(new Error(`Compiled backend command timed out: ${command}`));
+		}, 30_000);
+		const finish = () => { clearTimeout(timer); socket.close(); };
+		socket.onopen = () => socket.send(JSON.stringify({ type: "command", id, command, args }));
+		socket.onmessage = (event) => {
+			const result = JSON.parse(String(event.data));
+			if (result.type !== "response" || result.id !== id) return;
+			finish();
+			if (result.ok) resolve(result.result as T);
+			else reject(new Error(`Compiled backend command failed: ${command}: ${String(result.error?.message ?? result.error ?? "no diagnostic")}`));
+		};
+		socket.onerror = () => { finish(); reject(new Error("Compiled backend transport failed")); };
+	});
+}
+
 // Exercise the actual compiled entrypoint: source-only tests miss mixed SDK
 // build identities between the desktop client and its embedded Hub daemon.
 test("compiled desktop backend publishes its endpoint with its own Hub", async () => {
@@ -166,6 +191,26 @@ test("compiled desktop backend publishes its endpoint with its own Hub", async (
 				reject(new Error("Authenticated transport handshake failed"));
 			};
 		});
+		// Validate the acceptance harness's session contract through the real
+		// compiled backend. An idle session never dispatches a model turn.
+		const ownedSession = await installedCommand<{ sessionId: string }>(
+			privateEndpoint.toString(), "chat_session_command",
+			{ request: { action: "start", config: {
+				sessionId: "installer-owned-idle-session", environmentId: "local",
+				cwd: root, workspaceRoot: root, provider: "openai", model: "gpt-4.1-mini",
+				apiKey: "owned-offline-fixture", baseUrl: "http://127.0.0.1:1/v1",
+				enableTools: false, permissionProfile: "read-only",
+				initialMessages: [{ id: "installer-owned-message", role: "user", content: "Installer owned idle session" }],
+			} } },
+		);
+		expect(ownedSession.sessionId).toBeTruthy();
+		await installedCommand(privateEndpoint.toString(), "update_chat_session_title", {
+			sessionId: ownedSession.sessionId, environmentId: "local", title: "Installer owned idle session",
+		});
+		const ownedSessions = await installedCommand<Array<{ sessionId: string }>>(
+			privateEndpoint.toString(), "list_chat_sessions",
+		);
+		expect(ownedSessions.some((session) => session.sessionId === ownedSession.sessionId)).toBe(true);
 
 		// The installed backend must initialize the same atomic edit-recovery
 		// constraint used by source builds. This catches packaging drift where an

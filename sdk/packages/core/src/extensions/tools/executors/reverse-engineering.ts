@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { idaProgressPrelude, runObservedIda } from "./ida-job-diagnostics";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -160,8 +161,9 @@ async function withAnalysisLock<T>(
 	key: string,
 	work: () => Promise<T>,
 	signal?: AbortSignal,
+	retainLease?: () => boolean,
 ): Promise<T> {
-	return withProjectLease(key, work, signal);
+	return withProjectLease(key, work, signal, { retainLease });
 }
 
 function splitPathEntries(value: string | undefined): string[] {
@@ -2127,13 +2129,18 @@ import ida_funcs
 import ida_hexrays
 import idautils
 import idc
+${idaProgressPrelude(outputDir)}
 
 OUTPUT_PATH = ${JSON.stringify(outputPath)}
 
 def main():
+    cline_phase("input-loaded")
+    cline_phase("auto-analysis-waiting")
     ida_auto.auto_wait()
+    cline_phase("analysis-complete")
     if not ida_hexrays.init_hexrays_plugin():
         raise RuntimeError("Hex-Rays decompiler is unavailable")
+    cline_phase("decompiler-initialized")
     decompiled = 0
     with open(OUTPUT_PATH, "w", encoding="utf-8", errors="replace") as output:
         for address in idautils.Functions():
@@ -2152,15 +2159,18 @@ def main():
                 output.write("/* decompilation failed: %s */\\n\\n" % error)
     if decompiled == 0:
         raise RuntimeError("Hex-Rays did not decompile any function")
+    cline_phase("output-written")
 
 exit_code = 0
 try:
     main()
 except Exception:
     exit_code = 1
+    cline_phase("script-failed")
     with open(OUTPUT_PATH + ".error.txt", "w", encoding="utf-8", errors="replace") as error_output:
         traceback.print_exc(file=error_output)
 finally:
+    cline_phase("script-exiting")
     idc.qexit(exit_code)
 `;
 	await fs.writeFile(scriptPath, source, { mode: 0o600 });
@@ -3526,6 +3536,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			});
 		}
 
+		let retainLease = false;
 		return withAnalysisLock(
 			outputDir,
 			async () => {
@@ -3680,12 +3691,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						fs.rm(`${decompileOutput}.error.txt`, { force: true }),
 					]);
 				}
-				const result = await runSupervised(
-					command,
-					args,
-					timeoutMs,
-					context.signal,
-				);
+				const result = engine === "ida"
+                    ? await runObservedIda(command, args, outputDir, timeoutMs, context.signal).catch((error) => {
+						retainLease = Boolean(error?.terminationUnconfirmed);
+						throw error;
+					})
+                    : await runSupervised(command, args, timeoutMs, context.signal);
+                retainLease = Boolean(result.outputDrainTimedOut);
 				const decompileStat =
 					input.operation === "decompile"
 						? await fs.stat(decompileOutput).catch(() => undefined)
@@ -3738,6 +3750,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				);
 			},
 			context.signal,
+            () => retainLease,
 		);
 	};
 }

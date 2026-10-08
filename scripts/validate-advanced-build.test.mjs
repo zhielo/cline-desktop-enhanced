@@ -82,7 +82,7 @@ test("workspace quality retains complete typecheck scope and Bun smoke declarati
  const core=JSON.parse(readFileSync(new URL("../sdk/packages/core/package.json",import.meta.url),"utf8"));
  assert.equal(core.scripts["typecheck:smoke"],"bun tsc -p tsconfig.smoke.json --noEmit && bun tsc -p tsconfig.bun-smoke.json --noEmit");
  const workflow=readFileSync(new URL("../.github/workflows/sdk-test.yml",import.meta.url),"utf8");
- assert.equal((workflow.match(/bun-version: "1.3.14"/g)||[]).length,2);assert.ok(workflow.includes("bun run types"));assert.ok(workflow.includes("run: bun run lint"));assert.ok(workflow.includes("needs: quality-checks"));
+ assert.equal((workflow.match(/bun-version: \$\{\{ steps\.toolchain\.outputs\.version \}\}/g)||[]).length,2);assert.ok(workflow.includes("bun run types"));assert.ok(workflow.includes("run: bun run lint"));assert.ok(workflow.includes("needs: quality-checks"));
 });
 
 test("advanced integration retains worker fixture and compilation gates without implying device validation",()=>{
