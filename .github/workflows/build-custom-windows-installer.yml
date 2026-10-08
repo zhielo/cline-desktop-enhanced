@@ -134,6 +134,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate opt-in native WebView launch settings
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'installed-webview-launch-tests.exe'
+          & rustc --edition=2021 --test apps/examples/desktop-app/src-tauri/src/installed_webview_launch.rs -o $fixture
+          if ($LASTEXITCODE -ne 0) { throw 'Native WebView launch fixture compilation failed' }
+          & $fixture
+          if ($LASTEXITCODE -ne 0) { throw 'Native WebView launch option fixtures failed' }
+
       - name: Scan repository for committed secrets
         shell: bash
         run: gitleaks git --redact --no-banner --config .gitleaks.toml

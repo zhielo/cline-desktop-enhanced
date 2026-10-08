@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/src-tauri/src/installed_webview_launch.rs",markers:['enabled != Some("1")', "--remote-debugging-address=127.0.0.1", "data_directory.is_absolute()", "normal_launch_does_not_apply_debugging_options"]},
+ {path:"apps/examples/desktop-app/src-tauri/src/main.rs",markers:['std::env::var("CLINE_INSTALLED_ACCEPTANCE")', "window.additional_browser_args = Some", "window.data_directory = Some", ".build(context)"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["Validate opt-in native WebView launch settings", "rustc --edition=2021 --test", "Native WebView launch option fixtures failed"]},
  {path:"scripts/validate-advanced-build.mjs",markers:["Test real Hub singleton crash recovery", "Test native Node installed process harness", "Test native Bun SQLite memory startup", "Test SQLite database path boundaries"]},
  {path:"sdk/packages/shared/src/db/sqlite-db.ts",markers:['filePath !== ":memory:"', "dirname(resolve(filePath))"]},
  {path:"sdk/packages/shared/src/db/sqlite-db-paths.test.ts",markers:["without any mkdir operation", "absolute parent", "propagates a real disk-directory failure"]},

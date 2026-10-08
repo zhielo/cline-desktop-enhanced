@@ -14,7 +14,8 @@ test("native Node child receives exact per-process WebView2 environment and repo
 			"-e",
 			`
 		process.stdout.write(JSON.stringify({profile: process.env.WEBVIEW2_USER_DATA_FOLDER,
-			flags: process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS}));
+			flags: process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS,
+			optIn: process.env.CLINE_INSTALLED_ACCEPTANCE}));
 		process.stderr.write("owned startup diagnostic");
 		process.exitCode = 7;
 	`,
@@ -22,6 +23,7 @@ test("native Node child receives exact per-process WebView2 environment and repo
 		process.cwd(),
 		{
 			...process.env,
+			CLINE_INSTALLED_ACCEPTANCE: "1",
 			WEBVIEW2_USER_DATA_FOLDER: profile,
 			WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: flags,
 		},
@@ -31,6 +33,7 @@ test("native Node child receives exact per-process WebView2 environment and repo
 	assert.deepEqual(JSON.parse(child.diagnostics.stdoutTail), {
 		profile,
 		flags,
+		optIn: "1",
 	});
 	assert.equal(child.diagnostics.stderrTail, "owned startup diagnostic");
 	assert.equal(child.diagnostics.launchError, "");

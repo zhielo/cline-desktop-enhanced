@@ -125,3 +125,25 @@ test("installed harness runs under native Node and retains bounded startup evide
 	expect(runner).toContain("Test native Bun SQLite memory startup");
 	expect(runner).toContain("Test SQLite database path boundaries");
 });
+test("native WebView options require exact acceptance opt-in and preserve normal launches", () => {
+	const source = load(
+		"apps/examples/desktop-app/src-tauri/src/installed_webview_launch.rs",
+	);
+	expect(source).toContain('enabled != Some("1")');
+	expect(source).toContain("--remote-debugging-address=127.0.0.1");
+	expect(source).toContain("data_directory.is_absolute()");
+	expect(source).toContain("WRY_DEFAULT_ARGS");
+	expect(source).toContain("non_loopback_and_extra_arguments_are_rejected");
+	const native = load("apps/examples/desktop-app/src-tauri/src/main.rs");
+	expect(native).toContain("mod installed_webview_launch;");
+	expect(native).toContain('std::env::var("CLINE_INSTALLED_ACCEPTANCE")');
+	expect(native).toContain("window.additional_browser_args = Some");
+	expect(native).toContain("window.data_directory = Some");
+	expect(native).toContain(".build(context)");
+	const driver = load("apps/vscode/scripts/desktop-installed-acceptance.ts");
+	expect(driver).toContain('CLINE_INSTALLED_ACCEPTANCE: "1"');
+	const workflow = load(".github/workflows/build-custom-windows-installer.yml");
+	expect(workflow).toContain("rustc --edition=2021 --test");
+	expect(workflow).toContain("Native WebView launch option fixtures failed");
+	expect(workflow).toContain("steps.ui_acceptance.outcome == 'success'");
+});

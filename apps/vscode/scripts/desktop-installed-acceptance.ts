@@ -67,6 +67,7 @@ export async function main() {
 		),
 	)
 	Object.assign(environment, {
+		CLINE_INSTALLED_ACCEPTANCE: "1",
 		CLINE_DIR: root,
 		CLINE_DATA_DIR: join(root, "data"),
 		CLINE_HUB_DISCOVERY_PATH: discoveryPath,

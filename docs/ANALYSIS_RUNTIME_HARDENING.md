@@ -94,6 +94,12 @@ separately and its receipt reviewed when changing IDA adapters.
   bounded redacted launch receipt and owned-descendant flag observations, not just the
   timeout. The harness never falls back to a development web page or treats absent CDP
   as successful acceptance.
+  The fixture sets `CLINE_INSTALLED_ACCEPTANCE=1` so the native shell explicitly
+  supplies the validated loopback port and absolute private profile through Tauri's
+  WebView options before window creation, rather than relying only on WebView2's
+  environment-variable override. Exact opt-in is required; ordinary launches stay
+  unchanged. Extra browser flags, non-loopback addresses, invalid ports and relative
+  profiles are rejected. This does not bypass application IPC or backend authentication.
 - Private packages remain unsigned and artifact-only; no signing secrets or release write
   permissions are available to this workflow. Version/tag consistency checks remain.
 - Provenance identifies `GITHUB_SHA`. For a PR event this is the tested synthetic merge
