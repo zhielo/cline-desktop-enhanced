@@ -1,6 +1,6 @@
 # Full capability setup
 
-The Windows installer contains an integrity-checked core pack, full pack, separate angr pack and official Android connectivity tools. Use **Settings → Setup Center → Read bundled platform-tools notices → Install all supported components**. Review the confirmation, wait for the actual owned fixtures, then restart the desktop/backend when no jobs are active. No user Python, pip, command scripts or environment setup is needed.
+The Windows installer contains an integrity-checked core pack, full pack, separate angr pack and official Android connectivity tools. Use **Settings → Setup Center → Read bundled platform-tools notices → Install all supported components**. Review the confirmation, wait for the actual owned fixtures, then choose **Apply setup to idle backend** when no jobs are active. It refuses busy/unknown activity and never forces running jobs. No user Python, pip, command scripts or environment setup is needed.
 
 ## What full readiness proves
 

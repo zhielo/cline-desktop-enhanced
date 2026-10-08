@@ -4216,8 +4216,16 @@ export async function handleCommand(
       return await platformToolsNotices();
     if (command === "setup_center_detect") return await detectInstalledTools();
     if (command === "setup_center_devices") return await listSetupDevices();
+    if (!options?.connection?.data?.canApproveTools)
+      throw new Error("Setup changes require a trusted desktop connection");
     if (args?.confirmed !== true)
       throw new Error("Explicit Setup Center confirmation required");
+    if (command === "setup_center_apply_backend") {
+      const result = await upgradeManagedHub({workspaceRoot:ctx.localWorkspaceRoot,force:false,restartCompatible:true,waitForIdleMs:5000,reason:"Explicit idle Setup Center activation"});
+      if (result.outcome === "still_busy") throw new Error("Backend is busy or its activity is unknown; no running jobs were interrupted. Finish active work and try again.");
+      if (result.outcome === "hub_not_older") throw new Error("A newer or incompatible Hub was left running. Update the app before applying setup.");
+      return {outcome:result.outcome,restartRequired:false,message:"Saved setup applied to a freshly started idle backend. Reattach your saved session; no prompt is replayed."};
+    }
     if (command === "setup_center_save")
       return await saveSetupPreferences(args.preferences);
     if (command === "setup_center_install_full") {

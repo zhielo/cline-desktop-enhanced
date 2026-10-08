@@ -690,7 +690,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui-startup/v1",
+          workloadVersion: "installed-owned-ui-startup/core-full-core-v2",
+          runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples },
           baselineStatus: "not-established",
           limitations: [

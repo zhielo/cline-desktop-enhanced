@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/hub/daemon/index.ts",markers:["restartCompatible?: boolean","options.restartCompatible === true"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",markers:["Apply setup to idle backend"]},
   {
     path: "apps/examples/desktop-app/sidecar/setup-center.ts",
     markers: [
