@@ -1,4 +1,5 @@
 import { getProjectOutputLocation, ensureProjectOutputDirectories } from "./project-output";
+import { getAnalysisEnvironment } from "./analysis-environment";
 import { queryRuntimeJni } from "./runtime-jni-evidence";
 import { ExecutionControlService } from "./execution-control-service";
 import { planEvidenceAnalysis } from "./execution-analysis-planner";
@@ -58,6 +59,7 @@ import {
  createAndroidDeviceExecutor,
  AndroidDeviceInputSchema,
 	createReverseEngineeringExecutor,
+	listObservedIdaJobs,
 	createUserInstructionConfigService,
 	ensureCustomProvidersLoaded,
 	executeClineAccountAction,
@@ -4113,6 +4115,16 @@ export async function handleCommand(
 	}
 	if (command === "get_desktop_settings") {
 		return readDesktopSettings();
+	}
+	if (command === "get_analysis_environment") {
+		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
+			throw new Error("Analysis environment readiness is local-only.");
+		return await getAnalysisEnvironment();
+	}
+	if (command === "get_ida_job_diagnostics") {
+		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
+			throw new Error("IDA job diagnostics are local-only.");
+		return { jobs: listObservedIdaJobs(), recovery: "No PID-only control or automatic lease stealing. Confirm the exact process exited before operator recovery." };
 	}
 	if (command === "set_custom_ai_instructions") {
 		if (typeof args?.custom_ai_instructions !== "string") {

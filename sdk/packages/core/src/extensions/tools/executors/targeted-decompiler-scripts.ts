@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+import { idaProgressPrelude } from "./ida-job-diagnostics";
 export type FunctionSelector = { symbol?: string; address?: string };
 export const TARGETED_GHIDRA_SCRIPT = `// Fixed single-function adapter; never executes target code.
 import ghidra.app.script.GhidraScript;
@@ -43,11 +45,16 @@ export function targetedIdaScript(
 ) {
 	return `# Fixed single-function adapter; requires authorized IDA/Hex-Rays installation.
 import traceback, ida_auto, ida_funcs, ida_hexrays, idautils, idc
+${idaProgressPrelude(dirname(outputPath))}
 OUTPUT_PATH = ${JSON.stringify(outputPath)}
 SELECTOR = ${JSON.stringify(selector)}
 def main():
+    cline_phase("input-loaded")
+    cline_phase("auto-analysis-waiting")
     ida_auto.auto_wait()
+    cline_phase("analysis-complete")
     if not ida_hexrays.init_hexrays_plugin(): raise RuntimeError("Hex-Rays unavailable")
+    cline_phase("decompiler-initialized")
     matches=[]
     if SELECTOR.get("address"):
         address=int(SELECTOR["address"],16)
@@ -64,11 +71,15 @@ def main():
     text=str(pseudocode)
     if len(text)>1000000: raise RuntimeError("Selected pseudocode output budget exceeded")
     with open(OUTPUT_PATH,"w",encoding="utf-8") as output: output.write("/* selected function @ 0x%x; not a semantic equivalence proof */\\n" % matches[0]+text)
+    cline_phase("output-written")
 exit_code=0
 try: main()
 except Exception:
     exit_code=1
+    cline_phase("script-failed")
     with open(OUTPUT_PATH+".error.txt","w",encoding="utf-8") as error: error.write(traceback.format_exc()[:4000])
-finally: idc.qexit(exit_code)
+finally:
+    cline_phase("script-exiting")
+    idc.qexit(exit_code)
 `;
 }

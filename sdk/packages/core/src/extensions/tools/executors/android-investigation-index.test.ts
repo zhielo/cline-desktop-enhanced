@@ -95,6 +95,33 @@ describe("Android investigation evidence index", () => {
 		expect(new Set(indexes.map((i) => i?.id)).size).toBe(1);
 		await expect(queryInvestigation(indexes[0]!.file)).resolves.toBeDefined();
 	});
+	it("keeps host execution diagnostics outside immutable evidence and identity", async () => {
+		const dir = await temp();
+		const plain = await persistInvestigation(dir, result());
+		const value = result();
+		value.diagnostics = {
+			jobId: "owned-job",
+			action: "artifact_discovery",
+			interpreter: "/owned/python",
+			pid: 123,
+			exitCode: 0,
+			signal: null,
+			durationMs: 10,
+			stderrTail: "",
+			stderrTruncated: false,
+		};
+		const observed = await persistInvestigation(dir, value);
+		expect(observed?.id).toBe(plain?.id);
+		expect(observed?.reused).toBe(true);
+		const persisted = JSON.parse(await readFile(observed!.file, "utf8"));
+		expect(persisted.result).not.toHaveProperty("diagnostics");
+		await expect(queryInvestigation(observed!.file)).resolves.toBeDefined();
+		// The stored v1 boundary remains strict; new execution-only fields in a
+		// stored manifest must not be silently accepted.
+		persisted.result.diagnostics = value.diagnostics;
+		await writeFile(observed!.file, JSON.stringify(persisted));
+		await expect(queryInvestigation(observed!.file)).rejects.toThrow();
+	});
 	it("changes identity when source engine or evidence changes", async () => {
 		const dir = await temp();
 		const changed = result();

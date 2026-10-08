@@ -26,6 +26,7 @@ function spawnPortable(
 	command: string,
 	args: string[],
 	gui = false,
+	environmentOverrides?: Record<string, string>,
 ): ChildProcess {
 	const isBatch = process.platform === "win32" && /\.(bat|cmd)$/i.test(command);
 	const [executable, executableArgs] = isBatch
@@ -36,6 +37,7 @@ function spawnPortable(
 		stdio: gui ? "ignore" : ["ignore", "pipe", "pipe"],
 		windowsHide: !gui,
 		windowsVerbatimArguments: false,
+		...(environmentOverrides ? { env: { ...process.env, ...environmentOverrides } } : {}),
 	});
 }
 
@@ -95,6 +97,8 @@ export async function runSupervised(
 	args: string[],
 	timeoutMs: number,
 	signal?: AbortSignal,
+	onSpawn?: (pid: number | null) => void,
+	environmentOverrides?: Record<string, string>,
 ) {
 	return new Promise<{
 		exitCode: number | null;
@@ -104,6 +108,8 @@ export async function runSupervised(
 		cancelled: boolean;
 		outputDrainTimedOut?: boolean;
 		truncated?: boolean;
+		pid?: number | null;
+		signal?: string | null;
 	}>((resolve, reject) => {
 		if (signal?.aborted) {
 			resolve({
@@ -115,7 +121,7 @@ export async function runSupervised(
 			});
 			return;
 		}
-		const child = spawnPortable(command, args);
+		const child = spawnPortable(command, args, false, environmentOverrides);
 		let stdout = "";
 		let stderr = "";
 		let timedOut = false;
@@ -124,6 +130,7 @@ export async function runSupervised(
 		let outputDrainTimedOut = false,
 			truncated = false;
 		let parentExitCode: number | null = null;
+		let exitSignal: string | null = null;
 		let drainTimer: ReturnType<typeof setTimeout> | undefined;
 		const stdoutDecoder = new StringDecoder("utf8"),
 			stderrDecoder = new StringDecoder("utf8");
@@ -151,6 +158,8 @@ export async function runSupervised(
 			else
 				resolve({
 					exitCode: result.exitCode,
+					pid: child.pid ?? null,
+					signal: exitSignal,
 					stdout: redactSensitiveText(
 						boundedAppend(stdout, stdoutDecoder.end()),
 					),
@@ -181,8 +190,9 @@ export async function runSupervised(
 		};
 		signal?.addEventListener("abort", abort, { once: true });
 		child.once("error", (error) => finish({ exitCode: null, error }));
-		child.once("exit", (code) => {
+		child.once("exit", (code, signalName) => {
 			parentExitCode = code;
+			exitSignal = signalName ?? null;
 			if (drainTimer) clearTimeout(drainTimer);
 			// Descendants may retain stdout after the parent exits. Never wait forever for EOF.
 			drainTimer = setTimeout(() => {
@@ -196,6 +206,11 @@ export async function runSupervised(
 		});
 		// close fires only after stdio has drained; exit can precede the final chunks.
 		child.once("close", (exitCode) => finish({ exitCode }));
+		try { onSpawn?.(child.pid ?? null); }
+		catch (error) {
+			killProcessTree(child);
+			finish({ exitCode: null, error: error instanceof Error ? error : new Error("Process observer failed") });
+		}
 	});
 }
 

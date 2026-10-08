@@ -15,15 +15,19 @@ jobs:
   trigger-integration-test:
     name: Run Tests
     runs-on: ubuntu-latest
+    # This dispatch targets cline/intellij-plugin and needs the upstream App.
+    # Personal desktop forks must not attempt to mint that upstream credential.
     # Auto-run only for trusted PR authors. Anyone else needs a maintainer
     # to opt their PR in by commenting /test-jetbrains.
     if: |
-      (github.event_name == 'pull_request_target' &&
+      github.repository == 'cline/cline' &&
+      vars.CLINE_JETBRAINS_APP_ID != '' &&
+      ((github.event_name == 'pull_request_target' &&
        contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.pull_request.author_association)) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
        contains(github.event.comment.body, '/test-jetbrains') &&
-       contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association))
+       contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)))
     steps:
       - name: Generate GitHub App Token
         id: app-token
@@ -68,7 +72,7 @@ jobs:
           PR_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || steps.pr-details.outputs.head_sha }}
           PR_URL: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.html_url || steps.pr-details.outputs.html_url }}
         run: |
-          curl -X POST \
+          curl --fail-with-body -X POST \
             -H "Authorization: Bearer ${{ steps.app-token.outputs.token }}" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "User-Agent: cline-pr-trigger" \

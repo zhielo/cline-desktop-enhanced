@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod built_in_browser;
+#[cfg(any(windows, test))]
+mod installed_webview_launch;
 #[cfg(target_os = "macos")]
 mod macos_notification;
 
@@ -1353,6 +1355,39 @@ fn set_tray_status(
 }
 
 fn main() {
+    let mut context = tauri::generate_context!();
+    #[cfg(windows)]
+    {
+        let enabled = std::env::var("CLINE_INSTALLED_ACCEPTANCE").ok();
+        let arguments = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").ok();
+        let profile = std::env::var("WEBVIEW2_USER_DATA_FOLDER").ok();
+        match installed_webview_launch::acceptance_webview_options(
+            enabled.as_deref(),
+            arguments.as_deref(),
+            profile.as_deref(),
+        ) {
+            Ok(Some(options)) => {
+                let window = context
+                    .config_mut()
+                    .app
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.label == MAIN_WINDOW_LABEL)
+                    .expect("configured main window required");
+                window.additional_browser_args = Some(options.additional_browser_args);
+                window.data_directory = Some(options.data_directory);
+                eprintln!(
+                    "[installed-acceptance] explicit loopback WebView2 options applied on port {}",
+                    options.port
+                );
+            }
+            Ok(None) => {}
+            Err(error) => {
+                eprintln!("[installed-acceptance] invalid launch options: {error}");
+                std::process::exit(2);
+            }
+        }
+    }
     let desktop_backend = Arc::new(DesktopBackendState::default());
     let launch_cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().to_string())
@@ -1462,7 +1497,7 @@ fn main() {
             relaunch_app,
             quit_app
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri app")
         .run(|app_handle, event| match event {
             #[cfg(target_os = "macos")]

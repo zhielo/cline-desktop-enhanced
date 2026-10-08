@@ -118,11 +118,15 @@ export async function persistInvestigation(
 		!["completed", "partial"].includes(result.status)
 	)
 		return undefined;
-	const id = digest(result);
+	// Host diagnostics describe this execution, not immutable analysis evidence.
+	// Keep them out of the v1 manifest and content hash so identical evidence
+	// remains reusable regardless of job IDs, PIDs or receipt paths.
+	const { diagnostics: _diagnostics, ...indexedResult } = result;
+	const id = digest(indexedResult);
 	const manifest = Manifest.parse({
 		protocol: "cline-android-investigation/v1",
 		id,
-		result,
+		result: indexedResult,
 	});
 	const body = JSON.stringify(manifest);
 	if (Buffer.byteLength(body) > MAX_BYTES)

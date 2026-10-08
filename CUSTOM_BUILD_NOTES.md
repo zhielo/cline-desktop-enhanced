@@ -33,7 +33,7 @@ official upstream update cannot silently replace this customized build.
 
 ## Build
 
-Use Bun 1.3.13 and Node 22 or later:
+Use Bun 1.3.14 and Node 22 or later:
 
 ```powershell
 bun install
@@ -72,15 +72,14 @@ machine before distribution. This workspace did not contain the repository's
 installed Bun dependencies, so a full monorepo build was not performed here.
 
 The GitHub Actions workflow at
-`.github/workflows/build-custom-windows-installer.yml` performs the native
-Windows build, runs an installed-application smoke test, and uploads a single
-NSIS `setup.exe` artifact plus its SHA-256 checksum. It runs manually for
-private test builds and from `desktop-v*` tags for durable GitHub Releases.
+`.github/workflows/build-custom-windows-installer.yml` validates and builds an
+unsigned private Windows x64 NSIS installer on PRs to main, main/feature/fix
+pushes, manual runs and matching version tags. It never publishes a release
+or receives signing certificate secrets. Tagged runs remain private artifacts.
 
-Manual runs are unsigned unless both `WINDOWS_CERTIFICATE_BASE64` and
-`WINDOWS_CERTIFICATE_PASSWORD` repository secrets are configured. Tagged
-releases require those secrets and fail closed when signing is unavailable.
-Store the Base64-encoded PFX only as an Actions secret. Never commit signing
-material. A normal installer artifact is uploaded only after the silent-install,
-sidecar-health, and GUI-startup smoke test succeeds; failed-smoke artifacts are
-clearly separated and retained for seven days for diagnosis.
+Verified installer artifacts require installed-sidecar smoke and installed
+WebView2 acceptance, including configured Python owned-fixture readiness.
+Failure evidence is separate. The CI Python environment is not bundled into
+the installer: run the explicit opt-in setup script and check Settings →
+Analysis environment on the actual desktop computer. See
+`docs/ANALYSIS_RUNTIME_HARDENING.md` for setup, IDA receipts and merge gates.

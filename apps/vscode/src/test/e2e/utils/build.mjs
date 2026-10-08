@@ -1,44 +1,74 @@
-/**
- * Script to install dependencies for running E2E tests in GitHub Actions.
- */
-import { downloadAndUnzipVSCode, SilentReporter } from "@vscode/test-electron"
+/** Install E2E prerequisites from the locked workspace, with bounded cold-cache time. */
+import { createRequire } from "node:module"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import { downloadAndUnzipVSCode } from "@vscode/test-electron"
 import { execa } from "execa"
 
-const TIMEOUT_MINUTE = 1
-const INSTALL_TIMEOUT_MS = TIMEOUT_MINUTE * 60 * 1000
+const require = createRequire(import.meta.url)
+export const LOCKED_PLAYWRIGHT_CLI = join(dirname(require.resolve("playwright/package.json")), "cli.js")
+export const INSTALL_TIMEOUT_MS = 6 * 60 * 1000
 
-async function installVSCode() {
-	const VSCODE_APP_TYPE = "stable"
-	console.log("Downloading VS Code...")
-	return await downloadAndUnzipVSCode(VSCODE_APP_TYPE, undefined, new SilentReporter())
+export async function installVSCode() {
+	console.log("Downloading VS Code stable (60s network-idle limit)...")
+	const executable = await downloadAndUnzipVSCode({ version: "stable", timeout: 60_000 })
+	console.log("VS Code installation completed successfully")
+	return executable
 }
 
-async function installChromium() {
-	console.log("Installing Playwright Chromium...")
-	try {
-		await execa("npm", ["exec", "playwright", "install", "chromium"], {
-			stdio: "inherit",
-		})
-		console.log("Playwright Chromium installation completed successfully")
-	} catch (error) {
-		throw new Error(`Failed to install Playwright Chromium: ${error}`)
+export async function installChromium(signal) {
+	console.log("Installing locked Playwright Chromium (5 minute process limit)...")
+	await execa(process.execPath, [LOCKED_PLAYWRIGHT_CLI, "install", "chromium"], {
+		stdio: "inherit",
+		timeout: 5 * 60 * 1000,
+		cancelSignal: signal,
+	})
+	console.log("Playwright Chromium installation completed successfully")
+}
+
+export async function installDependencies({
+	vscode = installVSCode,
+	chromium = installChromium,
+	timeoutMs = INSTALL_TIMEOUT_MS,
+} = {}) {
+	const controller = new AbortController()
+	let timer
+	const pending = new Set(["VS Code", "Chromium"])
+	const install = async (name, run) => {
+		try {
+			await run(controller.signal)
+			pending.delete(name)
+		} catch (error) {
+			throw new Error(`${name} installation failed: ${error instanceof Error ? error.message : String(error)}`, {
+				cause: error,
+			})
+		}
 	}
-}
-
-async function installDependencies() {
-	return Promise.all([installVSCode(), installChromium()])
-}
-
-async function main() {
-	const timeoutPromise = new Promise((_, reject) =>
-		setTimeout(() => reject(new Error("Installation timed out.")), INSTALL_TIMEOUT_MS),
-	)
-	await Promise.race([installDependencies(), timeoutPromise])
+	try {
+		await Promise.race([
+			Promise.all([install("VS Code", vscode), install("Chromium", chromium)]),
+			new Promise((_, reject) => {
+				timer = setTimeout(() => {
+					reject(
+						new Error(
+							`E2E dependency installation timed out after ${timeoutMs} ms; pending: ${[...pending].join(", ")}`,
+						),
+					)
+				}, timeoutMs)
+			}),
+		])
+	} finally {
+		clearTimeout(timer)
+		controller.abort()
+	}
 	console.log("Installation complete.")
-	process.exit(0)
 }
 
-main().catch((error) => {
-	console.error("Failed to install dependencies for E2E test", error)
-	process.exit(1)
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	installDependencies()
+		.then(() => process.exit(0))
+		.catch((error) => {
+			console.error("Failed to install dependencies for E2E test", error)
+			process.exit(1)
+		})
+}

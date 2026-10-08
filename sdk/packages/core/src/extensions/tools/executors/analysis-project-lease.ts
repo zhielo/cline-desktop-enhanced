@@ -7,7 +7,7 @@ export async function withProjectLease<T>(
 	key: string,
 	work: () => Promise<T>,
 	signal?: AbortSignal,
-	options: { root?: string; waitMs?: number } = {},
+	options: { root?: string; waitMs?: number; retainLease?: () => boolean } = {},
 ) {
 	const resolved = await realpath(resolve(key)).catch(() => resolve(key)),
 		canonical =
@@ -61,11 +61,11 @@ export async function withProjectLease<T>(
 		signal?.throwIfAborted();
 		return await work();
 	} finally {
-		if (
+		if (!options.retainLease?.() && (
 			!published ||
 			JSON.parse(await readFile(join(lease, "owner.json"), "utf8")).nonce ===
 				nonce
-		)
+		))
 			await rm(lease, { recursive: true });
 	}
 }
