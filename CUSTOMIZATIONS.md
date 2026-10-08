@@ -678,3 +678,5 @@ Do not hide a new regression by weakening assertions or making a required custom
 - See `docs/INTEGRATED_ENHANCEMENT_DELIVERY.md` for exact implementation, acceptance and remaining boundaries. Preserve every earlier customization and the unsigned artifact-only workflow.
 
 Bundled repair selection resolves the verified cache to its canonical Windows path so long and 8.3 directory aliases do not change the selected interpreter across restarts.
+
+Bundled runtime manifest IDs accept bounded dotted Python versions (for example cpython-3.13.12-windows-x64-v1) while forbidding path separators/traversal. The installed acceptance records the actual readiness receipt before asserting success, so failed owned fixtures remain diagnosable without bypassing the gate.

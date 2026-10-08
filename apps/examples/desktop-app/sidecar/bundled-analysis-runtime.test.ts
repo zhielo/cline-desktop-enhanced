@@ -24,7 +24,7 @@ async function fixture() {
 	await writeFile(join(root, "python313._pth"), bytes);
 	const manifest = {
 		schemaVersion: 1,
-		runtimeId: "owned-v1",
+		runtimeId: "cpython-3.13.12-windows-x64-v1",
 		pythonVersion: "3.13.12",
 		fixtureVersion: "v1",
 		files: { "python.exe": digest, "python313._pth": digest },
@@ -37,7 +37,9 @@ async function fixture() {
 }
 it("validates owned file hashes, without executing an interpreter", async () => {
 	const f = await fixture();
-	expect((await verifyRuntime(f.root)).manifest.runtimeId).toBe("owned-v1");
+	expect((await verifyRuntime(f.root)).manifest.runtimeId).toBe(
+		"cpython-3.13.12-windows-x64-v1",
+	);
 });
 it("rejects changed files and changed trusted manifests", async () => {
 	const f = await fixture();
@@ -115,4 +117,22 @@ it("blocks damaged bundled analysis without throwing during coding startup", asy
 		initializeBundledAnalysisRuntime("win32"),
 	).resolves.toBeUndefined();
 	expect(process.env.CLINE_RE_PYTHON).toBe(join(f.root, "blocked-runtime.exe"));
+});
+
+it("rejects unsafe runtime identifiers even with valid owned file hashes", async () => {
+	const f = await fixture();
+	for (const runtimeId of [
+		"../escape",
+		"..",
+		".",
+		"a/escape",
+		"a\\escape",
+		"a".repeat(101),
+	]) {
+		await writeFile(
+			join(f.root, "runtime-manifest.json"),
+			JSON.stringify({ ...f.manifest, runtimeId }),
+		);
+		await expect(verifyRuntime(f.root)).rejects.toThrow();
+	}
 });

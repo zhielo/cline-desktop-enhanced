@@ -371,18 +371,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		stages.push("local-setting-persisted-through-ui")
 		await settings(page, "Analysis environment")
 		await page.getByRole("button", { name: "Check analysis readiness", exact: true }).click()
-		await page.getByText("Fixture execution: completed.", { exact: false }).waitFor({ timeout: 90_000 })
 		const ready = await rpc<{ configured: boolean; runtime: { source: string }; readiness: { status: string }; interpreter: { executable: string } }>(
 			page,
 			"get_analysis_environment",
 			{ environmentId: "local" },
 		)
+		await writeFile(join(evidence, "analysis-readiness.json"), JSON.stringify(ready, null, 2))
+		await page.screenshot({ path: join(evidence, "readiness.png") })
 		if (
 			!ready.configured ||
 			ready.readiness.status !== "completed" ||
 			ready.runtime?.source !== "bundled" || !ready.interpreter.executable.replaceAll("\\", "/").toLowerCase().includes("/resources/analysis-runtime/python.exe")
 		)
 			throw new Error("Installed application did not validate its bundled interpreter without CLINE_RE_PYTHON")
+		await page.getByText("Fixture execution: completed.", { exact: false }).waitFor({ timeout: 90_000 })
 		stages.push("installed-interpreter-owned-fixtures-passed")
 		await page.screenshot({ path: join(evidence, "readiness.png") })
 		await stop()

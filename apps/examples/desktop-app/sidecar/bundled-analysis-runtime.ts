@@ -16,7 +16,7 @@ import { configureAnalysisRuntime } from "@cline/core";
 import { z } from "zod";
 const Manifest = z.object({
 	schemaVersion: z.literal(1),
-	runtimeId: z.string().regex(/^[a-z0-9-]{1,100}$/),
+	runtimeId: z.string().regex(/^[a-z0-9][a-z0-9.-]{0,99}$/),
 	pythonVersion: z.string(),
 	fixtureVersion: z.string(),
 	files: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)),
