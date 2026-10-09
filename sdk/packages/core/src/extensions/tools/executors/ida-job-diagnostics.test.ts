@@ -102,7 +102,7 @@ it("streams exact phases and enforces unchanged-phase budget without classifying
   const root = await mkdtemp(join(tmpdir(), "ida-deadline-"));
   vi.stubEnv("CLINE_DATA_DIR", root);
   vi.useFakeTimers();
-  const updates = [];
+  const updates: ReturnType<typeof describeObservedIdaJob>[] = [];
   run.mockImplementation(async (_command, _args, _timeout, signal, spawn, env) => {
     spawn(789);
     writeFileSync(env.CLINE_IDA_PROGRESS_PATH, JSON.stringify({phase:"auto-analysis-waiting",timestamp:new Date().toISOString()})+"\n");
