@@ -121,3 +121,15 @@ it("preserves split UTF-8 and redacts retained credential output", async () => {
 	expect(result.stdout).toContain("€");
 	expect(result.stdout).not.toContain("ownedsecret");
 });
+
+it("cancellation is bounded and cannot report successful execution", async () => {
+  const fixture = await script("sleep 30", "setInterval(()=>{},1000)");
+  const controller = new AbortController();
+  const begun = Date.now();
+  try {
+    const result = await runSupervised(fixture.target,fixture.args,30000,controller.signal,()=>controller.abort());
+    expect(result.cancelled).toBe(true);
+    expect(result.exitCode).not.toBe(0);
+    expect(Date.now()-begun).toBeLessThan(10000);
+  } finally { await fs.rm(fixture.directory,{recursive:true,force:true,maxRetries:5,retryDelay:100}); }
+});

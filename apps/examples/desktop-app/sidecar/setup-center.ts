@@ -1,14 +1,16 @@
+import { createReadStream } from "node:fs";
 import { execFile } from "node:child_process";
 import { createHash, createPublicKey } from "node:crypto";
 import {
 	lstat,
+	realpath,
 	mkdir,
 	mkdtemp,
 	readFile,
 	rename,
 	writeFile,
 } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 import {
 	ADVANCED_ANALYSIS_WORKER,
@@ -19,6 +21,8 @@ import {
 import { readFileStrippingUtf8Bom } from "@cline/shared/node";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { z } from "zod";
+import { version as desktopVersion } from "../package.json";
+import ownedArm64Elf from "../../../../scripts/fixtures/owned-arm64-elf.json";
 import ownedElf from "../../../../scripts/fixtures/owned-native-elf.json";
 import { probeAnalysisSandbox } from "./analysis-sandbox-client";
 import {
@@ -104,8 +108,13 @@ export function validateSetupPreferences(input: unknown) {
 function applyPreferences(value: SetupPreferences, explicit = false) {
 	if (value.adbPath) process.env.ADB_PATH = value.adbPath;
 	else if (explicit) delete process.env.ADB_PATH;
-	if (value.idaHome) process.env.IDA_HOME = value.idaHome;
-	else if (explicit) delete process.env.IDA_HOME;
+	if (value.idaHome) {
+    process.env.IDA_HOME = value.idaHome;
+    process.env.CLINE_IDA_SELECTED_HOME = value.idaHome;
+  } else if (explicit) {
+    delete process.env.IDA_HOME;
+    delete process.env.CLINE_IDA_SELECTED_HOME;
+  }
 	if (value.workerEndpoint) {
 		process.env.CLINE_ANALYSIS_SANDBOX_WORKER = value.workerEndpoint;
 		process.env.CLINE_ANALYSIS_SANDBOX_PUBLIC_KEY = value.workerPublicKey;
@@ -357,15 +366,40 @@ export async function testSetupDevice() {
 	await saveOwnedJson("device-receipt.json", receipt);
 	return receipt;
 }
-export async function testLicensedIda() {
+export async function hashIdaExecutable(file: string, home: string) {
+  if (!isAbsolute(file)) throw new Error("IDA acceptance requires an absolute executable identity");
+  const [root, executable] = await Promise.all([realpath(home), realpath(file)]);
+  const child = relative(root, executable);
+  if (!child || child === ".." || child.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(child))
+    throw new Error("IDA acceptance executable is outside the selected installation");
+  const info = await lstat(file);
+  if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024 * 1024)
+    throw new Error("Invalid IDA acceptance executable");
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(file, { highWaterMark: 64 * 1024 })) hash.update(chunk);
+  return hash.digest("hex");
+}
+export async function currentIdaAcceptance(receipt: Record<string, unknown> | null, home: string, expectedArchitecture?: "x86_64" | "arm64") {
+  const architecture = expectedArchitecture ?? receipt?.architecture;
+  if (architecture !== "x86_64" && architecture !== "arm64") return false;
+  const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
+  if (receipt?.architecture !== architecture || receipt.fixtureSha256 !== fixture.sha256) return false;
+  if (!home || receipt?.status !== "passed" || receipt.idaHome !== home ||
+      typeof receipt.executable !== "string" || typeof receipt.executableSha256 !== "string") return false;
+  try { return await hashIdaExecutable(receipt.executable, home) === receipt.executableSha256; }
+  catch { return false; }
+}
+export async function testLicensedIda(architecture: "x86_64" | "arm64" = "x86_64") {
+  if (!["x86_64", "arm64"].includes(architecture)) throw new Error("Unsupported IDA acceptance architecture");
+  const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
 	const preferences = await readSetupPreferences();
 	if (!preferences.idaHome)
 		throw new Error("Choose your authorized IDA installation first");
 	applyPreferences(preferences);
 	await mkdir(directory(), { recursive: true, mode: 0o700 });
 	const root = await mkdtemp(join(directory(), "owned-ida-"));
-	const bytes = Buffer.from(ownedElf.base64, "base64");
-	if (createHash("sha256").update(bytes).digest("hex") !== ownedElf.sha256)
+	const bytes = Buffer.from(fixture.base64, "base64");
+	if (createHash("sha256").update(bytes).digest("hex") !== fixture.sha256)
 		throw new Error("Owned ELF identity mismatch");
 	const target = join(root, "owned.so");
 	await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
@@ -374,22 +408,28 @@ export async function testLicensedIda() {
 			engine: "ida",
 			operation: "decompile",
 			target,
-			function_selector: { address: ownedElf.functionAddress },
+			function_selector: { address: fixture.functionAddress },
 			output_directory: join(root, "analysis"),
 			timeout_ms: 120000,
 		},
 		{} as never,
 	);
 	const result = JSON.parse(raw);
+  const executable = result.engineExecutable?.path;
+  const executableSha256 = result.engineExecutable?.sha256;
+  const identityMatches = typeof executable === "string" && typeof executableSha256 === "string" &&
+    await hashIdaExecutable(executable, preferences.idaHome) === executableSha256;
 	const receipt = {
-		status: result.succeeded && result.artifactVerified ? "passed" : "failed",
+		status: result.succeeded && result.artifactVerified && result.sha256 === fixture.sha256 && identityMatches ? "passed" : "failed",
+    architecture, executable, executableSha256,
 		checkedAt: new Date().toISOString(),
 		idaHome: preferences.idaHome,
-		fixtureSha256: ownedElf.sha256,
-		scope: "Owned selected x86-64 function only; not all processor licenses",
+		fixtureSha256: fixture.sha256,
+		scope: `Owned selected ${architecture} function only; not all processor licenses or target compatibility`,
 		result,
 	};
-	await saveOwnedJson("ida-receipt.json", receipt);
+	await saveOwnedJson(`ida-receipt-${architecture}.json`, receipt);
+  if (architecture === "x86_64") await saveOwnedJson("ida-receipt.json", receipt);
 	return receipt;
 }
 export async function testSetupWorker() {
@@ -408,11 +448,14 @@ export async function testSetupWorker() {
 }
 export async function getSetupCenterStatus() {
 	const preferences = await readSetupPreferences();
-	const [idaReceipt, deviceReceipt, workerReceipt] = (await Promise.all(
-		["ida-receipt.json", "device-receipt.json", "worker-receipt.json"].map(
+	const [idaReceipt, deviceReceipt, workerReceipt, arm64Receipt] = (await Promise.all(
+		["ida-receipt.json", "device-receipt.json", "worker-receipt.json", "ida-receipt-arm64.json"].map(
 			(name) => readOwnedJson(name).catch(() => null),
 		),
 	)) as Array<Record<string, unknown> | null>;
+  const licensedArchitectures = [];
+  if (await currentIdaAcceptance(idaReceipt, preferences.idaHome, "x86_64")) licensedArchitectures.push("x86_64");
+  if (await currentIdaAcceptance(arm64Receipt, preferences.idaHome, "arm64")) licensedArchitectures.push("arm64");
 	const deviceCurrent =
 		deviceReceipt?.adbPath === preferences.adbPath &&
 		deviceReceipt?.deviceSerialSha256 ===
@@ -512,11 +555,12 @@ export async function getSetupCenterStatus() {
 				: "Setup needed",
 		checkedAt: current ? receipt?.checkedAt : undefined,
 		lastCheckedAt: receipt?.checkedAt,
-		licensedStatus:
-			idaReceipt?.idaHome === preferences.idaHome &&
-			idaReceipt?.status === "passed"
-				? "Owned x86-64 IDA acceptance passed; other processor licenses remain untested"
-				: "License needed until an explicit owned IDA acceptance passes",
+    desktopBuild: {version:desktopVersion, sourceCommit:process.env.CLINE_DESKTOP_BUILD_COMMIT ?? "development", capabilitySchema:"setup-center/processor-acceptance-v2"},
+    selectedRuntime: {runtimeId:runtime.runtimeId, source:runtime.source, integrity:runtime.integrity},
+    licensedArchitectures,
+    licensedStatus: licensedArchitectures.length
+      ? `Owned IDA acceptance passed for ${licensedArchitectures.join(", ")}; other processors and target compatibility remain untested`
+      : "Configuration / processor acceptance required; select IDA and test the matching licensed decompiler",
 		deviceStatus:
 			deviceCurrent && deviceReceipt?.status === "passed"
 				? "Last selected device connectivity test passed; reconnect and retest before device work"

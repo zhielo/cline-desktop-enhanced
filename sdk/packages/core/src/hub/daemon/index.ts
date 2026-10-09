@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import {
+	appendFileSync,
 	closeSync,
 	mkdirSync,
 	openSync,
@@ -434,7 +435,13 @@ export function spawnDetachedHubServer(
 	}
 	const command = resolveLaunchCommand(workspaceRoot, endpoint);
 	const logFile = openDetachedHubLogFile();
+	const trace = (phase: string, details: Record<string, unknown> = {}) => {
+		if (!logFile) return;
+		try { appendFileSync(logFile.logPath, `[hub-startup] ${JSON.stringify({timestamp:new Date().toISOString(),ownerPid:process.pid,phase,...details})}\n`); }
+		catch { /* Trace availability is not Hub readiness. */ }
+	};
 	try {
+		trace("spawn-requested", {executable:basename(command.launcher)});
 		const child = spawn(command.launcher, command.args, {
 			detached: true,
 			stdio: logFile ? ["ignore", logFile.fd, logFile.fd] : "ignore",
@@ -444,6 +451,9 @@ export function spawnDetachedHubServer(
 			// processes otherwise allocate a new visible console.
 			windowsHide: true,
 		});
+		trace("spawn-returned", {childPid:child.pid ?? null});
+		child.once("error", (error: NodeJS.ErrnoException) => trace("spawn-error", {code:error.code ?? "unknown"}));
+		child.once("exit", (code, signal) => trace("child-exit", {childPid:child.pid ?? null,code,signal}));
 		child.unref();
 	} finally {
 		if (logFile) {

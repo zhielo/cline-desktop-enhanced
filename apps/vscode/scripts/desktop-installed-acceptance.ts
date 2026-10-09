@@ -585,6 +585,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       runtime: { source: string };
       readiness: { status: string };
       interpreter: { executable: string };
+      setupCenter: {desktopBuild:{sourceCommit:string; capabilitySchema:string}};
     }>(page, "get_analysis_environment", { environmentId: "local" });
     await writeFile(
       join(evidence, "analysis-readiness.json"),
@@ -607,9 +608,15 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .getByText("Fixture execution: completed.", { exact: false })
       .waitFor({ timeout: 90_000 });
     stages.push("installed-interpreter-owned-fixtures-passed");
+    if (ready.setupCenter.desktopBuild.sourceCommit !== process.env.GITHUB_SHA ||
+        ready.setupCenter.desktopBuild.capabilitySchema !== "setup-center/processor-acceptance-v2")
+      throw new Error("Installed setup UI build identity mismatch");
     await page.screenshot({ path: join(evidence, "readiness.png") });
 
-    await settings(page, "Setup Center");
+    await page.getByRole("button", {name:"Open Setup Center",exact:true}).click();
+    await page.getByLabel("IDA acceptance processor",{exact:true}).selectOption("arm64");
+    // UI selection is not a commercial-license test; never launch licensed IDA in hosted CI.
+    stages.push("installed-setup-navigation-and-arm64-selection-passed");
     page.once("dialog", async (dialog) => {
       if (dialog.message().includes("reviewed and accept"))
         await dialog.accept();
@@ -767,7 +774,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/hub-recovery-ready-core-full-core-120-row-v5",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v6",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },
@@ -802,9 +809,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		const reason = (error instanceof Error ? error.message : String(error))
 			.replace(/approval_token=[^&\s]+/g, "approval_token=[REDACTED]")
       .slice(0, 2000);
-		// Only this fixture's known log is read, at most 64 KiB, with tokens redacted.
+		// Read only two fixed fixture-owned logs, each at most 64 KiB, redacted.
+    let hubStartupDiagnostic = "";
+    for (const [leaf, evidenceLeaf] of [["code.log", "owned-backend-tail.log"],
+      ["hub-daemon.log", "owned-hub-daemon-tail.log"]] as const) {
   try {
-   const log = await open(join(root, "data", "logs", "code.log"), "r");
+   const log = await open(join(root, "data", "logs", leaf), "r");
    try {
     const info = await log.stat();
     if (info.isFile() && info.size <= 50 * 1024 * 1024) {
@@ -815,10 +825,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
             buffer.length,
             Math.max(0, info.size - buffer.length),
           );
-          await writeFile(
-            join(evidence, "owned-backend-tail.log"),
-            redactedLaunchText(buffer.subarray(0, bytesRead).toString("utf8")),
-          );
+          const tail = redactedLaunchText(buffer.subarray(0, bytesRead).toString("utf8"));
+          await writeFile(join(evidence, evidenceLeaf), tail);
+          if (leaf === "hub-daemon.log") hubStartupDiagnostic = tail.slice(-1600);
     }
 	} finally {
         await log.close();
@@ -826,9 +835,10 @@ ConvertTo-Json -InputObject @($rows) -Compress
     } catch {
       /* Diagnostics do not substitute for the strict acceptance result. */
     }
+    }
     await writeFile(
       join(evidence, "summary.json"),
-      JSON.stringify({ status: "failed", stages, reason }, null, 2),
+      JSON.stringify({ status: "failed", stages, reason, hubStartupDiagnostic }, null, 2),
     );
     throw new Error(reason);
   } finally {

@@ -76,6 +76,7 @@ async function main() {
   const pkg = JSON.parse(await readFile(path.join(desktop, "package.json"), "utf8"));
   const job = (name, args, cwd = root) => ({ name, args, cwd, timeoutMs: 20 * 60 * 1000 });
   const prerequisites = [
+    job("Check owned ARM64 fixture", ["scripts/generate-owned-arm64-fixture.mjs", "--check"]),
     job("Check Android worker embed", ["scripts/generate-android-investigation.mjs", "--check"]),
     job("Verify custom fork preservation", ["run", "scripts/verify-custom-fork.ts"]),
     job("Build SDK packages", ["run", "build:sdk"]),
@@ -107,6 +108,7 @@ async function main() {
     job("Test desktop chat UI", ["x", ...pkg.scripts["test:chat-ui"].split(/\s+/)], desktop),
     job("Run desktop customization tests", ["x", "vitest", "run",
       "apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.test.tsx",
+      "apps/examples/desktop-app/webview/lib/native-tool-progress.test.ts",
       "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.test.tsx",
       "apps/examples/desktop-app/webview/components/views/settings/optimization-panel.test.tsx",
       "apps/examples/desktop-app/sidecar/bundled-analysis-runtime.test.ts",
@@ -154,6 +156,7 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/supervised-process-cancellation.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/managed-engine-pool.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/native-project-candidates.test.ts",

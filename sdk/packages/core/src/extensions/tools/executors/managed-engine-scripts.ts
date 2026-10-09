@@ -57,8 +57,8 @@ def publish(name,value):
     with open(path+".stage","x",encoding="utf-8") as output: json.dump(value,output)
     os.replace(path+".stage",path)
 def main():
-    ida_auto.auto_wait()
-    if not ida_hexrays.init_hexrays_plugin(): raise RuntimeError("Hex-Rays unavailable")
+    if not ida_hexrays.init_hexrays_plugin(): raise RuntimeError("Hex-Rays unavailable for loaded processor; configure its licensed decompiler")
+    if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
     publish("ready.json",dict(protocol=1,nonce=NONCE))
     begun=last=time.monotonic()
     while time.monotonic()-begun<900 and time.monotonic()-last<90:

@@ -1,5 +1,6 @@
 import {
   getSetupCenterStatus,
+  readSetupPreferences,
   platformToolsNotices,
   saveSetupPreferences,
   detectInstalledTools,
@@ -4253,7 +4254,10 @@ export async function handleCommand(
         throw new Error(
           "Confirm your authorized IDA/Hex-Rays license before the owned fixture test",
         );
-      return await testLicensedIda();
+      const architecture = args.architecture ?? "x86_64";
+      if (architecture !== "x86_64" && architecture !== "arm64") throw new Error("Unsupported IDA acceptance architecture");
+      if (typeof args.idaHome === "string") await saveSetupPreferences({...await readSetupPreferences(), idaHome:args.idaHome});
+      return await testLicensedIda(architecture);
     }
     throw new Error("Unknown Setup Center operation");
   }
@@ -4268,7 +4272,7 @@ export async function handleCommand(
 	if (command === "get_analysis_environment") {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
 			throw new Error("Analysis environment readiness is local-only.");
-		return await getAnalysisEnvironment(args?.force !== false);
+		return { ...await getAnalysisEnvironment(args?.force !== false), setupCenter: await getSetupCenterStatus() };
 	}
 	if (command === "get_ida_job_diagnostics") {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")

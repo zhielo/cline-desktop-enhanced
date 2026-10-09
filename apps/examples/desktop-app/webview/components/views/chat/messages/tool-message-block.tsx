@@ -20,6 +20,7 @@ import {
 	ChatMessageImageSchema,
 } from "@/lib/chat-schema";
 import { appendCappedCommandOutput } from "@/lib/command-output";
+import { latestIdaProgress, nativeExecutionFailure } from "@/lib/native-tool-progress";
 import { cn } from "@/lib/utils";
 import { MemoizedMarkdown } from "../../../ui/markdown";
 import { IS_DEBUG, STREAMING_TITLE_CLASS } from "./constants";
@@ -96,6 +97,9 @@ const ToolCallRow = memo(function ToolCallRow({
 				},
 			]
 		: summary.labelParts;
+  const nativeProgressOutput = toolName === "reverse_engineer"
+    ? appendCappedCommandOutput("", message.meta?.toolOutput ?? "").output : "";
+  const nativeProgress = latestIdaProgress(nativeProgressOutput);
 	const commandOutputSource = isCommand
 		? message.meta?.toolOutput ||
 			(payload?.isError
@@ -186,7 +190,8 @@ const ToolCallRow = memo(function ToolCallRow({
 		}
 	}, [isProceeding, onProceedWhileRunning, toolCallId, toolSessionId]);
 
-	const hasError = Boolean(payload?.isError);
+	const nativeFailure = toolName === "reverse_engineer" && !inProgress ? nativeExecutionFailure(payload?.result) : null;
+  const hasError = Boolean(payload?.isError || nativeFailure);
 	const Icon = getToolNameIcon(toolName);
 	const details = summary.details.map((detail, index) => ({
 		detail,
@@ -196,6 +201,8 @@ const ToolCallRow = memo(function ToolCallRow({
 		IS_DEBUG && payload ? formatToolValue(payload.input) : "";
 	const hasExpandedSections =
 		details.length > 0 ||
+    Boolean(nativeProgressOutput) ||
+    Boolean(nativeFailure) ||
 		fileDiffs.length > 0 ||
 		Boolean(submitText) ||
 		Boolean(isCommand ? commandOutput : summary.outputText) ||
@@ -221,11 +228,19 @@ const ToolCallRow = memo(function ToolCallRow({
 						<Icon className="size-4" />
 					)
 				}
-				label={<ToolLabel isRunning={isRunning} parts={labelParts} />}
+				label={<><ToolLabel isRunning={isRunning} parts={labelParts} />
+          {nativeProgress && <span className="ml-2 text-xs text-muted-foreground" data-testid="ida-live-tool-progress">
+            {isRunning ? nativeProgress : `Last recorded: ${nativeProgress}`}
+          </span>}
+        </>}
 				showDisclosureIcon={false}
 				status={hasError ? "error" : isRunning ? "running" : "success"}
 			/>
 			<ToolActivityContent presentation="rail">
+        {nativeFailure && <p role="alert" className="text-destructive text-xs">{nativeFailure}</p>}
+        {nativeProgressOutput && <ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
+          {nativeProgressOutput}
+        </ToolActivityCode>}
 				{details.length > 0 ? (
 					<ToolActivityDetails
 						className={cn(

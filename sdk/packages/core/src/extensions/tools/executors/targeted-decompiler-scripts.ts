@@ -50,11 +50,12 @@ OUTPUT_PATH = ${JSON.stringify(outputPath)}
 SELECTOR = ${JSON.stringify(selector)}
 def main():
     cline_phase("input-loaded")
-    cline_phase("auto-analysis-waiting")
-    ida_auto.auto_wait()
-    cline_phase("analysis-complete")
-    if not ida_hexrays.init_hexrays_plugin(): raise RuntimeError("Hex-Rays unavailable")
+    if not ida_hexrays.init_hexrays_plugin():
+        raise RuntimeError("Hex-Rays unavailable for the loaded processor; configure the licensed matching decompiler in Setup Center")
     cline_phase("decompiler-initialized")
+    cline_phase("auto-analysis-waiting")
+    if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
+    cline_phase("analysis-complete")
     matches=[]
     if SELECTOR.get("address"):
         address=int(SELECTOR["address"],16)
@@ -66,6 +67,7 @@ def main():
             if idc.get_func_name(address)==SELECTOR["symbol"]: matches.append(address)
             if len(matches)>1: raise RuntimeError("Ambiguous exact function name; use entry address")
     if len(matches)!=1: raise RuntimeError("Exact function not found; no containing/nearby function inferred")
+    cline_phase("decompilation-started")
     pseudocode=ida_hexrays.decompile(matches[0])
     if pseudocode is None: raise RuntimeError("Selected decompilation failed")
     text=str(pseudocode)

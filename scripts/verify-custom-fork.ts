@@ -5,6 +5,30 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "sdk/packages/core/src/hub/client/index.ts",
+		markers: ["onStartupError", "Managed Hub startup failed:", "no task command was replayed"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/daemon/index.ts",
+		markers: ['trace("spawn-requested"', 'trace("spawn-returned"', 'trace("child-exit"'],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: ["owned-hub-daemon-tail.log", "hubStartupDiagnostic = tail.slice(-1600)"],
+	},
+	{
+		path: "scripts/report-installed-acceptance.mjs",
+		markers: ["owned Hub startup tail:", "hubStartupDiagnostic.slice(-1600)"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/client/index.ts",
+		markers: ["rememberRecoverableLocalHubUrl(ensured.url, ensured.authToken)"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/client/index.test.ts",
+		markers: ["cline-hub-auth.replacement-token", "ensureDetachedHubServerMock).toHaveBeenCalledTimes(2)"],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/command-evidence.ts",
 		markers: [
 			"CommandExecutionReceipt",
@@ -56,6 +80,10 @@ const requiredMarkers: Array<{
 			"-----BEGIN PUBLIC KEY-----",
 			"deviceSerialSha256",
 			"testLicensedIda",
+      "owned-arm64-elf.json",
+      "currentIdaAcceptance",
+      "CLINE_IDA_SELECTED_HOME",
+      "executableSha256",
 			"platformToolsNotices",
 		],
 	},
@@ -330,6 +358,9 @@ const requiredMarkers: Array<{
 		path: "sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.ts",
 		markers: [
 			"runObservedIda",
+      "phase-deadline-exceeded",
+      "phaseTimeoutMs",
+      "formatIdaProgress",
 			"termination-unconfirmed",
 			"No script phase observed",
 			"auto-analysis-waiting",
@@ -344,6 +375,8 @@ const requiredMarkers: Array<{
 		markers: [
 			"Check analysis readiness",
 			"Refresh IDA jobs",
+      "Open Setup Center",
+      "Live read-only IDA job refresh",
 			"Configuration / acceptance required",
 		],
 	},

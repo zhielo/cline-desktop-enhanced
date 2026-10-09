@@ -326,6 +326,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	script_path: z.string().min(1).optional(),
 	script_args: z.array(z.string()).optional(),
 	timeout_ms: z.number().int().positive().max(3_600_000).optional(),
+	ida_phase_timeout_ms: z.number().int().min(1000).max(3_600_000).optional(),
 	output_directory: z.string().min(1).optional(),
 	output_file: z
 		.string()

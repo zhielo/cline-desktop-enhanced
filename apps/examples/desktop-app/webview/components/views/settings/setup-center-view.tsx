@@ -15,6 +15,9 @@ type Preferences = {
 	acceptedPlatformToolsLicense: boolean;
 };
 type Status = {
+  desktopBuild?: {version:string; sourceCommit:string; capabilitySchema:string};
+  selectedRuntime?: {runtimeId?:string; source?:string; integrity?:string};
+  licensedArchitectures?: string[];
 	preferences: Preferences;
 	fullStatus: string;
 	checkedAt?: string;
@@ -34,12 +37,21 @@ type Status = {
 };
 export function SetupCenter() {
 	const [notice, setNotice] = useState("");
+  const [idaArchitecture, setIdaArchitecture] = useState<"x86_64" | "arm64">("x86_64");
+  const [operationStarted, setOperationStarted] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
 	const [status, setStatus] = useState<Status | null>(null),
 		[form, setForm] = useState<Preferences | null>(null),
 		[busy, setBusy] = useState(false),
 		[message, setMessage] = useState(""),
 		[error, setError] = useState(""),
 		[devices, setDevices] = useState<{ serial: string; state: string }[]>([]);
+  useEffect(() => {
+    if (!busy || operationStarted === null) return;
+    const timer = setInterval(() => setElapsedSeconds(Math.floor((Date.now()-operationStarted)/1000)), 1000);
+    return () => clearInterval(timer);
+  }, [busy, operationStarted]);
 	const refresh = useCallback(async () => {
 		const reply = await desktopClient.invoke<Status>("setup_center_status", {
 			environmentId: "local",
@@ -59,6 +71,7 @@ export function SetupCenter() {
 	) {
 		if (confirmation && !window.confirm(confirmation)) return;
 		setBusy(true);
+    setOperationStarted(Date.now()); setElapsedSeconds(0);
 		setError("");
 		setMessage("");
 		try {
@@ -128,6 +141,8 @@ export function SetupCenter() {
 				subtitle="Install supported private engine packs, then verify actual capabilities. Licenses and device authorization stay explicit."
 			/>
 			<div className="space-y-6 p-6">
+        <p>Installed desktop: {status?.desktopBuild?.version ?? "Unknown"}; build <code>{status?.desktopBuild?.sourceCommit ?? "Unknown"}</code>.</p>
+        <p>Selected runtime: <code>{status?.selectedRuntime?.runtimeId ?? "Unknown"}</code>. Core and full are separate selections; installing an updated .exe alone does not select the full pack.</p>
 				<p>
 					Full pack:{" "}
 					<output aria-label="Full capability pack status">
@@ -245,6 +260,12 @@ export function SetupCenter() {
 					<div className="space-y-4">
 						<h2 className="text-lg font-semibold">Licensed IDA and Hex-Rays</h2>
 						<p>{status?.licensedStatus}</p>
+            <label className="block">IDA acceptance processor
+              <select aria-label="IDA acceptance processor" value={idaArchitecture} disabled={busy} onChange={e => setIdaArchitecture(e.target.value as "x86_64" | "arm64")}>
+                <option value="x86_64">x86-64</option><option value="arm64">ARM64 / AArch64</option>
+              </select>
+            </label>
+            <p>Owned-fixture acceptance for selected processor: {status?.licensedArchitectures?.includes(idaArchitecture) ? "Passed for this executable" : "Not verified; test its licensed decompiler"}.</p>
 						<label className="block">
 							IDA installation folder
 							<input
@@ -270,8 +291,8 @@ export function SetupCenter() {
 								onClick={() =>
 									void action(
 										"setup_center_test_ida",
-										"I own an authorized IDA/Hex-Rays license. Run one owned x86-64 selected-function decompilation? This does not install a license or execute the ELF.",
-										{ authorizedLicense: true },
+										`I own an authorized IDA/Hex-Rays license. Save this IDA folder and run one fixed owned ${idaArchitecture} selected-function decompilation? This does not install a license or execute the ELF.`,
+										{ authorizedLicense: true, architecture: idaArchitecture, idaHome: form.idaHome },
 									)
 								}
 							>
@@ -279,8 +300,8 @@ export function SetupCenter() {
 							</Button>
 						</div>
 						<p>
-							Save the selected installation first. An owned x86-64 test does
-							not validate every processor-specific decompiler license.
+							This test saves only the selected IDA folder. An owned processor test does
+              not validate every license or arbitrary target compatibility.
 						</p>
 						<h2 className="text-lg font-semibold">
 							Android device or emulator
@@ -396,7 +417,7 @@ export function SetupCenter() {
 				)}
 				{busy && (
 					<p aria-live="polite">
-						Setup operation running; tests remain bounded. Existing project jobs
+						Setup operation running{operationStarted === null ? "" : ` — ${elapsedSeconds}s elapsed; response deadline 300s`}; elapsed time is not engine progress. Existing project jobs
 						are not restarted.
 					</p>
 				)}

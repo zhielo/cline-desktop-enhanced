@@ -187,6 +187,15 @@ export async function runSupervised(
 			if (settled) return;
 			cancelled = true;
 			killProcessTree(child);
+			if (drainTimer) clearTimeout(drainTimer);
+			drainTimer = setTimeout(() => {
+				if (settled) return;
+				// No exit/EOF confirmation: retain ownership and report uncertainty.
+				outputDrainTimedOut = true;
+				child.stdout?.destroy();
+				child.stderr?.destroy();
+				finish({ exitCode: parentExitCode });
+			}, 2000);
 		};
 		signal?.addEventListener("abort", abort, { once: true });
 		child.once("error", (error) => finish({ exitCode: null, error }));

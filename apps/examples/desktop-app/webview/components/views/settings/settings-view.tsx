@@ -710,7 +710,7 @@ export function SettingsView({
     ) : activeNav === "Setup Center" ? (
       <SetupCenter />
 		) : activeNav === "Analysis environment" ? (
-			<AnalysisEnvironmentView />
+			<AnalysisEnvironmentView onOpenSetup={() => onNavigateSection("Setup Center")} />
 		) : activeNav === "Account" ? (
 			<AccountView />
 		) : activeNav === "General" ? (

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { idaProgressPrelude, runObservedIda } from "./ida-job-diagnostics";
+import { formatIdaProgress, idaProgressPrelude, runObservedIda } from "./ida-job-diagnostics";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -77,7 +77,7 @@ const ANALYSIS_SCHEMA_VERSION = 2;
 const FORENSIC_REPORT_SCHEMA_VERSION = 1;
 const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
 const GHIDRA_SCRIPT_VERSION = 3;
-const IDA_DECOMPILE_SCRIPT_VERSION = 2;
+const IDA_DECOMPILE_SCRIPT_VERSION = "ida-decompile-phase-deadline-v3";
 const DISCOVERY_CACHE_TTL_MS = 5 * 60_000;
 const DISCOVERY_PROBE_TIMEOUT_MS = 5_000;
 const discoveryCache = new Map<
@@ -178,6 +178,10 @@ function splitPathEntries(value: string | undefined): string[] {
  * reverse-engineering install variables from the Windows registry before
  * discovery so tools configured while the app is open become available.
  */
+export function shouldRefreshEngineEnvironment(name: string) {
+  return !(process.env.CLINE_IDA_SELECTED_HOME?.trim() && ["IDA_HOME", "IDADIR"].includes(name));
+}
+
 async function refreshProcessPath(): Promise<boolean> {
 	if (process.platform !== "win32") return false;
 	const machineEnvironment =
@@ -210,6 +214,7 @@ async function refreshProcessPath(): Promise<boolean> {
 		"IDADIR",
 		"JADX_HOME",
 	]) {
+    if (!shouldRefreshEngineEnvironment(name)) continue;
 		const [machineValue, userValue] = await Promise.all([
 			readWindowsRegistryValue(machineEnvironment, name),
 			readWindowsRegistryValue(userEnvironment, name),
@@ -310,7 +315,7 @@ async function platformInstallRoots(engine: Engine): Promise<string[]> {
 
 async function executableCandidates(engine: Engine): Promise<string[]> {
 	const win = process.platform === "win32";
-	const discoveredRoots = await platformInstallRoots(engine);
+	const discoveredRoots = engine === "ida" && process.env.CLINE_IDA_SELECTED_HOME?.trim() ? [] : await platformInstallRoots(engine);
 	if (engine === "ghidra") {
 		const home = process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR;
 		const roots = [...(home ? [home] : []), ...discoveredRoots];
@@ -337,8 +342,10 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 		];
 	}
 	if (engine === "ida") {
-		const home = process.env.IDA_HOME ?? process.env.IDADIR;
-		const roots = [...(home ? [home] : []), ...discoveredRoots];
+    const selectedHome = process.env.CLINE_IDA_SELECTED_HOME?.trim();
+    if (selectedHome && !path.isAbsolute(selectedHome)) throw new Error("Explicit IDA selection must be an absolute installation folder");
+		const home = selectedHome ?? process.env.IDA_HOME ?? process.env.IDADIR;
+		const roots = selectedHome ? [selectedHome] : [...(home ? [home] : []), ...discoveredRoots];
 		const names = win
 			? ["idat64.exe", "ida64.exe", "idat.exe", "ida.exe"]
 			: ["idat64", "ida64", "idat", "ida", "idat32", "ida32"];
@@ -349,7 +356,7 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 					path.join(root, "Contents", "MacOS", name),
 				]),
 			),
-			...names,
+      ...(selectedHome ? [] : names),
 		];
 	}
 	const home = process.env.JADX_HOME;
@@ -2135,12 +2142,13 @@ OUTPUT_PATH = ${JSON.stringify(outputPath)}
 
 def main():
     cline_phase("input-loaded")
-    cline_phase("auto-analysis-waiting")
-    ida_auto.auto_wait()
-    cline_phase("analysis-complete")
     if not ida_hexrays.init_hexrays_plugin():
-        raise RuntimeError("Hex-Rays decompiler is unavailable")
+        raise RuntimeError("Hex-Rays unavailable for the loaded processor; configure its licensed decompiler in Setup Center")
     cline_phase("decompiler-initialized")
+    cline_phase("auto-analysis-waiting")
+    if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
+    cline_phase("analysis-complete")
+    cline_phase("decompilation-started")
     decompiled = 0
     with open(OUTPUT_PATH, "w", encoding="utf-8", errors="replace") as output:
         for address in idautils.Functions():
@@ -2324,7 +2332,8 @@ async function discoverCapabilities(
 		platform: process.platform,
 		path: process.env.PATH ?? "",
 		ghidra: process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR ?? "",
-		ida: process.env.IDA_HOME ?? process.env.IDADIR ?? "",
+		ida: process.env.CLINE_IDA_SELECTED_HOME ?? process.env.IDA_HOME ?? process.env.IDADIR ?? "",
+    idaSelectionExplicit: Boolean(process.env.CLINE_IDA_SELECTED_HOME),
 		jadx: process.env.JADX_HOME ?? "",
 	});
 	const cached = discoveryCache.get(cacheKey);
@@ -3220,7 +3229,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			input.engine === "auto" ? chooseAuto(target, available) : input.engine;
 		if (!engine)
 			throw new Error(
-				"No compatible reverse-engineering engine was found. Configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
+				"No compatible reverse-engineering engine was found. In Cline Desktop, open Settings → Setup Center to select and test the authorized IDA installation and matching processor decompiler. Non-desktop hosts may configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
 			);
 		if (
 			input.managed_worker === true &&
@@ -3254,6 +3263,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 		const timeoutMs = input.timeout_ms ?? 900_000;
+        if (engine === "ida" && !gui) context.emitUpdate?.({stream:"stdout",
+            chunk:`[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs/1000)}s, phase budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? 300000, timeoutMs)/1000)}s. Missing Python packages do not diagnose IDA.\n`});
 		const engineIdentity = await toolIdentity(engine, available[engine]);
 		const fingerprintFile = async (file: string | undefined) => {
 			if (!file) return null;
@@ -3522,6 +3533,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				input.function_selector!,
 				context.signal,
 				timeoutMs,
+        engine === "ida" ? event => context.emitUpdate?.({stream:"stdout",
+          chunk:`[IDA progress] Managed worker: ${event.phase}; PID ${event.pid ?? "not observed"}; elapsed ${Math.floor(event.elapsedMs/1000)}s; stage deadline remaining ${event.remainingMs === null ? "not yet observed" : `${Math.ceil(event.remainingMs/1000)}s`}. Mailbox state, not a script-phase or liveness proof.\n`}) : undefined,
 			);
 			return JSON.stringify({
 				engine,
@@ -3692,7 +3705,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					]);
 				}
 				const result = engine === "ida"
-                    ? await runObservedIda(command, args, outputDir, timeoutMs, context.signal).catch((error) => {
+                    ? await runObservedIda(command, args, outputDir, timeoutMs, context.signal, {
+                        phaseTimeoutMs: input.ida_phase_timeout_ms,
+                        onProgress: (job) => context.emitUpdate?.({ stream: "stdout", chunk: `${formatIdaProgress(job)}\n` }),
+                    }).catch((error) => {
 						retainLease = Boolean(error?.terminationUnconfirmed);
 						throw error;
 					})
@@ -3737,6 +3753,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						persistent,
 						reusedAnalysis,
 						command,
+						engineExecutable: { path: resolvedCommand, sha256: engineFingerprint },
 						args,
 						durationMs: Date.now() - started,
 						artifacts,
