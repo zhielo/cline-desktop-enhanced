@@ -5,6 +5,53 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "apps/examples/desktop-app/webview/components/ui/preview-scroll-region.tsx",
+		markers: [
+			"min-h-0 flex-1 overflow-auto",
+			"tabIndex={0}",
+			"keyboard scrolling",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/artifact-context-menu.tsx",
+		markers: [
+			"artifact-preview-scroll",
+			"flex max-h-[85vh] flex-col",
+			"PreviewScrollRegion",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/messages/code-change-preview.tsx",
+		markers: [
+			"recorded-code-scroll",
+			"Before change",
+			"not the full or current file",
+			"Recorded tool data only",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/smali-search.ts",
+		markers: [
+			"activeScans",
+			"bytesRead",
+			"output_limit",
+			"byte_limit",
+			"yieldTurn",
+			"no automatic retry",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/process-session-manager.ts",
+		markers: ["scheduleDeadline", "deadlineAtMs", "termination unconfirmed"],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			"owned-markdown-preview-wheel-keyboard-scroll-passed",
+			"artifact-preview-scroll",
+		],
+	},
+	{
 		path: "apps/cli/src/tests/headless/headless.test.ts",
 		markers: [
 			'CLINE_VCR: "playback"',

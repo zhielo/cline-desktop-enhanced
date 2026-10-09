@@ -20,9 +20,14 @@ import {
 	ChatMessageImageSchema,
 } from "@/lib/chat-schema";
 import { appendCappedCommandOutput } from "@/lib/command-output";
-import { latestIdaProgress, nativeExecutionFailure } from "@/lib/native-tool-progress";
+import {
+	latestIdaProgress,
+	latestSmaliProgress,
+	nativeExecutionFailure,
+} from "@/lib/native-tool-progress";
 import { cn } from "@/lib/utils";
 import { MemoizedMarkdown } from "../../../ui/markdown";
+import { CodeChangePreview } from "./code-change-preview";
 import { IS_DEBUG, STREAMING_TITLE_CLASS } from "./constants";
 import { MessageImageCarousel } from "./image-carousel";
 import { getToolNameIcon } from "./tool-icons";
@@ -97,9 +102,13 @@ const ToolCallRow = memo(function ToolCallRow({
 				},
 			]
 		: summary.labelParts;
-  const nativeProgressOutput = toolName === "reverse_engineer"
-    ? appendCappedCommandOutput("", message.meta?.toolOutput ?? "").output : "";
-  const nativeProgress = latestIdaProgress(nativeProgressOutput);
+	const nativeProgressOutput =
+		toolName === "reverse_engineer"
+			? appendCappedCommandOutput("", message.meta?.toolOutput ?? "").output
+			: "";
+	const nativeProgress =
+		latestIdaProgress(nativeProgressOutput) ??
+		latestSmaliProgress(nativeProgressOutput);
 	const commandOutputSource = isCommand
 		? message.meta?.toolOutput ||
 			(payload?.isError
@@ -190,8 +199,11 @@ const ToolCallRow = memo(function ToolCallRow({
 		}
 	}, [isProceeding, onProceedWhileRunning, toolCallId, toolSessionId]);
 
-	const nativeFailure = toolName === "reverse_engineer" && !inProgress ? nativeExecutionFailure(payload?.result) : null;
-  const hasError = Boolean(payload?.isError || nativeFailure);
+	const nativeFailure =
+		toolName === "reverse_engineer" && !inProgress
+			? nativeExecutionFailure(payload?.result)
+			: null;
+	const hasError = Boolean(payload?.isError || nativeFailure);
 	const Icon = getToolNameIcon(toolName);
 	const details = summary.details.map((detail, index) => ({
 		detail,
@@ -201,8 +213,8 @@ const ToolCallRow = memo(function ToolCallRow({
 		IS_DEBUG && payload ? formatToolValue(payload.input) : "";
 	const hasExpandedSections =
 		details.length > 0 ||
-    Boolean(nativeProgressOutput) ||
-    Boolean(nativeFailure) ||
+		Boolean(nativeProgressOutput) ||
+		Boolean(nativeFailure) ||
 		fileDiffs.length > 0 ||
 		Boolean(submitText) ||
 		Boolean(isCommand ? commandOutput : summary.outputText) ||
@@ -228,19 +240,35 @@ const ToolCallRow = memo(function ToolCallRow({
 						<Icon className="size-4" />
 					)
 				}
-				label={<><ToolLabel isRunning={isRunning} parts={labelParts} />
-          {nativeProgress && <span className="ml-2 text-xs text-muted-foreground" data-testid="ida-live-tool-progress">
-            {isRunning ? nativeProgress : `Last recorded: ${nativeProgress}`}
-          </span>}
-        </>}
+				label={
+					<>
+						<ToolLabel isRunning={isRunning} parts={labelParts} />
+						{nativeProgress && (
+							<span
+								className="ml-2 text-xs text-muted-foreground"
+								data-testid="ida-live-tool-progress"
+							>
+								{isRunning
+									? nativeProgress
+									: `Last recorded: ${nativeProgress}`}
+							</span>
+						)}
+					</>
+				}
 				showDisclosureIcon={false}
 				status={hasError ? "error" : isRunning ? "running" : "success"}
 			/>
 			<ToolActivityContent presentation="rail">
-        {nativeFailure && <p role="alert" className="text-destructive text-xs">{nativeFailure}</p>}
-        {nativeProgressOutput && <ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
-          {nativeProgressOutput}
-        </ToolActivityCode>}
+				{nativeFailure && (
+					<p role="alert" className="text-destructive text-xs">
+						{nativeFailure}
+					</p>
+				)}
+				{nativeProgressOutput && (
+					<ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
+						{nativeProgressOutput}
+					</ToolActivityCode>
+				)}
 				{details.length > 0 ? (
 					<ToolActivityDetails
 						className={cn(
@@ -253,25 +281,31 @@ const ToolCallRow = memo(function ToolCallRow({
 						))}
 					</ToolActivityDetails>
 				) : null}
-				{fileDiffs.map((entry) =>
-					entry.kind === "rich" && entry.hunk ? (
-						<ToolFileDiff
-							className="mt-1"
-							fragment={entry.item.fragment}
-							key={entry.key}
-							newText={entry.hunk.newText}
-							oldText={entry.hunk.oldText}
-							path={entry.item.path}
-						/>
-					) : (
-						<ToolActivityCode
-							className="mt-1 overflow-x-auto text-xs"
-							key={entry.key}
-						>
-							{entry.item.diff}
-						</ToolActivityCode>
-					),
-				)}
+
+				{fileDiffs.map((entry) => (
+					<CodeChangePreview
+						key={entry.key}
+						path={entry.item.path}
+						fragment={entry.item.fragment}
+						newText={entry.hunk?.newText}
+						oldText={entry.hunk?.oldText}
+						diff={entry.item.diff}
+					>
+						{entry.kind === "rich" && entry.hunk ? (
+							<ToolFileDiff
+								className="mt-1"
+								fragment={entry.item.fragment}
+								newText={entry.hunk.newText}
+								oldText={entry.hunk.oldText}
+								path={entry.item.path}
+							/>
+						) : (
+							<ToolActivityCode className="mt-1 overflow-x-auto text-xs">
+								{entry.item.diff}
+							</ToolActivityCode>
+						)}
+					</CodeChangePreview>
+				))}
 				{commandOutput ? (
 					<CommandOutputTerminal isRunning={isRunning} output={commandOutput} />
 				) : submitText ? (
