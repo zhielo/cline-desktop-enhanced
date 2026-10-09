@@ -1,5 +1,14 @@
+import {
+	idaDatabaseKey,
+	prepareIdaAttempt,
+	publishIdaDatabase,
+} from "./ida-analysis-workspace";
 import { createHash } from "node:crypto";
-import { formatIdaProgress, idaProgressPrelude, runObservedIda } from "./ida-job-diagnostics";
+import {
+	formatIdaProgress,
+	idaProgressPrelude,
+	runObservedIda,
+} from "./ida-job-diagnostics";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -19,12 +28,21 @@ import {
 	runAnalysisNotebook,
 } from "./analysis-notebook";
 import { programEvidenceResult } from "./analysis-program-evidence";
-import { readNativeCandidateReceipt, runNativeProjectCandidate } from "./native-project-candidates";
-import { NATIVE_GHIDRA_EDIT_SCRIPT, nativeIdaEditScript } from "./native-project-edit-scripts";
+import {
+	readNativeCandidateReceipt,
+	runNativeProjectCandidate,
+} from "./native-project-candidates";
+import {
+	NATIVE_GHIDRA_EDIT_SCRIPT,
+	nativeIdaEditScript,
+} from "./native-project-edit-scripts";
 import { NativeProjectEditSchema } from "../native-project-edits-schema";
 import { guardManagedBatchArguments } from "./managed-engine-pool";
 import { ManagedEnginePool } from "./managed-engine-pool";
-import { MANAGED_GHIDRA_SCRIPT, managedIdaScript } from "./managed-engine-scripts";
+import {
+	MANAGED_GHIDRA_SCRIPT,
+	managedIdaScript,
+} from "./managed-engine-scripts";
 import { withProjectLease } from "./analysis-project-lease";
 import {
 	persistInvestigation,
@@ -179,7 +197,10 @@ function splitPathEntries(value: string | undefined): string[] {
  * discovery so tools configured while the app is open become available.
  */
 export function shouldRefreshEngineEnvironment(name: string) {
-  return !(process.env.CLINE_IDA_SELECTED_HOME?.trim() && ["IDA_HOME", "IDADIR"].includes(name));
+	return !(
+		process.env.CLINE_IDA_SELECTED_HOME?.trim() &&
+		["IDA_HOME", "IDADIR"].includes(name)
+	);
 }
 
 async function refreshProcessPath(): Promise<boolean> {
@@ -214,7 +235,7 @@ async function refreshProcessPath(): Promise<boolean> {
 		"IDADIR",
 		"JADX_HOME",
 	]) {
-    if (!shouldRefreshEngineEnvironment(name)) continue;
+		if (!shouldRefreshEngineEnvironment(name)) continue;
 		const [machineValue, userValue] = await Promise.all([
 			readWindowsRegistryValue(machineEnvironment, name),
 			readWindowsRegistryValue(userEnvironment, name),
@@ -315,7 +336,10 @@ async function platformInstallRoots(engine: Engine): Promise<string[]> {
 
 async function executableCandidates(engine: Engine): Promise<string[]> {
 	const win = process.platform === "win32";
-	const discoveredRoots = engine === "ida" && process.env.CLINE_IDA_SELECTED_HOME?.trim() ? [] : await platformInstallRoots(engine);
+	const discoveredRoots =
+		engine === "ida" && process.env.CLINE_IDA_SELECTED_HOME?.trim()
+			? []
+			: await platformInstallRoots(engine);
 	if (engine === "ghidra") {
 		const home = process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR;
 		const roots = [...(home ? [home] : []), ...discoveredRoots];
@@ -342,10 +366,15 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 		];
 	}
 	if (engine === "ida") {
-    const selectedHome = process.env.CLINE_IDA_SELECTED_HOME?.trim();
-    if (selectedHome && !path.isAbsolute(selectedHome)) throw new Error("Explicit IDA selection must be an absolute installation folder");
+		const selectedHome = process.env.CLINE_IDA_SELECTED_HOME?.trim();
+		if (selectedHome && !path.isAbsolute(selectedHome))
+			throw new Error(
+				"Explicit IDA selection must be an absolute installation folder",
+			);
 		const home = selectedHome ?? process.env.IDA_HOME ?? process.env.IDADIR;
-		const roots = selectedHome ? [selectedHome] : [...(home ? [home] : []), ...discoveredRoots];
+		const roots = selectedHome
+			? [selectedHome]
+			: [...(home ? [home] : []), ...discoveredRoots];
 		const names = win
 			? ["idat64.exe", "ida64.exe", "idat.exe", "ida.exe"]
 			: ["idat64", "ida64", "idat", "ida", "idat32", "ida32"];
@@ -356,7 +385,7 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 					path.join(root, "Contents", "MacOS", name),
 				]),
 			),
-      ...(selectedHome ? [] : names),
+			...(selectedHome ? [] : names),
 		];
 	}
 	const home = process.env.JADX_HOME;
@@ -2134,6 +2163,7 @@ import traceback
 import ida_auto
 import ida_funcs
 import ida_hexrays
+import ida_loader
 import idautils
 import idc
 ${idaProgressPrelude(outputDir)}
@@ -2168,6 +2198,9 @@ def main():
     if decompiled == 0:
         raise RuntimeError("Hex-Rays did not decompile any function")
     cline_phase("output-written")
+    cline_phase("database-saving")
+    if not ida_loader.save_database(idc.get_idb_path(), ida_loader.DBFL_COMP): raise RuntimeError("IDA database save failed")
+    cline_phase("database-saved")
 
 exit_code = 0
 try:
@@ -2183,6 +2216,39 @@ finally:
 `;
 	await fs.writeFile(scriptPath, source, { mode: 0o600 });
 	return scriptPath;
+}
+
+async function ensureIdaAnalysisScript(outputDir: string) {
+	const file = path.join(outputDir, "cline_analyze.py");
+	await fs.writeFile(
+		file,
+		`# Fixed owned IDA analysis lifecycle; no Hex-Rays requirement.
+import traceback
+import ida_auto
+import ida_loader
+import idc
+${idaProgressPrelude(outputDir)}
+exit_code = 0
+try:
+    cline_phase("input-loaded")
+    cline_phase("auto-analysis-waiting")
+    if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
+    cline_phase("analysis-complete")
+    cline_phase("database-saving")
+    if not ida_loader.save_database(idc.get_idb_path(), ida_loader.DBFL_COMP):
+        raise RuntimeError("IDA database save failed")
+    cline_phase("database-saved")
+except Exception:
+    exit_code = 1
+    cline_phase("script-failed")
+    traceback.print_exc()
+finally:
+    cline_phase("script-exiting")
+    idc.qexit(exit_code)
+`,
+		{ mode: 0o600 },
+	);
+	return file;
 }
 
 function installationRoot(command: string | undefined, engine: Engine) {
@@ -2332,8 +2398,12 @@ async function discoverCapabilities(
 		platform: process.platform,
 		path: process.env.PATH ?? "",
 		ghidra: process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR ?? "",
-		ida: process.env.CLINE_IDA_SELECTED_HOME ?? process.env.IDA_HOME ?? process.env.IDADIR ?? "",
-    idaSelectionExplicit: Boolean(process.env.CLINE_IDA_SELECTED_HOME),
+		ida:
+			process.env.CLINE_IDA_SELECTED_HOME ??
+			process.env.IDA_HOME ??
+			process.env.IDADIR ??
+			"",
+		idaSelectionExplicit: Boolean(process.env.CLINE_IDA_SELECTED_HOME),
 		jadx: process.env.JADX_HOME ?? "",
 	});
 	const cached = discoveryCache.get(cacheKey);
@@ -2464,9 +2534,26 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				"Managed workers require an owning session, explicit acknowledgement, exact decompile and no user scripts",
 			);
 
-		if (input.project_edit && input.operation !== "project_edit") throw new Error("project_edit data is only accepted for project_edit");
-		if (input.operation === "project_edit" && (!input.project_edit || !["ghidra","ida"].includes(input.engine ?? "") || input.script_path || input.script_args?.length || input.managed_worker === true || typeof context.sessionId !== "string" || !context.sessionId || (input.project_edit.mode !== "rollback" && !input.function_selector))) throw new Error("Native project edits require an owning session, explicit Ghidra/IDA engine, fixed edit data and exact function selector");
-		if (input.function_selector && !["decompile","project_edit"].includes(input.operation))
+		if (input.project_edit && input.operation !== "project_edit")
+			throw new Error("project_edit data is only accepted for project_edit");
+		if (
+			input.operation === "project_edit" &&
+			(!input.project_edit ||
+				!["ghidra", "ida"].includes(input.engine ?? "") ||
+				input.script_path ||
+				input.script_args?.length ||
+				input.managed_worker === true ||
+				typeof context.sessionId !== "string" ||
+				!context.sessionId ||
+				(input.project_edit.mode !== "rollback" && !input.function_selector))
+		)
+			throw new Error(
+				"Native project edits require an owning session, explicit Ghidra/IDA engine, fixed edit data and exact function selector",
+			);
+		if (
+			input.function_selector &&
+			!["decompile", "project_edit"].includes(input.operation)
+		)
 			throw new Error("function_selector is only accepted for decompile");
 		if (input.operation === "advanced_analysis") {
 			if (!input.advanced_action)
@@ -3246,7 +3333,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		const gui = input.operation === "open_gui";
 		if (
 			input.function_selector &&
-			(!["decompile","project_edit"].includes(input.operation) || engine === "jadx")
+			(!["decompile", "project_edit"].includes(input.operation) ||
+				engine === "jadx")
 		)
 			throw new Error(
 				"function_selector is only supported for Ghidra/IDA decompile; use JADX single-class or exact DEX/Smali method retrieval instead",
@@ -3263,8 +3351,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 		const timeoutMs = input.timeout_ms ?? 900_000;
-        if (engine === "ida" && !gui) context.emitUpdate?.({stream:"stdout",
-            chunk:`[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs/1000)}s, phase budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? 300000, timeoutMs)/1000)}s. Missing Python packages do not diagnose IDA.\n`});
+		if (engine === "ida" && !gui)
+			context.emitUpdate?.({
+				stream: "stdout",
+				chunk: `[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs / 1000)}s, phase budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? 300000, timeoutMs) / 1000)}s. Missing Python packages do not diagnose IDA.\n`,
+			});
 		const engineIdentity = await toolIdentity(engine, available[engine]);
 		const fingerprintFile = async (file: string | undefined) => {
 			if (!file) return null;
@@ -3280,11 +3371,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			});
 			return h.digest("hex");
 		};
-		const resolveCommand = async () => {
-			if (path.isAbsolute(command)) return command;
+		const resolveCommand = async (candidate = command) => {
+			if (path.isAbsolute(candidate)) return candidate;
 			const probe = await runSupervised(
 				process.platform === "win32" ? "where.exe" : "which",
-				[command],
+				[candidate],
 				5000,
 				context.signal,
 			);
@@ -3331,7 +3422,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					? NATIVE_GHIDRA_EDIT_SCRIPT
 					: nativeIdaEditScript("", "", "");
 			const binding = createHash("sha256")
-				.update(JSON.stringify({ engineFingerprint, configFingerprint, adapter }))
+				.update(
+					JSON.stringify({ engineFingerprint, configFingerprint, adapter }),
+				)
 				.digest("hex");
 			const verifyTarget = async () => {
 				if ((await sha256(target)) !== hash)
@@ -3533,8 +3626,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				input.function_selector!,
 				context.signal,
 				timeoutMs,
-        engine === "ida" ? event => context.emitUpdate?.({stream:"stdout",
-          chunk:`[IDA progress] Managed worker: ${event.phase}; PID ${event.pid ?? "not observed"}; elapsed ${Math.floor(event.elapsedMs/1000)}s; stage deadline remaining ${event.remainingMs === null ? "not yet observed" : `${Math.ceil(event.remainingMs/1000)}s`}. Mailbox state, not a script-phase or liveness proof.\n`}) : undefined,
+				engine === "ida"
+					? (event) =>
+							context.emitUpdate?.({
+								stream: "stdout",
+								chunk: `[IDA progress] Managed worker: ${event.phase}; PID ${event.pid ?? "not observed"}; elapsed ${Math.floor(event.elapsedMs / 1000)}s; stage deadline remaining ${event.remainingMs === null ? "not yet observed" : `${Math.ceil(event.remainingMs / 1000)}s`}. Mailbox state, not a script-phase or liveness proof.\n`,
+							})
+					: undefined,
 			);
 			return JSON.stringify({
 				engine,
@@ -3549,10 +3647,27 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			});
 		}
 
+		const workspaceDir = outputDir;
+		const databaseKey = idaDatabaseKey(
+			hash,
+			(engine === "ida" && gui && available.ida
+				? await fingerprintFile(await resolveCommand(available.ida))
+				: engineFingerprint) ?? undefined,
+			configFingerprint ?? undefined,
+		);
 		let retainLease = false;
 		return withAnalysisLock(
 			outputDir,
 			async () => {
+				const attempt =
+					engine === "ida"
+						? await prepareIdaAttempt(
+								workspaceDir,
+								databaseKey,
+								input.reuse_analysis !== false && !input.script_path,
+							)
+						: undefined;
+				const outputDir = attempt?.outputDir ?? workspaceDir;
 				const existingManifest = await readAnalysisManifest(outputDir);
 				const sameArtifact =
 					existingManifest?.schemaVersion === ANALYSIS_SCHEMA_VERSION &&
@@ -3624,7 +3739,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						}
 					}
 				} else if (engine === "ida") {
-					const databaseExists = sameArtifact && (await exists(idaDatabase));
+					const databaseExists =
+						attempt?.reusedAnalysis ??
+						(sameArtifact && (await exists(idaDatabase)));
 					reusedAnalysis = databaseExists;
 					if (gui) {
 						args = [databaseExists ? idaDatabase : target];
@@ -3638,6 +3755,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 								input.function_selector,
 							);
 							args.push(`-S${shellLikeQuote(decompileScript)}`);
+						}
+						if (input.operation === "analyze" && !input.script_path) {
+							args.push(
+								`-S${shellLikeQuote(await ensureIdaAnalysisScript(outputDir))}`,
+							);
 						}
 						if (input.script_path) {
 							args.push(
@@ -3704,23 +3826,51 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						fs.rm(`${decompileOutput}.error.txt`, { force: true }),
 					]);
 				}
-				const result = engine === "ida"
-                    ? await runObservedIda(command, args, outputDir, timeoutMs, context.signal, {
-                        phaseTimeoutMs: input.ida_phase_timeout_ms,
-                        onProgress: (job) => context.emitUpdate?.({ stream: "stdout", chunk: `${formatIdaProgress(job)}\n` }),
-                    }).catch((error) => {
-						retainLease = Boolean(error?.terminationUnconfirmed);
-						throw error;
-					})
-                    : await runSupervised(command, args, timeoutMs, context.signal);
-                retainLease = Boolean(result.outputDrainTimedOut);
+				const result =
+					engine === "ida"
+						? await runObservedIda(
+								command,
+								args,
+								outputDir,
+								timeoutMs,
+								context.signal,
+								{
+									phaseTimeoutMs: input.ida_phase_timeout_ms,
+									scriptPhasesExpected:
+										!input.script_path &&
+										["analyze", "decompile"].includes(input.operation),
+									onProgress: (job) =>
+										context.emitUpdate?.({
+											stream: "stdout",
+											chunk: `${formatIdaProgress(job)}\n`,
+										}),
+								},
+							).catch((error) => {
+								retainLease = Boolean(error?.terminationUnconfirmed);
+								throw error;
+							})
+						: await runSupervised(command, args, timeoutMs, context.signal);
+				retainLease = Boolean(result.outputDrainTimedOut);
 				const decompileStat =
 					input.operation === "decompile"
 						? await fs.stat(decompileOutput).catch(() => undefined)
 						: undefined;
+				const databaseStat =
+					engine === "ida"
+						? await fs.lstat(idaDatabase).catch(() => undefined)
+						: undefined;
+				const databaseVerified =
+					engine !== "ida" ||
+					Boolean(
+						databaseStat?.isFile() &&
+							!databaseStat.isSymbolicLink() &&
+							databaseStat.size > 0,
+					);
 				const artifactVerified =
-					input.operation !== "decompile" ||
-					(Boolean(decompileStat?.isFile()) && (decompileStat?.size ?? 0) > 0);
+					databaseVerified &&
+					(input.operation !== "decompile" ||
+						(Boolean(decompileStat?.isFile()) &&
+							(decompileStat?.size ?? 0) > 0));
 				const succeeded =
 					result.exitCode === 0 &&
 					!result.timedOut &&
@@ -3728,6 +3878,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					!result.outputDrainTimedOut &&
 					artifactVerified;
 				if (succeeded) {
+					if (engine === "ida" && !input.script_path)
+						await publishIdaDatabase(workspaceDir, outputDir, databaseKey);
 					await writeAnalysisManifest(outputDir, {
 						schemaVersion: ANALYSIS_SCHEMA_VERSION,
 						sha256: hash,
@@ -3751,9 +3903,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						outputDirectory: outputDir,
 						outputScope,
 						persistent,
+						workspaceDirectory: workspaceDir,
+						databaseVerified,
 						reusedAnalysis,
 						command,
-						engineExecutable: { path: resolvedCommand, sha256: engineFingerprint },
+						engineExecutable: {
+							path: resolvedCommand,
+							sha256: engineFingerprint,
+						},
 						args,
 						durationMs: Date.now() - started,
 						artifacts,
@@ -3767,7 +3924,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				);
 			},
 			context.signal,
-            () => retainLease,
+			() => retainLease,
 		);
 	};
 }

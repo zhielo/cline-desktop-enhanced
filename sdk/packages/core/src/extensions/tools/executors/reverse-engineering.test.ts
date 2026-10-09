@@ -2,7 +2,10 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createReverseEngineeringExecutor, shouldRefreshEngineEnvironment } from "./reverse-engineering";
+import {
+	createReverseEngineeringExecutor,
+	shouldRefreshEngineEnvironment,
+} from "./reverse-engineering";
 import * as supervisedProcess from "./supervised-process";
 import * as windowsEnvironment from "./windows-tool-environment";
 
@@ -18,7 +21,7 @@ const originalJadxHome = process.env.JADX_HOME;
 
 afterEach(async () => {
 	vi.restoreAllMocks();
-  vi.unstubAllEnvs();
+	vi.unstubAllEnvs();
 	process.env.PATH = originalPath;
 	if (originalCacheDirectory === undefined)
 		delete process.env.CLINE_RE_CACHE_DIR;
@@ -526,6 +529,7 @@ describe("reverse-engineering engine execution", () => {
 			"idat64",
 			`for arg in "$@"; do
   case "$arg" in
+    -o*) printf 'owned packed DB\n' > "\${arg#-o}" ;;
     -S*)
       script="\${arg#-S}"
       output="$(sed -n 's/^OUTPUT_PATH = "\\(.*\\)"$/\\1/p' "$script")"
@@ -568,7 +572,10 @@ printf "%s\\n" "$@"`,
 		expect(scriptSource).toContain("ida_hexrays.decompile(function)");
 		expect(scriptSource).toContain("idc.qexit(exit_code)");
 		expect(
-			await fs.readFile(path.join(outputDirectory, "decompiled.c"), "utf8"),
+			await fs.readFile(
+				path.join(result.outputDirectory, "decompiled.c"),
+				"utf8",
+			),
 		).toContain("int recovered");
 		expect(
 			result.artifacts.find(
@@ -578,7 +585,7 @@ printf "%s\\n" "$@"`,
 		expect(
 			JSON.parse(
 				await fs.readFile(
-					path.join(outputDirectory, "cline-analysis.json"),
+					path.join(result.outputDirectory, "cline-analysis.json"),
 					"utf8",
 				),
 			).sha256,
@@ -945,23 +952,172 @@ it.each([
 });
 
 it.each([
- {engine:"auto",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"}},
- {engine:"ghidra",operation:"project_edit",project_edit:{mode:"preview"}},
- {engine:"ghidra",operation:"project_edit",project_edit:{mode:"preview"},function_selector:{address:"0x10"},script_path:"/untrusted.py"},
- {engine:"ghidra",operation:"inspect",project_edit:{mode:"preview"}},
-])("rejects unsafe native edit envelopes before discovery: %j",async request=>{
- await expect(createReverseEngineeringExecutor()(request as never,{sessionId:"owned-session"} as never)).rejects.toThrow(/Native project edits require|project_edit data/);
+	{
+		engine: "auto",
+		operation: "project_edit",
+		project_edit: { mode: "preview" },
+		function_selector: { address: "0x10" },
+	},
+	{
+		engine: "ghidra",
+		operation: "project_edit",
+		project_edit: { mode: "preview" },
+	},
+	{
+		engine: "ghidra",
+		operation: "project_edit",
+		project_edit: { mode: "preview" },
+		function_selector: { address: "0x10" },
+		script_path: "/untrusted.py",
+	},
+	{ engine: "ghidra", operation: "inspect", project_edit: { mode: "preview" } },
+])("rejects unsafe native edit envelopes before discovery: %j", async (request) => {
+	await expect(
+		createReverseEngineeringExecutor()(
+			request as never,
+			{ sessionId: "owned-session" } as never,
+		),
+	).rejects.toThrow(/Native project edits require|project_edit data/);
 });
 
 it("explicit desktop IDA selection wins over registry refresh and never falls back to another executable", async () => {
-  const selected=await fs.mkdtemp(path.join(os.tmpdir(),"ida-explicit-"));temporaryDirectories.push(selected);
-  vi.stubEnv("CLINE_IDA_SELECTED_HOME",selected);
-  expect(shouldRefreshEngineEnvironment("IDA_HOME")).toBe(false);
-  expect(shouldRefreshEngineEnvironment("IDADIR")).toBe(false);
-  expect(shouldRefreshEngineEnvironment("GHIDRA_HOME")).toBe(true);
-  vi.spyOn(supervisedProcess,"commandAvailable").mockImplementation(async command=> /^idat(?:64)?(?:\.exe)?$/i.test(command));
-  vi.spyOn(supervisedProcess,"runSupervised").mockResolvedValue({exitCode:0,stdout:"owned fixture",stderr:"",timedOut:false,cancelled:false});
-  const result=JSON.parse(await createReverseEngineeringExecutor()({engine:"ida",operation:"discover",discovery_depth:"fast"},{} as never));
-  expect(result.capabilities.ida.headless).toBeUndefined();
-  expect(supervisedProcess.commandAvailable).not.toHaveBeenCalledWith(process.platform === "win32" ? "idat64.exe" : "idat64");
+	const selected = await fs.mkdtemp(path.join(os.tmpdir(), "ida-explicit-"));
+	temporaryDirectories.push(selected);
+	vi.stubEnv("CLINE_IDA_SELECTED_HOME", selected);
+	expect(shouldRefreshEngineEnvironment("IDA_HOME")).toBe(false);
+	expect(shouldRefreshEngineEnvironment("IDADIR")).toBe(false);
+	expect(shouldRefreshEngineEnvironment("GHIDRA_HOME")).toBe(true);
+	vi.spyOn(supervisedProcess, "commandAvailable").mockImplementation(
+		async (command) => /^idat(?:64)?(?:\.exe)?$/i.test(command),
+	);
+	vi.spyOn(supervisedProcess, "runSupervised").mockResolvedValue({
+		exitCode: 0,
+		stdout: "owned fixture",
+		stderr: "",
+		timedOut: false,
+		cancelled: false,
+	});
+	const result = JSON.parse(
+		await createReverseEngineeringExecutor()(
+			{ engine: "ida", operation: "discover", discovery_depth: "fast" },
+			{} as never,
+		),
+	);
+	expect(result.capabilities.ida.headless).toBeUndefined();
+	expect(supervisedProcess.commandAvailable).not.toHaveBeenCalledWith(
+		process.platform === "win32" ? "idat64.exe" : "idat64",
+	);
+});
+
+it("uses a fixed analyze lifecycle, isolates fresh attempts and reuses IDA databases across changed function selectors", async () => {
+	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ida-lifecycle-"));
+	temporaryDirectories.push(dir);
+	const home = path.join(dir, "ida");
+	await fs.mkdir(home);
+	const command = path.join(
+		home,
+		process.platform === "win32" ? "idat.exe" : "idat",
+	);
+	await fs.writeFile(command, "owned executable identity");
+	await fs.writeFile(
+		path.join(home, "hexarm64.dll"),
+		"owned fixture plugin marker",
+	);
+	await fs.chmod(command, 0o700);
+	vi.stubEnv("CLINE_IDA_SELECTED_HOME", home);
+	vi.stubEnv("CLINE_DATA_DIR", path.join(dir, "data"));
+	vi.spyOn(windowsEnvironment, "readWindowsRegistryValue").mockResolvedValue(
+		undefined,
+	);
+	vi.spyOn(supervisedProcess, "commandAvailable").mockImplementation(
+		async (value) => value === command,
+	);
+	const sources: string[] = [];
+	vi.spyOn(supervisedProcess, "runSupervised").mockImplementation(
+		async (_cmd, args, _timeout, _signal, spawn, env) => {
+			if (args.includes("-A")) {
+				spawn?.(12345);
+				const scriptArg = args.find((value) => value.startsWith("-S"))!;
+				const scriptFile = scriptArg.slice(2).replace(/^"|"$/g, "");
+				sources.push(await fs.readFile(scriptFile, "utf8"));
+				const attempt = path.dirname(scriptFile);
+				await fs.writeFile(
+					path.join(attempt, "analysis.i64"),
+					"owned packed database",
+				);
+				if (scriptFile.includes("decompile"))
+					await fs.writeFile(
+						path.join(attempt, "decompiled.c"),
+						sources.at(-1)!,
+					);
+				if (env?.CLINE_IDA_PROGRESS_PATH)
+					await fs.writeFile(
+						env.CLINE_IDA_PROGRESS_PATH,
+						'{"phase":"database-saved"}\n{"phase":"script-exiting"}\n',
+					);
+			}
+			return {
+				exitCode: 0,
+				stdout: "IDA owned mock 9.1",
+				stderr: "",
+				timedOut: false,
+				cancelled: false,
+			};
+		},
+	);
+	const target = path.join(dir, "owned.bin");
+	await fs.writeFile(target, "owned target");
+	const execute = createReverseEngineeringExecutor();
+	const request = {
+		engine: "ida" as const,
+		target,
+		output_directory: path.join(dir, "out"),
+		timeout_ms: 10000,
+	};
+	const analyze = JSON.parse(
+		await execute({ ...request, operation: "analyze" }, {} as never),
+	);
+	expect(analyze.succeeded).toBe(true);
+	expect(sources[0]).toContain("ida_auto.auto_wait()");
+	expect(sources[0]).toContain("save_database");
+	expect(sources[0]).toContain("idc.qexit(exit_code)");
+	expect(sources[0]).not.toContain("ida_hexrays");
+	const first = JSON.parse(
+		await execute(
+			{
+				...request,
+				operation: "decompile",
+				function_selector: { address: "0x1000" },
+			},
+			{} as never,
+		),
+	);
+	const changed = JSON.parse(
+		await execute(
+			{
+				...request,
+				operation: "decompile",
+				function_selector: { address: "0x2000" },
+			},
+			{} as never,
+		),
+	);
+	expect(first.reusedAnalysis).toBe(true);
+	expect(changed.reusedAnalysis).toBe(true);
+	expect(changed.args.some((value: string) => value.startsWith("-o"))).toBe(
+		false,
+	);
+	expect(changed.outputDirectory).not.toBe(first.outputDirectory);
+	expect(sources.at(-1)).toContain('"address":"0x2000"');
+	const fresh = JSON.parse(
+		await execute(
+			{ ...request, operation: "analyze", reuse_analysis: false },
+			{} as never,
+		),
+	);
+	expect(fresh.reusedAnalysis).toBe(false);
+	expect(fresh.outputDirectory).not.toBe(changed.outputDirectory);
+	expect(
+		await fs.readFile(path.join(first.outputDirectory, "analysis.i64"), "utf8"),
+	).toBe("owned packed database");
 });

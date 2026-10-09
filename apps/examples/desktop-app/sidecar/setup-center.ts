@@ -1,3 +1,4 @@
+import { getSetupJob } from "./setup-jobs";
 import { createReadStream } from "node:fs";
 import { execFile } from "node:child_process";
 import { createHash, createPublicKey } from "node:crypto";
@@ -109,12 +110,12 @@ function applyPreferences(value: SetupPreferences, explicit = false) {
 	if (value.adbPath) process.env.ADB_PATH = value.adbPath;
 	else if (explicit) delete process.env.ADB_PATH;
 	if (value.idaHome) {
-    process.env.IDA_HOME = value.idaHome;
-    process.env.CLINE_IDA_SELECTED_HOME = value.idaHome;
-  } else if (explicit) {
-    delete process.env.IDA_HOME;
-    delete process.env.CLINE_IDA_SELECTED_HOME;
-  }
+		process.env.IDA_HOME = value.idaHome;
+		process.env.CLINE_IDA_SELECTED_HOME = value.idaHome;
+	} else if (explicit) {
+		delete process.env.IDA_HOME;
+		delete process.env.CLINE_IDA_SELECTED_HOME;
+	}
 	if (value.workerEndpoint) {
 		process.env.CLINE_ANALYSIS_SANDBOX_WORKER = value.workerEndpoint;
 		process.env.CLINE_ANALYSIS_SANDBOX_PUBLIC_KEY = value.workerPublicKey;
@@ -189,14 +190,18 @@ function receiptIdentity() {
 	return `${identity.runtimeId ?? identity.source}:${identity.manifestHash ?? "external"}:${process.env.CLINE_ANGR_RUNTIME_ID ?? "no-angr-pack"}:${createHash("sha256").update(ADVANCED_ANALYSIS_WORKER).digest("hex")}`;
 }
 let checking: Promise<unknown> | undefined;
-export function testFullCapabilityPack() {
+export function testFullCapabilityPack(
+	phase: (value: string) => void = () => {},
+) {
 	if (checking) return checking;
 	checking = (async () => {
 		const identity = receiptIdentity();
+		phase("Testing full-pack owned engine fixtures");
 		const primary = await runAdvancedAnalysis({
 			action: "full_readiness",
 			timeoutMs: 120000,
 		});
+		phase("Testing isolated angr static VEX fixture");
 		const secondary = await runAdvancedAnalysis({
 			action: "angr_readiness",
 			timeoutMs: 120000,
@@ -259,8 +264,12 @@ export async function platformToolsNotices() {
 			"Official Android platform-tools 37.0.1. Included third-party notices must be reviewed.",
 	};
 }
-export async function installFullCapabilityPack() {
+export async function installFullCapabilityPack(
+	phase: (value: string) => void = () => {},
+) {
+	phase("Verifying bundled platform-tools integrity");
 	const tools = await bundledPlatformTools();
+	phase("Verifying and activating immutable full capability packs");
 	const activation = await activateBundledCapabilityPack("full");
 	const preferences = await readSetupPreferences();
 	if (!preferences.adbPath)
@@ -269,10 +278,13 @@ export async function installFullCapabilityPack() {
 			adbPath: tools.executable,
 			acceptedPlatformToolsLicense: true,
 		});
-	const receipt = await testFullCapabilityPack();
+	const receipt = await testFullCapabilityPack(phase);
 	return { activation, receipt };
 }
-export async function rollbackToCorePack() {
+export async function rollbackToCorePack(
+	phase: (value: string) => void = () => {},
+) {
+	phase("Verifying and selecting core runtime; prior packs are preserved");
 	return await activateBundledCapabilityPack("core");
 }
 export async function detectInstalledTools() {
@@ -367,31 +379,68 @@ export async function testSetupDevice() {
 	return receipt;
 }
 export async function hashIdaExecutable(file: string, home: string) {
-  if (!isAbsolute(file)) throw new Error("IDA acceptance requires an absolute executable identity");
-  const [root, executable] = await Promise.all([realpath(home), realpath(file)]);
-  const child = relative(root, executable);
-  if (!child || child === ".." || child.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(child))
-    throw new Error("IDA acceptance executable is outside the selected installation");
-  const info = await lstat(file);
-  if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024 * 1024)
-    throw new Error("Invalid IDA acceptance executable");
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file, { highWaterMark: 64 * 1024 })) hash.update(chunk);
-  return hash.digest("hex");
+	if (!isAbsolute(file))
+		throw new Error("IDA acceptance requires an absolute executable identity");
+	const [root, executable] = await Promise.all([
+		realpath(home),
+		realpath(file),
+	]);
+	const child = relative(root, executable);
+	if (
+		!child ||
+		child === ".." ||
+		child.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+		isAbsolute(child)
+	)
+		throw new Error(
+			"IDA acceptance executable is outside the selected installation",
+		);
+	const info = await lstat(file);
+	if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024 * 1024)
+		throw new Error("Invalid IDA acceptance executable");
+	const hash = createHash("sha256");
+	for await (const chunk of createReadStream(file, {
+		highWaterMark: 64 * 1024,
+	}))
+		hash.update(chunk);
+	return hash.digest("hex");
 }
-export async function currentIdaAcceptance(receipt: Record<string, unknown> | null, home: string, expectedArchitecture?: "x86_64" | "arm64") {
-  const architecture = expectedArchitecture ?? receipt?.architecture;
-  if (architecture !== "x86_64" && architecture !== "arm64") return false;
-  const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
-  if (receipt?.architecture !== architecture || receipt.fixtureSha256 !== fixture.sha256) return false;
-  if (!home || receipt?.status !== "passed" || receipt.idaHome !== home ||
-      typeof receipt.executable !== "string" || typeof receipt.executableSha256 !== "string") return false;
-  try { return await hashIdaExecutable(receipt.executable, home) === receipt.executableSha256; }
-  catch { return false; }
+export async function currentIdaAcceptance(
+	receipt: Record<string, unknown> | null,
+	home: string,
+	expectedArchitecture?: "x86_64" | "arm64",
+) {
+	const architecture = expectedArchitecture ?? receipt?.architecture;
+	if (architecture !== "x86_64" && architecture !== "arm64") return false;
+	const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
+	if (
+		receipt?.architecture !== architecture ||
+		receipt.fixtureSha256 !== fixture.sha256
+	)
+		return false;
+	if (
+		!home ||
+		receipt?.status !== "passed" ||
+		receipt.idaHome !== home ||
+		typeof receipt.executable !== "string" ||
+		typeof receipt.executableSha256 !== "string"
+	)
+		return false;
+	try {
+		return (
+			(await hashIdaExecutable(receipt.executable, home)) ===
+			receipt.executableSha256
+		);
+	} catch {
+		return false;
+	}
 }
-export async function testLicensedIda(architecture: "x86_64" | "arm64" = "x86_64") {
-  if (!["x86_64", "arm64"].includes(architecture)) throw new Error("Unsupported IDA acceptance architecture");
-  const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
+export async function testLicensedIda(
+	architecture: "x86_64" | "arm64" = "x86_64",
+) {
+	if (!["x86_64", "arm64"].includes(architecture))
+		throw new Error("Unsupported IDA acceptance architecture");
+	const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
 	const preferences = await readSetupPreferences();
 	if (!preferences.idaHome)
 		throw new Error("Choose your authorized IDA installation first");
@@ -415,13 +464,24 @@ export async function testLicensedIda(architecture: "x86_64" | "arm64" = "x86_64
 		{} as never,
 	);
 	const result = JSON.parse(raw);
-  const executable = result.engineExecutable?.path;
-  const executableSha256 = result.engineExecutable?.sha256;
-  const identityMatches = typeof executable === "string" && typeof executableSha256 === "string" &&
-    await hashIdaExecutable(executable, preferences.idaHome) === executableSha256;
+	const executable = result.engineExecutable?.path;
+	const executableSha256 = result.engineExecutable?.sha256;
+	const identityMatches =
+		typeof executable === "string" &&
+		typeof executableSha256 === "string" &&
+		(await hashIdaExecutable(executable, preferences.idaHome)) ===
+			executableSha256;
 	const receipt = {
-		status: result.succeeded && result.artifactVerified && result.sha256 === fixture.sha256 && identityMatches ? "passed" : "failed",
-    architecture, executable, executableSha256,
+		status:
+			result.succeeded &&
+			result.artifactVerified &&
+			result.sha256 === fixture.sha256 &&
+			identityMatches
+				? "passed"
+				: "failed",
+		architecture,
+		executable,
+		executableSha256,
 		checkedAt: new Date().toISOString(),
 		idaHome: preferences.idaHome,
 		fixtureSha256: fixture.sha256,
@@ -429,7 +489,8 @@ export async function testLicensedIda(architecture: "x86_64" | "arm64" = "x86_64
 		result,
 	};
 	await saveOwnedJson(`ida-receipt-${architecture}.json`, receipt);
-  if (architecture === "x86_64") await saveOwnedJson("ida-receipt.json", receipt);
+	if (architecture === "x86_64")
+		await saveOwnedJson("ida-receipt.json", receipt);
 	return receipt;
 }
 export async function testSetupWorker() {
@@ -448,14 +509,20 @@ export async function testSetupWorker() {
 }
 export async function getSetupCenterStatus() {
 	const preferences = await readSetupPreferences();
-	const [idaReceipt, deviceReceipt, workerReceipt, arm64Receipt] = (await Promise.all(
-		["ida-receipt.json", "device-receipt.json", "worker-receipt.json", "ida-receipt-arm64.json"].map(
-			(name) => readOwnedJson(name).catch(() => null),
-		),
-	)) as Array<Record<string, unknown> | null>;
-  const licensedArchitectures = [];
-  if (await currentIdaAcceptance(idaReceipt, preferences.idaHome, "x86_64")) licensedArchitectures.push("x86_64");
-  if (await currentIdaAcceptance(arm64Receipt, preferences.idaHome, "arm64")) licensedArchitectures.push("arm64");
+	const [idaReceipt, deviceReceipt, workerReceipt, arm64Receipt] =
+		(await Promise.all(
+			[
+				"ida-receipt.json",
+				"device-receipt.json",
+				"worker-receipt.json",
+				"ida-receipt-arm64.json",
+			].map((name) => readOwnedJson(name).catch(() => null)),
+		)) as Array<Record<string, unknown> | null>;
+	const licensedArchitectures = [];
+	if (await currentIdaAcceptance(idaReceipt, preferences.idaHome, "x86_64"))
+		licensedArchitectures.push("x86_64");
+	if (await currentIdaAcceptance(arm64Receipt, preferences.idaHome, "arm64"))
+		licensedArchitectures.push("arm64");
 	const deviceCurrent =
 		deviceReceipt?.adbPath === preferences.adbPath &&
 		deviceReceipt?.deviceSerialSha256 ===
@@ -544,6 +611,7 @@ export async function getSetupCenterStatus() {
 	);
 	return {
 		preferences,
+		setupJob: getSetupJob(),
 		runtime,
 		packs,
 		features,
@@ -555,12 +623,22 @@ export async function getSetupCenterStatus() {
 				: "Setup needed",
 		checkedAt: current ? receipt?.checkedAt : undefined,
 		lastCheckedAt: receipt?.checkedAt,
-    desktopBuild: {version:desktopVersion, sourceCommit:process.env.CLINE_DESKTOP_BUILD_COMMIT ?? "development", capabilitySchema:"setup-center/processor-acceptance-v2"},
-    selectedRuntime: {runtimeId:runtime.runtimeId, source:runtime.source, integrity:runtime.integrity},
-    licensedArchitectures,
-    licensedStatus: licensedArchitectures.length
-      ? `Owned IDA acceptance passed for ${licensedArchitectures.join(", ")}; other processors and target compatibility remain untested`
-      : "Configuration / processor acceptance required; select IDA and test the matching licensed decompiler",
+		desktopBuild: {
+			version: desktopVersion,
+			sourceCommit: process.env.CLINE_DESKTOP_BUILD_COMMIT ?? "development",
+			capabilitySchema: "setup-center/processor-acceptance-v2",
+		},
+		selectedRuntime: {
+			runtimeId: runtime.runtimeId,
+			source: runtime.source,
+			integrity: runtime.integrity,
+		},
+		licensedArchitectures,
+		licensedStatus: licensedArchitectures.length
+			? `Owned IDA acceptance passed for ${licensedArchitectures.join(", ")}; other processors and target compatibility remain untested`
+			: preferences.idaHome
+				? "IDA installation selected; optional integration test has not established processor readiness. Analysis may run directly and report actual runtime/plugin errors."
+				: "Select your installed IDA folder to use IDA analysis. The integration test is optional.",
 		deviceStatus:
 			deviceCurrent && deviceReceipt?.status === "passed"
 				? "Last selected device connectivity test passed; reconnect and retest before device work"

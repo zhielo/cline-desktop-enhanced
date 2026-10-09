@@ -44,7 +44,7 @@ export function targetedIdaScript(
 	selector: FunctionSelector,
 ) {
 	return `# Fixed single-function adapter; requires authorized IDA/Hex-Rays installation.
-import traceback, ida_auto, ida_funcs, ida_hexrays, idautils, idc
+import traceback, ida_auto, ida_funcs, ida_hexrays, ida_loader, idautils, idc
 ${idaProgressPrelude(dirname(outputPath))}
 OUTPUT_PATH = ${JSON.stringify(outputPath)}
 SELECTOR = ${JSON.stringify(selector)}
@@ -74,6 +74,9 @@ def main():
     if len(text)>1000000: raise RuntimeError("Selected pseudocode output budget exceeded")
     with open(OUTPUT_PATH,"w",encoding="utf-8") as output: output.write("/* selected function @ 0x%x; not a semantic equivalence proof */\\n" % matches[0]+text)
     cline_phase("output-written")
+    cline_phase("database-saving")
+    if not ida_loader.save_database(idc.get_idb_path(), ida_loader.DBFL_COMP): raise RuntimeError("IDA database save failed")
+    cline_phase("database-saved")
 exit_code=0
 try: main()
 except Exception:

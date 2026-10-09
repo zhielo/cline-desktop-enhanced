@@ -617,6 +617,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.getByLabel("IDA acceptance processor",{exact:true}).selectOption("arm64");
     // UI selection is not a commercial-license test; never launch licensed IDA in hosted CI.
     stages.push("installed-setup-navigation-and-arm64-selection-passed");
+    await settings(page,"Analysis environment");
+    await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
+    if (await page.getByLabel("IDA acceptance processor",{exact:true}).inputValue() !== "arm64")
+      throw new Error("Installed Setup Center forgot the selected processor after navigation");
+    if (!await page.getByRole("button",{name:"Test IDA integration (optional)",exact:true}).isVisible())
+      throw new Error("Installed IDA test is not clearly optional");
+    stages.push("installed-setup-processor-remount-and-optional-test-passed");
     page.once("dialog", async (dialog) => {
       if (dialog.message().includes("reviewed and accept"))
         await dialog.accept();
@@ -665,6 +672,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
       throw new Error(
         "Installed full pack did not execute all eleven owned engine fixtures",
       );
+    const setupJob = await rpc<{job:{id:string;command:string;status:string}|null}>(page,"setup_center_job_status");
+    if (!setupJob.job?.id || setupJob.job.command !== "setup_center_install_full" || setupJob.job.status !== "completed")
+      throw new Error("Installed full pack did not retain its completed background setup job");
+    if (!(await page.getByLabel("Setup operation status",{exact:true}).textContent())?.includes(setupJob.job.id))
+      throw new Error("Installed Setup Center did not show its tracked job beside the actions");
+    stages.push("installed-tracked-full-setup-job-passed");
     stages.push("installed-full-eleven-engine-owned-fixtures-passed");
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
     await stop();

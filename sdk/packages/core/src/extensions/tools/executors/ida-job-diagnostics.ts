@@ -31,6 +31,7 @@ type JobRecord = {
 	signal?: string | null;
 	timeoutMs?: number;
 	phaseTimeoutMs?: number;
+	scriptPhasesExpected?: boolean;
 	lastHostUpdateAt?: string;
 	endedAt?: string;
 	timeoutPhase?: string;
@@ -39,9 +40,16 @@ type JobRecord = {
 const jobs = new Map<string, JobRecord>();
 
 const SCRIPT_PHASES = [
-	"input-loaded", "auto-analysis-waiting", "analysis-complete",
-	"decompiler-initialized", "decompilation-started", "output-written",
-	"script-failed", "script-exiting",
+	"input-loaded",
+	"auto-analysis-waiting",
+	"analysis-complete",
+	"decompiler-initialized",
+	"decompilation-started",
+	"output-written",
+	"script-failed",
+	"script-exiting",
+	"database-saving",
+	"database-saved",
 ];
 
 function readScriptPhases(job: JobRecord) {
@@ -62,10 +70,16 @@ function readScriptPhases(job: JobRecord) {
 					const timestamp = Date.parse(event.timestamp);
 					if (Number.isFinite(timestamp) && timestamp <= Date.now() + 60_000)
 						lastPhaseAt = new Date(timestamp).toISOString();
-				} catch { /* Incomplete final line is not evidence. */ }
+				} catch {
+					/* Incomplete final line is not evidence. */
+				}
 			}
-		} finally { closeSync(fd); }
-	} catch { /* Missing phases never prove a hung process. */ }
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		/* Missing phases never prove a hung process. */
+	}
 	return { phases, lastPhaseAt };
 }
 
@@ -73,24 +87,51 @@ export function describeObservedIdaJob(job: JobRecord, now = Date.now()) {
 	const { phases, lastPhaseAt } = readScriptPhases(job);
 	const started = Date.parse(job.startedAt);
 	const ended = job.endedAt ? Date.parse(job.endedAt) : now;
-	const elapsedMs = Number.isFinite(started) && Number.isFinite(ended)
-		? Math.max(0, ended - started) : 0;
+	const elapsedMs =
+		Number.isFinite(started) && Number.isFinite(ended)
+			? Math.max(0, ended - started)
+			: 0;
 	return {
-		...job, phases, lastPhaseAt,
-		lastPhase: phases.at(-1) ?? "No script phase observed",
+		...job,
+		phases,
+		lastPhaseAt,
+		lastPhase:
+			phases.at(-1) ??
+			(job.scriptPhasesExpected === false
+				? "Script phase monitoring not supported; overall deadline enforced"
+				: "No script phase observed"),
 		elapsedMs,
-		remainingMs: typeof job.timeoutMs === "number" && Number.isFinite(job.timeoutMs) ? Math.max(0, job.timeoutMs - elapsedMs) : null,
-		deadlineAt: typeof job.timeoutMs === "number" && Number.isFinite(job.timeoutMs) && job.timeoutMs > 0 && job.timeoutMs <= 3_600_000 && Number.isFinite(started)
-			? new Date(started + job.timeoutMs).toISOString() : null,
-		stateMeaning: "Last recorded host state; not a fresh process-identity or liveness check",
+		remainingMs:
+			typeof job.timeoutMs === "number" && Number.isFinite(job.timeoutMs)
+				? Math.max(0, job.timeoutMs - elapsedMs)
+				: null,
+		deadlineAt:
+			typeof job.timeoutMs === "number" &&
+			Number.isFinite(job.timeoutMs) &&
+			job.timeoutMs > 0 &&
+			job.timeoutMs <= 3_600_000 &&
+			Number.isFinite(started)
+				? new Date(started + job.timeoutMs).toISOString()
+				: null,
+		stateMeaning:
+			"Last recorded host state; not a fresh process-identity or liveness check",
 	};
 }
 
-export function formatIdaProgress(job: ReturnType<typeof describeObservedIdaJob>) {
+export function formatIdaProgress(
+	job: ReturnType<typeof describeObservedIdaJob>,
+) {
 	const seconds = Math.floor(job.elapsedMs / 1000);
-	const remaining = job.remainingMs === null ? "unknown" : `${Math.ceil(job.remainingMs / 1000)}s`;
-	const phaseDeadline = job.phaseDeadlineAt ? Date.parse(job.phaseDeadlineAt) : NaN;
-	const phaseRemaining = Number.isFinite(phaseDeadline) ? Math.max(0, Math.ceil((phaseDeadline - Date.now()) / 1000)) : null;
+	const remaining =
+		job.remainingMs === null
+			? "unknown"
+			: `${Math.ceil(job.remainingMs / 1000)}s`;
+	const phaseDeadline = job.phaseDeadlineAt
+		? Date.parse(job.phaseDeadlineAt)
+		: NaN;
+	const phaseRemaining = Number.isFinite(phaseDeadline)
+		? Math.max(0, Math.ceil((phaseDeadline - Date.now()) / 1000))
+		: null;
 	return `[IDA progress] ${job.status}; PID ${job.pid ?? "not launched"}; phase: ${job.lastPhase}; elapsed ${seconds}s; deadline remaining ${remaining}; phase budget remaining ${phaseRemaining ?? "unknown"}s; job ${job.id}`;
 }
 
@@ -103,12 +144,18 @@ export async function runObservedIda(
 	signal?: AbortSignal,
 	options: {
 		phaseTimeoutMs?: number;
+		scriptPhasesExpected?: boolean;
 		onProgress?: (job: ReturnType<typeof describeObservedIdaJob>) => void;
 	} = {},
 ) {
 	const phaseTimeoutMs = Math.min(options.phaseTimeoutMs ?? 300_000, timeoutMs);
-	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 3_600_000 ||
-		!Number.isFinite(phaseTimeoutMs) || phaseTimeoutMs <= 0)
+	if (
+		!Number.isFinite(timeoutMs) ||
+		timeoutMs <= 0 ||
+		timeoutMs > 3_600_000 ||
+		!Number.isFinite(phaseTimeoutMs) ||
+		phaseTimeoutMs <= 0
+	)
 		throw new Error("Invalid IDA execution deadline");
 	const secretValues = prepareProcessEnvironment().secretValues;
 	if (
@@ -132,10 +179,14 @@ export async function runObservedIda(
 		scriptProgressPath,
 		timeoutMs,
 		phaseTimeoutMs,
+		scriptPhasesExpected: options.scriptPhasesExpected !== false,
 		lastHostUpdateAt: new Date().toISOString(),
 		endedAt: undefined as string | undefined,
 		timeoutPhase: undefined as string | undefined,
-		phaseDeadlineAt: new Date(Date.now() + phaseTimeoutMs).toISOString(),
+		phaseDeadlineAt:
+			options.scriptPhasesExpected === false
+				? undefined
+				: new Date(Date.now() + phaseTimeoutMs).toISOString(),
 	};
 	const indexRoot = join(resolveClineDataDir(), "analysis", "ida-job-index");
 	mkdirSync(indexRoot, { recursive: true, mode: 0o700 });
@@ -173,21 +224,46 @@ export async function runObservedIda(
 		if (changed) {
 			observedPhase = snapshot.lastPhase;
 			phaseStarted = Date.now();
-			job.phaseDeadlineAt = new Date(phaseStarted + phaseTimeoutMs).toISOString();
-			try { record({ phase: "script-phase-observed", scriptPhase: observedPhase }); }
-			catch { /* Journal I/O must not crash the host's timer callback. */ }
+			if (options.scriptPhasesExpected !== false)
+				job.phaseDeadlineAt = new Date(
+					phaseStarted + phaseTimeoutMs,
+				).toISOString();
+			try {
+				record({ phase: "script-phase-observed", scriptPhase: observedPhase });
+			} catch {
+				/* Journal I/O must not crash the host's timer callback. */
+			}
 		}
 		if (changed || Date.now() - lastPublished >= 30_000) {
 			lastPublished = Date.now();
-			try { options.onProgress?.({...snapshot, phaseDeadlineAt:job.phaseDeadlineAt}); } catch { /* Observer cannot alter execution. */ }
+			try {
+				options.onProgress?.({
+					...snapshot,
+					phaseDeadlineAt: job.phaseDeadlineAt,
+				});
+			} catch {
+				/* Observer cannot alter execution. */
+			}
 		}
-		if (job.status === "running" && Date.now() - phaseStarted >= phaseTimeoutMs &&
-			!phaseAbort.signal.aborted) {
+		if (
+			options.scriptPhasesExpected !== false &&
+			job.status === "running" &&
+			Date.now() - phaseStarted >= phaseTimeoutMs &&
+			!phaseAbort.signal.aborted
+		) {
 			phaseTimedOut = true;
 			job.timeoutPhase = observedPhase;
-			try { record({ phase: "phase-deadline-exceeded", lastScriptPhase: observedPhase, phaseTimeoutMs }); }
-			catch { /* The deadline remains enforced even if diagnostic storage fails. */ }
-			finally { phaseAbort.abort(); }
+			try {
+				record({
+					phase: "phase-deadline-exceeded",
+					lastScriptPhase: observedPhase,
+					phaseTimeoutMs,
+				});
+			} catch {
+				/* The deadline remains enforced even if diagnostic storage fails. */
+			} finally {
+				phaseAbort.abort();
+			}
 		}
 	};
 	let progressTimer: ReturnType<typeof setInterval> | undefined;
@@ -246,7 +322,11 @@ export async function runObservedIda(
 			stderrTail: result.stderr.slice(-16_384),
 			timeoutPhase: job.timeoutPhase,
 		});
-		try { options.onProgress?.(describeObservedIdaJob(job)); } catch { /* Read-only observer. */ }
+		try {
+			options.onProgress?.(describeObservedIdaJob(job));
+		} catch {
+			/* Read-only observer. */
+		}
 		listObservedIdaJobs();
 		return {
 			...result,
