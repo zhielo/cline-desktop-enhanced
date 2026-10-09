@@ -6,7 +6,49 @@ import {
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	verifyRestartInstructions,
+	verifyRecoveredHubSession,
+	waitForInstalledBackendEndpoint,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
+
+test("Hub crash acceptance reattaches before local discovery without replay or hiding errors", async () => {
+  const calls = [];
+  await verifyRecoveredHubSession(async () => { calls.push("attach"); }, async () => {
+    assert.deepEqual(calls, ["attach"]);
+    calls.push("list"); return [{sessionId:"owned"}];
+  }, "owned");
+  assert.deepEqual(calls, ["attach", "list"]);
+  let reads = 0;
+  await assert.rejects(verifyRecoveredHubSession(async () => {}, async () => {
+    reads++; throw new Error("disk I/O error");
+  }, "owned"), /disk I\/O error/);
+  assert.equal(reads, 1);
+  await assert.rejects(verifyRecoveredHubSession(async () => { throw new Error("recovery failed"); },
+    async () => { reads++; return []; }, "owned"), /recovery failed/);
+  assert.equal(reads, 1);
+  await assert.rejects(verifyRecoveredHubSession(async () => {}, async () => [], "owned"),
+    /Saved session missing/);
+});
+
+test("installed backend discovery tolerates only bounded native not-ready responses", async () => {
+	let attempts = 0;
+	const endpoint = "ws://127.0.0.1:12345/transport?approval_token=owned";
+	const result = await waitForInstalledBackendEndpoint(async () => {
+		if (++attempts < 3) throw new Error("page.evaluate: desktop backend endpoint not ready");
+		return endpoint;
+	}, {pollMs:0});
+	assert.equal(result, endpoint);
+	assert.equal(attempts, 3);
+	await assert.rejects(waitForInstalledBackendEndpoint(async () => {
+		throw new Error("desktop backend endpoint not ready");
+	}, {pollMs:0}), /bounded discovery budget/);
+	await assert.rejects(waitForInstalledBackendEndpoint(async () => {
+		throw new Error("permanent owned startup failure");
+	}), /permanent owned startup failure/);
+	await assert.rejects(waitForInstalledBackendEndpoint(async () => "ws://external.example/transport"),
+		/local WebSocket endpoint/);
+	await assert.rejects(waitForInstalledBackendEndpoint(() => new Promise(() => {}), {timeoutMs:10}),
+		/readiness deadline exceeded/);
+});
 
 test("native Node child receives exact per-process WebView2 environment and reports exit/output", async () => {
 	const profile = "owned fixture profile with spaces";

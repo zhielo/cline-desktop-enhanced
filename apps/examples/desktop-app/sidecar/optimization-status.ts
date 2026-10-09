@@ -1,6 +1,10 @@
 import { readFileSync, mkdirSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { analysisResourceGovernor } from "@cline/core";
+import {
+	analysisResourceGovernor,
+	getPowerShellWorkerBaselineDecision,
+	cleanupStaleDetachedCommandLogs,
+} from "@cline/core";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { privateUpdateReadiness } from "./trusted-update";
 const path = () =>
@@ -35,11 +39,20 @@ export function optimizationStatus() {
 			status: "baseline-required",
 			reason:
 				"Installed startup samples are recorded in acceptance evidence; no controlled before/after baseline is claimed.",
+			commandLatency: getPowerShellWorkerBaselineDecision(),
 		},
 		updates: privateUpdateReadiness(),
 		limitations: [
 			"Resource admission is per owning process; it is not machine-wide CPU/RAM enforcement.",
 			"Native engine pool and process safety limits remain unchanged.",
 		],
+	};
+}
+export async function cleanupCompletedCommandLogs() {
+	const removed = await cleanupStaleDetachedCommandLogs();
+	return {
+		removed,
+		message:
+			"Only expired detached command logs were considered. Active process identities, project files, session history and runtime packs were not deleted.",
 	};
 }

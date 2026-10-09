@@ -5,6 +5,8 @@ export function summarizeSamples(samples) {
 }
 export function comparePerformance(candidate,baseline,threshold=.1) {
  if(!Number.isFinite(threshold)||threshold<0||threshold>1)throw new Error("Invalid regression threshold");
+ if(!candidate?.environmentId||!candidate?.workloadVersion||!candidate.metrics||!Object.keys(candidate.metrics).length)throw new Error("Candidate provenance and metrics required");
+ for(const samples of Object.values(candidate.metrics))summarizeSamples(samples);
  if(!baseline)return {status:"baseline-required",reason:"Candidate measurements are not proof of improvement"};
  if(candidate.environmentId!==baseline.environmentId || candidate.workloadVersion!==baseline.workloadVersion)throw new Error("Comparable environment and workload required");
  const metrics=Object.entries(baseline.metrics).map(([name,samples])=> {if(!candidate.metrics[name])throw new Error(`Missing metric ${name}`);const before=summarizeSamples(samples),after=summarizeSamples(candidate.metrics[name]);return {name,before,after,regressed:after.p95>before.p95*(1+threshold)};});

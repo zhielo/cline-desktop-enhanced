@@ -110,6 +110,32 @@ for (const outer of shells) {
 						outer.name === "powershell.exe" ? ["101", "u{4e2d}"] : ["27", "中"],
 					);
 				});
+				it("preserves edition-specific native stderr redirection without confusing warning output with native failure", async () => {
+					const native = process.execPath.replaceAll("'", "''");
+					const command = wrap(
+						inner.path ?? inner.name,
+						`& '${native}' -e 'process.stderr.write("owned-warning")' 2>&1`,
+					);
+					if (inner.name === "powershell.exe")
+						await expect(
+							executor(command, process.cwd(), ctx),
+						).rejects.toMatchObject({ exitCode: 1 });
+					else
+						expect(await executor(command, process.cwd(), ctx)).toContain(
+							"owned-warning",
+						);
+					// Direct argv bypasses the legacy shell policy and retains exit 0.
+					expect(
+						await executor(
+							{
+								command: process.execPath,
+								args: ["-e", 'process.stderr.write("owned-warning")'],
+							},
+							process.cwd(),
+							ctx,
+						),
+					).toContain("owned-warning");
+				});
 
 				it("executes the reporter's bare-name pipeline in its cwd and environment", async () => {
 					const cwd = await mkdtemp(join(tmpdir(), "cline shell 中文 "));

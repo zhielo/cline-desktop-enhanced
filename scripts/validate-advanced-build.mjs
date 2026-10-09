@@ -23,6 +23,14 @@ export function formatValidationHeartbeat(active, now = Date.now()) {
   ).join("; ") || "no active checks"}`;
 }
 
+export function formatValidationNotice(message) {
+  // Only fixed gate names/timings are passed here, never child output or env.
+  // Escape workflow-command data and bound server-side annotation storage.
+  const data = String(message).slice(0, 1000).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+    .replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  return `::notice title=Custom validation progress::${data}`;
+}
+
 export function recordValidationProgress(file, event) {
   // Open/write/close each record: evidence survives a child crash without
   // depending on the final summary or a buffered persistent stream.
@@ -78,6 +86,8 @@ async function main() {
     job("Test native Bun SQLite memory startup", ["test", "sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs"]),
     job("Test SQLite database path boundaries", ["x", "vitest", "run", "sdk/packages/shared/src/db/sqlite-db-paths.test.ts", "--config", "vitest.config.mts"]),
     job("Test measured performance budget policy", ["test", "scripts/performance-budget.test.mjs"]),
+    job("Test bounded acceptance diagnostics", ["test", "scripts/report-installed-acceptance.test.mjs"]),
+    { ...job("Measure fixed owned command workload", ["scripts/benchmark-command-execution.mjs", "--out", path.join(output, "command-performance.json")]), executable: "node" },
     job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),
     job("Test consolidated runner", ["test", "scripts/validate-advanced-build.test.mjs"]),
     job("Type-check desktop", ["x", "tsc", "-p", "apps/examples/desktop-app/tsconfig.dev.json", "--noEmit"]),
@@ -97,7 +107,10 @@ async function main() {
     job("Test desktop chat UI", ["x", ...pkg.scripts["test:chat-ui"].split(/\s+/)], desktop),
     job("Run desktop customization tests", ["x", "vitest", "run",
       "apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.test.tsx",
+      "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.test.tsx",
+      "apps/examples/desktop-app/webview/components/views/settings/optimization-panel.test.tsx",
       "apps/examples/desktop-app/sidecar/bundled-analysis-runtime.test.ts",
+      "apps/examples/desktop-app/sidecar/setup-center.test.ts",
       "apps/examples/desktop-app/sidecar/trusted-update.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-environment.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts",
@@ -126,6 +139,10 @@ async function main() {
       "--config", "apps/examples/desktop-app/vitest.config.mts"]),
     job("Test real Hub shutdown runtime identity", ["x", "vitest", "run", "src/hub/daemon/shutdown.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
     job("Run focused SDK safety tests", ["x", "vitest", "run",
+      "sdk/packages/core/src/extensions/tools/executors/command-evidence.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/bash.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/bash.powershell.test.ts",
+      "sdk/packages/core/src/extensions/tools/definitions.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/resource-governor.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-notebook.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-evidence-graph.test.ts",
@@ -169,9 +186,12 @@ async function main() {
   const active = new Map();
   const progressFile = path.join(output, "progress.jsonl");
   recordValidationProgress(progressFile, { event: "validation-start", parallel });
+  let heartbeatCount = 0;
   const heartbeat = setInterval(() => {
     const message = formatValidationHeartbeat(active);
     console.log(message);
+    if (process.env.GITHUB_ACTIONS === "true" && ++heartbeatCount % 10 === 0)
+      console.log(formatValidationNotice(message));
     recordValidationProgress(progressFile, { event: "heartbeat", message });
   }, 30_000);
   let cancelled = false;
@@ -189,6 +209,7 @@ async function main() {
     const logName = step.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".log";
     const stream = createWriteStream(path.join(output, logName));
     console.log(`[START] ${step.name}`);
+    if (process.env.GITHUB_ACTIONS === "true") console.log(formatValidationNotice(`[START] ${step.name}`));
     recordValidationProgress(progressFile, { event: "check-start", name: step.name, log: logName });
     return await new Promise(resolve => {
       let settled = false, timedOut = false, timer;

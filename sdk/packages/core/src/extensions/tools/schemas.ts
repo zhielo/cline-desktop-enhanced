@@ -123,6 +123,8 @@ export const ReverseEngineeringInputSchema = z.object({
 			"compare_expressions",
 			"transform_blob",
 			"triton_expression",
+			"unicorn_emulate",
+			"angr_lift",
 			"match_native_functions",
 			"trace_native_region",
 			"trace_input_influence",
@@ -429,7 +431,7 @@ const SAFE_DEBUGGER_LOCATION_PATTERN =
 export const LiveDebuggerInputSchema = z.object({
 	operation: z.enum([
 		"discover",
- "process_identity",
+		"process_identity",
 		"inspect_dump",
 		"launch",
 		"attach_snapshot",
@@ -445,7 +447,7 @@ export const LiveDebuggerInputSchema = z.object({
 	target: z.string().min(1).optional(),
 	args: z.array(z.string().max(32_768)).max(256).optional(),
 	pid: z.number().int().positive().optional(),
- pid_start_token:z.string().min(1).max(300).optional(),
+	pid_start_token: z.string().min(1).max(300).optional(),
 	breakpoint: z
 		.string()
 		.min(1)
@@ -492,7 +494,7 @@ export const AndroidDeviceInputSchema = z.object({
 		"force_stop",
 		"logcat",
 		"crash_logs",
- "debug_reports",
+		"debug_reports",
 		"pull_apk",
 		"screenshot",
 		"tap",
@@ -504,10 +506,20 @@ export const AndroidDeviceInputSchema = z.object({
 		"bugreport",
 		"processes",
 	]),
- debug_report_paths:z.array(z.string().regex(/^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/)).min(1).max(6).optional(),
- use_root:z.boolean().optional(),
- confirm_sensitive_reports:z.boolean().optional(),
- acknowledge_root_read:z.boolean().optional(),
+	debug_report_paths: z
+		.array(
+			z
+				.string()
+				.regex(
+					/^(?:\/data\/tombstones\/tombstone_\d{2}|\/data\/anr\/anr_[A-Za-z0-9_.-]{1,120})$/,
+				),
+		)
+		.min(1)
+		.max(6)
+		.optional(),
+	use_root: z.boolean().optional(),
+	confirm_sensitive_reports: z.boolean().optional(),
+	acknowledge_root_read: z.boolean().optional(),
 
 	device_serial: z.string().min(1).optional(),
 	process_id: z.number().int().positive().optional(),
@@ -603,6 +615,20 @@ export const StructuredCommandInputSchema = z.object({
 		.array(z.string())
 		.optional()
 		.describe("Optional argv list passed directly to the executable."),
+	required_files: z
+		.array(z.string().min(1))
+		.max(32)
+		.optional()
+		.describe(
+			"Explicit input files that must exist before launch. Never guess an artifact path.",
+		),
+	expected_output_files: z
+		.array(z.string().min(1))
+		.max(32)
+		.optional()
+		.describe(
+			"Explicit output files to verify after a completed command; unchanged pre-existing files are not fresh output.",
+		),
 });
 
 export const StructuredCommandEntrySchema = z.union([

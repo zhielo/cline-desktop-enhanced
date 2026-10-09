@@ -154,7 +154,11 @@ export function normalizeRunCommandsInput(
 	}
 
 	if ("command" in validate) {
-		return "args" in validate ? [validate] : [validate.command];
+		return "args" in validate ||
+			"required_files" in validate ||
+			"expected_output_files" in validate
+			? [validate]
+			: [validate.command];
 	}
 
 	if ("cmd" in validate) {

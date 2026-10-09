@@ -15,6 +15,8 @@ vi.mock("@cline/core", async () => {
 function createContext(): SidecarContext {
 	return {
 		localWorkspaceRoot: "/workspace",
+		activeEnvironmentId:"local",
+		runtimeBindings:new Map([["local",{kind:"local",environmentId:"local"}]]),
 		wsClients: new Set(),
 		hubBuildMismatch: {
 			url: "ws://127.0.0.1:25463/hub",
@@ -91,5 +93,57 @@ describe("hub_upgrade command", () => {
 			handleCommand(ctx, "hub_upgrade", {}, { connection: connection(true) }),
 		).rejects.toThrow(/newer than this app/);
 		expect(ctx.hubBuildMismatch).not.toBeNull();
+	});
+});
+
+describe("explicit idle Setup Center activation", () => {
+	it("rejects untrusted or unconfirmed setup mutations", async () => {
+		const { handleCommand } = await import("./commands");
+		for (const [args, options] of [
+			[
+				{ environmentId: "local", confirmed: true },
+				{ connection: connection(false) },
+			],
+			[{ environmentId: "local" }, { connection: connection(true) }],
+		] as const)
+			await expect(
+				handleCommand(
+					createContext(),
+					"setup_center_apply_backend",
+					args,
+					options,
+				),
+			).rejects.toThrow(/trusted desktop|confirmation/);
+		expect(upgradeManagedHubMock).not.toHaveBeenCalled();
+	});
+	it("requires idle restart and does not expose backend credentials", async () => {
+		upgradeManagedHubMock.mockResolvedValue({
+			outcome: "replaced",
+			authToken: "secret-fixture",
+			activeSessionCount: 0,
+		});
+		const { handleCommand } = await import("./commands");
+		const result = await handleCommand(
+			createContext(),
+			"setup_center_apply_backend",
+			{ environmentId: "local", confirmed: true },
+			{ connection: connection(true) },
+		);
+		expect(upgradeManagedHubMock).toHaveBeenCalledWith(
+			expect.objectContaining({ force: false, restartCompatible: true }),
+		);
+		expect(JSON.stringify(result)).not.toContain("secret-fixture");
+	});
+	it("reports a busy refusal without claiming activation", async () => {
+		upgradeManagedHubMock.mockResolvedValue({ outcome: "still_busy" });
+		const { handleCommand } = await import("./commands");
+		await expect(
+			handleCommand(
+				createContext(),
+				"setup_center_apply_backend",
+				{ environmentId: "local", confirmed: true },
+				{ connection: connection(true) },
+			),
+		).rejects.toThrow("no running jobs were interrupted");
 	});
 });

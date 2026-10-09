@@ -1012,6 +1012,17 @@ describe("upgradeManagedHub", () => {
 		expect(spawn).not.toHaveBeenCalled();
 	});
 
+
+ it("explicit setup restarts only a confirmed idle compatible build under an accepted drain", async()=>{
+  readHubDiscovery.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",authToken:"old-token",pid:12345}).mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",authToken:"new-token"});
+  probeHubServer.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",protocolVersion:"v1",buildId:"current-build",pid:12345}).mockResolvedValueOnce(undefined).mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",protocolVersion:"v1",buildId:"current-build"});
+  verifyHubConnection.mockResolvedValue(true);
+  const {upgradeManagedHub}=await import(".");expect((await upgradeManagedHub({restartCompatible:true,waitForIdleMs:0})).outcome).toBe("replaced");expect(requestHubDrain).toHaveBeenCalled();expect(requestHubShutdown).toHaveBeenCalled();
+ });
+ it("explicit compatible setup never forces busy work even with a mistaken force flag",async()=>{
+  readHubDiscovery.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",authToken:"old-token"});probeHubServer.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",protocolVersion:"v1",buildId:"current-build"});queryHubSessionActivity.mockResolvedValue({activeSessionCount:1,participantClientCount:1});
+  const {upgradeManagedHub}=await import(".");expect((await upgradeManagedHub({restartCompatible:true,force:true,waitForIdleMs:0})).outcome).toBe("still_busy");expect(requestHubShutdown).not.toHaveBeenCalled();expect(requestHubDrain).toHaveBeenLastCalledWith("ws://127.0.0.1:25463/hub","old-token","hub upgrade aborted",{off:true});
+ });
 	it("starts a hub when none is running", async () => {
 		readHubDiscovery.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
 			url: "ws://127.0.0.1:25463/hub",

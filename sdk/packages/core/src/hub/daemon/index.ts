@@ -746,6 +746,8 @@ const HUB_UPGRADE_DEFAULT_WAIT_MS = 5_000;
 const HUB_UPGRADE_IDLE_POLL_MS = 500;
 
 export interface UpgradeManagedHubOptions {
+	/** Explicit setup activation only: drain and restart this exact compatible build, never force busy work. */
+	restartCompatible?: boolean;
 	workspaceRoot?: string;
 	/**
 	 * How long to wait, after draining, for the hub's live sessions to finish
@@ -814,7 +816,10 @@ export interface UpgradeManagedHubResult {
  * they never shorten the wait window, and without `force` an unconfirmed
  * hub is handed back un-drained rather than retired.
  *
- * Never replaces a hub this build is not strictly newer than - the build
+ * Ordinary upgrades never replace a hub this build is not strictly newer than.
+ * Explicit restartCompatible setup activation may restart only an already compatible
+ * build after accepted drain and confirmed idle; it never honors force for busy work.
+ * The build
  * total order guarantees at most one side of any install pair can reach the
  * retire step, which is what keeps two mixed installs from taking turns
  * "upgrading" the hub to their own build.
@@ -837,14 +842,15 @@ export async function upgradeManagedHub(
 		authToken: live.authToken ?? discovered?.authToken,
 		pid: live.pid ?? discovered?.pid,
 	};
-	if (getManagedHubCompatibility(live).compatible) {
+	const compatible = getManagedHubCompatibility(live).compatible;
+	if (compatible && options.restartCompatible !== true) {
 		return {
 			outcome: "already_current",
 			url: live.url,
 			authToken: record.authToken,
 		};
 	}
-	if (compareHubBuilds(resolveHubBuildIdentity(), live) <= 0) {
+	if (!compatible && compareHubBuilds(resolveHubBuildIdentity(), live) <= 0) {
 		return {
 			outcome: "hub_not_older",
 			url: live.url,
@@ -907,7 +913,7 @@ export async function upgradeManagedHub(
 	// unanswerable hub is handed back un-drained. With force, the user has
 	// already consented to interrupting the sessions the prompt showed them,
 	// and the accepted drain keeps new work out from here through the retire.
-	if (!confirmedIdle && options.force !== true) {
+	if (!confirmedIdle && (options.force !== true || options.restartCompatible === true)) {
 		await undrain();
 		return {
 			outcome: "still_busy",

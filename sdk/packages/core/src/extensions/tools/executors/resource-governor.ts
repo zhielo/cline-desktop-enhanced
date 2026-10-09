@@ -1,6 +1,7 @@
 import { freemem } from "node:os";
 export type ResourceProfile = "economy" | "balanced" | "deep";
 type Pending = {
+	enqueuedAt: number;
 	mb: number;
 	resident: boolean;
 	resolve: (release: () => void) => void;
@@ -37,6 +38,10 @@ export class ResourceGovernor {
 			peakActive: this.peak,
 			maxConcurrent: this.profile === "economy" ? 1 : 2,
 			hardMemoryEnforcement: false,
+			estimatedBudgetMB: this.profile === "deep" ? 1536 : 1024,
+			oldestQueuedMs: this.queue.length
+				? Math.max(0, Date.now() - this.queue[0].enqueuedAt)
+				: 0,
 		};
 	}
 	acquire(
@@ -62,6 +67,7 @@ export class ResourceGovernor {
 			);
 		return new Promise((resolve, reject) => {
 			const entry: Pending = {
+				enqueuedAt: Date.now(),
 				mb,
 				resident,
 				resolve,

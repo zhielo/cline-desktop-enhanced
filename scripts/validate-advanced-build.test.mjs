@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineCorpusArgs, formatValidationHeartbeat, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
+import { engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
 const jobs = [1, 2, 3, 4, 5].map(n => ({ name: String(n) }));
 test("engine corpus explicitly selects the shipped Windows profile without weakening full-engine execution", () => {
   const corpus = "advanced-analysis-worker.test.py";
@@ -21,6 +21,15 @@ test("heartbeats identify every active gate without exposing commands or environ
   const active = new Map([[{}, { name: "sidecar", start: 1000, args: ["secret"] }], [{}, { name: "installer", start: 3000 }]]);
   assert.equal(formatValidationHeartbeat(active, 5000), "[PROGRESS] sidecar: 4s; installer: 2s");
   assert.equal(formatValidationHeartbeat(new Map(), 5000), "[PROGRESS] no active checks");
+});
+test("public progress annotations are bounded and cannot inject workflow commands", () => {
+  const annotation = formatValidationNotice("gate%\r\n::error::injected\u0000");
+  assert.equal(annotation, "::notice title=Custom validation progress::gate%25%0D%0A::error::injected");
+  assert.ok(!annotation.includes("\n"));
+  assert.equal(formatValidationNotice("x".repeat(2000)).split("::").at(-1).length, 1000);
+  const runner = readFileSync(new URL("./validate-advanced-build.mjs", import.meta.url), "utf8");
+  assert.ok(runner.includes('process.env.GITHUB_ACTIONS === "true"'));
+  assert.ok(runner.includes("++heartbeatCount % 10 === 0"));
 });
 test("progress records are independently readable before a final summary exists", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "cline-validation-progress-"));

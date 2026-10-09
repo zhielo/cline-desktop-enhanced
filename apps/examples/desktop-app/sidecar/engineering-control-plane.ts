@@ -943,9 +943,37 @@ export function routeEngineeringModel(
 		: [];
 	if (candidates.length === 0)
 		throw new Error("At least one model candidate is required");
+	for (const candidate of candidates) {
+		if (
+			!candidate ||
+			typeof candidate.id !== "string" ||
+			typeof candidate.provider !== "string" ||
+			!Array.isArray(candidate.capabilities) ||
+			candidate.capabilities.some((c) => typeof c !== "string") ||
+			!Number.isFinite(candidate.contextWindow) ||
+			candidate.contextWindow < 0
+		)
+			throw new Error("Invalid model candidate identity or capabilities");
+		for (const value of [candidate.successRate, candidate.toolReliability])
+			if (
+				value !== undefined &&
+				(!Number.isFinite(value) || value < 0 || value > 1)
+			)
+				throw new Error("Model outcome estimates must be finite rates in 0..1");
+		for (const value of [candidate.costPerMillionTokens, candidate.latencyMs])
+			if (value !== undefined && (!Number.isFinite(value) || value < 0))
+				throw new Error(
+					"Model cost and latency estimates must be finite and nonnegative",
+				);
+	}
 	const required = Array.isArray(task.requiredCapabilities)
 		? task.requiredCapabilities.map(String)
 		: [];
+	const mode = task.mode ?? "balanced";
+	if (mode !== "economy" && mode !== "balanced" && mode !== "deep")
+		throw new Error("Model routing mode must be economy, balanced or deep");
+	const manualModelId =
+		typeof task.manualModelId === "string" ? task.manualModelId : undefined;
 	const minimumContext = Math.max(0, Number(task.minimumContext ?? 0));
 	const maxCost =
 		task.maxCostPerMillionTokens === undefined
@@ -969,6 +997,14 @@ export function routeEngineeringModel(
 			score -= Math.min(10, (candidate.latencyMs ?? 2_000) / 1_000);
 			score -= Math.min(10, (candidate.costPerMillionTokens ?? 10) / 10);
 			score -= missing.length * 40;
+			if (mode === "economy") {
+				score -= Math.min(40, (candidate.costPerMillionTokens ?? 40) * 2);
+				score -= Math.min(20, (candidate.latencyMs ?? 2000) / 500);
+			} else if (mode === "deep") {
+				score +=
+					(candidate.successRate ?? 0.75) * 30 +
+					(candidate.toolReliability ?? 0.75) * 30;
+			}
 			return {
 				candidate,
 				score: Math.round(score * 100) / 100,
@@ -989,11 +1025,24 @@ export function routeEngineeringModel(
 			};
 		})
 		.sort((a, b) => b.score - a.score);
+	const selected = manualModelId
+		? ranked.find(
+				(item) => item.eligible && item.candidate.id === manualModelId,
+			)?.candidate
+		: ranked.find((item) => item.eligible)?.candidate;
 	return {
-		selected: ranked.find((item) => item.eligible)?.candidate,
-		reason: ranked.some((item) => item.eligible)
-			? "Highest-ranked eligible model; missing-capability and insufficient-context models cannot be selected"
-			: "No eligible model meets the required capabilities and minimum context",
+		selected,
+		mode,
+		manualOverride: Boolean(manualModelId),
+		retryPolicy:
+			"Routing advice never replays commands or changes the selected chat provider automatically",
+		reason: manualModelId
+			? selected
+				? "Explicit eligible model selected"
+				: "Manual model is unavailable or ineligible; no silent fallback"
+			: ranked.some((item) => item.eligible)
+				? "Highest-ranked eligible model; missing-capability and insufficient-context models cannot be selected"
+				: "No eligible model meets the required capabilities and minimum context",
 		ranked,
 	};
 }

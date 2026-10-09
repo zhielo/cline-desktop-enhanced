@@ -39,6 +39,7 @@ import {
 	redactSensitiveText,
 } from "./process-environment-policy";
 import type { RunCommandExecutionController } from "./run-command-execution-controller";
+import type { CommandExecutionReceipt } from "./command-evidence";
 
 const MAX_DETACHED_LOG_BYTES = 10 * 1024 * 1024;
 const DEFAULT_DETACHED_LOG_RETENTION_MS = 24 * 60 * 60 * 1_000;
@@ -723,6 +724,7 @@ function spawnAndCollect(
 			windowsHide: true,
 		});
 		const childPid = child.pid;
+		const processStartedAt = Date.now();
 
 		const stdout = createRollingCollector(
 			maxOutputChars,
@@ -751,6 +753,40 @@ function spawnAndCollect(
 			() => detachable,
 			maxOutputChars,
 		);
+		const emitReceipt = (
+			status: CommandExecutionReceipt["status"],
+			exitCode: number | null,
+		) => {
+			const out = stdout.current();
+			const err = stderr.current();
+			context.emitUpdate?.({
+				type: "command_execution_receipt",
+				receipt: {
+					schemaVersion: 1,
+					executable: redactSensitiveText(
+						config.executable,
+						preparedEnvironment.secretValues,
+					),
+					cwd: redactSensitiveText(
+						config.cwd,
+						preparedEnvironment.secretValues,
+					),
+					pid: childPid,
+					exitCode,
+					status,
+					stdout: out.text.slice(-8192),
+					stderr: err.text.slice(-8192),
+					outputTruncated:
+						out.dropped ||
+						err.dropped ||
+						out.text.length > 8192 ||
+						err.text.length > 8192,
+					durationMs: Date.now() - processStartedAt,
+					terminationConfirmed:
+						child.exitCode !== null || child.signalCode !== null,
+				} satisfies CommandExecutionReceipt,
+			});
+		};
 
 		const settle = (fn: () => void) => {
 			if (settled) return;
@@ -819,7 +855,13 @@ function spawnAndCollect(
 			killed = true;
 			progress.stop({ flush: true });
 			cleanup();
-			void killProcessTree().finally(() => settle(() => reject(error)));
+			void killProcessTree().finally(() => {
+				emitReceipt(
+					error instanceof TimeoutError ? "timed_out" : "cancelled",
+					child.exitCode,
+				);
+				settle(() => reject(error));
+			});
 		};
 
 		timeout = setTimeout(
@@ -880,6 +922,7 @@ function spawnAndCollect(
 			]
 				.filter(Boolean)
 				.join("\n");
+			emitReceipt("running", null);
 			settle(() => resolve(notice));
 			return true;
 		};
@@ -964,6 +1007,7 @@ function spawnAndCollect(
 			}
 			progress.stop({ flush: true });
 			cleanup();
+			emitReceipt(code === 0 ? "completed" : "failed", code);
 
 			if (code !== 0) {
 				const exitCode = code ?? 1;
@@ -1093,6 +1137,7 @@ function spawnAndCollect(
 			}
 			progress.stop({ flush: true });
 			cleanup();
+			emitReceipt("launch_failed", null);
 			settle(() =>
 				reject(new Error(`Failed to execute command: ${sanitizedMessage}`)),
 			);

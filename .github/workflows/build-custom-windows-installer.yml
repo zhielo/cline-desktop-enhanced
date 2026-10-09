@@ -205,6 +205,32 @@ jobs:
           ./scripts/package-analysis-runtime.ps1 -EnginePython $env:CLINE_RE_PYTHON
           if ($LASTEXITCODE -ne 0) { throw "Bundled runtime packaging failed" }
 
+      - name: Build and package full private capability packs
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vsRoot = (& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
+          if (-not $vsRoot) { throw 'Full pack requires verified Visual C++ tools' }
+          $devCmd = Join-Path $vsRoot 'Common7/Tools/VsDevCmd.bat'
+          $vars = & $env:COMSPEC /d /s /c "`"$devCmd`" -no_logo -arch=amd64 -host_arch=amd64 && set"
+          if ($LASTEXITCODE -ne 0) { throw 'Full pack compiler environment failed' }
+          foreach ($line in $vars) { $i=$line.IndexOf('='); if ($i -gt 0) { [Environment]::SetEnvironmentVariable($line.Substring(0,$i),$line.Substring($i+1),'Process') } }
+          foreach ($pack in @('full','angr')) {
+            $venv = Join-Path $env:RUNNER_TEMP "cline-$pack-engines"
+            py -3.13 -m venv $venv
+            if ($LASTEXITCODE -ne 0) { throw 'Full pack venv creation failed' }
+            $python = Join-Path $venv 'Scripts/python.exe'
+            $pins = if ($pack -eq 'full') { 'sdk/packages/core/scripts/requirements-advanced-full-windows.txt' } else { 'sdk/packages/core/scripts/requirements-advanced-angr.txt' }
+            & $python -m pip install --disable-pip-version-check -r $pins
+            if ($LASTEXITCODE -ne 0) { throw "Full pack dependency build failed: $pack" }
+            ./scripts/package-analysis-runtime.ps1 -EnginePython $python -Pack $pack
+            if ($LASTEXITCODE -ne 0) { throw "Full pack execution/packaging failed: $pack" }
+          }
+
+      - name: Package official Android connectivity tools
+        shell: pwsh
+        run: ./scripts/package-android-platform-tools.ps1
+
       - name: Build pinned Android instrumentation bundle
         working-directory: workers/android-capture
         shell: pwsh
@@ -459,6 +485,11 @@ jobs:
           }
           node --experimental-strip-types ../../vscode/scripts/desktop-installed-acceptance.ts
           if ($LASTEXITCODE -ne 0) { throw 'Installed WebView acceptance failed' }
+
+      - name: Publish bounded installed acceptance failure
+        if: ${{ always() && steps.ui_acceptance.outcome == 'failure' }}
+        shell: pwsh
+        run: node scripts/report-installed-acceptance.mjs apps/examples/desktop-app/dist/installed-ui-evidence/summary.json
 
       - name: Upload installed UI acceptance evidence
         if: ${{ always() }}
