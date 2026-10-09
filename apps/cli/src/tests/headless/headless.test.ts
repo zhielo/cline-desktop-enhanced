@@ -4,6 +4,8 @@
 // These tests run cline as a child process (no TUI harness) and assert on
 // stdout, stderr, and exit codes.
 //
+// Unauthenticated headless cases replay an owned 401 response in network-isolated
+// VCR mode; CI must not wait on a live provider to verify error rendering.
 // Tests tagged @live require a configured provider and are skipped by default.
 // Run them with:  CLINE_BIN=... npm test -- headless @live
 // ---------------------------------------------------------------------------
@@ -27,7 +29,11 @@ test.describe("cline -y (headless auth failure mode) - unauthenticated", () => {
 	test.use({
 		program: { file: CLINE_BIN, args: ["-y", "tell me a joke"] },
 		...TERMINAL_WIDE,
-		env: clineEnv("unauthenticated"),
+		env: clineEnv("unauthenticated", {
+			CLINE_VCR: "playback",
+			CLINE_VCR_FILTER: "",
+			CLINE_VCR_CASSETTE: "./fixtures/headless-unauthorized.json",
+		}),
 	});
 
 	test("prints Not authenticated and exits 1", async ({ terminal }) => {
@@ -50,7 +56,11 @@ test.describe("piped stdin | cline - unauthenticated", () => {
 			],
 		},
 		...TERMINAL_WIDE,
-		env: clineEnv("unauthenticated"),
+		env: clineEnv("unauthenticated", {
+			CLINE_VCR: "playback",
+			CLINE_VCR_FILTER: "",
+			CLINE_VCR_CASSETTE: "./fixtures/headless-unauthorized.json",
+		}),
 	});
 
 	test("prints Not Authenticated for piped stdin", async ({ terminal }) => {
@@ -70,7 +80,11 @@ test.describe("cline -y --verbose - unauthenticated", () => {
 			args: ["-c", `${CLINE_BIN} -y --verbose "tell me a joke" 2>&1`],
 		},
 		...TERMINAL_WIDE,
-		env: clineEnv("unauthenticated"),
+		env: clineEnv("unauthenticated", {
+			CLINE_VCR: "playback",
+			CLINE_VCR_FILTER: "",
+			CLINE_VCR_CASSETTE: "./fixtures/headless-unauthorized.json",
+		}),
 	});
 
 	test("shows verbose output or not-authenticated", async ({ terminal }) => {
@@ -87,7 +101,11 @@ test.describe("cline -y --json - unauthenticated", () => {
 	test.use({
 		program: { file: CLINE_BIN, args: ["-y", "--json", "tell me a joke"] },
 		...TERMINAL_WIDE,
-		env: clineEnv("unauthenticated"),
+		env: clineEnv("unauthenticated", {
+			CLINE_VCR: "playback",
+			CLINE_VCR_FILTER: "",
+			CLINE_VCR_CASSETTE: "./fixtures/headless-unauthorized.json",
+		}),
 	});
 
 	test("outputs JSON error for unauthenticated", async ({ terminal }) => {

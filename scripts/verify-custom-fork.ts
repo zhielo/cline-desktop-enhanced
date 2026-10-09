@@ -5,6 +5,23 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "apps/cli/src/tests/headless/headless.test.ts",
+		markers: [
+			'CLINE_VCR: "playback"',
+			'CLINE_VCR_FILTER: ""',
+			"headless-unauthorized.json",
+			"expectExitCode(terminal, EXIT_CODE_FAIL)",
+		],
+	},
+	{
+		path: "apps/cli/src/tests/fixtures/headless-unauthorized.json",
+		markers: [
+			'"status": 401',
+			'"message": "Unauthorized"',
+			'"contentType": "application/json"',
+		],
+	},
+	{
 		path: "sdk/packages/core/src/hub/discovery/index.ts",
 		markers: [
 			"hubLockQueues",

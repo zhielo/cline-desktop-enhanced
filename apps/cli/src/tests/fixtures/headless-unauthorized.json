@@ -1,0 +1,17 @@
+[
+	{
+		"scope": "https://api.cline.bot",
+		"method": "POST",
+		"path": "/api/v1/chat/completions",
+		"status": 401,
+		"response": {
+			"error": {
+				"message": "Unauthorized",
+				"type": "authentication_error",
+				"code": "invalid_api_key"
+			}
+		},
+		"responseIsBinary": false,
+		"contentType": "application/json"
+	}
+]
