@@ -157,8 +157,11 @@ describe("structured command evidence", () => {
 		);
 		expect(result).toMatchObject({
 			success: false,
-			execution: { status: "timed_out", exitCode: null },
+			execution: { status: "timed_out" },
 		});
+		// taskkill can report a native nonzero exit before its own completion;
+		// POSIX signal termination usually has null exitCode. Neither is success.
+		expect(result.execution?.exitCode === null || Number.isInteger(result.execution?.exitCode)).toBe(true);
 		expect(typeof result.execution?.terminationConfirmed).toBe("boolean");
 	});
 	it("does not expose environment secrets in structured receipts", async () => {

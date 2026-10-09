@@ -130,9 +130,9 @@ export function SetupCenter() {
 			<div className="space-y-6 p-6">
 				<p>
 					Full pack:{" "}
-					<strong aria-label="Full capability pack status">
+					<output aria-label="Full capability pack status">
 						{status?.fullStatus ?? "Checking setup"}
-					</strong>
+					</output>
 					.{" "}
 					{status?.checkedAt
 						? `Last owned-fixture test: ${status.checkedAt}`

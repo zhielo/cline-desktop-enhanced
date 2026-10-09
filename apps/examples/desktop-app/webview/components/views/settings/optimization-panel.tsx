@@ -106,7 +106,7 @@ export function OptimizationPanel() {
 			<Button variant="outline" disabled={busy} onClick={() => void cleanup()}>
 				Clean expired command logs
 			</Button>
-			{cleanupMessage && <p role="status">{cleanupMessage}</p>}
+			{cleanupMessage && <output>{cleanupMessage}</output>}
 			{status && (
 				<>
 					<label>

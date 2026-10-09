@@ -1,4 +1,5 @@
 import { lstat, realpath } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { resolve } from "node:path";
 
 /** Bounded, redacted process facts. No argv or environment is persisted here. */
@@ -39,7 +40,7 @@ export async function inspectCommandArtifacts(
 	return Promise.all(
 		paths.map(async (path) => {
 			const absolute = resolve(cwd, path);
-			let info;
+			let info: Stats;
 			try {
 				info = await lstat(absolute);
 			} catch {

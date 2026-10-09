@@ -154,6 +154,8 @@ export async function main() {
   const stages: string[] = [];
   let launchNumber = 0;
   const startupSamples: number[] = [];
+  const appWorkingSetSamples: number[] = [];
+  const transcriptScrollSamples: number[] = [];
   const taskkill = join(
     process.env.SystemRoot ?? "C:\\Windows",
     "System32",
@@ -325,6 +327,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .first()
       .waitFor();
     startupSamples.push(performance.now() - startupStarted);
+    // Sample only this launched native app, never arbitrary user processes.
+    // WebView/Hub/worker descendants are deliberately not called whole-app RAM.
+    const powershell = join(process.env.SystemRoot ?? "C:\\Windows",
+      "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    const probe = startAcceptanceProcess(powershell, ["-NoProfile", "-NonInteractive", "-Command",
+      `[Console]::Write((Get-Process -Id ${app.child.pid} -ErrorAction Stop).WorkingSet64)`], workspace, environment);
+    const probeCode = await Promise.race([probe.exited, delay(10000, null, {ref:false})]);
+    if (probeCode === null && probe.child.pid) await killOwnedProcess(probe.child.pid);
+    if (probeCode !== 0) throw new Error("Owned installed app memory probe failed");
+    await probe.closed;
+    const bytes = Number(probe.diagnostics.stdoutTail.trim());
+    if (!Number.isFinite(bytes) || bytes <= 0) throw new Error("Invalid owned app working-set observation");
+    appWorkingSetSamples.push(bytes / 1024 / 1024);
     return page;
 	}
 
@@ -462,13 +477,11 @@ ConvertTo-Json -InputObject @($rows) -Compress
 					permissionProfile: "read-only",
 					// Empty new sessions intentionally persist lazily. Seed an owned
 					// transcript to exercise the existing durable recovery contract.
-            initialMessages: [
-              {
-                id: "installer-owned-message",
-                role: "user",
-                content: "Installer owned session",
-              },
-            ],
+            initialMessages: Array.from({length:120}, (_, index) => ({
+              id: `installer-owned-message-${index}`,
+              role: "user",
+              content: `Installer owned history row ${index}. ${"Owned offline transcript fixture. ".repeat(8)}`,
+            })),
 				},
 			},
       },
@@ -486,6 +499,15 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			.first()
       .click();
     stages.push("owned-workspace-idle-session-opened");
+    await page.waitForFunction(() => document.querySelectorAll('[data-message-role="user"]').length >= 120);
+    for (let sample = 0; sample < 3; sample++) {
+      const started = performance.now();
+      await page.locator('[data-message-role="user"]').first().scrollIntoViewIfNeeded();
+      await page.locator('[data-message-role="user"]').last().scrollIntoViewIfNeeded();
+      await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+      transcriptScrollSamples.push(performance.now() - started);
+    }
+    stages.push("owned-120-row-transcript-scroll-acceptance-passed");
     await settings(page, "General");
     const instructions = page.getByRole("textbox", {
       name: "Custom AI instructions",
@@ -690,12 +712,16 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui-startup/core-full-core-v2",
+          workloadVersion: "installed-owned-ui/core-full-core-120-row-v3",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
-          metrics: { installedReadyMs: startupSamples },
+          metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
+            ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },
+          units: {installedReadyMs:"milliseconds",nativeAppWorkingSetMB:"MiB",ownedTranscriptScrollRoundTripMs:"milliseconds"},
           baselineStatus: "not-established",
           limitations: [
-            "Three candidate startup samples, not an improvement claim or idle/peak RAM benchmark.",
+            "Three candidate observations per metric; no controlled before/after improvement claim.",
+            "Working set includes the launched native app only, not WebView, Hub or analysis worker memory and not a peak-memory benchmark.",
+            "Scroll measurements use 120 owned offline rows and two animation frames, not live model work or proof of all long-session workloads.",
           ],
         },
         null,
