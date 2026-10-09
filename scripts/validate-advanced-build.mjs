@@ -155,6 +155,8 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/analysis-environment.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/ida-analysis-workspace.test.ts",
+      "sdk/packages/core/src/hub/discovery/startup-lock.test.ts",
+      "sdk/packages/core/src/hub/daemon/index.test.ts",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",

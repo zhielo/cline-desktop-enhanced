@@ -5,6 +5,15 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "sdk/packages/core/src/hub/discovery/index.ts",
+		markers: [
+			"hubLockQueues",
+			"reclaimDeadHubLock",
+			"current?.nonce === ownership.nonce",
+			"Unknown/permission errors are not evidence of death",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/ida-analysis-workspace.ts",
 		markers: [
 			"idaDatabaseKey",
@@ -1483,7 +1492,11 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "sdk/packages/core/src/hub/daemon/index.ts",
-		markers: ["HUB_STARTUP_TIMEOUT_MS = 30_000"],
+		markers: [
+			"HUB_STARTUP_TIMEOUT_MS = 90_000",
+			"pendingHubStarts",
+			"Join daemon readiness",
+		],
 	},
 	{
 		path: "vitest.config.mts",

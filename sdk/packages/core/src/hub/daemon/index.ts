@@ -57,7 +57,9 @@ export interface DetachedHubOptions extends HubEndpointOverrides {
 // initializing the embedded runtime before discovery is writable. Keep this
 // aligned with the desktop host readiness window so a healthy cold start is
 // not failed by an earlier internal deadline.
-const HUB_STARTUP_TIMEOUT_MS = 30_000;
+// Full-pack integrity verification precedes compiled helper readiness. This bounded
+// cold-start window does not authorize retries or age-based lock theft.
+const HUB_STARTUP_TIMEOUT_MS = 90_000;
 const HUB_STARTUP_POLL_MS = 200;
 const HUB_RETIRE_TIMEOUT_MS = 3_000;
 const HUB_RETIRE_POLL_MS = 100;
@@ -437,11 +439,17 @@ export function spawnDetachedHubServer(
 	const logFile = openDetachedHubLogFile();
 	const trace = (phase: string, details: Record<string, unknown> = {}) => {
 		if (!logFile) return;
-		try { appendFileSync(logFile.logPath, `[hub-startup] ${JSON.stringify({timestamp:new Date().toISOString(),ownerPid:process.pid,phase,...details})}\n`); }
-		catch { /* Trace availability is not Hub readiness. */ }
+		try {
+			appendFileSync(
+				logFile.logPath,
+				`[hub-startup] ${JSON.stringify({ timestamp: new Date().toISOString(), ownerPid: process.pid, phase, ...details })}\n`,
+			);
+		} catch {
+			/* Trace availability is not Hub readiness. */
+		}
 	};
 	try {
-		trace("spawn-requested", {executable:basename(command.launcher)});
+		trace("spawn-requested", { executable: basename(command.launcher) });
 		const child = spawn(command.launcher, command.args, {
 			detached: true,
 			stdio: logFile ? ["ignore", logFile.fd, logFile.fd] : "ignore",
@@ -451,9 +459,13 @@ export function spawnDetachedHubServer(
 			// processes otherwise allocate a new visible console.
 			windowsHide: true,
 		});
-		trace("spawn-returned", {childPid:child.pid ?? null});
-		child.once("error", (error: NodeJS.ErrnoException) => trace("spawn-error", {code:error.code ?? "unknown"}));
-		child.once("exit", (code, signal) => trace("child-exit", {childPid:child.pid ?? null,code,signal}));
+		trace("spawn-returned", { childPid: child.pid ?? null });
+		child.once("error", (error: NodeJS.ErrnoException) =>
+			trace("spawn-error", { code: error.code ?? "unknown" }),
+		);
+		child.once("exit", (code, signal) =>
+			trace("child-exit", { childPid: child.pid ?? null, code, signal }),
+		);
 		child.unref();
 	} finally {
 		if (logFile) {
@@ -742,14 +754,29 @@ async function ensureDetachedHubServerLocked(
 	throw new Error("Timed out waiting for detached hub startup.");
 }
 
+const pendingHubStarts = new Map<string, Promise<DetachedHubResolution>>();
 export async function ensureDetachedHubServer(
 	workspaceRoot: string,
 	endpointOverrides: DetachedHubOptions = {},
 ): Promise<DetachedHubResolution> {
 	const owner = resolveDefaultHubOwnerContext();
-	return await withHubStartupLock(owner.discoveryPath, async () =>
+	const key = JSON.stringify({
+		discoveryPath: owner.discoveryPath,
+		endpoint: resolveHubEndpointOptions(endpointOverrides),
+		allowPortFallback: endpointOverrides.allowPortFallback === true,
+		manageConnectors: endpointOverrides.manageConnectors ?? true,
+	});
+	const pending = pendingHubStarts.get(key);
+	if (pending) return await pending; // Join daemon readiness, never replay a task command.
+	const starting = withHubStartupLock(owner.discoveryPath, () =>
 		ensureDetachedHubServerLocked(owner, workspaceRoot, endpointOverrides),
 	);
+	pendingHubStarts.set(key, starting);
+	try {
+		return await starting;
+	} finally {
+		if (pendingHubStarts.get(key) === starting) pendingHubStarts.delete(key);
+	}
 }
 
 const HUB_UPGRADE_DEFAULT_WAIT_MS = 5_000;
@@ -923,7 +950,10 @@ export async function upgradeManagedHub(
 	// unanswerable hub is handed back un-drained. With force, the user has
 	// already consented to interrupting the sessions the prompt showed them,
 	// and the accepted drain keeps new work out from here through the retire.
-	if (!confirmedIdle && (options.force !== true || options.restartCompatible === true)) {
+	if (
+		!confirmedIdle &&
+		(options.force !== true || options.restartCompatible === true)
+	) {
 		await undrain();
 		return {
 			outcome: "still_busy",

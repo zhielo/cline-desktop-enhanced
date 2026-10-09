@@ -27,7 +27,7 @@ const {
 	writeHubDiscovery,
 	CLINE_RUN_AS_HUB_DAEMON_ENV,
 } = vi.hoisted(() => ({
-	spawn: vi.fn(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 })),
+	spawn: vi.fn(() => ({ unref: vi.fn(), once: vi.fn(), pid: 12345 })),
 	appendFileSync: vi.fn(),
 	closeSync: vi.fn(),
 	mkdirSync: vi.fn(),
@@ -161,7 +161,11 @@ describe("ensureDetachedHubServer", () => {
 		__test__.resetRetireAttempts();
 		delete process.env[CLINE_RUN_AS_HUB_DAEMON_ENV];
 		spawn.mockReset();
-		spawn.mockImplementation(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
+		spawn.mockImplementation(() => ({
+			unref: vi.fn(),
+			once: vi.fn(),
+			pid: 12345,
+		}));
 		appendFileSync.mockReset();
 		closeSync.mockReset();
 		mkdirSync.mockReset();
@@ -201,6 +205,30 @@ describe("ensureDetachedHubServer", () => {
 		}
 	});
 
+	it("coalesces concurrent owner startup across clients without replay or duplicate lock acquisition", async () => {
+		let release!: () => void;
+		withHubStartupLock.mockImplementationOnce(async () => {
+			await new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return { url: "ws://127.0.0.1:25463/hub", authToken: "owned-token" };
+		});
+		const { ensureDetachedHubServer } = await import(".");
+		const before = withHubStartupLock.mock.calls.length;
+		const requests = Array.from({ length: 20 }, () =>
+			ensureDetachedHubServer("/workspace"),
+		);
+		await vi.waitFor(() =>
+			expect(withHubStartupLock.mock.calls.length).toBe(before + 1),
+		);
+		release();
+		const responses = await Promise.all(requests);
+		expect(responses.every((value) => value.authToken === "owned-token")).toBe(
+			true,
+		);
+		expect(withHubStartupLock.mock.calls.length).toBe(before + 1);
+		expect(spawn).not.toHaveBeenCalled();
+	});
 	it.each([
 		true,
 		false,
@@ -266,7 +294,11 @@ describe("ensureDetachedHubServer", () => {
 				.mockImplementationOnce(() => {
 					throw textFileBusy;
 				})
-				.mockImplementationOnce(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
+				.mockImplementationOnce(() => ({
+					unref: vi.fn(),
+					once: vi.fn(),
+					pid: 12345,
+				}));
 			readHubDiscovery.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
 				url: "ws://127.0.0.1:25463/hub",
 				authToken: "new-token",
@@ -298,10 +330,17 @@ describe("ensureDetachedHubServer", () => {
 		const { spawnDetachedHubServer } = await import(".");
 		spawnDetachedHubServer("/workspace");
 		const child = spawn.mock.results.at(-1)!.value!;
-		const callbacks = child.once.mock.calls as unknown as Array<[string, (...args: unknown[]) => void]>;
-		callbacks.find(([event]) => event === "error")![1]({code:"ENOENT",message:"Bearer private-secret"});
-		callbacks.find(([event]) => event === "exit")![1](1,null);
-		const text = appendFileSync.mock.calls.map((call) => String(call[1])).join("");
+		const callbacks = child.once.mock.calls as unknown as Array<
+			[string, (...args: unknown[]) => void]
+		>;
+		callbacks.find(([event]) => event === "error")![1]({
+			code: "ENOENT",
+			message: "Bearer private-secret",
+		});
+		callbacks.find(([event]) => event === "exit")![1](1, null);
+		const text = appendFileSync.mock.calls
+			.map((call) => String(call[1]))
+			.join("");
 		expect(text).toContain("spawn-requested");
 		expect(text).toContain("spawn-returned");
 		expect(text).toContain('"childPid":12345');
@@ -351,7 +390,9 @@ describe("ensureDetachedHubServer", () => {
 			.mockResolvedValueOnce(undefined)
 			.mockResolvedValueOnce(undefined);
 
-		const { prewarmDetachedHubServer } = await import(".");
+		const { prewarmDetachedHubServer, ensureDetachedHubServer } = await import(
+			"."
+		);
 		prewarmDetachedHubServer("/workspace");
 		await vi.waitFor(() => {
 			expect(clearHubDiscovery).toHaveBeenCalledWith("/tmp/hub-discovery.json");
@@ -365,6 +406,20 @@ describe("ensureDetachedHubServer", () => {
 			probeHubServer.mock.invocationCallOrder[0],
 		);
 		expect(spawn).toHaveBeenCalledOnce();
+		// The void prewarm must settle before resetting shared recovery mocks.
+		readHubDiscovery.mockResolvedValue({
+			url: "ws://127.0.0.1:25463/hub",
+			authToken: "new-token",
+		});
+		probeHubServer.mockResolvedValue({
+			url: "ws://127.0.0.1:25463/hub",
+			protocolVersion: "v1",
+			buildId: "current-build",
+		});
+		verifyHubConnection.mockResolvedValue(true);
+		await expect(ensureDetachedHubServer("/workspace")).resolves.toMatchObject({
+			authToken: "new-token",
+		});
 	});
 
 	it("retries a transient ETXTBSY spawn failure while prewarming the detached daemon", async () => {
@@ -380,7 +435,11 @@ describe("ensureDetachedHubServer", () => {
 				.mockImplementationOnce(() => {
 					throw textFileBusy;
 				})
-				.mockImplementationOnce(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
+				.mockImplementationOnce(() => ({
+					unref: vi.fn(),
+					once: vi.fn(),
+					pid: 12345,
+				}));
 			readHubDiscovery.mockResolvedValueOnce(undefined);
 			probeHubServer.mockResolvedValueOnce(undefined);
 
@@ -860,7 +919,11 @@ describe("upgradeManagedHub", () => {
 		__test__.resetRetireAttempts();
 		delete process.env[CLINE_RUN_AS_HUB_DAEMON_ENV];
 		spawn.mockReset();
-		spawn.mockImplementation(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
+		spawn.mockImplementation(() => ({
+			unref: vi.fn(),
+			once: vi.fn(),
+			pid: 12345,
+		}));
 		rememberRecoverableLocalHubUrl.mockReset();
 		rememberRecoverableLocalHubUrl.mockImplementation((url: string) => url);
 		verifyHubConnection.mockReset();
@@ -1034,17 +1097,71 @@ describe("upgradeManagedHub", () => {
 		expect(spawn).not.toHaveBeenCalled();
 	});
 
-
- it("explicit setup restarts only a confirmed idle compatible build under an accepted drain", async()=>{
-  readHubDiscovery.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",authToken:"old-token",pid:12345}).mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",authToken:"new-token"});
-  probeHubServer.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",protocolVersion:"v1",buildId:"current-build",pid:12345}).mockResolvedValueOnce(undefined).mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",protocolVersion:"v1",buildId:"current-build"});
-  verifyHubConnection.mockResolvedValue(true);
-  const {upgradeManagedHub}=await import(".");expect((await upgradeManagedHub({restartCompatible:true,waitForIdleMs:0})).outcome).toBe("replaced");expect(requestHubDrain).toHaveBeenCalled();expect(requestHubShutdown).toHaveBeenCalled();
- });
- it("explicit compatible setup never forces busy work even with a mistaken force flag",async()=>{
-  readHubDiscovery.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",authToken:"old-token"});probeHubServer.mockResolvedValueOnce({url:"ws://127.0.0.1:25463/hub",protocolVersion:"v1",buildId:"current-build"});queryHubSessionActivity.mockResolvedValue({activeSessionCount:1,participantClientCount:1});
-  const {upgradeManagedHub}=await import(".");expect((await upgradeManagedHub({restartCompatible:true,force:true,waitForIdleMs:0})).outcome).toBe("still_busy");expect(requestHubShutdown).not.toHaveBeenCalled();expect(requestHubDrain).toHaveBeenLastCalledWith("ws://127.0.0.1:25463/hub","old-token","hub upgrade aborted",{off:true});
- });
+	it("explicit setup restarts only a confirmed idle compatible build under an accepted drain", async () => {
+		readHubDiscovery
+			.mockResolvedValueOnce({
+				url: "ws://127.0.0.1:25463/hub",
+				authToken: "old-token",
+				pid: 12345,
+			})
+			.mockResolvedValueOnce({
+				url: "ws://127.0.0.1:25463/hub",
+				authToken: "new-token",
+			});
+		probeHubServer
+			.mockResolvedValueOnce({
+				url: "ws://127.0.0.1:25463/hub",
+				protocolVersion: "v1",
+				buildId: "current-build",
+				pid: 12345,
+			})
+			.mockResolvedValueOnce(undefined)
+			.mockResolvedValueOnce({
+				url: "ws://127.0.0.1:25463/hub",
+				protocolVersion: "v1",
+				buildId: "current-build",
+			});
+		verifyHubConnection.mockResolvedValue(true);
+		const { upgradeManagedHub } = await import(".");
+		expect(
+			(await upgradeManagedHub({ restartCompatible: true, waitForIdleMs: 0 }))
+				.outcome,
+		).toBe("replaced");
+		expect(requestHubDrain).toHaveBeenCalled();
+		expect(requestHubShutdown).toHaveBeenCalled();
+	});
+	it("explicit compatible setup never forces busy work even with a mistaken force flag", async () => {
+		readHubDiscovery.mockResolvedValueOnce({
+			url: "ws://127.0.0.1:25463/hub",
+			authToken: "old-token",
+		});
+		probeHubServer.mockResolvedValueOnce({
+			url: "ws://127.0.0.1:25463/hub",
+			protocolVersion: "v1",
+			buildId: "current-build",
+		});
+		queryHubSessionActivity.mockResolvedValue({
+			activeSessionCount: 1,
+			participantClientCount: 1,
+		});
+		const { upgradeManagedHub } = await import(".");
+		expect(
+			(
+				await upgradeManagedHub({
+					restartCompatible: true,
+					force: true,
+					waitForIdleMs: 0,
+				})
+			).outcome,
+		).toBe("still_busy");
+		expect(requestHubShutdown).not.toHaveBeenCalled();
+		expect(requestHubDrain).toHaveBeenLastCalledWith(
+			"ws://127.0.0.1:25463/hub",
+			"old-token",
+			"hub upgrade aborted",
+			{ off: true },
+		);
+	});
 	it("starts a hub when none is running", async () => {
 		readHubDiscovery.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
 			url: "ws://127.0.0.1:25463/hub",
