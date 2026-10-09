@@ -376,6 +376,36 @@ export const ReverseEngineeringInputSchema = z.object({
 		.describe(
 			"Literal text or regular expression to find across decoded Smali",
 		),
+	smali_queries: z
+		.array(z.string().min(1).max(4096))
+		.min(1)
+		.max(32)
+		.optional()
+		.describe(
+			"Search up to 32 literal indicators in one file pass; cannot combine with smali_query or regex mode",
+		),
+	smali_exclude_dirs: z
+		.array(
+			z
+				.string()
+				.min(1)
+				.max(128)
+				.regex(/^[^\\/]+$/),
+		)
+		.max(32)
+		.optional()
+		.describe(
+			"Additional directory basenames to exclude; .git and node_modules are always excluded",
+		),
+	smali_max_bytes: z
+		.number()
+		.int()
+		.min(1)
+		.max(2 * 1024 * 1024 * 1024)
+		.optional()
+		.describe(
+			"Total scanned-byte budget; defaults to 512 MiB. Reaching it returns explicit partial coverage",
+		),
 	smali_regex: z.boolean().optional(),
 	context_lines: z.number().int().min(0).max(20).optional(),
 	max_results: z.number().int().min(1).max(5_000).optional(),
@@ -844,6 +874,15 @@ export const ProcessSessionInputSchema = z.discriminatedUnion("action", [
 			.optional()
 			.describe(
 				"Environment overrides. Sensitive variables remain host-filtered and output-redacted",
+			),
+		timeout_ms: z
+			.number()
+			.int()
+			.min(1000)
+			.max(3_600_000)
+			.optional()
+			.describe(
+				"Optional finite process lifetime for batch work, 1 second to 1 hour; deadline survives identity-verified recovery. Omit for intentionally persistent servers/terminals",
 			),
 		interactive: z
 			.boolean()

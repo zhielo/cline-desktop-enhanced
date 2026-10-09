@@ -47,6 +47,7 @@ export interface ProcessSessionStartOptions {
 	cwd: string;
 	env?: Record<string, string>;
 	toolCallId?: string;
+	timeoutMs?: number;
 	interactive?: boolean;
 	columns?: number;
 	rows?: number;
@@ -63,6 +64,8 @@ export interface ProcessSessionSnapshot {
 	args: string[];
 	cwd: string;
 	startedAtMs: number;
+	deadlineAtMs?: number;
+	timedOut?: boolean;
 	completedAtMs?: number;
 	exitCode?: number | null;
 	outputDrainTimedOut?: boolean;
@@ -100,6 +103,7 @@ export function getProcessSessionRuntimeCapabilities() {
 
 export interface ProcessSessionRecoveryRecord {
 	version: 1;
+	deadlineAtMs?: number;
 	processId: string;
 	ownerSessionId: string;
 	toolCallId?: string;
@@ -231,6 +235,7 @@ interface ManagedProcessSession {
 	stdoutRedactor: StreamingSecretRedactor;
 	stderrRedactor: StreamingSecretRedactor;
 	secretValues: string[];
+	deadlineTimer?: NodeJS.Timeout;
 	cleanupTimer?: NodeJS.Timeout;
 	recoveryTimer?: NodeJS.Timeout;
 	recovered: boolean;
@@ -494,6 +499,13 @@ export class ProcessSessionManager {
 		if (!options.executable) {
 			throw new Error("executable is required");
 		}
+		if (
+			options.timeoutMs !== undefined &&
+			(!Number.isInteger(options.timeoutMs) ||
+				options.timeoutMs < 1000 ||
+				options.timeoutMs > 3_600_000)
+		)
+			throw new Error("timeoutMs must be an integer from 1000 to 3600000");
 		this.assertCapacity(options.ownerSessionId);
 
 		const processId = randomUUID();
@@ -578,6 +590,9 @@ export class ProcessSessionManager {
 				args,
 				cwd: options.cwd,
 				startedAtMs,
+				...(options.timeoutMs !== undefined
+					? { deadlineAtMs: startedAtMs + options.timeoutMs }
+					: {}),
 				interactive: Boolean(terminalProcess),
 				terminalBackend: terminalProcess
 					? process.platform === "win32"
@@ -610,6 +625,7 @@ export class ProcessSessionManager {
 		};
 		this.sessions.set(processId, managed);
 		this.bindLifecycle(managed);
+		this.scheduleDeadline(managed);
 		if (terminalFallbackReason) {
 			this.appendOutput(
 				managed,
@@ -687,6 +703,9 @@ export class ProcessSessionManager {
 				processStartToken: session.snapshot.processStartToken as string,
 				cwd: session.snapshot.cwd,
 				startedAtMs: session.snapshot.startedAtMs,
+				...(session.snapshot.deadlineAtMs !== undefined
+					? { deadlineAtMs: session.snapshot.deadlineAtMs }
+					: {}),
 				interactive: session.snapshot.interactive,
 				...(session.snapshot.terminalColumns
 					? { terminalColumns: session.snapshot.terminalColumns }
@@ -823,6 +842,7 @@ export class ProcessSessionManager {
 		if (!session.settled) {
 			throw new Error(`Process session ${processId} is still active`);
 		}
+		if (session.deadlineTimer) clearTimeout(session.deadlineTimer);
 		if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
 		if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
 		const deleted = this.sessions.delete(processId);
@@ -841,11 +861,38 @@ export class ProcessSessionManager {
 			}),
 		);
 		for (const session of this.sessions.values()) {
+			if (session.deadlineTimer) clearTimeout(session.deadlineTimer);
 			if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
 			if (session.recoveryTimer) clearTimeout(session.recoveryTimer);
 		}
 		this.sessions.clear();
 		this.persistRecoveryRecords();
+	}
+
+	private scheduleDeadline(session: ManagedProcessSession): void {
+		const deadline = session.snapshot.deadlineAtMs;
+		if (deadline === undefined || session.settled) return;
+		session.deadlineTimer = setTimeout(
+			() => {
+				if (session.settled) return;
+				session.snapshot.timedOut = true;
+				session.snapshot.error =
+					"Process lifetime deadline exceeded; termination requested, not yet confirmed";
+				session.cancelRequested = true;
+				this.appendOutput(
+					session,
+					"stderr",
+					"[Process lifetime deadline exceeded; no automatic restart.]\n",
+				);
+				void this.killProcessTree(session, "SIGKILL").catch(() => {
+					if (!session.settled)
+						session.snapshot.error =
+							"Process deadline exceeded; termination unconfirmed (identity or signal unavailable)";
+				});
+			},
+			Math.max(0, deadline - Date.now()),
+		);
+		session.deadlineTimer.unref();
 	}
 
 	private bindLifecycle(session: ManagedProcessSession): void {
@@ -968,8 +1015,12 @@ export class ProcessSessionManager {
 		exitSignal: NodeJS.Signals | null,
 	): void {
 		if (session.settled) return;
+		if (session.deadlineTimer) clearTimeout(session.deadlineTimer);
 		session.settled = true;
 		session.snapshot.state = state;
+		if (session.snapshot.timedOut && !session.snapshot.outputDrainTimedOut)
+			session.snapshot.error =
+				"Process lifetime deadline exceeded; exit observed";
 		session.snapshot.completedAtMs = Date.now();
 		session.snapshot.exitCode = exitCode;
 		session.snapshot.exitSignal = exitSignal;
@@ -1141,7 +1192,11 @@ export class ProcessSessionManager {
 			typeof record.processStartToken === "string" &&
 			record.processStartToken.length > 0 &&
 			typeof record.cwd === "string" &&
-			Number.isFinite(record.startedAtMs)
+			Number.isFinite(record.startedAtMs) &&
+			(record.deadlineAtMs === undefined ||
+				(Number.isSafeInteger(record.deadlineAtMs) &&
+					record.deadlineAtMs >= record.startedAtMs &&
+					record.deadlineAtMs - record.startedAtMs <= 3_600_000))
 		);
 	}
 
@@ -1201,6 +1256,9 @@ export class ProcessSessionManager {
 					args: [],
 					cwd: record.cwd,
 					startedAtMs: record.startedAtMs,
+					...(record.deadlineAtMs !== undefined
+						? { deadlineAtMs: record.deadlineAtMs }
+						: {}),
 					interactive: record.interactive,
 					terminalBackend: record.interactive
 						? process.platform === "win32"
@@ -1227,6 +1285,7 @@ export class ProcessSessionManager {
 			};
 			this.sessions.set(record.processId, managed);
 			this.scheduleRecoveredIdentityCheck(managed);
+			this.scheduleDeadline(managed);
 			recovered.push(this.copySnapshot(managed));
 		}
 		this.persistRecoveryRecords();

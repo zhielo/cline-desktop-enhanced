@@ -31,6 +31,42 @@ async function waitForCompletion(
 }
 
 describe("ProcessSessionManager", () => {
+	it("enforces an opt-in batch lifetime and retains a timed-out exit receipt", async () => {
+		const manager = new ProcessSessionManager();
+		try {
+			const started = await manager.start({
+				ownerSessionId: OWNER,
+				executable: process.execPath,
+				args: ["-e", "setInterval(()=>{},1000)"],
+				cwd: process.cwd(),
+				timeoutMs: 1000,
+			});
+			expect(started.deadlineAtMs).toBe(started.startedAtMs + 1000);
+			const done = await waitForCompletion(manager, started.processId);
+			expect(done.timedOut).toBe(true);
+			expect(done.state).toBe("cancelled");
+			expect(done.error).toContain("exit observed");
+		} finally {
+			await manager.dispose();
+		}
+	});
+	it("rejects invalid batch lifetimes before starting a process", async () => {
+		const manager = new ProcessSessionManager();
+		try {
+			await expect(
+				manager.start({
+					ownerSessionId: OWNER,
+					executable: process.execPath,
+					cwd: process.cwd(),
+					timeoutMs: 0,
+				}),
+			).rejects.toThrow("timeoutMs");
+			expect(manager.list(OWNER)).toHaveLength(0);
+		} finally {
+			await manager.dispose();
+		}
+	});
+
 	it("recovers only exact kernel identities and exposes conservative controls", async () => {
 		const root = mkdtempSync(join(tmpdir(), "cline-process-recovery-"));
 		const recoveryFilePath = join(root, "recovery.json");

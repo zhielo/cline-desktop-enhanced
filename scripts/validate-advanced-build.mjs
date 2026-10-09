@@ -159,6 +159,7 @@ async function main() {
       "sdk/packages/core/src/hub/daemon/index.test.ts",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/smali-search.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/supervised-process.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/supervised-process-cancellation.test.ts",
  "sdk/packages/core/src/extensions/tools/executors/analysis-project-lease.test.ts",

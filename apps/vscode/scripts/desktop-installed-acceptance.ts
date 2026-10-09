@@ -185,6 +185,7 @@ export async function main() {
     join(workspace, "OWNED_FIXTURE.txt"),
     "Deterministic installer acceptance fixture.\n",
   );
+  await writeFile(join(workspace, "OWNED_SCROLL_REPORT.md"), Array.from({length: 240}, (_, i) => `Owned Markdown scroll line ${i}`).join("\n"));
   let port = 0;
   const discoveryPath = join(root, "hub.json");
 	const environment = Object.fromEntries(
@@ -536,7 +537,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
               id: `installer-owned-message-${index}`,
               role: "user",
               content: `Installer owned history row ${index}. ${"Owned offline transcript fixture. ".repeat(8)}`,
-            })),
+            })).concat([{id: "installer-owned-artifact", role: "assistant", content: "Owned report: `./OWNED_SCROLL_REPORT.md`"}]),
 				},
 			},
       },
@@ -563,6 +564,25 @@ ConvertTo-Json -InputObject @($rows) -Compress
       transcriptScrollSamples.push(performance.now() - started);
     }
     stages.push("owned-120-row-transcript-scroll-acceptance-passed");
+    await page.locator('a[data-cline-file-reference="./OWNED_SCROLL_REPORT.md"]').last().click();
+    const preview = page.getByTestId("artifact-preview-scroll");
+    await preview.waitFor({state: "visible"});
+    if (!(await preview.evaluate(el => el.scrollHeight > el.clientHeight))) throw new Error("Owned Markdown preview is not independently scrollable");
+    const box = await preview.boundingBox();
+    if (!box || box.y < 0 || box.y + box.height > (page.viewportSize()?.height ?? await page.evaluate(() => innerHeight))) throw new Error("Markdown preview exceeds viewport");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 700);
+    await page.waitForFunction(() => (document.querySelector('[data-testid="artifact-preview-scroll"]')?.scrollTop ?? 0) > 0);
+    await preview.focus();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.press("End");
+    await page.waitForFunction(() => { const el = document.querySelector('[data-testid="artifact-preview-scroll"]'); return !!el && el.scrollTop + el.clientHeight >= el.scrollHeight - 2; });
+    await page.keyboard.press("Home");
+    await page.waitForFunction(() => (document.querySelector('[data-testid="artifact-preview-scroll"]')?.scrollTop ?? -1) === 0);
+    await page.keyboard.press("Escape");
+    await preview.waitFor({state: "hidden"});
+    stages.push("owned-markdown-preview-wheel-keyboard-scroll-passed");
+
     await settings(page, "General");
     const instructions = page.getByRole("textbox", {
       name: "Custom AI instructions",

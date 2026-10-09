@@ -382,3 +382,31 @@ describe("MemoizedMarkdown interactions", () => {
 		});
 	});
 });
+
+test("recognizes the explicit relative installed scroll fixture and opens its preview", async () => {
+	const invoke = vi.spyOn(desktopClient, "invoke").mockResolvedValue({
+		path: "C:\\owned\\OWNED_SCROLL_REPORT.md",
+		name: "OWNED_SCROLL_REPORT.md",
+		size: 35000,
+		modifiedAt: "2026-10-09T00:00:00Z",
+		kind: "text",
+		content: "Owned scroll fixture line 239",
+	});
+	await renderMarkdown({ content: "Owned report: `./OWNED_SCROLL_REPORT.md`" });
+	const link = await vi.waitFor(() => {
+		const a = container.querySelector<HTMLAnchorElement>(
+			'a[data-cline-file-reference="./OWNED_SCROLL_REPORT.md"]',
+		);
+		expect(a).not.toBeNull();
+		return a as HTMLAnchorElement;
+	});
+	await click(link);
+	expect(invoke).toHaveBeenCalledWith("read_artifact_preview", {
+		path: "./OWNED_SCROLL_REPORT.md",
+	});
+	expect(
+		document.querySelector('[data-testid="artifact-preview-scroll"]')
+			?.textContent,
+	).toContain("line 239");
+	expect(openWindow).not.toHaveBeenCalled();
+});

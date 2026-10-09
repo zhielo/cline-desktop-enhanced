@@ -23,6 +23,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { toast } from "@/hooks/use-toast";
 import { useArtifactWorkspace } from "@/lib/artifact-workspace";
 import { desktopClient } from "@/lib/desktop-client";
@@ -233,8 +234,8 @@ export function ArtifactContextMenu({
 				</ContextMenuContent>
 			</ContextMenu>
 			<Dialog onOpenChange={setPreviewOpen} open={previewOpen}>
-				<DialogContent className="max-h-[85vh] gap-3 overflow-hidden sm:max-w-3xl">
-					<DialogHeader>
+				<DialogContent className="flex max-h-[85vh] flex-col gap-3 overflow-hidden sm:max-w-3xl">
+					<DialogHeader className="shrink-0">
 						<DialogTitle className="pr-8 font-mono text-sm">
 							{preview?.name ?? path}
 						</DialogTitle>
@@ -285,7 +286,10 @@ export function ArtifactContextMenu({
 							)}
 						</div>
 					)}
-					<div className="min-h-48 overflow-auto rounded-lg border border-border/70 bg-muted/20">
+					<PreviewScrollRegion
+						aria-label="Artifact preview content"
+						data-testid="artifact-preview-scroll"
+					>
 						{previewLoading ? (
 							<div className="grid min-h-48 place-items-center">
 								<Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -313,7 +317,7 @@ export function ArtifactContextMenu({
 									"Preview is not available for this artifact type."}
 							</div>
 						)}
-					</div>
+					</PreviewScrollRegion>
 				</DialogContent>
 			</Dialog>
 		</>

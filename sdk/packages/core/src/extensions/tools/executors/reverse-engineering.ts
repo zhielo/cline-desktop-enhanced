@@ -1,20 +1,11 @@
-import {
-	idaDatabaseKey,
-	prepareIdaAttempt,
-	publishIdaDatabase,
-} from "./ida-analysis-workspace";
 import { createHash } from "node:crypto";
-import {
-	formatIdaProgress,
-	idaProgressPrelude,
-	runObservedIda,
-} from "./ida-job-diagnostics";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { inflateRaw } from "node:zlib";
+import { NativeProjectEditSchema } from "../native-project-edits-schema";
 import type { ReverseEngineeringExecutor } from "../types";
 import {
 	type AdvancedResult,
@@ -28,6 +19,30 @@ import {
 	runAnalysisNotebook,
 } from "./analysis-notebook";
 import { programEvidenceResult } from "./analysis-program-evidence";
+import { withProjectLease } from "./analysis-project-lease";
+import {
+	persistInvestigation,
+	queryInvestigation,
+	readInvestigationResult,
+} from "./android-investigation-index";
+import {
+	idaDatabaseKey,
+	prepareIdaAttempt,
+	publishIdaDatabase,
+} from "./ida-analysis-workspace";
+import {
+	formatIdaProgress,
+	idaProgressPrelude,
+	runObservedIda,
+} from "./ida-job-diagnostics";
+import {
+	guardManagedBatchArguments,
+	ManagedEnginePool,
+} from "./managed-engine-pool";
+import {
+	MANAGED_GHIDRA_SCRIPT,
+	managedIdaScript,
+} from "./managed-engine-scripts";
 import {
 	readNativeCandidateReceipt,
 	runNativeProjectCandidate,
@@ -36,19 +51,7 @@ import {
 	NATIVE_GHIDRA_EDIT_SCRIPT,
 	nativeIdaEditScript,
 } from "./native-project-edit-scripts";
-import { NativeProjectEditSchema } from "../native-project-edits-schema";
-import { guardManagedBatchArguments } from "./managed-engine-pool";
-import { ManagedEnginePool } from "./managed-engine-pool";
-import {
-	MANAGED_GHIDRA_SCRIPT,
-	managedIdaScript,
-} from "./managed-engine-scripts";
-import { withProjectLease } from "./analysis-project-lease";
-import {
-	persistInvestigation,
-	queryInvestigation,
-	readInvestigationResult,
-} from "./android-investigation-index";
+import { scanSmali } from "./smali-search";
 import {
 	commandAvailable,
 	launchDetachedGui,
@@ -1077,91 +1080,6 @@ async function readSmaliMethod(
 				? body
 				: `${body.slice(0, MAX_OUTPUT_CHARS)}\n... [method body truncated at ${MAX_OUTPUT_CHARS} characters]`,
 		truncated: body.length > MAX_OUTPUT_CHARS,
-	};
-}
-
-async function searchSmali(
-	target: string,
-	query: string,
-	regex: boolean,
-	contextLines: number,
-	maxResults: number,
-	signal?: AbortSignal,
-) {
-	const matcher = regex
-		? boundedUserRegex(query, "smali_query")
-		: {
-				test: (value: string) =>
-					value.toLowerCase().includes(query.toLowerCase()),
-			};
-	const stat = await fs.stat(target);
-	const stack = stat.isDirectory() ? [target] : [];
-	const files = stat.isFile() ? [target] : [];
-	let visited = 0;
-	while (stack.length > 0 && visited < 100_000) {
-		signal?.throwIfAborted();
-		const current = stack.pop();
-		if (!current) break;
-		for (const entry of await fs.readdir(current, { withFileTypes: true })) {
-			visited += 1;
-			const candidate = path.join(current, entry.name);
-			if (entry.isDirectory()) stack.push(candidate);
-			else if (entry.isFile() && entry.name.toLowerCase().endsWith(".smali"))
-				files.push(candidate);
-		}
-	}
-	const matches: Array<{
-		path: string;
-		line: number;
-		method: string | null;
-		text: string;
-		context: string;
-	}> = [];
-	for (const file of files) {
-		signal?.throwIfAborted();
-		const fileStat = await fs.stat(file);
-		if (fileStat.size > 20 * 1024 * 1024) continue;
-		const lines = (await fs.readFile(file, "utf8")).split(/\r?\n/);
-		let method: string | null = null;
-		for (let index = 0; index < lines.length; index += 1) {
-			const trimmed = lines[index]?.trim() ?? "";
-			if (trimmed.startsWith(".method ")) {
-				method = trimmed.slice(".method ".length);
-			} else if (trimmed === ".end method") {
-				method = null;
-			}
-			if (!matcher.test(lines[index] ?? "")) continue;
-			const from = Math.max(0, index - contextLines);
-			const to = Math.min(lines.length, index + contextLines + 1);
-			matches.push({
-				path: file,
-				line: index + 1,
-				method,
-				text: lines[index] ?? "",
-				context: lines
-					.slice(from, to)
-					.map((line, contextIndex) => `${from + contextIndex + 1}: ${line}`)
-					.join("\n"),
-			});
-			if (matches.length >= maxResults) {
-				return {
-					query,
-					regex,
-					scannedFiles: files.length,
-					matches,
-					truncated: true,
-					hint: "Use read_smali_method with the returned class path and method signature to retrieve the complete method body.",
-				};
-			}
-		}
-	}
-	return {
-		query,
-		regex,
-		scannedFiles: files.length,
-		matches,
-		truncated: false,
-		hint: "Use read_smali_method with a returned path and method signature to retrieve the complete method body.",
 	};
 }
 
@@ -2772,20 +2690,35 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		}
 		if (smaliReadOperation) {
 			if (input.operation === "search_smali") {
-				if (!input.smali_query) {
-					throw new Error("smali_query is required for search_smali");
+				if (
+					(!input.smali_query && !input.smali_queries?.length) ||
+					(input.smali_query && input.smali_queries) ||
+					(input.smali_queries && input.smali_regex)
+				) {
+					throw new Error(
+						"Choose smali_query, or literal smali_queries without regex mode",
+					);
 				}
 				return JSON.stringify(
 					{
 						operation: input.operation,
-						...(await searchSmali(
+						...(await scanSmali({
 							target,
-							input.smali_query,
-							input.smali_regex === true,
-							input.context_lines ?? 2,
-							input.max_results ?? 200,
-							context.signal,
-						)),
+							queries: input.smali_queries ?? [input.smali_query!],
+							regex: input.smali_regex
+								? boundedUserRegex(input.smali_query!, "smali_query")
+								: undefined,
+							contextLines: input.context_lines ?? 2,
+							maxResults: input.max_results ?? 200,
+							excludeDirs: input.smali_exclude_dirs,
+							maxBytes: input.smali_max_bytes,
+							timeoutMs: input.timeout_ms,
+							signal: context.signal,
+							owner: context.sessionId,
+							onProgress: (chunk) =>
+								context.emitUpdate?.({ stream: "stdout", chunk }),
+						})),
+						query: input.smali_query,
 						durationMs: Date.now() - started,
 					},
 					null,
