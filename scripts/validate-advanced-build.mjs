@@ -100,6 +100,7 @@ async function main() {
     job("Run desktop customization tests", ["x", "vitest", "run",
       "apps/examples/desktop-app/webview/components/views/settings/analysis-environment-view.test.tsx",
       "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.test.tsx",
+      "apps/examples/desktop-app/webview/components/views/settings/optimization-panel.test.tsx",
       "apps/examples/desktop-app/sidecar/bundled-analysis-runtime.test.ts",
       "apps/examples/desktop-app/sidecar/setup-center.test.ts",
       "apps/examples/desktop-app/sidecar/trusted-update.test.ts",
