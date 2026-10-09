@@ -16,8 +16,7 @@ declare const __CLINE_CORE_RUNTIME_BUILD_EPOCH_MS__: number | undefined;
 const HUB_DISCOVERY_ENV = "CLINE_HUB_DISCOVERY_PATH";
 const HUB_BUILD_ID_ENV = "CLINE_HUB_BUILD_ID";
 const HUB_BUILD_EPOCH_ENV = "CLINE_HUB_BUILD_EPOCH_MS";
-const HUB_STARTUP_LOCK_MAX_AGE_MS = 30_000;
-const HUB_STARTUP_LOCK_WAIT_MS = 15_000;
+const HUB_STARTUP_LOCK_WAIT_MS = 120_000;
 const HUB_STARTUP_LOCK_POLL_MS = 100;
 
 export interface HubServerDiscoveryRecord {
@@ -77,9 +76,11 @@ function isPidAlive(pid: number | undefined): boolean {
 		process.kill(pid, 0);
 		return true;
 	} catch (error) {
-		return error instanceof Error && "code" in error
-			? String((error as NodeJS.ErrnoException).code) === "EPERM"
-			: false;
+		return !(
+			error instanceof Error &&
+			"code" in error &&
+			String((error as NodeJS.ErrnoException).code) === "ESRCH"
+		); // Unknown/permission errors are not evidence of death.
 	}
 }
 
@@ -97,18 +98,25 @@ function getHubLockDir(lockBasis: string): string {
 
 async function readHubLockRecord(
 	lockDir: string,
-): Promise<{ pid: number; acquiredAt: string } | undefined> {
+): Promise<{ pid: number; acquiredAt: string; nonce?: string } | undefined> {
 	try {
 		const parsed = JSON.parse(
 			await readFile(join(lockDir, "owner.json"), "utf8"),
-		) as Partial<{ pid: number; acquiredAt: string }>;
+		) as Partial<{ pid: number; acquiredAt: string; nonce?: string }>;
 		if (
 			typeof parsed.pid !== "number" ||
-			typeof parsed.acquiredAt !== "string"
+			!Number.isInteger(parsed.pid) ||
+			(parsed.pid ?? 0) <= 0 ||
+			typeof parsed.acquiredAt !== "string" ||
+			!Number.isFinite(Date.parse(parsed.acquiredAt))
 		) {
 			return undefined;
 		}
-		return { pid: parsed.pid, acquiredAt: parsed.acquiredAt };
+		return {
+			pid: parsed.pid,
+			acquiredAt: parsed.acquiredAt,
+			nonce: parsed.nonce,
+		};
 	} catch {
 		return undefined;
 	}
@@ -460,7 +468,45 @@ export async function clearHubDiscoveryIfOwned(
 	});
 }
 
+const hubLockQueues = new Map<string, Promise<void>>();
+/** Serialize same-host callers before touching stale filesystem ownership. */
 async function withHubLock<T>(
+	lockBasis: string,
+	label: string,
+	callback: () => Promise<T>,
+): Promise<T> {
+	const previous = hubLockQueues.get(lockBasis) ?? Promise.resolve();
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const tail = previous.catch(() => {}).then(() => held);
+	hubLockQueues.set(lockBasis, tail);
+	await previous.catch(() => {});
+	try {
+		return await withHubLockExclusive(lockBasis, label, callback);
+	} finally {
+		release();
+		if (hubLockQueues.get(lockBasis) === tail) hubLockQueues.delete(lockBasis);
+	}
+}
+/** Re-read under an exclusive reclaimer so a stale observer cannot delete a new live owner. */
+async function reclaimDeadHubLock(lockDir: string) {
+	const guard = `${lockDir}.reclaim`;
+	try {
+		await mkdir(guard);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST") return;
+		throw error;
+	}
+	try {
+		const current = await readHubLockRecord(lockDir);
+		if (current && !isPidAlive(current.pid)) await removeHubLock(lockDir);
+	} finally {
+		await rm(guard, { recursive: true, force: true });
+	}
+}
+async function withHubLockExclusive<T>(
 	lockBasis: string,
 	label: string,
 	callback: () => Promise<T>,
@@ -484,17 +530,21 @@ async function withHubLock<T>(
 			if (!record) {
 				// The winner creates the directory before it can publish owner.json.
 				// Do not steal that initialization window. A genuinely abandoned
-				// empty lock is reclaimed only after the bounded wait.
-				if (Date.now() >= deadline) {
-					await removeHubLock(lockDir);
-					continue;
-				}
+				// empty/malformed lock remains unconfirmed and is never stolen on elapsed time alone.
+				if (Date.now() >= deadline)
+					throw new Error(
+						`Unconfirmed hub ${label} initialization ownership at ${lockDir}; no lock was stolen`,
+					);
 				await sleep(HUB_STARTUP_LOCK_POLL_MS);
 				continue;
 			}
-			const lockAge = Date.now() - Date.parse(record.acquiredAt);
-			if (!isPidAlive(record.pid) || lockAge > HUB_STARTUP_LOCK_MAX_AGE_MS) {
-				await removeHubLock(lockDir);
+			if (!isPidAlive(record.pid)) {
+				if (Date.now() >= deadline)
+					throw new Error(
+						`Timed out reclaiming abandoned hub ${label} lock ${lockDir}`,
+					);
+				await reclaimDeadHubLock(lockDir);
+				await sleep(HUB_STARTUP_LOCK_POLL_MS);
 				continue;
 			}
 			if (Date.now() >= deadline) {
@@ -504,19 +554,22 @@ async function withHubLock<T>(
 			continue;
 		}
 
+		const ownership = {
+			pid: process.pid,
+			acquiredAt: new Date().toISOString(),
+			nonce: randomBytes(16).toString("hex"),
+		};
 		try {
 			await writeFile(
 				join(lockDir, "owner.json"),
-				`${JSON.stringify(
-					{ pid: process.pid, acquiredAt: new Date().toISOString() },
-					null,
-					2,
-				)}\n`,
+				`${JSON.stringify(ownership, null, 2)}\n`,
 				"utf8",
 			);
 			return await callback();
 		} finally {
-			await removeHubLock(lockDir);
+			const current = await readHubLockRecord(lockDir);
+			if (current?.nonce === ownership.nonce && current.pid === ownership.pid)
+				await removeHubLock(lockDir);
 		}
 	}
 }

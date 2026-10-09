@@ -1,3 +1,7 @@
+export {
+	prepareProcessEnvironment,
+	redactSensitiveText,
+} from "./extensions/tools/executors/process-environment-policy";
 /**
  * @cline/core
  *

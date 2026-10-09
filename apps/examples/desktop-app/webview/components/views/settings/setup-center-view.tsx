@@ -14,10 +14,23 @@ type Preferences = {
 	workerPublicKey: string;
 	acceptedPlatformToolsLicense: boolean;
 };
+type SetupJob = {
+	id: string;
+	command: string;
+	status: "running" | "completed" | "failed" | "interrupted";
+	phase: string;
+	startedAt: string;
+	error?: string;
+};
 type Status = {
-  desktopBuild?: {version:string; sourceCommit:string; capabilitySchema:string};
-  selectedRuntime?: {runtimeId?:string; source?:string; integrity?:string};
-  licensedArchitectures?: string[];
+	setupJob?: SetupJob | null;
+	desktopBuild?: {
+		version: string;
+		sourceCommit: string;
+		capabilitySchema: string;
+	};
+	selectedRuntime?: { runtimeId?: string; source?: string; integrity?: string };
+	licensedArchitectures?: string[];
 	preferences: Preferences;
 	fullStatus: string;
 	checkedAt?: string;
@@ -37,9 +50,13 @@ type Status = {
 };
 export function SetupCenter() {
 	const [notice, setNotice] = useState("");
-  const [idaArchitecture, setIdaArchitecture] = useState<"x86_64" | "arm64">("x86_64");
-  const [operationStarted, setOperationStarted] = useState<number | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+	const [setupJob, setSetupJob] = useState<SetupJob | null>(null);
+	const [awaitingReceipt, setAwaitingReceipt] = useState(false);
+	const [idaArchitecture, setIdaArchitecture] = useState<"x86_64" | "arm64">(
+		"x86_64",
+	);
+	const [operationStarted, setOperationStarted] = useState<number | null>(null);
+	const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
 	const [status, setStatus] = useState<Status | null>(null),
 		[form, setForm] = useState<Preferences | null>(null),
@@ -47,45 +64,160 @@ export function SetupCenter() {
 		[message, setMessage] = useState(""),
 		[error, setError] = useState(""),
 		[devices, setDevices] = useState<{ serial: string; state: string }[]>([]);
-  useEffect(() => {
-    if (!busy || operationStarted === null) return;
-    const timer = setInterval(() => setElapsedSeconds(Math.floor((Date.now()-operationStarted)/1000)), 1000);
-    return () => clearInterval(timer);
-  }, [busy, operationStarted]);
+	useEffect(() => {
+		if (!busy || operationStarted === null) return;
+		const timer = setInterval(
+			() =>
+				setElapsedSeconds(Math.floor((Date.now() - operationStarted) / 1000)),
+			1000,
+		);
+		return () => clearInterval(timer);
+	}, [busy, operationStarted]);
 	const refresh = useCallback(async () => {
 		const reply = await desktopClient.invoke<Status>("setup_center_status", {
 			environmentId: "local",
 		});
 		setStatus(reply);
 		setForm(reply.preferences);
+		if (reply.setupJob) {
+			setSetupJob(reply.setupJob);
+			if (
+				reply.setupJob.status === "running" ||
+				reply.setupJob.status === "interrupted"
+			) {
+				setBusy(true);
+				setOperationStarted(Date.parse(reply.setupJob.startedAt));
+			}
+		}
 	}, []);
 	useEffect(() => {
+		const saved = localStorage.getItem("cline.setup.ida-processor");
+		if (saved === "arm64" || saved === "x86_64") setIdaArchitecture(saved);
+		if (localStorage.getItem("cline.setup.pending-admission")) {
+			setAwaitingReceipt(true);
+			setBusy(true);
+		}
 		void refresh().catch((e) =>
 			setError(e instanceof Error ? e.message : "Setup status unavailable"),
 		);
 	}, [refresh]);
+	useEffect(() => {
+		if (!awaitingReceipt && setupJob?.status !== "running") return;
+		let disposed = false;
+		let timer: ReturnType<typeof setTimeout>;
+		const poll = async () => {
+			try {
+				const reply = await desktopClient.invoke<{ job: SetupJob | null }>(
+					"setup_center_job_status",
+					{
+						environmentId: "local",
+						...(setupJob?.id ? { jobId: setupJob.id } : {}),
+					},
+					{ timeoutMs: 15000 },
+				);
+				if (disposed) return;
+				if (reply.job) {
+					setSetupJob(reply.job);
+					setAwaitingReceipt(false);
+					localStorage.removeItem("cline.setup.pending-admission");
+					setOperationStarted(Date.parse(reply.job.startedAt));
+					if (reply.job.status !== "running") {
+						setBusy(reply.job.status === "interrupted");
+						setError(
+							reply.job.status === "failed"
+								? (reply.job.error ?? "Setup job failed")
+								: reply.job.status === "interrupted"
+									? reply.job.phase
+									: "",
+						);
+						await refresh();
+						return;
+					}
+					setError("");
+				}
+			} catch {
+				if (!disposed)
+					setError(
+						"Setup status connection unavailable; this does not prove installation failed. Read-only reconnection continues; no operation is replayed.",
+					);
+			}
+			if (!disposed) timer = setTimeout(poll, 1500);
+		};
+		timer = setTimeout(poll, 500);
+		return () => {
+			disposed = true;
+			clearTimeout(timer);
+		};
+	}, [awaitingReceipt, setupJob?.id, setupJob?.status, refresh]);
 	async function action(
 		command: string,
 		confirmation: string,
 		extra: Record<string, unknown> = {},
 	) {
 		if (confirmation && !window.confirm(confirmation)) return;
+		const tracked = [
+			"setup_center_install_full",
+			"setup_center_test_full",
+			"setup_center_rollback_core",
+			"setup_center_test_ida",
+			"setup_center_test_worker",
+			"setup_center_test_device",
+		].includes(command);
+		if (tracked) {
+			localStorage.setItem("cline.setup.pending-admission", command);
+			setSetupJob(null);
+		}
+		let accepted = false;
 		setBusy(true);
-    setOperationStarted(Date.now()); setElapsedSeconds(0);
+		setOperationStarted(Date.now());
+		setElapsedSeconds(0);
 		setError("");
 		setMessage("");
 		try {
 			const reply = await desktopClient.invoke<Record<string, unknown>>(
 				command,
-				{ environmentId: "local", confirmed: true, ...extra },
-				{ timeoutMs: 300000 },
+				{
+					environmentId: "local",
+					confirmed: true,
+					...extra,
+					...(tracked ? { background: true } : {}),
+				},
+				{ timeoutMs: tracked ? 15000 : 300000 },
 			);
-			setMessage(JSON.stringify(reply, null, 2));
-			await refresh();
+			if (tracked && reply.setupJob) {
+				const job = reply.setupJob as SetupJob;
+				setSetupJob(job);
+				accepted = true;
+				localStorage.removeItem("cline.setup.pending-admission");
+				setAwaitingReceipt(false);
+				setOperationStarted(Date.parse(job.startedAt));
+			} else {
+				setMessage(JSON.stringify(reply, null, 2));
+				await refresh();
+				if (tracked) localStorage.removeItem("cline.setup.pending-admission");
+			}
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Setup operation failed");
+			if (
+				tracked &&
+				/timed? ?out|timeout|WebSocket|transport|connection|closed/i.test(
+					e instanceof Error ? e.message : String(e),
+				)
+			) {
+				// RPC timeout is not worker failure; never replay an uncertain mutation.
+				setAwaitingReceipt(true);
+				accepted = true;
+				setError(
+					"Setup request response unavailable. Checking the persisted job; installation may still be running. No operation is replayed.",
+				);
+			} else {
+				if (tracked) {
+					localStorage.removeItem("cline.setup.pending-admission");
+					setAwaitingReceipt(false);
+				}
+				setError(e instanceof Error ? e.message : "Setup operation failed");
+			}
 		} finally {
-			setBusy(false);
+			if (!accepted) setBusy(false);
 		}
 	}
 	async function detect() {
@@ -141,8 +273,16 @@ export function SetupCenter() {
 				subtitle="Install supported private engine packs, then verify actual capabilities. Licenses and device authorization stay explicit."
 			/>
 			<div className="space-y-6 p-6">
-        <p>Installed desktop: {status?.desktopBuild?.version ?? "Unknown"}; build <code>{status?.desktopBuild?.sourceCommit ?? "Unknown"}</code>.</p>
-        <p>Selected runtime: <code>{status?.selectedRuntime?.runtimeId ?? "Unknown"}</code>. Core and full are separate selections; installing an updated .exe alone does not select the full pack.</p>
+				<p>
+					Installed desktop: {status?.desktopBuild?.version ?? "Unknown"}; build{" "}
+					<code>{status?.desktopBuild?.sourceCommit ?? "Unknown"}</code>.
+				</p>
+				<p>
+					Selected runtime:{" "}
+					<code>{status?.selectedRuntime?.runtimeId ?? "Unknown"}</code>. Core
+					and full are separate selections; installing an updated .exe alone
+					does not select the full pack.
+				</p>
 				<p>
 					Full pack:{" "}
 					<output aria-label="Full capability pack status">
@@ -215,6 +355,30 @@ export function SetupCenter() {
 						Roll back to core
 					</Button>
 				</div>
+				<output
+					className="block"
+					aria-live="polite"
+					aria-label="Setup operation status"
+				>
+					{setupJob && (
+						<span className="block">
+							Job {setupJob.id}: {setupJob.status} — {setupJob.phase}.
+						</span>
+					)}
+					{busy && (
+						<span className="block">
+							Setup operation running — {elapsedSeconds}s elapsed. Elapsed time
+							is not engine progress. Request timeouts do not stop background
+							setup; existing project jobs are not restarted.
+						</span>
+					)}
+					{awaitingReceipt && (
+						<span className="block">
+							Awaiting persisted admission receipt; read-only reconnection only.
+						</span>
+					)}
+				</output>
+				{error && <p role="alert">{error}</p>}
 				<Button
 					disabled={busy}
 					onClick={() =>
@@ -260,12 +424,29 @@ export function SetupCenter() {
 					<div className="space-y-4">
 						<h2 className="text-lg font-semibold">Licensed IDA and Hex-Rays</h2>
 						<p>{status?.licensedStatus}</p>
-            <label className="block">IDA acceptance processor
-              <select aria-label="IDA acceptance processor" value={idaArchitecture} disabled={busy} onChange={e => setIdaArchitecture(e.target.value as "x86_64" | "arm64")}>
-                <option value="x86_64">x86-64</option><option value="arm64">ARM64 / AArch64</option>
-              </select>
-            </label>
-            <p>Owned-fixture acceptance for selected processor: {status?.licensedArchitectures?.includes(idaArchitecture) ? "Passed for this executable" : "Not verified; test its licensed decompiler"}.</p>
+						<label className="block">
+							IDA acceptance processor
+							<select
+								aria-label="IDA acceptance processor"
+								value={idaArchitecture}
+								disabled={busy}
+								onChange={(e) => {
+									const value = e.target.value as "x86_64" | "arm64";
+									setIdaArchitecture(value);
+									localStorage.setItem("cline.setup.ida-processor", value);
+								}}
+							>
+								<option value="x86_64">x86-64</option>
+								<option value="arm64">ARM64 / AArch64</option>
+							</select>
+						</label>
+						<p>
+							Owned-fixture acceptance for selected processor:{" "}
+							{status?.licensedArchitectures?.includes(idaArchitecture)
+								? "Passed for this executable"
+								: "Not tested or stale — optional; direct IDA analysis remains available"}
+							.
+						</p>
 						<label className="block">
 							IDA installation folder
 							<input
@@ -290,18 +471,37 @@ export function SetupCenter() {
 								disabled={busy}
 								onClick={() =>
 									void action(
-										"setup_center_test_ida",
-										`I own an authorized IDA/Hex-Rays license. Save this IDA folder and run one fixed owned ${idaArchitecture} selected-function decompilation? This does not install a license or execute the ELF.`,
-										{ authorizedLicense: true, architecture: idaArchitecture, idaHome: form.idaHome },
+										"setup_center_save_ida",
+										"Save this IDA installation for direct analysis? No integration test or license change is performed. Existing Hub processes require the separate idle-only setup application.",
+										{ idaHome: form.idaHome },
 									)
 								}
 							>
-								Test licensed IDA
+								Save IDA installation
+							</Button>
+							<Button
+								disabled={busy}
+								onClick={() =>
+									void action(
+										"setup_center_test_ida",
+										`I own an authorized IDA/Hex-Rays license. Save this IDA folder and run one fixed owned ${idaArchitecture} selected-function decompilation? This does not install a license or execute the ELF.`,
+										{
+											authorizedLicense: true,
+											architecture: idaArchitecture,
+											idaHome: form.idaHome,
+										},
+									)
+								}
+							>
+								Test IDA integration (optional)
 							</Button>
 						</div>
 						<p>
-							This test saves only the selected IDA folder. An owned processor test does
-              not validate every license or arbitrary target compatibility.
+							The test is optional and is not a gate for direct IDA analysis.
+							Detection or folder selection alone does not prove IDAPython or
+							the selected Hex-Rays processor works. Actual execution reports
+							plugin, license and runtime errors. An owned processor test does
+							not validate every license or arbitrary target compatibility.
 						</p>
 						<h2 className="text-lg font-semibold">
 							Android device or emulator
@@ -415,13 +615,6 @@ export function SetupCenter() {
 						</div>
 					</div>
 				)}
-				{busy && (
-					<p aria-live="polite">
-						Setup operation running{operationStarted === null ? "" : ` — ${elapsedSeconds}s elapsed; response deadline 300s`}; elapsed time is not engine progress. Existing project jobs
-						are not restarted.
-					</p>
-				)}
-				{error && <p role="alert">{error}</p>}
 				{message && (
 					<output
 						aria-live="polite"

@@ -35,7 +35,8 @@ import { BunRuntime, SIDECAR_HOST, SIDECAR_MODE, SIDECAR_PORT } from "./types";
 
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 let activeObservability:
-  ReturnType<typeof createDesktopObservability> | undefined;
+	| ReturnType<typeof createDesktopObservability>
+	| undefined;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 	let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -244,8 +245,18 @@ async function runEntrypoint(): Promise<void> {
 	setClineClientIdentity(DESKTOP_CLIENT_CONTEXT);
 
 	disableCurrentDirectoryExecutableSearch();
-  await loadSetupPreferences();
+	await loadSetupPreferences();
+	const verificationStarted = Date.now();
+	const traceHubBoot = process.argv.includes("--cline-hub-daemon");
+	if (traceHubBoot)
+		process.stderr.write(
+			`[hub-startup-entry] ${JSON.stringify({ phase: "analysis-runtime-verification-started", pid: process.pid })}\n`,
+		);
 	await initializeBundledAnalysisRuntime();
+	if (traceHubBoot)
+		process.stderr.write(
+			`[hub-startup-entry] ${JSON.stringify({ phase: "analysis-runtime-verification-finished", pid: process.pid, elapsedMs: Date.now() - verificationStarted })}\n`,
+		);
 	loadResourceProfile();
 	// Claim the Hub daemon sentinel here, not in the shared remote helper: its
 	// daemon import resolves to the dist build of @cline/core while this bundle

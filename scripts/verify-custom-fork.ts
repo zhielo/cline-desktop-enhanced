@@ -5,16 +5,96 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "apps/cli/src/tests/headless/headless.test.ts",
+		markers: [
+			'CLINE_VCR: "playback"',
+			'CLINE_VCR_FILTER: ""',
+			"headless-unauthorized.json",
+			"expectExitCode(terminal, EXIT_CODE_FAIL)",
+		],
+	},
+	{
+		path: "apps/cli/src/tests/fixtures/headless-unauthorized.json",
+		markers: [
+			'"status": 401',
+			'"message": "Unauthorized"',
+			'"contentType": "application/json"',
+		],
+	},
+	{
+		path: "sdk/packages/core/src/hub/discovery/index.ts",
+		markers: [
+			"hubLockQueues",
+			"reclaimDeadHubLock",
+			"current?.nonce === ownership.nonce",
+			"Unknown/permission errors are not evidence of death",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/ida-analysis-workspace.ts",
+		markers: [
+			"idaDatabaseKey",
+			"prepareIdaAttempt",
+			"publishIdaDatabase",
+			"COPYFILE_EXCL",
+			"cline-ida-database.json",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",
+		markers: [
+			"ensureIdaAnalysisScript",
+			"workspaceDirectory: workspaceDir",
+			"scriptPhasesExpected:",
+			"database-saving",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/setup-jobs.ts",
+		markers: [
+			"startSetupJob",
+			"setup-admission.json",
+			"interrupted",
+			"redactSensitiveText",
+			"files.slice(32)",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",
+		markers: [
+			"setup_center_job_status",
+			"Save IDA installation",
+			"Test IDA integration (optional)",
+			"cline.setup.ida-processor",
+			"Setup operation status",
+		],
+	},
+	{
+		path: "docs/IDA_AND_SETUP_JOB_RELIABILITY.md",
+		markers: ["Operator-confirmed", "does not consult", "eleven"],
+	},
+	{
 		path: "sdk/packages/core/src/hub/client/index.ts",
-		markers: ["onStartupError", "Managed Hub startup failed:", "no task command was replayed"],
+		markers: [
+			"onStartupError",
+			"Managed Hub startup failed:",
+			"no task command was replayed",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/hub/daemon/index.ts",
-		markers: ['trace("spawn-requested"', 'trace("spawn-returned"', 'trace("child-exit"'],
+		markers: [
+			'trace("spawn-requested"',
+			'trace("spawn-returned"',
+			'trace("child-exit"',
+		],
 	},
 	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
-		markers: ["owned-hub-daemon-tail.log", "hubStartupDiagnostic = tail.slice(-1600)"],
+		markers: [
+			"owned-hub-daemon-tail.log",
+			"hubStartupDiagnostic = tail.slice(-1600)",
+		],
 	},
 	{
 		path: "scripts/report-installed-acceptance.mjs",
@@ -26,7 +106,10 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "sdk/packages/core/src/hub/client/index.test.ts",
-		markers: ["cline-hub-auth.replacement-token", "ensureDetachedHubServerMock).toHaveBeenCalledTimes(2)"],
+		markers: [
+			"cline-hub-auth.replacement-token",
+			"ensureDetachedHubServerMock).toHaveBeenCalledTimes(2)",
+		],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/tools/executors/command-evidence.ts",
@@ -80,10 +163,10 @@ const requiredMarkers: Array<{
 			"-----BEGIN PUBLIC KEY-----",
 			"deviceSerialSha256",
 			"testLicensedIda",
-      "owned-arm64-elf.json",
-      "currentIdaAcceptance",
-      "CLINE_IDA_SELECTED_HOME",
-      "executableSha256",
+			"owned-arm64-elf.json",
+			"currentIdaAcceptance",
+			"CLINE_IDA_SELECTED_HOME",
+			"executableSha256",
 			"platformToolsNotices",
 		],
 	},
@@ -358,9 +441,9 @@ const requiredMarkers: Array<{
 		path: "sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.ts",
 		markers: [
 			"runObservedIda",
-      "phase-deadline-exceeded",
-      "phaseTimeoutMs",
-      "formatIdaProgress",
+			"phase-deadline-exceeded",
+			"phaseTimeoutMs",
+			"formatIdaProgress",
 			"termination-unconfirmed",
 			"No script phase observed",
 			"auto-analysis-waiting",
@@ -375,8 +458,8 @@ const requiredMarkers: Array<{
 		markers: [
 			"Check analysis readiness",
 			"Refresh IDA jobs",
-      "Open Setup Center",
-      "Live read-only IDA job refresh",
+			"Open Setup Center",
+			"Live read-only IDA job refresh",
 			"Configuration / acceptance required",
 		],
 	},
@@ -1426,7 +1509,11 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "sdk/packages/core/src/hub/daemon/index.ts",
-		markers: ["HUB_STARTUP_TIMEOUT_MS = 30_000"],
+		markers: [
+			"HUB_STARTUP_TIMEOUT_MS = 90_000",
+			"pendingHubStarts",
+			"Join daemon readiness",
+		],
 	},
 	{
 		path: "vitest.config.mts",

@@ -12,7 +12,11 @@ import {
 	describeObservedIdaJob,
 	formatIdaProgress,
 } from "./ida-job-diagnostics";
-afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); run.mockReset(); });
+afterEach(() => {
+	vi.unstubAllEnvs();
+	vi.useRealTimers();
+	run.mockReset();
+});
 it("records exact PID, bounded diagnostics and uncertain termination without guessing progress", async () => {
 	const root = await mkdtemp(join(tmpdir(), "ida-job-"));
 	vi.stubEnv("CLINE_DATA_DIR", root);
@@ -99,38 +103,125 @@ it("phase recording cannot replace IDA's original error or suppress qexit", () =
 });
 
 it("streams exact phases and enforces unchanged-phase budget without classifying it as user cancellation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "ida-deadline-"));
-  vi.stubEnv("CLINE_DATA_DIR", root);
-  vi.useFakeTimers();
-  const updates: ReturnType<typeof describeObservedIdaJob>[] = [];
-  run.mockImplementation(async (_command, _args, _timeout, signal, spawn, env) => {
-    spawn(789);
-    writeFileSync(env.CLINE_IDA_PROGRESS_PATH, JSON.stringify({phase:"auto-analysis-waiting",timestamp:new Date().toISOString()})+"\n");
-    await new Promise(resolve => signal.addEventListener("abort", resolve, {once:true}));
-    return {exitCode:null,stdout:"",stderr:"",cancelled:true,timedOut:false,outputDrainTimedOut:true};
-  });
-  try {
-    const pending = runObservedIda("/owned/idat", [], root, 9000, undefined, {phaseTimeoutMs:1000,onProgress:job=>updates.push(job)});
-    await vi.advanceTimersByTimeAsync(1000); // Observe the actual phase; start its budget.
-    await vi.advanceTimersByTimeAsync(1000);
-    const result = await pending;
-    expect(result).toMatchObject({timedOut:true,cancelled:false,outputDrainTimedOut:true});
-    expect(result.idaJob).toMatchObject({status:"termination-unconfirmed",timeoutPhase:"auto-analysis-waiting",phaseTimeoutMs:1000});
-    expect(updates.some(job => job.lastPhase === "auto-analysis-waiting")).toBe(true);
-    expect(formatIdaProgress(updates.at(-1)!)).toContain("deadline remaining");
-    const frozen = describeObservedIdaJob(result.idaJob, Date.now()+100000);
-    expect(frozen.elapsedMs).toBe(2000);
-    expect(vi.getTimerCount()).toBe(0);
-  } finally { await rm(root,{recursive:true,force:true}); }
+	const root = await mkdtemp(join(tmpdir(), "ida-deadline-"));
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	vi.useFakeTimers();
+	const updates: ReturnType<typeof describeObservedIdaJob>[] = [];
+	run.mockImplementation(
+		async (_command, _args, _timeout, signal, spawn, env) => {
+			spawn(789);
+			writeFileSync(
+				env.CLINE_IDA_PROGRESS_PATH,
+				JSON.stringify({
+					phase: "auto-analysis-waiting",
+					timestamp: new Date().toISOString(),
+				}) + "\n",
+			);
+			await new Promise((resolve) =>
+				signal.addEventListener("abort", resolve, { once: true }),
+			);
+			return {
+				exitCode: null,
+				stdout: "",
+				stderr: "",
+				cancelled: true,
+				timedOut: false,
+				outputDrainTimedOut: true,
+			};
+		},
+	);
+	try {
+		const pending = runObservedIda("/owned/idat", [], root, 9000, undefined, {
+			phaseTimeoutMs: 1000,
+			onProgress: (job) => updates.push(job),
+		});
+		await vi.advanceTimersByTimeAsync(1000); // Observe the actual phase; start its budget.
+		await vi.advanceTimersByTimeAsync(1000);
+		const result = await pending;
+		expect(result).toMatchObject({
+			timedOut: true,
+			cancelled: false,
+			outputDrainTimedOut: true,
+		});
+		expect(result.idaJob).toMatchObject({
+			status: "termination-unconfirmed",
+			timeoutPhase: "auto-analysis-waiting",
+			phaseTimeoutMs: 1000,
+		});
+		expect(
+			updates.some((job) => job.lastPhase === "auto-analysis-waiting"),
+		).toBe(true);
+		expect(formatIdaProgress(updates.at(-1)!)).toContain("deadline remaining");
+		const frozen = describeObservedIdaJob(result.idaJob, Date.now() + 100000);
+		expect(frozen.elapsedMs).toBe(2000);
+		expect(vi.getTimerCount()).toBe(0);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
 });
 it("does not let a failed progress observer change process execution", async () => {
-  const root = await mkdtemp(join(tmpdir(), "ida-observer-"));
-  vi.stubEnv("CLINE_DATA_DIR",root);
-  run.mockImplementation(async (_command,_args,_timeout,_signal,spawn) => {
-    spawn(321);return {exitCode:0,stdout:"",stderr:"",timedOut:false,cancelled:false};
-  });
-  try {
-    const result = await runObservedIda("/owned/idat",[],root,1000,undefined,{onProgress:()=>{throw new Error("observer only");}});
-    expect(result.exitCode).toBe(0);expect(result.idaJob.status).toBe("process-exited");
-  } finally { await rm(root,{recursive:true,force:true}); }
+	const root = await mkdtemp(join(tmpdir(), "ida-observer-"));
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	run.mockImplementation(async (_command, _args, _timeout, _signal, spawn) => {
+		spawn(321);
+		return {
+			exitCode: 0,
+			stdout: "",
+			stderr: "",
+			timedOut: false,
+			cancelled: false,
+		};
+	});
+	try {
+		const result = await runObservedIda(
+			"/owned/idat",
+			[],
+			root,
+			1000,
+			undefined,
+			{
+				onProgress: () => {
+					throw new Error("observer only");
+				},
+			},
+		);
+		expect(result.exitCode).toBe(0);
+		expect(result.idaJob.status).toBe("process-exited");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+it("does not enforce a script-phase deadline for an invocation without supported phases, retaining its overall deadline", async () => {
+	const root = await mkdtemp(join(tmpdir(), "ida-no-phases-"));
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	vi.useFakeTimers();
+	run.mockImplementation(async (_cmd, _args, timeout, signal, spawn) => {
+		spawn(123);
+		expect(timeout).toBe(10000);
+		await new Promise((resolve) => setTimeout(resolve, 4000));
+		expect(signal.aborted).toBe(false);
+		return {
+			exitCode: 0,
+			stdout: "",
+			stderr: "",
+			timedOut: false,
+			cancelled: false,
+		};
+	});
+	try {
+		const pending = runObservedIda("owned-idat", [], root, 10000, undefined, {
+			phaseTimeoutMs: 1000,
+			scriptPhasesExpected: false,
+		});
+		await vi.advanceTimersByTimeAsync(4000);
+		const result = await pending;
+		expect(result.timedOut).toBe(false);
+		expect(result.idaJob.phaseDeadlineAt).toBeUndefined();
+		expect(describeObservedIdaJob(result.idaJob).lastPhase).toContain(
+			"not supported",
+		);
+	} finally {
+		vi.useRealTimers();
+		await rm(root, { recursive: true, force: true });
+	}
 });
