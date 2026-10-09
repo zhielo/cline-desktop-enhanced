@@ -1368,7 +1368,10 @@ export async function ensureCompatibleLocalHubUrl(
 		const ensured = await ensureDetachedHubServer(
 			options.workspaceRoot ?? process.cwd(),
 		);
-		return ensured.url;
+		// This path resolved our managed discovery, not an explicit endpoint.
+		// Refresh credentials before a retry: a replacement can reuse the same
+		// URL with a new token, and daemon port overrides skip its registry update.
+		return rememberRecoverableLocalHubUrl(ensured.url, ensured.authToken);
 	} catch {
 		return undefined;
 	}

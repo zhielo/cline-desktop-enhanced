@@ -5,6 +5,14 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "sdk/packages/core/src/hub/client/index.ts",
+		markers: ["rememberRecoverableLocalHubUrl(ensured.url, ensured.authToken)"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/client/index.test.ts",
+		markers: ["cline-hub-auth.replacement-token", "ensureDetachedHubServerMock).toHaveBeenCalledTimes(2)"],
+	},
+	{
 		path: "sdk/packages/core/src/extensions/tools/executors/command-evidence.ts",
 		markers: [
 			"CommandExecutionReceipt",

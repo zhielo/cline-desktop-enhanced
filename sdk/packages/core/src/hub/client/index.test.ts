@@ -22,7 +22,7 @@ class MockWebSocket {
 	readonly sentFrames: unknown[] = [];
 	private readonly listeners = new Map<string, SocketListener[]>();
 
-	constructor(public readonly url: string) {
+	constructor(public readonly url: string, public readonly protocols?: string | string[]) {
 		MockWebSocket.instances.push(this);
 		queueMicrotask(() => {
 			if (MockWebSocket.failNextOpen) {
@@ -1283,7 +1283,7 @@ describe("resolveCompatibleLocalHubUrl", () => {
 			};
 		});
 
-		const { ensureCompatibleLocalHubUrl } = await import(".");
+		const { ensureCompatibleLocalHubUrl, NodeHubClient: ManagedClient } = await import(".");
 
 		await expect(
 			ensureCompatibleLocalHubUrl({
@@ -1292,6 +1292,24 @@ describe("resolveCompatibleLocalHubUrl", () => {
 			}),
 		).resolves.toBe("ws://127.0.0.1:25464/hub");
 		expect(ensureDetachedHubServerMock).toHaveBeenCalledWith("/tmp/project");
+		const client = new ManagedClient({url:"ws://127.0.0.1:25464/hub"});
+		try {
+			await client.connect();
+			expect(MockWebSocket.instances.at(-1)?.protocols).toEqual(["cline-hub-auth.token"]);
+			const socket = MockWebSocket.instances.at(-1)!;
+			socket.readyState = MockWebSocket.CLOSED;
+			socket.emit("close", {code:1006, reason:"owned fixture crash"});
+			ensureDetachedHubServerMock.mockResolvedValueOnce({url:client.getUrl(),authToken:"replacement-token"});
+			MockWebSocket.failNextOpen = true;
+			// Discovery is absent: daemon ensure does not itself remember the token.
+			// This models an owned Hub with a pinned port replacing its lost process.
+			await client.connect();
+			expect(ensureDetachedHubServerMock).toHaveBeenCalledTimes(2);
+			expect(MockWebSocket.instances.at(-1)?.protocols).toEqual(["cline-hub-auth.replacement-token"]);
+			expect(client.isConnected()).toBe(true);
+		} finally {
+			await client.dispose();
+		}
 	});
 
 	it("replaces a stale-build hub without dropping its retirement credentials", async () => {

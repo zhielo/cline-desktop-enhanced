@@ -724,3 +724,7 @@ Explicit Setup Center IDA selection is carried into the owning backend environme
 Managed IDA requests also stream owned PID/readiness/request mailbox observations with a bounded waiting heartbeat. These are explicitly not script-phase or liveness proof; capacity, nonce binding, idle/lifetime limits and no-replay/no-automatic-restart behavior are unchanged. Failed native execution receipts render as unsuccessful tool rows rather than visually successful decompilation.
 
 Licensed acceptance also requires the executor's actual target SHA-256 to match the owned fixture and checks processor/fixture identity when reading each processor's receipt. Copying an x86-64 receipt into the ARM64 slot cannot establish ARM64 readiness.
+
+## Managed Hub replacement credential binding
+
+Managed discovery resolution refreshes the returned daemon URL and authentication token before reconnecting, including replacements reusing a pinned port. Explicit endpoint callers remain non-recoverable; no accepted task prompt is replayed. Regression coverage checks first-spawn authentication and same-URL token rotation without assuming a concurrent observer refreshes discovery. Both installed crash-recovery journeys remain mandatory.
