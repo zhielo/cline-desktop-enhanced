@@ -23,6 +23,14 @@ export function formatValidationHeartbeat(active, now = Date.now()) {
   ).join("; ") || "no active checks"}`;
 }
 
+export function formatValidationNotice(message) {
+  // Only fixed gate names/timings are passed here, never child output or env.
+  // Escape workflow-command data and bound server-side annotation storage.
+  const data = String(message).slice(0, 1000).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+    .replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  return `::notice title=Custom validation progress::${data}`;
+}
+
 export function recordValidationProgress(file, event) {
   // Open/write/close each record: evidence survives a child crash without
   // depending on the final summary or a buffered persistent stream.
@@ -178,9 +186,12 @@ async function main() {
   const active = new Map();
   const progressFile = path.join(output, "progress.jsonl");
   recordValidationProgress(progressFile, { event: "validation-start", parallel });
+  let heartbeatCount = 0;
   const heartbeat = setInterval(() => {
     const message = formatValidationHeartbeat(active);
     console.log(message);
+    if (process.env.GITHUB_ACTIONS === "true" && ++heartbeatCount % 10 === 0)
+      console.log(formatValidationNotice(message));
     recordValidationProgress(progressFile, { event: "heartbeat", message });
   }, 30_000);
   let cancelled = false;
@@ -198,6 +209,7 @@ async function main() {
     const logName = step.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".log";
     const stream = createWriteStream(path.join(output, logName));
     console.log(`[START] ${step.name}`);
+    if (process.env.GITHUB_ACTIONS === "true") console.log(formatValidationNotice(`[START] ${step.name}`));
     recordValidationProgress(progressFile, { event: "check-start", name: step.name, log: logName });
     return await new Promise(resolve => {
       let settled = false, timedOut = false, timer;

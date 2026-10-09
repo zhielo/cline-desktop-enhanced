@@ -737,6 +737,7 @@ const requiredMarkers: Array<{
 			"supervised-process.test.ts",
 			"writer-worktree.test.ts",
 			"formatValidationHeartbeat",
+			"formatValidationNotice",
 			"recordValidationProgress",
 			"progress.jsonl",
 			"clearInterval(heartbeat)",
