@@ -14,6 +14,12 @@ export type WorkerLaunch = {
 	args: string[];
 	nonce: string;
 };
+export type ManagedEngineProgress = {
+	phase: string;
+	pid: number | null;
+	elapsedMs: number;
+	remainingMs: number | null;
+};
 type Worker = {
 	id: string;
 	launch: WorkerLaunch;
@@ -157,6 +163,7 @@ export class ManagedEnginePool {
 		factory: () => Promise<WorkerLaunch>,
 		signal: AbortSignal | undefined,
 		timeoutMs: number,
+    onWaiting?: (worker: Worker, remainingMs: number) => void,
 	) {
 		if (this.creating.has(key))
 			throw new Error(
@@ -269,7 +276,7 @@ export class ManagedEnginePool {
 				() => void this.stop(current).catch(() => {}),
 				this.options.lifetimeMs ?? 900000,
 			);
-			await this.waitFor(current, "ready.json", timeoutMs, signal, 4096);
+			await this.waitFor(current, "ready.json", timeoutMs, signal, 4096, remaining => onWaiting?.(current, remaining));
 			releaseStartup?.();
 			releaseStartup = undefined;
 			return current;
@@ -292,9 +299,15 @@ export class ManagedEnginePool {
 		timeoutMs: number,
 		signal: AbortSignal | undefined,
 		limit: number,
+		onWaiting?: (remainingMs: number) => void,
 	) {
 		const until = Date.now() + timeoutMs;
+		let lastProgressAt = 0;
 		for (;;) {
+			if (Date.now() - lastProgressAt >= 30_000) {
+				lastProgressAt = Date.now();
+				try { onWaiting?.(Math.max(0, until - Date.now())); } catch { /* Observer only. */ }
+			}
 			signal?.throwIfAborted();
 			if (worker.exited)
 				throw new Error(
@@ -322,7 +335,13 @@ export class ManagedEnginePool {
 		selector: FunctionSelector,
 		signal?: AbortSignal,
 		timeoutMs = 120000,
+		onProgress?: (event: ManagedEngineProgress) => void,
 	) {
+		const started = Date.now();
+		const notify = (phase: string, worker?: Worker, remainingMs: number | null = null) => {
+			try { onProgress?.({phase, pid:worker?.child.pid ?? null, elapsedMs:Date.now()-started, remainingMs}); }
+			catch { /* A failed UI observer must not alter worker ownership. */ }
+		};
 		if (
 			Boolean(selector.symbol) === Boolean(selector.address) ||
 			(selector.symbol !== undefined &&
@@ -333,15 +352,17 @@ export class ManagedEnginePool {
 			throw new Error("Exactly one exact function selector required");
 		signal?.throwIfAborted();
 		let worker = this.workers.get(key);
+		notify(worker ? "checking existing worker" : "creating private worker; awaiting readiness", worker);
 		const reused = !!worker;
 		if (worker?.busy || worker?.stopping)
 			throw new Error("Managed engine is busy; request not queued or replayed");
 		if (worker) {
 			worker.busy = true;
 			clearTimeout(worker.idle);
-		} else worker = await this.create(key, project, factory, signal, timeoutMs);
+		} else worker = await this.create(key, project, factory, signal, timeoutMs, (current, remaining) => notify("awaiting worker ready mailbox; import/auto-analysis not yet proven complete", current, remaining));
 		const current = worker,
 			id = randomUUID();
+		notify("worker readiness verified; waiting for execution admission", current);
 		let releaseExecution: (() => void) | undefined;
 		try {
 			releaseExecution = await analysisResourceGovernor.acquire(
@@ -366,12 +387,14 @@ export class ManagedEnginePool {
 				mode: 0o600,
 			});
 			await rename(stage, join(current.launch.root, "request.json"));
+			notify("selected-function request submitted once; awaiting response", current, Math.min(timeoutMs,60000));
 			const response = await this.waitFor(
 				current,
 				`${id}.json`,
 				Math.min(timeoutMs, 60000),
 				signal,
 				1024 * 1024,
+				remaining => notify("awaiting selected-function mailbox response", current, remaining),
 			);
 			if (
 				response.id !== id ||
@@ -392,6 +415,7 @@ export class ManagedEnginePool {
 			)
 				throw new Error("Managed engine result budget/shape mismatch");
 			await rm(join(current.launch.root, `${id}.json`));
+			notify("selected-function response verified", current, 0);
 			return {
 				workerId: current.id,
 				pid: current.child.pid,

@@ -54,5 +54,32 @@ it("requires explicit readiness action and renders missing engines without claim
 	} finally {
 		await act(async () => root.unmount());
 		element.remove();
+    calls.mockReset();
 	}
+});
+
+it("opens Setup Center without running readiness or installation commands", async () => {
+  Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});calls.mockReset();
+  const open=vi.fn();const element=document.createElement("div");document.body.append(element);const root=createRoot(element);
+  try {
+    await act(async()=>root.render(<AnalysisEnvironmentView onOpenSetup={open}/>));
+    const button=[...element.querySelectorAll("button")].find(b=>b.textContent==="Open Setup Center")!;
+    await act(async()=>button.click());expect(open).toHaveBeenCalledOnce();expect(calls).not.toHaveBeenCalled();
+    expect(element.textContent).toContain("processor-specific Hex-Rays license");
+  } finally {await act(async()=>root.unmount());element.remove();calls.mockReset();}
+});
+it("live diagnostics refresh serially and stop on unmount without restarting a job", async () => {
+  Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});calls.mockReset();vi.useFakeTimers();
+  calls.mockResolvedValue({jobs:[{id:"owned",pid:42,status:"running",lastPhase:"auto-analysis-waiting",receiptPath:"owned.jsonl",elapsedMs:10000,remainingMs:120000}]});
+  const element=document.createElement("div");document.body.append(element);const root=createRoot(element);
+  try {
+    await act(async()=>root.render(<AnalysisEnvironmentView/>));
+    await act(async()=>element.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(calls.mock.calls[0][0]).toBe("get_ida_job_diagnostics");
+    expect(element.textContent).toContain("Elapsed 10s");
+    await act(async()=>vi.advanceTimersByTimeAsync(2000));expect(calls).toHaveBeenCalledTimes(2);
+    await act(async()=>root.unmount());
+    await vi.advanceTimersByTimeAsync(4000);expect(calls).toHaveBeenCalledTimes(2);
+  } finally {await act(async()=>root.unmount());element.remove();calls.mockReset();vi.useRealTimers();}
 });

@@ -285,3 +285,12 @@ it("never treats an already exited root PID as safe to terminate", () => {
 		managedRootIsRunning({ pid: undefined, exitCode: null, signalCode: null }),
 	).toBe(false);
 });
+
+it("streams bounded owned mailbox states without changing single-request execution", async () => {
+  const f=await fixture();const progress: {phase:string;pid:number|null}[]=[];
+  const result=await f.pool.query("progress",join(f.root,"progress"),()=>f.factory(),{address:"0x10"},undefined,5000,event=>progress.push(event));
+  expect(progress.some(event=>event.phase.includes("ready mailbox"))).toBe(true);
+  expect(progress.some(event=>event.phase.includes("request submitted once") && event.pid===result.pid)).toBe(true);
+  expect(progress.at(-1)?.phase).toBe("selected-function response verified");
+  expect(f.launches()).toBe(1);
+});

@@ -70,3 +70,13 @@ describe("bounded targeted decompiler contracts", () => {
 		).toBe(false);
 	});
 });
+
+it("checks the loaded processor decompiler before expensive auto-analysis and marks selected decompilation", () => {
+  const script = targetedIdaScript("/owned/result.c",{address:"0x1000"});
+  expect(script.indexOf("init_hexrays_plugin()")).toBeLessThan(script.indexOf("ida_auto.auto_wait()"));
+  expect(script).toContain('cline_phase("decompilation-started")');
+  expect(script).toContain("loaded processor");
+  for (const value of [0,-1,999,3600001])
+    expect(ReverseEngineeringInputSchema.safeParse({operation:"decompile",ida_phase_timeout_ms:value}).success).toBe(false);
+  expect(ReverseEngineeringInputSchema.parse({operation:"decompile",ida_phase_timeout_ms:60000}).ida_phase_timeout_ms).toBe(60000);
+});

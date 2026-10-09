@@ -585,6 +585,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       runtime: { source: string };
       readiness: { status: string };
       interpreter: { executable: string };
+      setupCenter: {desktopBuild:{sourceCommit:string; capabilitySchema:string}};
     }>(page, "get_analysis_environment", { environmentId: "local" });
     await writeFile(
       join(evidence, "analysis-readiness.json"),
@@ -607,9 +608,15 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .getByText("Fixture execution: completed.", { exact: false })
       .waitFor({ timeout: 90_000 });
     stages.push("installed-interpreter-owned-fixtures-passed");
+    if (ready.setupCenter.desktopBuild.sourceCommit !== process.env.GITHUB_SHA ||
+        ready.setupCenter.desktopBuild.capabilitySchema !== "setup-center/processor-acceptance-v2")
+      throw new Error("Installed setup UI build identity mismatch");
     await page.screenshot({ path: join(evidence, "readiness.png") });
 
-    await settings(page, "Setup Center");
+    await page.getByRole("button", {name:"Open Setup Center",exact:true}).click();
+    await page.getByLabel("IDA acceptance processor",{exact:true}).selectOption("arm64");
+    // UI selection is not a commercial-license test; never launch licensed IDA in hosted CI.
+    stages.push("installed-setup-navigation-and-arm64-selection-passed");
     page.once("dialog", async (dialog) => {
       if (dialog.message().includes("reviewed and accept"))
         await dialog.accept();
@@ -767,7 +774,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/hub-recovery-ready-core-full-core-120-row-v5",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v6",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },

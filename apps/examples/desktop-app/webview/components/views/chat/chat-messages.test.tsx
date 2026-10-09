@@ -253,6 +253,28 @@ describe("ChatMessages tool disclosures", () => {
 		).toBe(false);
 	});
 
+  it("shows explicit IDA phase and deadline while the non-command tool is still running", async () => {
+    const tool: ChatMessage = {id:"ida-running",sessionId:"session-1",role:"tool",createdAt:1,
+      content:JSON.stringify({toolName:"reverse_engineer",input:{engine:"ida",operation:"decompile"},result:null}),
+      meta:{toolName:"reverse_engineer",hookEventName:"tool_call_start",toolOutput:"[IDA progress] running; PID 42; phase: auto-analysis-waiting; elapsed 30s; deadline remaining 270s\n"}};
+    await renderMessages([tool],{status:"running"});
+    const progress=container.querySelector('[data-testid="ida-live-tool-progress"]');
+    expect(progress?.textContent).toContain("auto-analysis-waiting");
+    expect(progress?.textContent).toContain("deadline remaining 270s");
+    await renderMessages([tool],{status:"completed"});
+    expect(container.querySelector('[data-testid="ida-live-tool-progress"]')?.textContent).toContain("Last recorded:");
+  });
+
+  it("shows a failed native deadline receipt as unsuccessful rather than a success row", async () => {
+    await renderMessages([{id:"ida-failed",sessionId:"session-1",role:"tool",createdAt:1,
+      content:JSON.stringify({toolName:"reverse_engineer",input:{engine:"ida",operation:"decompile"},result:JSON.stringify({engine:"ida",succeeded:false,timedOut:true})}),
+      meta:{toolName:"reverse_engineer"}}]);
+    const trigger=container.querySelector(".cline-chat-tool-trigger") as HTMLElement | null;
+    await act(async()=>trigger?.click());
+    expect(container.textContent).toContain("Native execution deadline exceeded");
+    expect(container.querySelector(".text-destructive\\/80")).not.toBeNull();
+  });
+
 	it.each([
 		"cancelled",
 		"failed",

@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createReverseEngineeringExecutor } from "./reverse-engineering";
+import { createReverseEngineeringExecutor, shouldRefreshEngineEnvironment } from "./reverse-engineering";
 import * as supervisedProcess from "./supervised-process";
 import * as windowsEnvironment from "./windows-tool-environment";
 
@@ -18,6 +18,7 @@ const originalJadxHome = process.env.JADX_HOME;
 
 afterEach(async () => {
 	vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 	process.env.PATH = originalPath;
 	if (originalCacheDirectory === undefined)
 		delete process.env.CLINE_RE_CACHE_DIR;
@@ -950,4 +951,17 @@ it.each([
  {engine:"ghidra",operation:"inspect",project_edit:{mode:"preview"}},
 ])("rejects unsafe native edit envelopes before discovery: %j",async request=>{
  await expect(createReverseEngineeringExecutor()(request as never,{sessionId:"owned-session"} as never)).rejects.toThrow(/Native project edits require|project_edit data/);
+});
+
+it("explicit desktop IDA selection wins over registry refresh and never falls back to another executable", async () => {
+  const selected=await fs.mkdtemp(path.join(os.tmpdir(),"ida-explicit-"));temporaryDirectories.push(selected);
+  vi.stubEnv("CLINE_IDA_SELECTED_HOME",selected);
+  expect(shouldRefreshEngineEnvironment("IDA_HOME")).toBe(false);
+  expect(shouldRefreshEngineEnvironment("IDADIR")).toBe(false);
+  expect(shouldRefreshEngineEnvironment("GHIDRA_HOME")).toBe(true);
+  vi.spyOn(supervisedProcess,"commandAvailable").mockImplementation(async command=> /^idat(?:64)?(?:\.exe)?$/i.test(command));
+  vi.spyOn(supervisedProcess,"runSupervised").mockResolvedValue({exitCode:0,stdout:"owned fixture",stderr:"",timedOut:false,cancelled:false});
+  const result=JSON.parse(await createReverseEngineeringExecutor()({engine:"ida",operation:"discover",discovery_depth:"fast"},{} as never));
+  expect(result.capabilities.ida.headless).toBeUndefined();
+  expect(supervisedProcess.commandAvailable).not.toHaveBeenCalledWith(process.platform === "win32" ? "idat64.exe" : "idat64");
 });

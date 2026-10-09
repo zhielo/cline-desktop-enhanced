@@ -1,11 +1,12 @@
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	run: vi.fn(),
+  executor: vi.fn(),
 	identity: vi.fn(() => ({
 		source: "bundled",
 		runtimeId: "owned-full",
@@ -17,7 +18,7 @@ vi.mock("@cline/core", () => ({
 	ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
 	getAnalysisRuntimeIdentity: mocks.identity,
 	runAdvancedAnalysis: mocks.run,
-	createReverseEngineeringExecutor: vi.fn(),
+	createReverseEngineeringExecutor: () => mocks.executor,
 }));
 vi.mock("./trusted-update", () => ({
 	privateUpdateReadiness: () => ({ enabled: false }),
@@ -25,6 +26,7 @@ vi.mock("./trusted-update", () => ({
 
 import {
 	FULL_ENGINE_IDS,
+  testLicensedIda, saveSetupPreferences, currentIdaAcceptance, hashIdaExecutable,
 	fullReceiptPassed,
 	getSetupCenterStatus,
 	testFullCapabilityPack,
@@ -142,4 +144,26 @@ it("missing angr never produces full Ready", async () => {
 	});
 	await testFullCapabilityPack();
 	expect((await getSetupCenterStatus()).fullStatus).toBe("Setup needed");
+});
+
+it("ARM64 acceptance uses a fixed owned fixture and invalidates replacement of the same IDA executable", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ida-setup-"));roots.push(root);
+  vi.stubEnv("CLINE_DATA_DIR",root);
+  vi.stubEnv("IDA_HOME",process.env.IDA_HOME ?? "");vi.stubEnv("CLINE_IDA_SELECTED_HOME",process.env.CLINE_IDA_SELECTED_HOME ?? "");
+  const home=join(root,"ida");await mkdir(home);const executable=join(home,"idat.exe");await writeFile(executable,"owned executable identity");
+  await saveSetupPreferences({...base,idaHome:home});
+  const digest=await hashIdaExecutable(executable,home);
+  mocks.executor.mockResolvedValue(JSON.stringify({succeeded:true,artifactVerified:true,engineExecutable:{path:executable,sha256:digest}}));
+  const receipt=await testLicensedIda("arm64");
+  expect(receipt.status).toBe("passed");expect(receipt.architecture).toBe("arm64");
+  expect(mocks.executor.mock.calls.at(-1)?.[0].function_selector.address).toBe("0x1000");
+  const target=mocks.executor.mock.calls.at(-1)?.[0].target;
+  const bytes=await import("node:fs/promises").then(fs=>fs.readFile(target));
+  expect(bytes.readUInt16LE(18)).toBe(183);
+  expect(await currentIdaAcceptance(receipt,home)).toBe(true);
+  expect((await getSetupCenterStatus()).licensedArchitectures).toEqual(["arm64"]);
+  await writeFile(executable,"replacement at same path");
+  expect(await currentIdaAcceptance(receipt,home)).toBe(false);
+  expect((await getSetupCenterStatus()).licensedArchitectures).toEqual([]);
+  await expect(hashIdaExecutable(executable,join(root,"not-selected"))).rejects.toThrow();
 });
