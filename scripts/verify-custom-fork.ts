@@ -5,6 +5,14 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "sdk/packages/core/src/hub/client/index.ts",
+		markers: ["onStartupError", "Managed Hub startup failed:", "no task command was replayed"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/daemon/index.ts",
+		markers: ['trace("spawn-requested"', 'trace("spawn-returned"', 'trace("child-exit"'],
+	},
+	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
 		markers: ["owned-hub-daemon-tail.log", "hubStartupDiagnostic = tail.slice(-1600)"],
 	},

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
 	spawn,
+	appendFileSync,
 	closeSync,
 	mkdirSync,
 	openSync,
@@ -26,7 +27,8 @@ const {
 	writeHubDiscovery,
 	CLINE_RUN_AS_HUB_DAEMON_ENV,
 } = vi.hoisted(() => ({
-	spawn: vi.fn(() => ({ unref: vi.fn() })),
+	spawn: vi.fn(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 })),
+	appendFileSync: vi.fn(),
 	closeSync: vi.fn(),
 	mkdirSync: vi.fn(),
 	openSync: vi.fn(() => 17),
@@ -102,6 +104,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 vi.mock("node:fs", () => ({
+	appendFileSync,
 	closeSync,
 	mkdirSync,
 	openSync,
@@ -158,7 +161,8 @@ describe("ensureDetachedHubServer", () => {
 		__test__.resetRetireAttempts();
 		delete process.env[CLINE_RUN_AS_HUB_DAEMON_ENV];
 		spawn.mockReset();
-		spawn.mockImplementation(() => ({ unref: vi.fn() }));
+		spawn.mockImplementation(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
+		appendFileSync.mockReset();
 		closeSync.mockReset();
 		mkdirSync.mockReset();
 		openSync.mockReset();
@@ -262,7 +266,7 @@ describe("ensureDetachedHubServer", () => {
 				.mockImplementationOnce(() => {
 					throw textFileBusy;
 				})
-				.mockImplementationOnce(() => ({ unref: vi.fn() }));
+				.mockImplementationOnce(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
 			readHubDiscovery.mockResolvedValueOnce(undefined).mockResolvedValueOnce({
 				url: "ws://127.0.0.1:25463/hub",
 				authToken: "new-token",
@@ -288,6 +292,24 @@ describe("ensureDetachedHubServer", () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	it("records owned spawn and child lifecycle without arguments or credentials", async () => {
+		const { spawnDetachedHubServer } = await import(".");
+		spawnDetachedHubServer("/workspace");
+		const child = spawn.mock.results.at(-1)!.value!;
+		const callbacks = child.once.mock.calls as unknown as Array<[string, (...args: unknown[]) => void]>;
+		callbacks.find(([event]) => event === "error")![1]({code:"ENOENT",message:"Bearer private-secret"});
+		callbacks.find(([event]) => event === "exit")![1](1,null);
+		const text = appendFileSync.mock.calls.map((call) => String(call[1])).join("");
+		expect(text).toContain("spawn-requested");
+		expect(text).toContain("spawn-returned");
+		expect(text).toContain('"childPid":12345');
+		expect(text).toContain("spawn-error");
+		expect(text).toContain("ENOENT");
+		expect(text).toContain("child-exit");
+		expect(text).not.toContain("private-secret");
+		expect(text).not.toContain("--cwd");
 	});
 
 	it("passes disabled connector management to the detached daemon", async () => {
@@ -358,7 +380,7 @@ describe("ensureDetachedHubServer", () => {
 				.mockImplementationOnce(() => {
 					throw textFileBusy;
 				})
-				.mockImplementationOnce(() => ({ unref: vi.fn() }));
+				.mockImplementationOnce(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
 			readHubDiscovery.mockResolvedValueOnce(undefined);
 			probeHubServer.mockResolvedValueOnce(undefined);
 
@@ -838,7 +860,7 @@ describe("upgradeManagedHub", () => {
 		__test__.resetRetireAttempts();
 		delete process.env[CLINE_RUN_AS_HUB_DAEMON_ENV];
 		spawn.mockReset();
-		spawn.mockImplementation(() => ({ unref: vi.fn() }));
+		spawn.mockImplementation(() => ({ unref: vi.fn(), once: vi.fn(), pid:12345 }));
 		rememberRecoverableLocalHubUrl.mockReset();
 		rememberRecoverableLocalHubUrl.mockImplementation((url: string) => url);
 		verifyHubConnection.mockReset();

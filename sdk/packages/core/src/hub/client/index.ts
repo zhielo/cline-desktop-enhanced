@@ -199,6 +199,8 @@ export interface HubClientOptions {
 }
 
 export interface LocalHubResolutionOptions {
+	/** Internal diagnostic only; never selects or retries a task command. */
+	onStartupError?: (error: unknown) => void;
 	endpoint?: string;
 	strategy?: "prefer-hub" | "require-hub";
 	workspaceRoot?: string;
@@ -824,11 +826,20 @@ export class NodeHubClient {
 			return await this.recoveryPromise;
 		}
 		this.recoveryPromise = (async () => {
+			let startupError: unknown;
 			const recoveredUrl = await ensureCompatibleLocalHubUrl({
 				workspaceRoot: this.options.workspaceRoot,
 				cwd: this.options.cwd,
-			}).catch(() => undefined);
+				onStartupError: (cause) => { startupError = cause; },
+			}).catch((cause) => { startupError = cause; return undefined; });
 			if (!recoveredUrl) {
+				if (startupError) {
+					const detail = String(startupError instanceof Error ? startupError.message : startupError)
+						.replace(/(?:Bearer\s+|approval_token=|authToken=)\S+/gi, "[REDACTED]")
+						.replace(/("(?:authToken|token|apiKey|password|secret)"\s*:\s*")[^"]*"/gi, '$1[REDACTED]"')
+						.replace(/\b[0-9a-f]{32,}\b/gi, "[REDACTED]").slice(0, 700);
+					throw new HubTransportError("hub_connect_failed", `Managed Hub startup failed: ${detail}. Inspect the owned hub-daemon.log; no task command was replayed.`);
+				}
 				return false;
 			}
 			this.currentUrl = recoveredUrl;
@@ -1372,7 +1383,8 @@ export async function ensureCompatibleLocalHubUrl(
 		// Refresh credentials before a retry: a replacement can reuse the same
 		// URL with a new token, and daemon port overrides skip its registry update.
 		return rememberRecoverableLocalHubUrl(ensured.url, ensured.authToken);
-	} catch {
+	} catch (error) {
+		try { options.onStartupError?.(error); } catch { /* Diagnostics cannot authorize startup. */ }
 		return undefined;
 	}
 }

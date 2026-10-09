@@ -1399,10 +1399,20 @@ describe("resolveCompatibleLocalHubUrl", () => {
 
 		const { ensureCompatibleLocalHubUrl } = await import(".");
 
+		const onStartupError = vi.fn();
 		await expect(
-			ensureCompatibleLocalHubUrl({ workspaceRoot: "/tmp/project" }),
+			ensureCompatibleLocalHubUrl({ workspaceRoot: "/tmp/project", onStartupError }),
 		).resolves.toBeUndefined();
+		expect(onStartupError).toHaveBeenCalledWith(expect.objectContaining({message:"could not retire stale hub"}));
 		expect(ensureDetachedHubServerMock).toHaveBeenCalledWith("/tmp/project");
+		const { NodeHubClient: ManagedClient, rememberRecoverableLocalHubUrl } = await import(".");
+		vi.stubGlobal("WebSocket", MockWebSocket);
+		rememberRecoverableLocalHubUrl("ws://127.0.0.1:25467/hub");
+		const client = new ManagedClient({url:"ws://127.0.0.1:25467/hub"});
+		MockWebSocket.failNextOpen = true;
+		try {
+			await expect(client.connect()).rejects.toThrow("Managed Hub startup failed: could not retire stale hub");
+		} finally { client.close(); }
 	});
 
 	it("resolves managed shared discovery in development builds", async () => {
