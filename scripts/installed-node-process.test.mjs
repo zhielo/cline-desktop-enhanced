@@ -6,7 +6,29 @@ import {
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	verifyRestartInstructions,
+	waitForInstalledBackendEndpoint,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
+
+test("installed backend discovery tolerates only bounded native not-ready responses", async () => {
+	let attempts = 0;
+	const endpoint = "ws://127.0.0.1:12345/transport?approval_token=owned";
+	const result = await waitForInstalledBackendEndpoint(async () => {
+		if (++attempts < 3) throw new Error("page.evaluate: desktop backend endpoint not ready");
+		return endpoint;
+	}, {pollMs:0});
+	assert.equal(result, endpoint);
+	assert.equal(attempts, 3);
+	await assert.rejects(waitForInstalledBackendEndpoint(async () => {
+		throw new Error("desktop backend endpoint not ready");
+	}, {pollMs:0}), /bounded discovery budget/);
+	await assert.rejects(waitForInstalledBackendEndpoint(async () => {
+		throw new Error("permanent owned startup failure");
+	}), /permanent owned startup failure/);
+	await assert.rejects(waitForInstalledBackendEndpoint(async () => "ws://external.example/transport"),
+		/local WebSocket endpoint/);
+	await assert.rejects(waitForInstalledBackendEndpoint(() => new Promise(() => {}), {timeoutMs:10}),
+		/readiness deadline exceeded/);
+});
 
 test("native Node child receives exact per-process WebView2 environment and reports exit/output", async () => {
 	const profile = "owned fixture profile with spaces";

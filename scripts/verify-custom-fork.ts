@@ -123,6 +123,8 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
 		markers: [
+			"waitForInstalledBackendEndpoint",
+			"get_desktop_settings",
 			"hub-restart-saved-session-reattached-without-prompt-replay",
 			"bundled",
 		],

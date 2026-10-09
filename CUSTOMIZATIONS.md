@@ -703,3 +703,5 @@ Session SQLite schema initialization installs the existing five-second busy hand
 - Installed acceptance uses a uniquely labeled full-pack status and emits bounded redacted failure annotations while retaining all fixture/restart/rollback assertions and the verified artifact upload gate.
 
 Installed acceptance also exercises a fixed 120-row owned offline transcript and records bounded native-app-only working-set and scroll-round-trip observations. Three candidate samples are not a controlled speedup, peak memory, descendant-memory or universal long-session claim.
+
+Installed restart acceptance now waits for the real local native endpoint and one authenticated settings read before counting startup as ready. Endpoint discovery alone may retry the exact native not-ready response at most three times within 90 seconds; commands and prompts are never replayed. Permanent startup failures, nonlocal endpoints and discovery timeout still fail acceptance. Full-pack integrity coverage and the existing outer installed-test deadline remain unchanged.

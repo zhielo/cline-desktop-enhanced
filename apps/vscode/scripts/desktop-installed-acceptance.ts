@@ -58,6 +58,45 @@ export async function verifyRestartInstructions(
     throw new Error("Installed UI setting did not survive restart");
 }
 
+/** Retry only endpoint discovery, never a submitted command or accepted prompt.
+ * Full-pack integrity checks can outlast one native 30s readiness window. */
+export async function waitForInstalledBackendEndpoint(
+	readEndpoint: () => Promise<string>,
+	options: { timeoutMs?: number; pollMs?: number; maxAttempts?: number } = {},
+) {
+	const timeoutMs = options.timeoutMs ?? 90_000;
+	const pollMs = options.pollMs ?? 200;
+	const maxAttempts = options.maxAttempts ?? 3;
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || !Number.isFinite(pollMs) || pollMs < 0 ||
+		!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3)
+		throw new Error("Invalid installed backend readiness budget");
+	const deadline = Date.now() + timeoutMs;
+	for (let attempt = 0; attempt < maxAttempts && Date.now() < deadline; attempt++) {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const endpoint = await Promise.race([
+				readEndpoint(),
+				new Promise<never>((_, reject) => {
+					timer = setTimeout(() => reject(new Error("Installed backend readiness deadline exceeded")), Math.max(1, deadline - Date.now()));
+				}),
+			]);
+			const url = new URL(endpoint);
+			if (!["ws:", "wss:"].includes(url.protocol) ||
+				!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || url.username || url.password)
+				throw new Error("Installed backend did not publish a local WebSocket endpoint");
+			return endpoint;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (!/desktop backend endpoint not ready/i.test(message)) throw error;
+		} finally {
+			clearTimeout(timer);
+		}
+		if (attempt + 1 < maxAttempts && Date.now() < deadline)
+			await delay(Math.min(pollMs, Math.max(0, deadline - Date.now())));
+	}
+	throw new Error("Installed backend did not become ready within the bounded discovery budget");
+}
+
 type ProcessMetadata = {
   name: string;
   pid: number;
@@ -326,6 +365,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .getByRole("button", { name: "Settings", exact: true })
       .first()
       .waitFor();
+    // Visible settings are not proof that the restarted sidecar is ready.
+    // Require one actual authenticated read; no command or prompt is replayed.
+    await rpc(page, "get_desktop_settings");
     startupSamples.push(performance.now() - startupStarted);
     // Sample only this launched native app, never arbitrary user processes.
     // WebView/Hub/worker descendants are deliberately not called whole-app RAM.
@@ -348,14 +390,14 @@ ConvertTo-Json -InputObject @($rows) -Compress
     command: string,
     args: Record<string, unknown> = {},
   ): Promise<T> {
+		const endpoint = await waitForInstalledBackendEndpoint(() => page.evaluate(async () => {
+			const native = (window as unknown as {
+				__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> };
+			}).__TAURI_INTERNALS__;
+			return await native.invoke("get_desktop_backend_endpoint");
+		}));
 		return (await page.evaluate(
-			async ({ command, args }) => {
-        const native = (
-          window as unknown as {
-            __TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> };
-          }
-        ).__TAURI_INTERNALS__;
-        const endpoint = await native.invoke("get_desktop_backend_endpoint");
+			async ({ command, args, endpoint }) => {
 				return await new Promise((resolve, reject) => {
           const socket = new WebSocket(endpoint);
           const id = crypto.randomUUID();
@@ -394,7 +436,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           };
         });
 			},
-			{ command, args },
+      { command, args, endpoint },
     )) as T;
 	}
 	async function settings(page: Page, section: string) {
@@ -712,7 +754,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/core-full-core-120-row-v3",
+          workloadVersion: "installed-owned-ui/backend-ready-core-full-core-120-row-v4",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },
