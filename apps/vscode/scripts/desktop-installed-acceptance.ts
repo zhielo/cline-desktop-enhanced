@@ -58,6 +58,19 @@ export async function verifyRestartInstructions(
     throw new Error("Installed UI setting did not survive restart");
 }
 
+/** Reattach through the authoritative Hub recovery path before opening a new
+ * local SQLite discovery connection. Neither operation is replayed on error. */
+export async function verifyRecoveredHubSession(
+  attach: () => Promise<unknown>,
+  readSessions: () => Promise<Array<{ sessionId: string }>>,
+  sessionId: string,
+) {
+  await attach();
+  const sessions = await readSessions();
+  if (!sessions.some((item) => item.sessionId === sessionId))
+    throw new Error("Saved session missing after Hub restart");
+}
+
 /** Retry only endpoint discovery, never a submitted command or accepted prompt.
  * Full-pack integrity checks can outlast one native 30s readiness window. */
 export async function waitForInstalledBackendEndpoint(
@@ -698,19 +711,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
       throw new Error("Owned isolated Hub PID unavailable");
   // This discovery belongs only to this fixture. No user Hub is killed.
     await killOwnedProcess(beforeHub.pid);
-    const recoveredSessions = await rpc<Array<{ sessionId: string }>>(
-      page,
-      "list_chat_sessions",
+    // list_chat_sessions is local SQLite discovery, not a Hub readiness probe.
+    // First exercise the real registration/reattachment recovery contract.
+    await verifyRecoveredHubSession(
+      () => rpc(page, "chat_session_command", {
+        request: {
+          action: "attach",
+          sessionId: session.sessionId,
+          config: { environmentId: "local" },
+        },
+      }),
+      () => rpc<Array<{ sessionId: string }>>(page, "list_chat_sessions"),
+      session.sessionId,
     );
-    if (!recoveredSessions.some((item) => item.sessionId === session.sessionId))
-      throw new Error("Saved session missing after Hub restart");
-    await rpc(page, "chat_session_command", {
-      request: {
-        action: "attach",
-        sessionId: session.sessionId,
-        config: { environmentId: "local" },
-      },
-    });
     const afterHub = JSON.parse(await readFile(discoveryPath, "utf8"));
     if (
       afterHub.pid === beforeHub.pid &&
@@ -754,7 +767,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/backend-ready-core-full-core-120-row-v4",
+          workloadVersion: "installed-owned-ui/hub-recovery-ready-core-full-core-120-row-v5",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },

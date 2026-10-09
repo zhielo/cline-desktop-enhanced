@@ -6,8 +6,28 @@ import {
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	verifyRestartInstructions,
+	verifyRecoveredHubSession,
 	waitForInstalledBackendEndpoint,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
+
+test("Hub crash acceptance reattaches before local discovery without replay or hiding errors", async () => {
+  const calls = [];
+  await verifyRecoveredHubSession(async () => { calls.push("attach"); }, async () => {
+    assert.deepEqual(calls, ["attach"]);
+    calls.push("list"); return [{sessionId:"owned"}];
+  }, "owned");
+  assert.deepEqual(calls, ["attach", "list"]);
+  let reads = 0;
+  await assert.rejects(verifyRecoveredHubSession(async () => {}, async () => {
+    reads++; throw new Error("disk I/O error");
+  }, "owned"), /disk I\/O error/);
+  assert.equal(reads, 1);
+  await assert.rejects(verifyRecoveredHubSession(async () => { throw new Error("recovery failed"); },
+    async () => { reads++; return []; }, "owned"), /recovery failed/);
+  assert.equal(reads, 1);
+  await assert.rejects(verifyRecoveredHubSession(async () => {}, async () => [], "owned"),
+    /Saved session missing/);
+});
 
 test("installed backend discovery tolerates only bounded native not-ready responses", async () => {
 	let attempts = 0;
