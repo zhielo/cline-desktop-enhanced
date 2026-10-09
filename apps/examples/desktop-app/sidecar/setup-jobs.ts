@@ -145,15 +145,31 @@ export function startSetupJob(
 		.then(() => operation(phase))
 		.then(
 			(result) => {
+				const value = result as
+					| { result?: { outputDrainTimedOut?: boolean } }
+					| undefined;
+				if (value?.result?.outputDrainTimedOut) {
+					job.status = "interrupted";
+					job.phase =
+						"Setup subprocess termination unconfirmed; admission retained. No work was replayed.";
+					return result;
+				}
 				job.status = "completed";
 				job.phase =
 					"Setup operation completed; capability readiness remains execution-receipt based";
 				return result;
 			},
 			(error) => {
-				job.status = "failed";
-				job.phase = "Setup operation failed; inspect diagnostics";
-				// Arbitrary subprocess messages can contain secrets. Detailed errors stay in the existing trusted RPC result.
+				job.status =
+					(error as { terminationUnconfirmed?: boolean })
+						?.terminationUnconfirmed === true
+						? "interrupted"
+						: "failed";
+				job.phase =
+					job.status === "interrupted"
+						? "Setup subprocess termination unconfirmed; admission retained. No work was replayed."
+						: "Setup operation failed; inspect diagnostics";
+				// Redact known environment values and credential syntax before bounding persisted failure text.
 				job.error = redactSensitiveText(
 					error instanceof Error ? error.message : String(error),
 					prepareProcessEnvironment().secretValues,
@@ -165,6 +181,7 @@ export function startSetupJob(
 			job.endedAt = job.updatedAt = new Date().toISOString();
 			try {
 				persist(job);
+				if (job.status === "interrupted") return;
 				const info = lstatSync(admission);
 				if (
 					!info.isFile() ||

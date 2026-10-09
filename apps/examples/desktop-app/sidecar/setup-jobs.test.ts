@@ -66,3 +66,21 @@ it("preserves failed or interrupted host state without secrets or automatic repl
 		await rm(root, { recursive: true, force: true });
 	}
 });
+it("retains cross-process admission after unconfirmed subprocess termination instead of permitting a duplicate", async () => {
+	const root = await mkdtemp(join(tmpdir(), "setup-uncertain-"));
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	try {
+		const first = startSetupJob("setup_center_test_ida", {}, async () => ({
+			result: { outputDrainTimedOut: true },
+		}));
+		await first.completion;
+		expect(getSetupJob()?.status).toBe("interrupted");
+		expect(() => assertSetupIdle()).toThrow("admission lease");
+		expect(() =>
+			startSetupJob("setup_center_install_full", {}, async () => ({})),
+		).toThrow("admission lease");
+	} finally {
+		vi.unstubAllEnvs();
+		await rm(root, { recursive: true, force: true });
+	}
+});

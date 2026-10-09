@@ -189,6 +189,32 @@ function receiptIdentity() {
 	const identity = getAnalysisRuntimeIdentity();
 	return `${identity.runtimeId ?? identity.source}:${identity.manifestHash ?? "external"}:${process.env.CLINE_ANGR_RUNTIME_ID ?? "no-angr-pack"}:${createHash("sha256").update(ADVANCED_ANALYSIS_WORKER).digest("hex")}`;
 }
+async function requireSetupWorkerTermination(
+	result: {
+		diagnostics?: { pid?: number | null; terminationConfirmed?: boolean };
+	},
+	identity: string,
+) {
+	if (
+		result.diagnostics?.pid != null &&
+		result.diagnostics.terminationConfirmed === false
+	) {
+		await saveOwnedJson("full-receipt.json", {
+			schemaVersion: 1,
+			identity,
+			checkedAt: new Date().toISOString(),
+			status: "failed",
+			checks: [],
+			reason: "Worker termination unconfirmed; setup admission retained",
+		});
+		throw Object.assign(
+			new Error(
+				"Setup worker termination unconfirmed; inspect Diagnostics before operator recovery",
+			),
+			{ terminationUnconfirmed: true },
+		);
+	}
+}
 let checking: Promise<unknown> | undefined;
 export function testFullCapabilityPack(
 	phase: (value: string) => void = () => {},
@@ -201,11 +227,13 @@ export function testFullCapabilityPack(
 			action: "full_readiness",
 			timeoutMs: 120000,
 		});
+		await requireSetupWorkerTermination(primary, identity);
 		phase("Testing isolated angr static VEX fixture");
 		const secondary = await runAdvancedAnalysis({
 			action: "angr_readiness",
 			timeoutMs: 120000,
 		});
+		await requireSetupWorkerTermination(secondary, identity);
 		const checks = (
 			Array.isArray(primary.evidence.checks) ? primary.evidence.checks : []
 		) as SetupCheck[];
