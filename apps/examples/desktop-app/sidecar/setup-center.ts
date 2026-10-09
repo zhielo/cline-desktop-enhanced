@@ -379,7 +379,11 @@ export async function hashIdaExecutable(file: string, home: string) {
   for await (const chunk of createReadStream(file, { highWaterMark: 64 * 1024 })) hash.update(chunk);
   return hash.digest("hex");
 }
-export async function currentIdaAcceptance(receipt: Record<string, unknown> | null, home: string) {
+export async function currentIdaAcceptance(receipt: Record<string, unknown> | null, home: string, expectedArchitecture?: "x86_64" | "arm64") {
+  const architecture = expectedArchitecture ?? receipt?.architecture;
+  if (architecture !== "x86_64" && architecture !== "arm64") return false;
+  const fixture = architecture === "arm64" ? ownedArm64Elf : ownedElf;
+  if (receipt?.architecture !== architecture || receipt.fixtureSha256 !== fixture.sha256) return false;
   if (!home || receipt?.status !== "passed" || receipt.idaHome !== home ||
       typeof receipt.executable !== "string" || typeof receipt.executableSha256 !== "string") return false;
   try { return await hashIdaExecutable(receipt.executable, home) === receipt.executableSha256; }
@@ -416,7 +420,7 @@ export async function testLicensedIda(architecture: "x86_64" | "arm64" = "x86_64
   const identityMatches = typeof executable === "string" && typeof executableSha256 === "string" &&
     await hashIdaExecutable(executable, preferences.idaHome) === executableSha256;
 	const receipt = {
-		status: result.succeeded && result.artifactVerified && identityMatches ? "passed" : "failed",
+		status: result.succeeded && result.artifactVerified && result.sha256 === fixture.sha256 && identityMatches ? "passed" : "failed",
     architecture, executable, executableSha256,
 		checkedAt: new Date().toISOString(),
 		idaHome: preferences.idaHome,
@@ -450,8 +454,8 @@ export async function getSetupCenterStatus() {
 		),
 	)) as Array<Record<string, unknown> | null>;
   const licensedArchitectures = [];
-  if (await currentIdaAcceptance(idaReceipt, preferences.idaHome)) licensedArchitectures.push("x86_64");
-  if (await currentIdaAcceptance(arm64Receipt, preferences.idaHome)) licensedArchitectures.push("arm64");
+  if (await currentIdaAcceptance(idaReceipt, preferences.idaHome, "x86_64")) licensedArchitectures.push("x86_64");
+  if (await currentIdaAcceptance(arm64Receipt, preferences.idaHome, "arm64")) licensedArchitectures.push("arm64");
 	const deviceCurrent =
 		deviceReceipt?.adbPath === preferences.adbPath &&
 		deviceReceipt?.deviceSerialSha256 ===

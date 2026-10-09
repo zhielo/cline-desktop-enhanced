@@ -1,3 +1,4 @@
+import arm64Fixture from "../../../../scripts/fixtures/owned-arm64-elf.json";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -153,7 +154,7 @@ it("ARM64 acceptance uses a fixed owned fixture and invalidates replacement of t
   const home=join(root,"ida");await mkdir(home);const executable=join(home,"idat.exe");await writeFile(executable,"owned executable identity");
   await saveSetupPreferences({...base,idaHome:home});
   const digest=await hashIdaExecutable(executable,home);
-  mocks.executor.mockResolvedValue(JSON.stringify({succeeded:true,artifactVerified:true,engineExecutable:{path:executable,sha256:digest}}));
+  mocks.executor.mockResolvedValue(JSON.stringify({succeeded:true,artifactVerified:true,sha256:arm64Fixture.sha256,engineExecutable:{path:executable,sha256:digest}}));
   const receipt=await testLicensedIda("arm64");
   expect(receipt.status).toBe("passed");expect(receipt.architecture).toBe("arm64");
   expect(mocks.executor.mock.calls.at(-1)?.[0].function_selector.address).toBe("0x1000");
@@ -161,6 +162,8 @@ it("ARM64 acceptance uses a fixed owned fixture and invalidates replacement of t
   const bytes=await import("node:fs/promises").then(fs=>fs.readFile(target));
   expect(bytes.readUInt16LE(18)).toBe(183);
   expect(await currentIdaAcceptance(receipt,home)).toBe(true);
+  expect(await currentIdaAcceptance(receipt,home,"x86_64")).toBe(false);
+  expect(await currentIdaAcceptance({...receipt,fixtureSha256:"f".repeat(64)},home,"arm64")).toBe(false);
   expect((await getSetupCenterStatus()).licensedArchitectures).toEqual(["arm64"]);
   await writeFile(executable,"replacement at same path");
   expect(await currentIdaAcceptance(receipt,home)).toBe(false);

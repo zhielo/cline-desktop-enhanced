@@ -722,3 +722,5 @@ The installed crash-recovery journey now invokes the existing authoritative Hub 
 Explicit Setup Center IDA selection is carried into the owning backend environment. Windows registry refresh cannot overwrite it, and a missing executable in that chosen installation fails instead of silently using another IDA from PATH or auto-discovered folders. Other tool/PATH refresh behavior is unchanged. Applying a saved selection to an existing Hub still requires the separate idle-only action.
 
 Managed IDA requests also stream owned PID/readiness/request mailbox observations with a bounded waiting heartbeat. These are explicitly not script-phase or liveness proof; capacity, nonce binding, idle/lifetime limits and no-replay/no-automatic-restart behavior are unchanged. Failed native execution receipts render as unsuccessful tool rows rather than visually successful decompilation.
+
+Licensed acceptance also requires the executor's actual target SHA-256 to match the owned fixture and checks processor/fixture identity when reading each processor's receipt. Copying an x86-64 receipt into the ARM64 slot cannot establish ARM64 readiness.
