@@ -127,6 +127,10 @@ it("coalesces actual full and separate angr tests and invalidates changed runtim
 	expect((await getSetupCenterStatus()).fullStatus).toBe("Ready");
 	vi.stubEnv("CLINE_ANGR_RUNTIME_ID", "changed-owned-runtime");
 	expect((await getSetupCenterStatus()).fullStatus).toBe("Setup needed");
+	expect(
+		(await getSetupCenterStatus()).features.every((f) => f.state === "stale"),
+	).toBe(true);
+	expect((await getSetupCenterStatus()).lastCheckedAt).toBeDefined();
 });
 it("missing angr never produces full Ready", async () => {
 	const root = await mkdtemp(join(tmpdir(), "owned-setup-missing-"));

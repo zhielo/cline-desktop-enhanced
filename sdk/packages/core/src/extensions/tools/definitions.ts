@@ -19,6 +19,10 @@ import {
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { captureRunCommandsTimeout } from "../../services/telemetry/core-events";
 import { CommandExitError } from "./executors/bash";
+import {
+	inspectCommandArtifacts,
+	type CommandExecutionReceipt,
+} from "./executors/command-evidence";
 import { recordWindowsCommandLatencyObservation } from "./executors/command-latency-baseline";
 import {
 	MAX_COMMAND_OUTPUT_CHARS,
@@ -290,6 +294,7 @@ async function executeShellCommands(
 				let timeToFirstOutputMs: number | undefined;
 				let outputChunkCount = 0;
 				let outputChars = 0;
+				let execution: CommandExecutionReceipt | undefined;
 				const recordCompletion = (success: boolean) => {
 					const durationMs = Date.now() - startedAt;
 					recordRunCommandsCompletionMetrics(
@@ -306,48 +311,81 @@ async function executeShellCommands(
 						success,
 					});
 				};
-				const commandContext: AgentToolContext = context.emitUpdate
-					? {
-							...context,
-							emitUpdate: (update) => {
-								const payload =
-									update && typeof update === "object" && !Array.isArray(update)
-										? (update as Record<string, unknown>)
-										: { update };
-								const chunk = payload.chunk;
-								if (typeof chunk === "string" && chunk.length > 0) {
-									outputChunkCount += 1;
-									outputChars += chunk.length;
-									if (!recordedFirstOutput) {
-										recordedFirstOutput = true;
-										timeToFirstOutputMs = Date.now() - startedAt;
-										recordRunCommandsFirstOutput(
-											telemetry,
-											timeToFirstOutputMs,
-											{ executionMode, timeoutSource },
-										);
-									}
-								}
-								context.emitUpdate?.({
-									...payload,
-									commandIndex,
-									...(!emittedCommandMetadata ? { query } : {}),
-								});
-								emittedCommandMetadata = true;
-							},
+				const commandContext: AgentToolContext = {
+					...context,
+					emitUpdate: (update) => {
+						const payload =
+							update && typeof update === "object" && !Array.isArray(update)
+								? (update as Record<string, unknown>)
+								: { update };
+						if (payload.type === "command_execution_receipt") {
+							execution = payload.receipt as CommandExecutionReceipt;
+							return;
 						}
-					: context;
+						const chunk = payload.chunk;
+						if (typeof chunk === "string" && chunk.length > 0) {
+							outputChunkCount += 1;
+							outputChars += chunk.length;
+							if (!recordedFirstOutput) {
+								recordedFirstOutput = true;
+								timeToFirstOutputMs = Date.now() - startedAt;
+								recordRunCommandsFirstOutput(telemetry, timeToFirstOutputMs, {
+									executionMode,
+									timeoutSource,
+								});
+							}
+						}
+						context.emitUpdate?.({
+							...payload,
+							commandIndex,
+							...(!emittedCommandMetadata ? { query } : {}),
+						});
+						emittedCommandMetadata = true;
+					},
+				};
 				try {
+					const structured = typeof command === "string" ? undefined : command;
+					if (structured?.required_files?.length)
+						await inspectCommandArtifacts(structured.required_files, cwd);
+					const previousOutputs = structured?.expected_output_files?.length
+						? await Promise.all(
+								structured.expected_output_files.map(async (path) => {
+									try {
+										return (await inspectCommandArtifacts([path], cwd))[0];
+									} catch {
+										return undefined;
+									}
+								}),
+							)
+						: [];
 					const output = await withTimeout(
 						executor(command, cwd, commandContext),
 						timeoutMs,
 						`Command timed out after ${timeoutMs}ms`,
 					);
+					const artifacts = structured?.expected_output_files?.length
+						? await inspectCommandArtifacts(
+								structured.expected_output_files,
+								cwd,
+							)
+						: [];
+					if (execution?.status === "running" && artifacts.length)
+						throw new Error(
+							"Command is still running; output artifacts are not verified",
+						);
+					for (const [index, artifact] of artifacts.entries()) {
+						if (artifact.fingerprint === previousOutputs[index]?.fingerprint)
+							throw new Error(
+								`Output artifact was not refreshed by this command: ${artifact.path}`,
+							);
+					}
 					recordCompletion(true);
 					return {
 						query,
 						result: output,
 						success: true,
+						...(execution ? { execution } : {}),
+						...(artifacts.length ? { artifacts } : {}),
 					};
 				} catch (error) {
 					recordCompletion(false);
@@ -365,6 +403,7 @@ async function executeShellCommands(
 							result: error.output,
 							error: error.message,
 							success: false,
+							...(execution ? { execution } : {}),
 						};
 					}
 					const msg = formatError(error);
@@ -373,6 +412,7 @@ async function executeShellCommands(
 						result: "",
 						error: `Command failed: ${msg}`,
 						success: false,
+						...(execution ? { execution } : {}),
 					};
 				}
 			},
@@ -598,6 +638,7 @@ export function createSearchTool(
 const RUN_COMMANDS_SHARED_INSTRUCTIONS =
 	"Use for listing files, checking git status, running builds, executing tests, etc. " +
 	"Prefer { command, args } with explicit argv to bypass shell startup and parsing when shell syntax is not needed. " +
+	"Use required_files to preflight known inputs and expected_output_files to verify fresh outputs. Inspect failures before retrying; never replay side-effecting commands automatically. Stderr alone is not failure: use the execution receipt and exit code. Reading a log successfully does not prove the preceding command succeeded. " +
 	"Commands must be non-interactive. Commands that require follow-up input like pagers should be skipped or used with supported flags/env (e.g. git --no-pager, --non-interactive) to bypass the interaction steps. ";
 
 /**
@@ -634,6 +675,11 @@ export function buildRunCommandsDescription(
 			RUN_COMMANDS_SHARED_INSTRUCTIONS +
 			`Output beyond ~${Math.round(MAX_COMMAND_OUTPUT_CHARS / 1000)}k characters is middle-truncated (start and end preserved); filter output when you need specific sections. ` +
 			`Commands run through ${shellName}; quote paths and arguments for ${executable} and use ${sequencingOperator} to sequence commands. ` +
+			(shellKind === "powershell"
+				? edition === "windows"
+					? "The executor uses ErrorActionPreference=Stop. The legacy 5.1 edition can promote redirected native stderr (2>&1 or 2>file) to fatal error records; prefer direct argv for native programs and use their actual exit code. "
+					: "The executor uses ErrorActionPreference=Stop. Native stderr redirection behavior varies by runtime version; prefer direct argv for native programs and preserve their actual exit code. "
+				: "") +
 			`Write commands directly; do not wrap them in another ${wrapper} invocation. ` +
 			"Only start another shell when you intentionally need a different shell or a separate process. " +
 			"Include multiple commands in the same call when they are independent and safe to run concurrently. When independent reads, searches, or edits are also needed, call those tools in the same response."

@@ -4197,10 +4197,17 @@ export async function handleCommand(
 	}
 	if (
 		command === "get_optimization_status" ||
-		command === "set_resource_profile"
+		command === "set_resource_profile" ||
+		command === "cleanup_completed_command_logs"
 	) {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
 			throw new Error("Optimization settings are local-only");
+		if (command === "cleanup_completed_command_logs") {
+			if (!options?.connection?.data?.canApproveTools || args?.confirmed !== true)
+				throw new Error("Trusted desktop confirmation required for log cleanup");
+			const { cleanupCompletedCommandLogs } = await import("./optimization-status");
+			return await cleanupCompletedCommandLogs();
+		}
 		if (command === "set_resource_profile") {
 			if (args?.confirmed !== true)
 				throw new Error("Explicit confirmation required");

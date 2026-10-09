@@ -18,6 +18,7 @@ type Status = {
 	preferences: Preferences;
 	fullStatus: string;
 	checkedAt?: string;
+	lastCheckedAt?: string;
 	packs: { id: string; available: boolean; selected: boolean }[];
 	features: {
 		id: string;
@@ -128,10 +129,17 @@ export function SetupCenter() {
 			/>
 			<div className="space-y-6 p-6">
 				<p>
-					Full pack: <strong>{status?.fullStatus ?? "Checking setup"}</strong>.{" "}
+					Full pack:{" "}
+					<strong aria-label="Full capability pack status">
+						{status?.fullStatus ?? "Checking setup"}
+					</strong>
+					.{" "}
 					{status?.checkedAt
 						? `Last owned-fixture test: ${status.checkedAt}`
 						: "Package presence alone is not execution proof."}
+					{!status?.checkedAt && status?.lastCheckedAt
+						? ` Previous test ${status.lastCheckedAt} is stale; retest the selected runtime.`
+						: ""}
 				</p>
 				<div className="flex flex-wrap gap-2">
 					<Button

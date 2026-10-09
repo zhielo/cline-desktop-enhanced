@@ -178,3 +178,51 @@ it("never selects a model that lacks required capabilities, context, or a declar
 		measurements: "estimates-or-low-sample",
 	});
 });
+it("supports explainable modes and an eligible manual override without silent fallback", () => {
+	const candidates = [
+		{
+			id: "economy",
+			provider: "owned",
+			capabilities: ["tools"],
+			contextWindow: 100000,
+			successRate: 0.8,
+			toolReliability: 0.8,
+			costPerMillionTokens: 1,
+			latencyMs: 200,
+		},
+		{
+			id: "deep",
+			provider: "owned",
+			capabilities: ["tools"],
+			contextWindow: 100000,
+			successRate: 0.99,
+			toolReliability: 0.99,
+			costPerMillionTokens: 20,
+			latencyMs: 2000,
+		},
+	];
+	expect(
+		routeEngineeringModel({ mode: "economy" }, candidates).selected?.id,
+	).toBe("economy");
+	expect(routeEngineeringModel({ mode: "deep" }, candidates).selected?.id).toBe(
+		"deep",
+	);
+	expect(
+		routeEngineeringModel({ manualModelId: "economy" }, candidates),
+	).toMatchObject({
+		manualOverride: true,
+		selected: { id: "economy" },
+	});
+	expect(
+		routeEngineeringModel(
+			{ manualModelId: "deep", maxCostPerMillionTokens: 1 },
+			candidates,
+		),
+	).toMatchObject({
+		selected: undefined,
+		reason: expect.stringContaining("no silent fallback"),
+	});
+	expect(() =>
+		routeEngineeringModel({ mode: "invalid" }, candidates),
+	).toThrow();
+});

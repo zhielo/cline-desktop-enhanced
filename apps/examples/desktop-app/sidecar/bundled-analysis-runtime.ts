@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
 	cp,
 	lstat,
@@ -93,11 +94,12 @@ export async function verifyRuntime(
 			info.size > 128 * 1024 * 1024
 		)
 			throw new Error("Redirected or oversized runtime member");
-		if (
-			createHash("sha256")
-				.update(await readFile(path))
-				.digest("hex") !== hash
-		)
+		// Hash with bounded stream buffers instead of allocating a whole native
+		// library (up to 128 MiB) during every backend startup.
+		const hasher = createHash("sha256");
+		for await (const chunk of createReadStream(path, { highWaterMark: 64 * 1024 }))
+			hasher.update(chunk);
+		if (hasher.digest("hex") !== hash)
 			throw new Error(
 				"Runtime integrity check failed; reinstall from trusted installer",
 			);

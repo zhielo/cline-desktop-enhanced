@@ -433,6 +433,9 @@ export async function getSetupCenterStatus() {
 	} | null;
 	const current =
 		receipt?.identity === receiptIdentity() && runtime.integrity !== "failed";
+	const fullInstalled =
+		runtime.integrity === "verified" &&
+		runtime.runtimeId?.includes("-full-") === true;
 	const features = FULL_ENGINE_IDS.map((engine) => {
 		const check = current
 			? receipt?.checks?.find((c) => c.engine === engine)
@@ -440,17 +443,39 @@ export async function getSetupCenterStatus() {
 		return {
 			id: engine,
 			label: engine,
+			state:
+				runtime.integrity === "failed"
+					? "failed"
+					: receipt && !current
+						? "stale"
+						: check?.status === "completed" && check.executionVerified === true
+							? "ready"
+							: check?.status === "failed"
+								? "failed"
+								: fullInstalled
+									? "installed_not_tested"
+									: "setup_required",
 			status:
-				check?.status === "completed" && check.executionVerified === true
-					? "Ready"
-					: check?.status === "failed"
-						? "Test failed"
-						: "Setup needed",
+				runtime.integrity === "failed"
+					? "Integrity failed"
+					: receipt && !current
+						? "Stale"
+						: check?.status === "completed" && check.executionVerified === true
+							? "Ready"
+							: check?.status === "failed"
+								? "Test failed"
+								: fullInstalled
+									? "Installed, not tested"
+									: "Setup needed",
 			reason:
-				check?.reason ??
-				(check
-					? "Owned fixture tested"
-					: "Install the full pack, then test actual execution"),
+				runtime.integrity === "failed"
+					? "Repair or roll back the runtime before testing"
+					: receipt && !current
+						? "Runtime or worker identity changed; retest actual execution"
+						: (check?.reason ??
+							(check
+								? "Owned fixture tested"
+								: "Install the full pack, then test actual execution")),
 			version: check?.version,
 		};
 	});
@@ -486,6 +511,7 @@ export async function getSetupCenterStatus() {
 				? "Ready"
 				: "Setup needed",
 		checkedAt: current ? receipt?.checkedAt : undefined,
+		lastCheckedAt: receipt?.checkedAt,
 		licensedStatus:
 			idaReceipt?.idaHome === preferences.idaHome &&
 			idaReceipt?.status === "passed"

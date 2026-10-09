@@ -544,7 +544,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
         exact: true,
       })
       .click();
-    await page.getByText("Ready", { exact: true }).waitFor({ timeout: 240000 });
+    await page.getByLabel("Full capability pack status", { exact: true }).filter({ hasText: /^Ready$/ }).waitFor({ timeout: 240000 });
     const full = await rpc<{
       fullStatus: string;
       features: Array<{ id: string; status: string }>;
@@ -661,7 +661,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .getByRole("button", { name: "Roll back to core", exact: true })
       .click();
     await page
-      .getByText("Setup needed", { exact: true })
+      .getByLabel("Full capability pack status", { exact: true }).filter({ hasText: /^Setup needed$/ })
       .waitFor({ timeout: 90000 });
     const rollback = await rpc<{
       runtime: { runtimeId: string; integrity: string };

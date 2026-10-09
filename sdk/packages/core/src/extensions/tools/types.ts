@@ -32,6 +32,9 @@ import type {
  * Result from a single tool operation
  */
 export interface ToolOperationResult {
+	/** Available only when the executor reports actual process facts. */
+	execution?: import("./executors/command-evidence").CommandExecutionReceipt;
+	artifacts?: import("./executors/command-evidence").CommandArtifactReceipt[];
 	/** The query/input that was executed */
 	query: string;
 	/** The result content (if successful) */

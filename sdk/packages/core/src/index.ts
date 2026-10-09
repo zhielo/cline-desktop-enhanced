@@ -1035,6 +1035,7 @@ export {
 	recordWindowsCommandLatencyObservation,
 } from "./extensions/tools/executors/command-latency-baseline";
 export * from "./remote/remote-environments";
+export { cleanupStaleDetachedCommandLogs } from "./extensions/tools/executors/bash";
 export { ensureLoginShellPath } from "./remote/shell-path";
 export { isClineAccountFeatureEnabled } from "./services/feature-flags/cline-account-feature-flags";
 export {

@@ -4,41 +4,82 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"sdk/packages/core/src/hub/daemon/index.ts",markers:["restartCompatible?: boolean","options.restartCompatible === true"]},
- {path:"apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",markers:["Apply setup to idle backend"]},
-  {
-    path: "apps/examples/desktop-app/sidecar/setup-center.ts",
-    markers: [
-      "FULL_ENGINE_IDS",
-      "fullReceiptPassed",
-      "executionVerified === true",
-      "-----BEGIN PUBLIC KEY-----",
-      "deviceSerialSha256",
-      "testLicensedIda",
-      "platformToolsNotices",
-    ],
-  },
-  {
-    path: "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",
-    markers: [
-      "Install all supported components",
-      "acceptedPlatformToolsLicense: true",
-      "Roll back to core",
-      "Package presence alone is not execution proof",
-    ],
-  },
-  {
-    path: "sdk/packages/core/scripts/full-analysis-readiness.test.py",
-    markers: ["executionVerified", "angr", "full"],
-  },
-  {
-    path: "scripts/package-android-platform-tools.ps1",
-    markers: [
-      "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99",
-      "adb.exe",
-      "NOTICE.txt",
-    ],
-  },
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/command-evidence.ts",
+		markers: [
+			"CommandExecutionReceipt",
+			"inspectCommandArtifacts",
+			"non-linked regular file",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/definitions.ts",
+		markers: [
+			"expected_output_files",
+			"command_execution_receipt",
+			"side-effecting commands automatically",
+		],
+	},
+	{
+		path: "scripts/benchmark-command-execution.mjs",
+		markers: [
+			"owned-shared-executor-ready/v1",
+			"environmentId",
+			"not installed UI startup",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/setup-center.ts",
+		markers: ["installed_not_tested", "stale", "lastCheckedAt"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/engineering-control-plane.ts",
+		markers: ["manualModelId", "no silent fallback", "Model routing mode"],
+	},
+	{
+		path: "sdk/packages/core/src/hub/daemon/index.ts",
+		markers: [
+			"restartCompatible?: boolean",
+			"options.restartCompatible === true",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",
+		markers: ["Apply setup to idle backend"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/setup-center.ts",
+		markers: [
+			"FULL_ENGINE_IDS",
+			"fullReceiptPassed",
+			"executionVerified === true",
+			"-----BEGIN PUBLIC KEY-----",
+			"deviceSerialSha256",
+			"testLicensedIda",
+			"platformToolsNotices",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",
+		markers: [
+			"Install all supported components",
+			"acceptedPlatformToolsLicense: true",
+			"Roll back to core",
+			"Package presence alone is not execution proof",
+		],
+	},
+	{
+		path: "sdk/packages/core/scripts/full-analysis-readiness.test.py",
+		markers: ["executionVerified", "angr", "full"],
+	},
+	{
+		path: "scripts/package-android-platform-tools.ps1",
+		markers: [
+			"45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99",
+			"adb.exe",
+			"NOTICE.txt",
+		],
+	},
 
 	{
 		path: "apps/examples/desktop-app/webview/lib/run-error.ts",

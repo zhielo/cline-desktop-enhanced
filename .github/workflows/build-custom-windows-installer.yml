@@ -486,6 +486,11 @@ jobs:
           node --experimental-strip-types ../../vscode/scripts/desktop-installed-acceptance.ts
           if ($LASTEXITCODE -ne 0) { throw 'Installed WebView acceptance failed' }
 
+      - name: Publish bounded installed acceptance failure
+        if: ${{ always() && steps.ui_acceptance.outcome == 'failure' }}
+        shell: pwsh
+        run: node scripts/report-installed-acceptance.mjs apps/examples/desktop-app/dist/installed-ui-evidence/summary.json
+
       - name: Upload installed UI acceptance evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
