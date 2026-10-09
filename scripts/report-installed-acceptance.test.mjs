@@ -10,3 +10,12 @@ test("failure annotations are bounded, escaped and redact credentials", () => {
 	expect(text).toContain("%0A");
 	expect(text).toContain("%25");
 });
+test("owned Hub startup evidence is independently bounded and redacted", () => {
+ const text = annotationFromSummary({status:"failed",reason:"connection failed",hubStartupDiagnostic:
+  "x".repeat(5000) + '\n[hub-daemon] fatal: owned startup failure "authToken":"private-value" Bearer hidden'});
+ expect(text).toContain("owned startup failure");
+ expect(text).not.toContain("private-value");
+ expect(text).not.toContain("Bearer hidden");
+ expect(text.length).toBeLessThan(2200);
+ expect(text).toContain("%0A");
+});

@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 
 export function annotationFromSummary(summary) {
 	if (summary?.status !== "failed") return undefined;
-	const reason = String(summary.reason ?? "Inspect installed UI evidence")
+	const startup = typeof summary.hubStartupDiagnostic === "string"
+		? summary.hubStartupDiagnostic.slice(-1600) : "";
+	const reason = (String(summary.reason ?? "Inspect installed UI evidence").slice(0, 800) +
+		(startup ? `; owned Hub startup tail: ${startup}` : ""))
 		.replace(/(?:Bearer\s+|approval_token=)\S+/gi, "[REDACTED]")
 		.replace(/("(?:authToken|token|apiKey|password|secret)"\s*:\s*")[^"]*"/gi, '$1[REDACTED]"')
 		.replace(/\b[0-9a-f]{32,}\b/gi, "[REDACTED]")

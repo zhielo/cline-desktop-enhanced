@@ -728,3 +728,5 @@ Licensed acceptance also requires the executor's actual target SHA-256 to match 
 ## Managed Hub replacement credential binding
 
 Managed discovery resolution refreshes the returned daemon URL and authentication token before reconnecting, including replacements reusing a pinned port. Explicit endpoint callers remain non-recoverable; no accepted task prompt is replayed. Regression coverage checks first-spawn authentication and same-URL token rotation without assuming a concurrent observer refreshes discovery. Both installed crash-recovery journeys remain mandatory.
+
+Installed recovery failures retain a separately bounded, redacted tail of the fixture-owned hub-daemon.log and expose its bounded startup context in the failure annotation. This diagnostic does not replace any installed acceptance assertion, replay commands, mark failed installers verified, or read user Hub logs.

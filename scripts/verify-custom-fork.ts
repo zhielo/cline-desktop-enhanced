@@ -5,6 +5,14 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: ["owned-hub-daemon-tail.log", "hubStartupDiagnostic = tail.slice(-1600)"],
+	},
+	{
+		path: "scripts/report-installed-acceptance.mjs",
+		markers: ["owned Hub startup tail:", "hubStartupDiagnostic.slice(-1600)"],
+	},
+	{
 		path: "sdk/packages/core/src/hub/client/index.ts",
 		markers: ["rememberRecoverableLocalHubUrl(ensured.url, ensured.authToken)"],
 	},

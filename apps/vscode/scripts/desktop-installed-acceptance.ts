@@ -809,9 +809,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		const reason = (error instanceof Error ? error.message : String(error))
 			.replace(/approval_token=[^&\s]+/g, "approval_token=[REDACTED]")
       .slice(0, 2000);
-		// Only this fixture's known log is read, at most 64 KiB, with tokens redacted.
+		// Read only two fixed fixture-owned logs, each at most 64 KiB, redacted.
+    let hubStartupDiagnostic = "";
+    for (const [leaf, evidenceLeaf] of [["code.log", "owned-backend-tail.log"],
+      ["hub-daemon.log", "owned-hub-daemon-tail.log"]] as const) {
   try {
-   const log = await open(join(root, "data", "logs", "code.log"), "r");
+   const log = await open(join(root, "data", "logs", leaf), "r");
    try {
     const info = await log.stat();
     if (info.isFile() && info.size <= 50 * 1024 * 1024) {
@@ -822,10 +825,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
             buffer.length,
             Math.max(0, info.size - buffer.length),
           );
-          await writeFile(
-            join(evidence, "owned-backend-tail.log"),
-            redactedLaunchText(buffer.subarray(0, bytesRead).toString("utf8")),
-          );
+          const tail = redactedLaunchText(buffer.subarray(0, bytesRead).toString("utf8"));
+          await writeFile(join(evidence, evidenceLeaf), tail);
+          if (leaf === "hub-daemon.log") hubStartupDiagnostic = tail.slice(-1600);
     }
 	} finally {
         await log.close();
@@ -833,9 +835,10 @@ ConvertTo-Json -InputObject @($rows) -Compress
     } catch {
       /* Diagnostics do not substitute for the strict acceptance result. */
     }
+    }
     await writeFile(
       join(evidence, "summary.json"),
-      JSON.stringify({ status: "failed", stages, reason }, null, 2),
+      JSON.stringify({ status: "failed", stages, reason, hubStartupDiagnostic }, null, 2),
     );
     throw new Error(reason);
   } finally {
