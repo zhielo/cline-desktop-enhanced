@@ -537,7 +537,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
               id: `installer-owned-message-${index}`,
               role: "user",
               content: `Installer owned history row ${index}. ${"Owned offline transcript fixture. ".repeat(8)}`,
-            })).concat([{id: "installer-owned-artifact", role: "assistant", content: "Owned report: `OWNED_SCROLL_REPORT.md`"}]),
+            })).concat([{id: "installer-owned-artifact", role: "assistant", content: "Owned report: `./OWNED_SCROLL_REPORT.md`"}]),
 				},
 			},
       },
@@ -564,7 +564,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       transcriptScrollSamples.push(performance.now() - started);
     }
     stages.push("owned-120-row-transcript-scroll-acceptance-passed");
-    await page.locator('a[data-cline-file-reference="OWNED_SCROLL_REPORT.md"]').last().click();
+    await page.locator('a[data-cline-file-reference="./OWNED_SCROLL_REPORT.md"]').last().click();
     const preview = page.getByTestId("artifact-preview-scroll");
     await preview.waitFor({state: "visible"});
     if (!(await preview.evaluate(el => el.scrollHeight > el.clientHeight))) throw new Error("Owned Markdown preview is not independently scrollable");
