@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { mkdtemp, writeFile, rm, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -54,7 +55,8 @@ export async function testFirstPartyFixture() {
 		);
 		if (
 			!receipt.result?.edges.some((e) => e.kind === "ipc-candidate") ||
-			receipt.status !== "completed" || receipt.result.parserVersion !== "5.9.3"
+			receipt.status !== "completed" ||
+			receipt.result.parserVersion !== "5.9.3"
 		)
 			throw new Error(receipt.error ?? "Owned static IPC fixture did not pass");
 		fixtureReceipt = {
@@ -84,7 +86,9 @@ export async function handleFirstPartyCommand(
 ) {
 	const db = firstPartyStore();
 	const bound = db.session(session.id);
-	if (bound && bound.workspace !== (await realpath(session.workspace)))
+	// The store and receipt service use realpathSync. Use the same resolver here:
+	// Windows async/sync path spellings must not split one workspace identity.
+	if (bound && bound.workspace !== realpathSync(session.workspace))
 		throw new Error(
 			"Session workspace changed; existing analysis binding cannot be reused",
 		);
