@@ -23,6 +23,7 @@ type SetupJob = {
 	error?: string;
 };
 type Status = {
+ firstPartyAnalysis?:{installed:boolean;parser:string;staticFixture:{status:string;checkedAt?:string};targetSupported:string;nativeProvider:string;runtimeCapture:string;behaviorVerification:string};
 	setupJob?: SetupJob | null;
 	desktopBuild?: {
 		version: string;
@@ -273,6 +274,16 @@ export function SetupCenter() {
 				subtitle="Install supported private engine packs, then verify actual capabilities. Licenses and device authorization stay explicit."
 			/>
 			<div className="space-y-6 p-6">
+                <section aria-label="First-party analysis readiness" className="space-y-2 rounded border p-3">
+                    <h3>First-party JavaScript / Electron analysis</h3>
+                    <Button variant="outline" onClick={()=>void desktopClient.invoke<{notices:string}>("first_party_analysis_notices",{environmentId:"local"}).then(r=>setNotice(r.notices)).catch(()=>setError("Parser notices unavailable"))}>Read bundled parser notices</Button>
+                    <p>Parser bundled: {status?.firstPartyAnalysis?.installed ? status.firstPartyAnalysis.parser : "Checking installed backend"}. No REA, separate Node installation or Python pack required.</p>
+                    <p>Owned static fixture: {status?.firstPartyAnalysis?.staticFixture.status ?? "not-tested"}. This is not target behavior verification.</p>
+                    <p className="text-xs">{status?.firstPartyAnalysis?.targetSupported}</p>
+                    <p className="text-xs">{status?.firstPartyAnalysis?.nativeProvider}</p>
+                    <p className="text-xs">{status?.firstPartyAnalysis?.runtimeCapture}</p>
+                    <Button disabled={busy} onClick={()=>void action("first_party_analysis_selftest","Run the bundled parser against fixed owned JavaScript fixtures? Target source is parsed, never executed; this does not certify native engines or runtime capture.")}>Test first-party static analysis</Button>
+                </section>
 				<p>
 					Installed desktop: {status?.desktopBuild?.version ?? "Unknown"}; build{" "}
 					<code>{status?.desktopBuild?.sourceCommit ?? "Unknown"}</code>.
