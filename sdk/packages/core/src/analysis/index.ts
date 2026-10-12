@@ -16,7 +16,7 @@ export const EvidenceQuerySchema = z
 	.object({
 		receiptId: z.string().uuid(),
 		view: z
-			.enum(["artifacts", "findings", "graph", "verification"])
+			.enum(["artifacts", "findings", "graph", "comparison", "verification"])
 			.default("findings"),
 		offset: z.number().int().min(0).max(10000).default(0),
 		limit: z.number().int().min(1).max(50).default(20),
@@ -45,7 +45,15 @@ export function queryFirstPartyEvidence(
 			completedAt: receipt.completedAt,
 			error: receipt.error,
 			limitations: result?.limitations,
-			comparison: result?.comparison,
+			comparison: result?.comparison
+				? {
+						added: result.comparison.added,
+						removed: result.comparison.removed,
+						changed: result.comparison.changed,
+						findingsCount: result.comparison.findings?.length ?? 0,
+						limitations: result.comparison.limitations,
+					}
+				: undefined,
 			verifiedBehavior: false,
 			note: "Receipt integrity and static inspection are not behavioral certification.",
 		};
@@ -54,7 +62,9 @@ export function queryFirstPartyEvidence(
 			? (result?.artifacts ?? [])
 			: q.view === "graph"
 				? (result?.edges ?? [])
-				: (result?.facts ?? []);
+				: q.view === "comparison"
+					? (result?.comparison?.findings ?? [])
+					: (result?.facts ?? []);
 	const filtered = q.filter
 		? all.filter((v) =>
 				JSON.stringify(v).toLowerCase().includes(q.filter.toLowerCase()),
@@ -65,6 +75,8 @@ export function queryFirstPartyEvidence(
 		status: receipt.status,
 		resultHash: receipt.resultHash,
 		view: q.view,
+		available:
+			q.view !== "comparison" || result?.comparison?.findings !== undefined,
 		total: filtered.length,
 		offset: q.offset,
 		items: filtered.slice(q.offset, q.offset + q.limit),

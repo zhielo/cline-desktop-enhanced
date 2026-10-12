@@ -128,3 +128,57 @@ it("keeps saved evidence available in Off and never auto-runs inspection", async
 		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
 	).toBe(false);
 });
+
+it("reads bounded finding comparisons while Off without starting a worker", async () => {
+	invoke.mockImplementation(async (command: string) =>
+		command === "first_party_analysis_evidence"
+			? {
+					items: [
+						{
+							change: "removed",
+							kind: "resolved-endpoint",
+							value: "https://old.invalid",
+						},
+					],
+					total: 1,
+					nextOffset: null,
+				}
+			: {
+					mode: "off",
+					receipts: [
+						{ id: "a", status: "completed", target: "new", createdAt: "now" },
+					],
+					readiness: {},
+				},
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="s" environmentId="local" />,
+		),
+	);
+	await act(async () => {
+		const select = el.querySelector("select")!;
+		select.value = "a";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "comparison")!
+			.click(),
+	);
+	expect(invoke).toHaveBeenCalledWith("first_party_analysis_evidence", {
+		sessionId: "s",
+		environmentId: "local",
+		query: {
+			receiptId: "a",
+			view: "comparison",
+			filter: "",
+			offset: 0,
+			limit: 20,
+		},
+	});
+	expect(el.textContent).toContain("https://old.invalid");
+	expect(
+		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
+	).toBe(false);
+});

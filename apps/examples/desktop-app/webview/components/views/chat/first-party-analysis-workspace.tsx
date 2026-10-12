@@ -15,7 +15,13 @@ type Status = {
 	receipts: Summary[];
 	readiness: Record<string, unknown>;
 };
-type View = "artifacts" | "findings" | "graph" | "timeline" | "verification";
+type View =
+	| "artifacts"
+	| "findings"
+	| "graph"
+	| "comparison"
+	| "timeline"
+	| "verification";
 type PageResult = {
 	items?: unknown[];
 	nextOffset?: number | null;
@@ -148,9 +154,10 @@ export function FirstPartyAnalysisWorkspace({
 		>
 			<h3 className="font-semibold">First-party Analysis Workspace</h3>
 			<p className="text-xs text-muted-foreground">
-				Mode: {status?.mode ?? "unavailable"}. Static JS/TS/Electron syntax and
-				bounded ASAR inspection. Never executes the target. Mode does not
-				override permissions or disable existing tools.
+				Mode: {status?.mode ?? "unavailable"}. Static JS/TS/Electron syntax,
+				bounded local value/call relationships, declared source-map locations
+				and ASAR inspection. Never executes the target. Mode does not override
+				permissions or disable existing tools.
 			</p>
 			<div className="flex flex-wrap gap-2">
 				<input
@@ -220,6 +227,7 @@ export function FirstPartyAnalysisWorkspace({
 						"artifacts",
 						"findings",
 						"graph",
+						"comparison",
 						"timeline",
 						"verification",
 					] as View[]
@@ -269,6 +277,11 @@ export function FirstPartyAnalysisWorkspace({
 							}}
 							placeholder="Literal evidence filter"
 						/>
+					) : null}
+					{view === "comparison" && page?.available === false ? (
+						<p className="text-xs">
+							Comparison was not recorded for this receipt.
+						</p>
 					) : null}
 					{page?.items ? (
 						<ul className="space-y-2">

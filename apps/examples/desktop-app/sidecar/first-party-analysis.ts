@@ -21,7 +21,11 @@ export function firstPartyReadiness() {
 		parser: "TypeScript 5.9.3",
 		staticFixture: fixtureReceipt ?? { status: "not-tested" },
 		targetSupported:
-			"Determined per request; supported JS/TS/package metadata and bounded ASAR only",
+			"Determined per request; supported JS/TS/package metadata, basic source maps and bounded ASAR only",
+		localSemantics:
+			"Bounded immutable scalar expressions, lexical local calls and simple pure-return argument substitution; no complete program semantics",
+		sourceMaps:
+			"Basic v3 mapping declarations and embedded hashes only; runtime reconciliation not implemented",
 		nativeProvider:
 			"Use existing engine-specific Setup Center tests; no new parity claim",
 		runtimeCapture:
@@ -36,7 +40,7 @@ export async function testFirstPartyFixture() {
 	try {
 		await writeFile(
 			join(root, "main.js"),
-			'import { ipcMain } from "electron"; ipcMain.handle("owned:add", () => 42);',
+			'import { ipcMain } from "electron"; ipcMain.handle("owned:add", () => 42); const host="https://owned.invalid"; function route(h){return h+"/fixture";} fetch(route(host));',
 		);
 		await writeFile(
 			join(root, "renderer.js"),
@@ -45,6 +49,17 @@ export async function testFirstPartyFixture() {
 		await writeFile(
 			join(root, "never-execute.js"),
 			'throw new Error("TARGET_MUST_NOT_EXECUTE");',
+		);
+		await writeFile(
+			join(root, "main.js.map"),
+			JSON.stringify({
+				version: 3,
+				file: "main.js",
+				sources: ["owned.ts"],
+				sourcesContent: ["const owned=42;"],
+				names: [],
+				mappings: "AAAA",
+			}),
 		);
 		db.setMode("owned-fixture", await realpath(root), "static");
 		const receipt = await runFirstPartyAnalysis(
@@ -56,7 +71,13 @@ export async function testFirstPartyFixture() {
 		if (
 			!receipt.result?.edges.some((e) => e.kind === "ipc-candidate") ||
 			receipt.status !== "completed" ||
-			receipt.result.parserVersion !== "5.9.3"
+			receipt.result.parserVersion !== "5.9.3" ||
+			!receipt.result.facts.some(
+				(f) =>
+					f.kind === "resolved-endpoint" &&
+					f.value === "https://owned.invalid/fixture",
+			) ||
+			!receipt.result.facts.some((f) => f.kind === "source-map-location")
 		)
 			throw new Error(receipt.error ?? "Owned static IPC fixture did not pass");
 		fixtureReceipt = {
@@ -69,7 +90,7 @@ export async function testFirstPartyFixture() {
 		fixtureReceipt = {
 			status: "failed",
 			checkedAt: new Date().toISOString(),
-			profile: "cline-js-static/1",
+			profile: "cline-js-static/2",
 			error: e instanceof Error ? e.message : "Fixture failed",
 		};
 		throw e;

@@ -16,6 +16,7 @@ import {
 	digest,
 	ANALYSIS_PROFILE,
 	type AnalysisReceipt,
+	type AnalysisResult,
 } from "./contracts";
 import { FirstPartyAnalysisStore } from "./store";
 import { runFirstPartyAnalysis } from "./service";
@@ -228,7 +229,7 @@ it("supervises a real child, strips credentials and exposes retained paginated e
 				{ receiptId: r.id, view: "findings", limit: 1 },
 				db,
 			),
-		).toMatchObject({ total: 1 });
+		).toMatchObject({ total: 2, items: [expected.facts[0]], nextOffset: 1 });
 		db.setMode("s", root, "off");
 		expect(
 			queryFirstPartyEvidence(
@@ -261,4 +262,52 @@ it("cancels an owned child without replay", async () => {
 	expect(r.result).toBeUndefined();
 	expect(db.summaries("s")).toHaveLength(1);
 	db.close();
+});
+
+it("retains version-one receipt hashes without rewriting evidence during a profile upgrade", () => {
+	const file = join(root, "legacy.sqlite"),
+		db = new FirstPartyAnalysisStore(file);
+	db.setMode("s", root, "static");
+	const r = receipt("00000000-0000-4000-8000-000000000001");
+	r.profile = "cline-js-static/1";
+	db.start(r);
+	r.status = "completed";
+	r.result = {
+		profile: "cline-js-static/1",
+		parserVersion: "5.9.3",
+		status: "completed",
+		artifacts: [],
+		facts: [],
+		edges: [],
+		limitations: ["Legacy static syntax only"],
+		counters: { entries: 0, bytes: 0, nodes: 0 },
+	} as unknown as AnalysisResult;
+	r.resultHash = digest(r.result);
+	db.save(r);
+	db.setMode("s", root, "off");
+	db.close();
+	const reopened = new FirstPartyAnalysisStore(file);
+	try {
+		expect(reopened.get("s", r.id).result).toEqual(r.result);
+		expect(
+			queryFirstPartyEvidence(
+				"s",
+				{ receiptId: r.id, view: "verification" },
+				reopened,
+			),
+		).toMatchObject({
+			profile: "cline-js-static/1",
+			resultHash: r.resultHash,
+			verifiedBehavior: false,
+		});
+		expect(
+			queryFirstPartyEvidence(
+				"s",
+				{ receiptId: r.id, view: "comparison" },
+				reopened,
+			),
+		).toMatchObject({ available: false, total: 0 });
+	} finally {
+		reopened.close();
+	}
 });

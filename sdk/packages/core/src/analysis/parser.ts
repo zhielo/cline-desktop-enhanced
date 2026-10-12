@@ -1,4 +1,6 @@
 import ts from "typescript";
+import { analyzeLocalSemantics } from "./semantic";
+import { sourceMapLocations } from "./source-maps";
 import path from "node:path";
 import {
 	ANALYSIS_PROFILE,
@@ -22,6 +24,7 @@ export function analyzeSources(
 	const facts: AnalysisFact[] = [],
 		limitations = [...partial];
 	const artifacts: AnalysisResult["artifacts"] = [];
+	const semanticEdges: AnalysisResult["edges"] = [];
 	let nodes = 0,
 		stopped = false;
 	const add = (
@@ -51,10 +54,12 @@ export function analyzeSources(
 			},
 			limitations: notes,
 		};
-		facts.push({
+		const fact: AnalysisFact = {
 			id: `ev_${digest({ profile: ANALYSIS_PROFILE, parserVersion: ts.version, ...data })}`,
 			...data,
-		});
+		};
+		facts.push(fact);
+		return fact;
 	};
 	const literal = (n?: ts.Node) =>
 		n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
@@ -62,6 +67,51 @@ export function analyzeSources(
 			: undefined;
 	for (const source of sources) {
 		if (stopped) break;
+		if (source.path.endsWith(".map")) {
+			artifacts.push({
+				path: source.path,
+				sha256: source.sha256,
+				bytes: source.bytes,
+				role: "source-map",
+			});
+			const mapFile = ts.createSourceFile(
+				source.path,
+				"{}",
+				ts.ScriptTarget.Latest,
+				true,
+			);
+			try {
+				const records = sourceMapLocations(
+					source.source,
+					LIMITS.facts - facts.length,
+				);
+				for (const record of records.locations) {
+					const value = JSON.stringify(record);
+					if (value.length > 1000) {
+						limitations.push(
+							`Source-map label too long for retained evidence: ${source.path}`,
+						);
+						continue;
+					}
+					add(
+						source,
+						mapFile,
+						mapFile,
+						"source-map-location",
+						value,
+						"derived",
+						[
+							"Untrusted source-map declaration; original labels are not opened or executed. Embedded source hash is not execution proof.",
+						],
+					);
+				}
+				if (records.partial)
+					limitations.push(`Source map coverage incomplete: ${source.path}`);
+			} catch {
+				limitations.push(`Unsupported/malformed source map: ${source.path}`);
+			}
+			continue;
+		}
 		if (source.path.endsWith(".json")) {
 			artifacts.push({
 				path: source.path,
@@ -347,12 +397,24 @@ export function analyzeSources(
 			ts.forEachChild(n, visit);
 		};
 		visit(file);
+		if (!stopped) {
+			const semantic = analyzeLocalSemantics(
+				file,
+				source,
+				(node, kind, value, notes) =>
+					add(source, file, node, kind, value, "derived", notes),
+				LIMITS.facts - semanticEdges.length,
+			);
+			semanticEdges.push(...semantic.edges);
+			nodes += semantic.visits;
+			if (semantic.exhausted || nodes > LIMITS.nodes) stopped = true;
+		}
 	}
 	if (stopped)
 		limitations.push(
 			"AST node or finding budget reached; remaining syntax was not inspected.",
 		);
-	const edges: AnalysisResult["edges"] = [];
+	const edges: AnalysisResult["edges"] = [...semanticEdges];
 	const modules = new Map(
 		facts.filter((f) => f.kind === "module").map((f) => [f.value, f]),
 	);
@@ -422,8 +484,8 @@ export function analyzeSources(
 		edges,
 		limitations: [
 			...limitations.slice(0, 90),
-			"Static syntax coverage only: no complete alias analysis, interprocedural data flow, deobfuscation, or execution proof.",
-			"Source maps, unpacked ASAR entries, dynamic imports and native addons are not executed or decompiled.",
+			"Bounded syntax, local symbol/value reduction and pure-return call candidates only; no complete alias analysis or interprocedural recovery, universal deobfuscation or execution proof.",
+			"Source-map labels are untrusted declarations; unpacked ASAR entries, dynamic imports and native addons are not executed or decompiled.",
 		],
 		counters: {
 			entries: sources.length,

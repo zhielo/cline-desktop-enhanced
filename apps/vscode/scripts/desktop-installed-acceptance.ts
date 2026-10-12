@@ -188,6 +188,13 @@ export async function main() {
   await writeFile(join(workspace, "OWNED_SCROLL_REPORT.md"), Array.from({length: 240}, (_, i) => `Owned Markdown scroll line ${i}`).join("\n"));
   await writeFile(join(workspace,"owned-main.js"),'import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42);');
   await writeFile(join(workspace,"owned-renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
+  const analysisCurrent=join(workspace,"owned-analysis-current"), analysisPrevious=join(workspace,"owned-analysis-previous");
+  await mkdir(analysisCurrent);await mkdir(analysisPrevious);
+  for(const [directory,route] of [[analysisCurrent,"/v2"],[analysisPrevious,"/v1"]]) {
+    await writeFile(join(directory,"main.js"),`import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42); const host="https://owned.invalid"; const route=${JSON.stringify(route)}; function endpoint(h,r){return h+r;} fetch(endpoint(host,route));`);
+    await writeFile(join(directory,"renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
+  }
+  await writeFile(join(analysisCurrent,"main.js.map"),JSON.stringify({version:3,file:"main.js",sources:["original.ts"],sourcesContent:["export const owned=42;"],names:[],mappings:"AAAA"}));
   let port = 0;
   const discoveryPath = join(root, "hub.json");
 	const environment = Object.fromEntries(
@@ -562,10 +569,16 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(beforeAnalysis.mode!=="off")throw new Error("New session analysis must default Off");
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("static");
     await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="static"&&!select.disabled;});
-    const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"."}});
+    const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"owned-analysis-current",compareTarget:"owned-analysis-previous"}});
     if(!["completed","partial"].includes(parsed.status))throw new Error("Installed static parser failed");
     const graph=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"graph"}});
     if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
+    const values=await rpc<{items:Array<{kind:string;value:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"resolved-endpoint"}});
+    if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed local value/return reduction failed");
+    const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
+    if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
+    const changes=await rpc<{items:Array<{kind:string;value:string;change:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"comparison",filter:"resolved-endpoint"}});
+    if(!changes.items.some(f=>f.change==="removed"&&f.value==="https://owned.invalid/v1")||!changes.items.some(f=>f.change==="added"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed endpoint finding comparison failed");
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
     await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
     await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();

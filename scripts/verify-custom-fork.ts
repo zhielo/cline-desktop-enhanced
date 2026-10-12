@@ -4,7 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"sdk/packages/core/src/analysis/contracts.ts",markers:["cline-js-static/1","shipped-artifact","termination-unconfirmed"]},
+ {path:"sdk/packages/core/src/analysis/contracts.ts",markers:["cline-js-static/2","shipped-artifact","termination-unconfirmed"]},
  {path:"sdk/packages/core/src/analysis/service.ts",markers:["--cline-analysis-worker","SIGKILL","reservation retained","do not replay"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx",markers:["Session Analysis mode","Runtime mode does not grant","first_party_analysis_mode"]},
  {path:"apps/examples/desktop-app/sidecar/analysis-parser-notices.ts",markers:["Apache License","Microsoft"]},

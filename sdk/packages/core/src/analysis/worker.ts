@@ -11,7 +11,9 @@ import {
 import { analyzeSources, type SourceArtifact } from "./parser";
 
 const sourceName = (p: string) =>
-	/\.(?:[cm]?[jt]s|[jt]sx)$/i.test(p) || path.basename(p) === "package.json";
+	/\.(?:[cm]?[jt]s|[jt]sx)$/i.test(p) ||
+	p.endsWith(".map") ||
+	path.basename(p) === "package.json";
 export function within(root: string, target: string) {
 	const child = path.relative(root, target);
 	return (
@@ -251,18 +253,54 @@ export async function analyzeTarget(
 				]),
 			);
 		};
+		const earlier = analyzeSources(previous.sources, previous.limitations);
+		const relativeFinding = (
+			fact: AnalysisResult["facts"][number],
+			base: string,
+		) => {
+			const prefix = path.relative(root, base).split(path.sep).join("/");
+			const name =
+				fact.location.path === prefix
+					? path.posix.basename(fact.location.path)
+					: fact.location.path.slice(prefix.length + 1);
+			return JSON.stringify([
+				name,
+				fact.kind,
+				fact.kind === "module" ? name : fact.value,
+				fact.confidence,
+			]);
+		};
+		const currentFindings = new Map(
+			result.facts.map((f) => [relativeFinding(f, baseCurrent), f]),
+		);
+		const previousFindings = new Map(
+			earlier.facts.map((f) => [relativeFinding(f, basePrevious), f]),
+		);
+		const changedFindings = [
+			...result.facts
+				.filter((f) => !previousFindings.has(relativeFinding(f, baseCurrent)))
+				.map((f) => ({ ...f, change: "added" as const })),
+			...earlier.facts
+				.filter((f) => !currentFindings.has(relativeFinding(f, basePrevious)))
+				.map((f) => ({ ...f, change: "removed" as const })),
+		];
+		if (changedFindings.length > LIMITS.facts) result.status = "partial";
 		const a = normalized(current.sources, baseCurrent),
 			b = normalized(previous.sources, basePrevious);
 		result.comparison = {
 			added: [...a.keys()].filter((k) => !b.has(k)),
 			removed: [...b.keys()].filter((k) => !a.has(k)),
 			changed: [...a.keys()].filter((k) => b.has(k) && a.get(k) !== b.get(k)),
+			findings: changedFindings.slice(0, LIMITS.facts),
 			limitations: [
-				"Relative-path byte comparison only; renamed files, behavior equivalence and original names are not inferred.",
-				...previous.limitations,
+				"Byte and relative-path finding comparison; changed candidates are not proof of changed runtime behavior. Renames, behavior equivalence and original symbols are not inferred.",
+				...earlier.limitations,
+				...(changedFindings.length > LIMITS.facts
+					? ["Finding comparison budget reached."]
+					: []),
 			],
 		};
-		if (previous.limitations.length) result.status = "partial";
+		if (earlier.status === "partial") result.status = "partial";
 	}
 	return ResultSchema.parse(result);
 }
