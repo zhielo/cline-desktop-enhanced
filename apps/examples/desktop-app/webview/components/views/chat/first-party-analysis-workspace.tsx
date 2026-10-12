@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
 import type { AnalysisMode } from "./analysis-mode-control";
 type Summary = {
@@ -276,12 +277,14 @@ export function FirstPartyAnalysisWorkspace({
 									key={`${selected}-${offset}-${index}`}
 									className="rounded border p-2"
 								>
-									<pre
+									<PreviewScrollRegion
+										aria-label="Scrollable analysis evidence"
 										className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs"
-										tabIndex={0}
 									>
-										{JSON.stringify(item, null, 2)}
-									</pre>
+										<pre className="whitespace-pre-wrap break-all text-xs">
+											{JSON.stringify(item, null, 2)}
+										</pre>
+									</PreviewScrollRegion>
 									{view === "graph" && item && typeof item === "object" ? (
 										<div className="flex gap-2 text-xs">
 											{(["source", "target"] as const).map((side) => {
@@ -307,12 +310,14 @@ export function FirstPartyAnalysisWorkspace({
 							))}
 						</ul>
 					) : page ? (
-						<pre
+						<PreviewScrollRegion
+							aria-label="Scrollable analysis evidence"
 							className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded border p-2 text-xs"
-							tabIndex={0}
 						>
-							{JSON.stringify(page, null, 2)}
-						</pre>
+							<pre className="whitespace-pre-wrap break-all text-xs">
+								{JSON.stringify(page, null, 2)}
+							</pre>
+						</PreviewScrollRegion>
 					) : (
 						<p className="text-xs">
 							Select a receipt. Evidence remains available when Analysis is Off.

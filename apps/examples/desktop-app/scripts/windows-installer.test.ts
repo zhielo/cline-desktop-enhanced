@@ -114,10 +114,32 @@ async function start(dir: string, name: string): Promise<ChildProcess> {
 	return child;
 }
 
-test("locked Tauri CLI is the version whose NSIS pin this suite mirrors", () => {
-	const resolved = readFileSync(lockfile, "utf8").match(
-		/"@tauri-apps\/cli": \["@tauri-apps\/cli@([^"]+)"/,
+function lockedTauriCliVersion(text: string) {
+	return text.match(
+		/"@tauri-apps\/cli":\s*\[\s*"@tauri-apps\/cli@([^"]+)"/,
 	)?.[1];
+}
+
+test("Tauri CLI resolution is whitespace-independent but remains exact", () => {
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli": ["@tauri-apps/cli@2.11.4"'),
+	).toBe("2.11.4");
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli":["@tauri-apps/cli@2.11.4"'),
+	).toBe("2.11.4");
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli":\n[\n"@tauri-apps/cli@2.11.4"'),
+	).toBe("2.11.4");
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli":["@tauri-apps/cli@2.12.0"'),
+	).not.toBe(TAURI_CLI_VERSION);
+	expect(
+		lockedTauriCliVersion('"another-package":["@tauri-apps/cli@2.11.4"'),
+	).toBeUndefined();
+});
+
+test("locked Tauri CLI is the version whose NSIS pin this suite mirrors", () => {
+	const resolved = lockedTauriCliVersion(readFileSync(lockfile, "utf8"));
 	expect(
 		resolved,
 		`@tauri-apps/cli moved from ${TAURI_CLI_VERSION}; re-read its bundler's NSIS_URL/NSIS_SHA1 and update TAURI_CLI_VERSION, NSIS_VERSION and the download in desktop-test.yml`,
