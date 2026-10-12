@@ -1276,6 +1276,7 @@ function ChatThreadPane({
 		writeWorkInToWindow(next);
 	}, []);
 	const [showDiffView, setShowDiffView] = useState(false);
+ const [workspaceInitialTab,setWorkspaceInitialTab]=useState<"changes"|"analysis">("changes");
 	const [deletingSession, setDeletingSession] = useState(false);
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 	const [renamingSession, setRenamingSession] = useState(false);
@@ -2678,6 +2679,7 @@ function ChatThreadPane({
 					<WindowTitleBarContent>
 						<div className="cline-view-enter z-20 border-b border-border/70 bg-background/85 backdrop-blur-sm">
 							<AgentHeader
+ sessionId={isCloudSession?undefined:displayedSessionId??undefined} environmentId={environmentId} onOpenAnalysis={()=>{setWorkspaceInitialTab("analysis");setShowDiffView(true);}}
 								agentActivity={isCloudSession ? undefined : agentActivity}
 								agents={isCloudSession ? undefined : agents}
 								agentsError={agentsError}
@@ -2714,6 +2716,7 @@ function ChatThreadPane({
 							<CloudProvisioningPane phase="Opening session..." />
 						) : showDiffView && !isCloudSession ? (
 							<DiffView
+ key={workspaceInitialTab} initialTab={workspaceInitialTab} sessionId={displayedSessionId??undefined}
 								cwd={config.cwd || config.workspaceRoot}
 								environmentId={environmentId}
 								fileDiffs={fileDiffs}

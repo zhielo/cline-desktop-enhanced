@@ -15,6 +15,7 @@ import {
 	Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { desktopClient } from "@/lib/desktop-client";
@@ -25,7 +26,10 @@ import { InvestigationWorkspace } from "./investigation-workspace";
 
 import { ExecutionWorkspace } from "./execution-workspace";
 
+import {FirstPartyAnalysisWorkspace} from "./first-party-analysis-workspace";
+
 type WorkbenchMode =
+ | "first-party"
 	| "execution"
 	| "incidents"
 	| "investigation"
@@ -107,6 +111,7 @@ const modes: Array<{
 	{ id: "debug", icon: Bug, label: "Debug" },
 	{ id: "terminal", icon: Terminal, label: "Terminal" },
 	{ id: "approvals", icon: ShieldCheck, label: "Approvals" },
+	{ id:"first-party",icon:FileSearch,label:"App analysis" },
 	{ id: "evidence", icon: FileCheck2, label: "Evidence" },
 	{ id: "diagnostics", icon: Wrench, label: "Diagnostics" },
 ];
@@ -117,13 +122,14 @@ function pretty(value: unknown): string {
 }
 
 export function AnalysisWorkbench({
-	cwd,
+ sessionId,	cwd,
 	environmentId,
 }: {
+ sessionId?:string;
 	cwd?: string;
 	environmentId: string;
 }) {
-	const [mode, setMode] = useState<WorkbenchMode>("analyze");
+	const [mode, setMode] = useState<WorkbenchMode>(sessionId?"first-party":"analyze");
 	const [discovery, setDiscovery] = useState<Discovery | null>(null);
 	const [diagnostics, setDiagnostics] = useState<unknown>(null);
 	const [tasks, setTasks] = useState<TaskPlan[]>([]);
@@ -501,8 +507,9 @@ export function AnalysisWorkbench({
 							onPrepare={(request) => prepare("static", request)}
 						/>
 					)}
+					{mode === "first-party" && <FirstPartyAnalysisWorkspace key={sessionId} sessionId={sessionId} environmentId={environmentId}/>}
 					{mode === "execution" && (
-						<ExecutionWorkspace cwd={cwd} environmentId={environmentId} />
+						<ExecutionWorkspace cwd={cwd ?? ""} environmentId={environmentId} />
 					)}
 					{mode === "incidents" && (
 						<ApkIncidentWorkspace cwd={cwd} environmentId={environmentId} />

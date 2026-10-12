@@ -717,7 +717,8 @@ function buildCoreSessionConfig(
 		providerConfig: config.providerConfig,
 		...(workspaceRoot ? { workspaceRoot } : {}),
 		...(cwd ? { cwd } : {}),
-		systemPrompt: [suppliedSystemPrompt, bridgeContract]
+		systemPrompt: [suppliedSystemPrompt, bridgeContract,
+            "First-party desktop analysis: reverse_engineer javascript_analysis is enabled only by the owning session Analysis mode. It parses confined JS/TS/Electron/ASAR without target execution. Use analysis_evidence receiptId views for bounded retained facts. Do not infer executed behavior from static calls, IPC candidates, loaded code, hashes or build success. Off blocks this parser only; runtime selection grants no extra permission. Missing capabilities must be reported, never silently approximated as verified."]
 			.filter(Boolean)
 			.join("\n\n"),
 		maxIterations: config.maxIterations ?? config.max_iterations,

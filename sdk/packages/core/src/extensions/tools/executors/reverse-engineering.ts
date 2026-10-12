@@ -1,3 +1,4 @@
+import { runFirstPartyAnalysis, queryFirstPartyEvidence, FirstPartyAnalysisStore } from "../../../analysis/index";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -2437,6 +2438,19 @@ function chooseAuto(
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+        if (input.operation === "javascript_analysis" || input.operation === "analysis_evidence") {
+            if (!context.sessionId) throw new Error("First-party analysis requires an owning session");
+            const store = new FirstPartyAnalysisStore();
+            try {
+                if (input.operation === "analysis_evidence") return JSON.stringify(queryFirstPartyEvidence(context.sessionId, input.evidence_query, store));
+                if (!input.target) throw new Error("JavaScript analysis target required");
+                const receipt = await runFirstPartyAnalysis(context.sessionId, {target:input.target,...input.javascript_options},context.signal,store);
+                return JSON.stringify({id:receipt.id,status:receipt.status,resultHash:receipt.resultHash,error:receipt.error,
+                    artifacts:receipt.result?.artifacts.length,findings:receipt.result?.facts.length,
+                    limitations:receipt.result?.limitations,
+                    next:"Use analysis_evidence with this receiptId for bounded findings/artifacts/graph/verification views. No execution or behavior verification implied."});
+            } finally { store.close(); }
+        }
 		if (
 			input.managed_worker === true &&
 			(input.operation !== "decompile" ||

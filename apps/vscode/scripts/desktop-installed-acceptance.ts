@@ -186,6 +186,8 @@ export async function main() {
     "Deterministic installer acceptance fixture.\n",
   );
   await writeFile(join(workspace, "OWNED_SCROLL_REPORT.md"), Array.from({length: 240}, (_, i) => `Owned Markdown scroll line ${i}`).join("\n"));
+  await writeFile(join(workspace,"owned-main.js"),'import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42);');
+  await writeFile(join(workspace,"owned-renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
   let port = 0;
   const discoveryPath = join(root, "hub.json");
 	const environment = Object.fromEntries(
@@ -555,6 +557,26 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			.first()
       .click();
     stages.push("owned-workspace-idle-session-opened");
+    const analysisArgs={sessionId:session.sessionId,environmentId:"local"};
+    const beforeAnalysis=await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs);
+    if(beforeAnalysis.mode!=="off")throw new Error("New session analysis must default Off");
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("static");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="static"&&!select.disabled;});
+    const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"."}});
+    if(!["completed","partial"].includes(parsed.status))throw new Error("Installed static parser failed");
+    const graph=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"graph"}});
+    if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
+    await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();
+    await page.getByLabel("First-party Analysis Workspace",{exact:true}).waitFor();
+    await page.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
+    if(await page.getByRole("button",{name:"Inspect static sources",exact:true}).isEnabled())throw new Error("Off analysis must block new inspection");
+    await page.getByRole("button",{name:"verification",exact:true}).click();
+    await page.getByText("Receipt integrity and static inspection are not behavioral certification.",{exact:false}).waitFor();
+    stages.push("installed-first-party-mode-parser-evidence-passed");
+    await page.getByRole("button",{name:"Close diff view",exact:true}).click();
+
     await page.waitForFunction(() => document.querySelectorAll('[data-message-role="user"]').length >= 120);
     for (let sample = 0; sample < 3; sample++) {
       const started = performance.now();

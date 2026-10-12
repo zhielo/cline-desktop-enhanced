@@ -47,6 +47,7 @@ import { EditorIcon } from "./editor-icons";
 import { WorkspaceTerminal } from "./workspace-terminal";
 
 type DiffViewProps = {
+ sessionId?:string; initialTab?:"changes"|"analysis";
 	environmentId: string;
 	fileDiffs: SessionFileDiff[];
 	cwd?: string;
@@ -58,6 +59,7 @@ type ReviewScope = "all" | "staged" | "unstaged";
 type WorkspaceFileResult = { root: string; files: string[]; limit: number };
 
 export function DiffView({
+ sessionId,initialTab="changes",
 	environmentId,
 	fileDiffs,
 	cwd,
@@ -72,7 +74,7 @@ export function DiffView({
 	const [pendingRevert, setPendingRevert] = useState<string[] | null>(null);
 	const [activeTab, setActiveTab] = useState<
 		"changes" | "files" | "terminal" | "analysis"
-	>("changes");
+	>(initialTab);
 	const [fileQuery, setFileQuery] = useState("");
 	const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
 	const [filesLoading, setFilesLoading] = useState(false);
@@ -400,7 +402,7 @@ export function DiffView({
 			) : activeTab === "terminal" ? (
 				<WorkspaceTerminal cwd={cwd} environmentId={environmentId} />
 			) : (
-				<AnalysisWorkbench cwd={cwd} environmentId={environmentId} />
+				<AnalysisWorkbench cwd={cwd} environmentId={environmentId} sessionId={sessionId} />
 			)}
 
 			<AlertDialog
