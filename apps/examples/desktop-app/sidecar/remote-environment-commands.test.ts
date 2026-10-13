@@ -743,8 +743,14 @@ describe("remote environment command routing", () => {
 		const { createSidecarContext } = await import("./context");
 		const root = mkdtempSync(join(tmpdir(), "remote-search-limit-"));
 		try {
-			for (let i = 0; i < 2800; i++)
-				writeFileSync(join(root, `${i}-${"x".repeat(100)}.ts`), "");
+			// Supply an owned large listing to the real production shell/head pipeline.
+			// Thousands of synchronous file creations added Windows filesystem I/O,
+			// not the transfer cap, and could exhaust the 20-second fixture deadline.
+			const listing = Array.from(
+				{ length: 2800 },
+				(_, i) => `./${i}-${"x".repeat(100)}.ts\n`,
+			).join("");
+			writeFileSync(join(root, "owned-listing.txt"), listing);
 			const ctx = createSidecarContext(root);
 			const fake = createFakeService();
 			ctx.remoteEnvironments = fake.service;
@@ -753,12 +759,22 @@ describe("remote environment command routing", () => {
 				createExistingRemoteBinding(profile.id),
 			);
 			let transferredBytes = 0;
+			let transferredOutput = "";
 			fake.run.mockImplementation(async (_id, input) => {
-				const stdout = execFileSync(input.command, input.args, {
-					cwd: input.cwd,
-					encoding: "utf8",
-				});
+				expect(input.command).toBe("sh");
+				expect(input.args[0]).toBe("-c");
+				const stdout = execFileSync(
+					input.command,
+					["-c", `find() { cat owned-listing.txt; }; ${input.args[1]}`],
+					{
+						cwd: input.cwd,
+						encoding: "utf8",
+						timeout: 5000,
+						maxBuffer: 512 * 1024,
+					},
+				);
 				transferredBytes = Buffer.byteLength(stdout);
+				transferredOutput = stdout;
 				return { stdout, stderr: "", exitCode: 0 };
 			});
 			const result = (await handleCommand(ctx, "search_workspace_files", {
@@ -767,9 +783,63 @@ describe("remote environment command routing", () => {
 				limit: 200,
 			})) as string[];
 			expect(transferredBytes).toBe(262144);
+			expect(transferredOutput).toBe(listing.slice(0, 262144));
 			expect(result.length).toBeGreaterThan(0);
-			expect(result.length).toBeLessThanOrEqual(200);
+			expect(result.length).toBeLessThanOrEqual(50);
 			expect(result.every((path) => path.endsWith(".ts"))).toBe(true);
+			const partialPath = transferredOutput
+				.slice(transferredOutput.lastIndexOf("\n") + 1)
+				.replace(/^\.\//, "");
+			expect(partialPath.length).toBeGreaterThan(0);
+			expect(partialPath.endsWith(".ts")).toBe(false);
+			// Query the exact unique cut record: merely checking the first page's
+			// suffixes could miss a truncated record ranked outside that page.
+			await expect(
+				handleCommand(ctx, "search_workspace_files", {
+					environmentId: profile.id,
+					workspaceRoot: root,
+					query: partialPath,
+				}),
+			).resolves.toEqual([]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("walks real remote files and prunes dependency directories with the production shell script", async () => {
+		const { handleCommand } = await import("./commands");
+		const { createSidecarContext } = await import("./context");
+		const root = mkdtempSync(join(tmpdir(), "remote-search-walk-"));
+		try {
+			mkdirSync(join(root, "src"));
+			mkdirSync(join(root, "node_modules"));
+			writeFileSync(join(root, "src", "owned.ts"), "");
+			writeFileSync(join(root, "README.md"), "");
+			writeFileSync(join(root, "node_modules", "excluded.ts"), "");
+			const ctx = createSidecarContext(root);
+			const fake = createFakeService();
+			ctx.remoteEnvironments = fake.service;
+			ctx.runtimeBindings.set(
+				profile.id,
+				createExistingRemoteBinding(profile.id),
+			);
+			fake.run.mockImplementation(async (_id, input) => ({
+				stdout: execFileSync(input.command, input.args, {
+					cwd: input.cwd,
+					encoding: "utf8",
+					timeout: 5000,
+					maxBuffer: 512 * 1024,
+				}),
+				stderr: "",
+				exitCode: 0,
+			}));
+			await expect(
+				handleCommand(ctx, "search_workspace_files", {
+					environmentId: profile.id,
+					workspaceRoot: root,
+					limit: 50,
+				}),
+			).resolves.toEqual(["README.md", "src/owned.ts"]);
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
