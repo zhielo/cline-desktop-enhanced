@@ -39,7 +39,8 @@
     "resources": [
       "icons/app/*.png",
       "icons/app/macos/*.png",
-      "bin/remote-helpers/*"
+      "bin/remote-helpers/*",
+      "bin/javascript-isolation/*"
     ],
     "icon": [
       "icons/32x32.png",

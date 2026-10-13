@@ -4,6 +4,7 @@
 			"icons/app/*.png",
 			"icons/app/macos/*.png",
 			"bin/remote-helpers/*",
+            "bin/javascript-isolation/*",
       "resources/analysis-runtime/**/*",
       "resources/analysis-runtime-full/**/*",
       "resources/analysis-runtime-angr/**/*",

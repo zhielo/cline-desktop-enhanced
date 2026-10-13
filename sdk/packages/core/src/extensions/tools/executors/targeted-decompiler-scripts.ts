@@ -10,7 +10,28 @@ import ghidra.program.model.listing.FunctionIterator;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Iterator;
+import java.util.HashSet;
+import java.math.BigInteger;
+import ghidra.program.model.pcode.*;
+import ghidra.program.model.address.Address;
+import com.google.gson.*;
 public class ClineDecompileSelected extends GhidraScript {
+ private int constantVisits=0;
+ private BigInteger constant(Varnode n,int depth,HashSet<Varnode> seen) {
+  if(++constantVisits>256||n==null||depth>6||n.getSize()<1||n.getSize()>8||seen.contains(n))return null;
+  if(n.isConstant())return new BigInteger(Long.toUnsignedString(n.getOffset()));
+  seen.add(n);PcodeOp op=n.getDef();if(op==null)return null;
+  BigInteger mask=BigInteger.ONE.shiftLeft(n.getSize()*8).subtract(BigInteger.ONE);
+  if(op.getOpcode()==PcodeOp.COPY||op.getOpcode()==PcodeOp.CAST){BigInteger v=constant(op.getInput(0),depth+1,seen);return v==null?null:v.and(mask);}
+  if(op.getOpcode()==PcodeOp.INT_ADD||op.getOpcode()==PcodeOp.INT_SUB||op.getOpcode()==PcodeOp.PTRADD) {
+   BigInteger a=constant(op.getInput(0),depth+1,new HashSet<Varnode>(seen)),b=constant(op.getInput(1),depth+1,new HashSet<Varnode>(seen));if(a==null||b==null)return null;
+   if(op.getOpcode()==PcodeOp.PTRADD){BigInteger scale=constant(op.getInput(2),depth+1,new HashSet<Varnode>(seen));if(scale==null)return null;b=b.multiply(scale);}
+   return (op.getOpcode()==PcodeOp.INT_SUB?a.subtract(b):a.add(b)).and(mask);
+  }
+  if(op.getOpcode()==PcodeOp.MULTIEQUAL&&op.getNumInputs()<=16){BigInteger same=null;for(int i=0;i<op.getNumInputs();i++){BigInteger v=constant(op.getInput(i),depth+1,new HashSet<Varnode>(seen));if(v==null||(same!=null&&!same.equals(v)))return null;same=v;}return same;}
+  return null; // LOAD, unresolved registers/phi values and external state remain unknown.
+ }
  protected void run() throws Exception {
   String[] args=getScriptArgs();
   if(args.length!=3) throw new IllegalArgumentException("Expected output, selector kind, encoded value");
@@ -35,6 +56,26 @@ public class ClineDecompileSelected extends GhidraScript {
    String code=result.getDecompiledFunction().getC();
    if(code.length()>1000000) throw new IllegalStateException("Selected pseudocode output budget exceeded");
    try(PrintWriter writer=new PrintWriter(args[0],"UTF-8")) {writer.println("/* selected function @ "+selected.getEntryPoint()+"; not a semantic equivalence proof */");writer.println(code);}
+   if(result.getHighFunction()==null)throw new IllegalStateException("High p-code unavailable");
+   JsonObject evidence=new JsonObject();evidence.addProperty("schemaVersion",1);evidence.addProperty("addressHex","0x"+Long.toUnsignedString(selected.getEntryPoint().getOffset(),16));
+   evidence.addProperty("name",selected.getName());evidence.addProperty("signature",selected.getSignature().getPrototypeString());
+   evidence.addProperty("pseudocode",code);evidence.addProperty("architecture",currentProgram.getLanguageID().getIdAsString());
+   JsonObject image=new JsonObject();image.addProperty("preferredBaseHex","0x"+Long.toUnsignedString(currentProgram.getImageBase().getOffset(),16));image.addProperty("addressSpace","ghidra-program-virtual");evidence.add("image",image);
+   JsonArray calls=new JsonArray();int visited=0;boolean truncated=false;
+   Iterator<PcodeOpAST> operations=result.getHighFunction().getPcodeOps();
+   while(operations.hasNext()) {if(++visited>50000||monitor.isCancelled())throw new IllegalStateException("P-code budget/cancellation");PcodeOpAST op=operations.next();
+    if(op.getOpcode()!=PcodeOp.CALL&&op.getOpcode()!=PcodeOp.CALLIND)continue;
+    if(calls.size()>=128){truncated=true;continue;}
+    JsonObject call=new JsonObject();call.addProperty("fromAddressHex","0x"+Long.toUnsignedString(op.getSeqnum().getTarget().getOffset(),16));
+    call.addProperty("kind",op.getOpcode()==PcodeOp.CALL?"direct":"indirect");
+    constantVisits=0;
+    BigInteger target=op.getOpcode()==PcodeOp.CALL&&op.getInput(0).isAddress()?new BigInteger(Long.toUnsignedString(op.getInput(0).getOffset())):constant(op.getInput(0),0,new HashSet<Varnode>());
+    if(target!=null){call.addProperty("targetAddressHex","0x"+target.toString(16));call.addProperty("resolution","bounded-high-pcode-constant-candidate");}
+    else call.addProperty("resolution","unknown-memory-register-or-ambiguous-phi");
+    calls.add(call);
+   }
+   evidence.add("callees",calls);evidence.addProperty("relationsTruncated",truncated);evidence.addProperty("coverage","selected-function-decompiler-and-bounded-high-pcode-not-runtime");
+   try(PrintWriter writer=new PrintWriter(args[0]+".native.json","UTF-8")){writer.println(evidence.toString());}
   } finally {decompiler.dispose();}
  }
 }

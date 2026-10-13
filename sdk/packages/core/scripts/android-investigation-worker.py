@@ -283,7 +283,7 @@ def disassemble_selected(data, method, maximum, segments=None):
     engine=capstone.Cs(*architectures[method["architecture"]]);engine.detail=True
     address=int(method["addressHex"],16)
     if method["architecture"]=="thumb":address &= ~1
-    instructions=[];decoded=0;references=[];strings=[];callees=[]
+    instructions=[];decoded=0;references=[];strings=[];callees=[];register_values={};indirect_calls=[]
     for instruction in engine.disasm(data[offset:offset+count],address):
         if len(instructions)>=1000:break
         calls=[]
@@ -291,6 +291,35 @@ def disassemble_selected(data, method, maximum, segments=None):
             for operand in instruction.operands:
                 if operand.type==capstone.CS_OP_IMM:calls.append(hex(operand.imm))
         callees.extend({"fromAddressHex":hex(instruction.address),"targetAddressHex":call,"confidence":"decoded-direct-call-candidate"} for call in calls)
+        if method["architecture"]=="x86_64":
+            from capstone import x86_const as x86
+            if instruction.group(capstone.CS_GRP_CALL) and not calls:
+                target=None;operand=instruction.operands[0] if instruction.operands else None
+                if operand is not None and operand.type==capstone.CS_OP_REG:target=register_values.get(operand.reg)
+                record={"fromAddressHex":hex(instruction.address),"resolution":"constant-register-static-candidate" if target is not None else "unknown-register-or-memory-target"}
+                if target is not None and 0<target<2**64:
+                    record["targetAddressHex"]=hex(target);callees.append(dict(record,confidence="bounded-straight-line-indirect-call-candidate-not-runtime"))
+                else:record["resolution"]="unknown-register-or-memory-target"
+                if len(indirect_calls)<128:indirect_calls.append(record)
+            _,written=instruction.regs_access()
+            candidate=None;destination=None
+            if instruction.mnemonic in ("mov","movabs") and len(instruction.operands)==2:
+                left,right=instruction.operands
+                if left.type==capstone.CS_OP_REG and left.size==8 and right.type==capstone.CS_OP_IMM:destination=left.reg;candidate=right.imm%(2**64)
+                elif left.type==capstone.CS_OP_REG and left.size==8 and right.type==capstone.CS_OP_REG:destination=left.reg;candidate=register_values.get(right.reg)
+            elif instruction.mnemonic=="lea" and len(instruction.operands)==2:
+                left,right=instruction.operands
+                if left.type==capstone.CS_OP_REG and left.size==8 and right.type==capstone.CS_OP_MEM and right.mem.base==x86.X86_REG_RIP and right.mem.index==0:destination=left.reg;candidate=instruction.address+instruction.size+right.mem.disp
+            # Subregister writes invalidate full-width aliases, not just the recorded register ID.
+            alias_groups=[(x86.X86_REG_RAX,x86.X86_REG_EAX,x86.X86_REG_AX,x86.X86_REG_AL,x86.X86_REG_AH),(x86.X86_REG_RBX,x86.X86_REG_EBX,x86.X86_REG_BX,x86.X86_REG_BL,x86.X86_REG_BH),(x86.X86_REG_RCX,x86.X86_REG_ECX,x86.X86_REG_CX,x86.X86_REG_CL,x86.X86_REG_CH),(x86.X86_REG_RDX,x86.X86_REG_EDX,x86.X86_REG_DX,x86.X86_REG_DL,x86.X86_REG_DH)]
+            # For other aliases conservatively drop all values on any unsupported write.
+            for register in written:
+                group=next((g for g in alias_groups if register in g),None)
+                if group is None:register_values.clear()
+                else:
+                    for alias in group:register_values.pop(alias,None)
+            if destination is not None and candidate is not None:register_values[destination]=candidate
+            if instruction.group(capstone.CS_GRP_JUMP) or instruction.group(capstone.CS_GRP_CALL) or instruction.group(capstone.CS_GRP_RET):register_values.clear()
         if method["architecture"]=="x86_64" and segments is not None:
             for operand in instruction.operands:
                 if operand.type != capstone.CS_OP_MEM or operand.mem.base != capstone.x86_const.X86_REG_RIP:continue
@@ -308,7 +337,7 @@ def disassemble_selected(data, method, maximum, segments=None):
                 strings.append({"fromAddressHex":hex(instruction.address),"addressHex":hex(target),"fileOffset":at,"value":value.decode("ascii"),"sha256":hashlib.sha256(value).hexdigest(),"confidence":"file-backed-ascii-reference-candidate-not-runtime-read"})
         instructions.append({"addressHex":hex(instruction.address),"bytes":instruction.bytes.hex(),"mnemonic":instruction.mnemonic,"operands":instruction.op_str,"directCallCandidates":calls})
         decoded+=instruction.size
-    return {"engine":"capstone","engineVersion":importlib.metadata.version("capstone"),"architecture":method["architecture"],"references":references,"strings":strings,"callees":callees[:128],"relationsTruncated":len(callees)>128 or len(references)>=128 or len(strings)>=64,"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
+    return {"engine":"capstone","engineVersion":importlib.metadata.version("capstone"),"architecture":method["architecture"],"references":references,"strings":strings,"callees":callees[:128],"indirectCalls":indirect_calls,"relationsTruncated":len(callees)>128 or len(references)>=128 or len(strings)>=64,"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
 
 
 def selected_dex_code(data, selector, limit):
@@ -347,7 +376,7 @@ def native_selection(request):
     for method in matches[:20]:
         try:body=disassemble_selected(data,method,selector.get("max_bytes",4096),None if meta["segmentsTruncated"] else meta["segments"])
         except ImportError:body={"status":"blocked","reason":"Capstone is not installed"}
-        selections.append(dict(method,image=meta["image"],disassembly=body,references=body.get("references","unknown"),strings=body.get("strings","unknown"),callees=body.get("callees","unknown")))
+        selections.append(dict(method,image=meta["image"],disassembly=body,references=body.get("references","unknown"),strings=body.get("strings","unknown"),callees=body.get("callees","unknown"),indirectCalls=body.get("indirectCalls","unknown")))
     return {"protocol":"cline-advanced-analysis/v1","status":"completed" if len(matches)==1 and selections[0]["disassembly"]["status"]=="completed" and not meta["functionsTruncated"] else "partial","engine":"android-static","engineVersion":VERSION,"input":{"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data),"format":"elf"},"evidence":{"schemaVersion":1,"artifacts":[{"id":artifact,"sha256":hashlib.sha256(data).hexdigest(),"format":"elf","validation":"LIEF-parsed-bounded-file-mappings","native":meta}],"relationships":[],"selectedFunctions":selections,"matchCount":len(matches),"ambiguous":len(matches)>1,"coverage":{"truncated":len(matches)>20 or meta["functionsTruncated"]}},"limitations":["Static bounded ELF symbol analysis only; not function discovery in stripped/virtualized code, runtime execution, JNI registration proof or semantic equivalence.","Capstone output is linear range disassembly, not a complete CFG; direct calls and x86_64 RIP-relative ASCII references are static candidates, not runtime accesses. Preferred ELF base is link-time metadata, not ASLR/load-base proof. Addresses are preserved as hexadecimal strings."]}
 
 

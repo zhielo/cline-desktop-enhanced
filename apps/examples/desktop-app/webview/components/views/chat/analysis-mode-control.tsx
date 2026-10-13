@@ -53,7 +53,7 @@ export function AnalysisModeControl({
 		if (
 			value === "runtime" &&
 			!window.confirm(
-				"Runtime mode does not grant execution permission. Existing target selection and per-action approvals remain required. JavaScript Inspector capture is not implemented.",
+				"Runtime mode does not grant execution permission. Existing target selection and per-action approvals remain required. Passive Inspector requires Debug approval; isolated JavaScript execution requires independent Execute approval and verified Windows isolation.",
 			)
 		)
 			return;

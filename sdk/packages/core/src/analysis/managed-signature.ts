@@ -34,6 +34,35 @@ export function inspectManagedSignature(
 		}
 		throw new Error("Reserved compressed integer");
 	};
+	const signedCompressed = () => {
+		const first = byte();
+		let raw: number, bits: number;
+		if (first < 128) {
+			raw = first;
+			bits = 6;
+		} else if ((first & 192) === 128) {
+			raw = ((first & 63) << 8) | byte();
+			bits = 13;
+		} else if ((first & 224) === 192) {
+			raw = (first & 31) * 16777216 + (byte() << 16) + (byte() << 8) + byte();
+			bits = 28;
+		} else throw new Error("Reserved signed compressed integer");
+		const value = Math.floor(raw / 2) - (raw & 1 ? 2 ** bits : 0);
+		if (
+			(bits > 6 && value >= -64 && value <= 63) ||
+			(bits > 13 && value >= -8192 && value <= 8191)
+		)
+			throw new Error("Noncanonical signed compressed integer");
+		return value;
+	};
+	const reference = () => {
+		const token = compressed(),
+			tag = token & 3,
+			row = token >>> 2;
+		if (!row || tag === 3)
+			throw new Error("Invalid TypeDefOrRef signature token");
+		return `${["TypeDef", "TypeRef", "TypeSpec"][tag]}#${row}`;
+	};
 	const primitives: Record<number, string> = {
 		1: "void",
 		2: "bool",
@@ -71,13 +100,66 @@ export function inspectManagedSignature(
 		if (code === 29) return `${type(depth + 1)}[]`;
 		if (code === 19 || code === 30)
 			return `${code === 19 ? "!" : "!!"}${compressed()}`;
-		if (code === 17 || code === 18) {
-			const token = compressed(),
-				tag = token & 3,
-				row = token >>> 2;
-			if (!row || tag === 3)
-				throw new Error("Invalid TypeDefOrRef signature token");
-			return `${code === 17 ? "valuetype" : "class"}:${["TypeDef", "TypeRef", "TypeSpec"][tag]}#${row}`;
+		if (code === 17 || code === 18)
+			return `${code === 17 ? "valuetype" : "class"}:${reference()}`;
+		if (code === 31 || code === 32) {
+			const token = reference();
+			return `${code === 31 ? "modreq" : "modopt"}(${token}) ${type(depth + 1, allowVoid)}`;
+		}
+		if (code === 21) {
+			const category = byte();
+			if (category !== 17 && category !== 18)
+				throw new Error("Invalid genericinst category");
+			const token = reference(),
+				count = compressed();
+			if (count < 1 || count > 16) throw new Error("Generic argument budget");
+			const arguments_: string[] = [];
+			for (let i = 0; i < count; i++) arguments_.push(type(depth + 1));
+			return `${category === 17 ? "valuetype" : "class"}:${token}<${arguments_.join(", ")}>`;
+		}
+		if (code === 20) {
+			const element = type(depth + 1),
+				rank = compressed();
+			if (rank < 1 || rank > 8) throw new Error("Array rank budget");
+			const sizesCount = compressed();
+			if (sizesCount > rank) throw new Error("Array sizes exceed rank");
+			const sizes: number[] = [];
+			for (let i = 0; i < sizesCount; i++) sizes.push(compressed());
+			const lowerCount = compressed();
+			if (lowerCount > rank) throw new Error("Array lower bounds exceed rank");
+			const lower: number[] = [];
+			for (let i = 0; i < lowerCount; i++) lower.push(signedCompressed());
+			return `${element}[rank=${rank};sizes=${sizes.join(",")};lower=${lower.join(",")}]`;
+		}
+		if (code === 27) {
+			const flags = byte(),
+				convention = flags & 15;
+			if (
+				flags & 128 ||
+				(flags & 64 && !(flags & 32)) ||
+				convention > 5 ||
+				(flags & 16 && convention !== 0 && convention !== 5)
+			)
+				throw new Error("Invalid function-pointer convention");
+			const arity = flags & 16 ? compressed() : 0;
+			if (arity > 32 || (flags & 16 && !arity))
+				throw new Error("Function-pointer generic budget");
+			const count = compressed();
+			if (count > 8) throw new Error("Function-pointer parameter budget");
+			const result = type(depth + 1, true),
+				parameters: string[] = [];
+			let sentinel = false;
+			for (let i = 0; i < count; i++) {
+				if (b[at] === 65) {
+					if (convention !== 5 || sentinel)
+						throw new Error("Invalid vararg sentinel");
+					byte();
+					sentinel = true;
+					parameters.push("...");
+				}
+				parameters.push(type(depth + 1));
+			}
+			return `fnptr[cc=${flags};arity=${arity}] ${result} (${parameters.join(", ")})`;
 		}
 		throw new Error(`Unsupported signature element 0x${code.toString(16)}`);
 	};

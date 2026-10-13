@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
+import { ActiveJavaScriptScenario } from "./active-javascript-scenario";
 import type { AnalysisMode } from "./analysis-mode-control";
 type Summary = {
 	id: string;
@@ -282,8 +283,9 @@ export function FirstPartyAnalysisWorkspace({
 			<p className="text-xs text-muted-foreground">
 				Mode: {status?.mode ?? "unavailable"}. Static JS/TS/Electron syntax,
 				bounded cross-module/value/call relationships, managed PE metadata and
-				IL bytes, declared source-map locations and ASAR inspection. Never
-				executes the target. Mode does not override permissions or disable
+				IL bytes, declared source-map locations and ASAR inspection. Static
+				inspection never executes the target. Active scenarios require a
+				separate Execute approval. Mode does not override permissions or disable
 				existing tools.
 			</p>
 			<div className="flex flex-wrap gap-2">
@@ -622,6 +624,11 @@ export function FirstPartyAnalysisWorkspace({
 					show retained engine output; absent components stay unknown.
 				</p>
 			</details>
+			<ActiveJavaScriptScenario
+				sessionId={sessionId}
+				environmentId={environmentId}
+				enabled={status?.mode === "runtime" && !running}
+			/>
 		</section>
 	);
 }

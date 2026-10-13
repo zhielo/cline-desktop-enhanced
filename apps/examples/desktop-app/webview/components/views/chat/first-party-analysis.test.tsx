@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/desktop-client", () => ({ desktopClient: { invoke } }));
+import { ActiveJavaScriptScenario } from "./active-javascript-scenario";
 import { AnalysisModeControl } from "./analysis-mode-control";
 import { FirstPartyAnalysisWorkspace } from "./first-party-analysis-workspace";
 let el: HTMLDivElement, root: Root;
@@ -339,4 +340,38 @@ it.each([
 				'[aria-label="Capture source-bound console reports"]',
 			)!.disabled,
 		).toBe(false);
+});
+
+async function prepareOwnedScenario() {
+ await act(async () => root.render(<ActiveJavaScriptScenario sessionId="s" environmentId="local" enabled={true} />));
+ await act(async () => {
+  const input=el.querySelector<HTMLInputElement>('[aria-label="Isolated JavaScript target"]')!;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"owned.cjs");
+  input.dispatchEvent(new Event("input",{bubbles:true}));
+ });
+ await act(async () => Array.from(el.querySelectorAll("button")).find(b=>b.textContent?.includes("Prepare independently"))!.click());
+ await vi.waitFor(()=>expect(el.textContent).toContain("Approve Execute and run once"));
+}
+it("invalidates independent Execute approval on session change before run", async () => {
+ let release!: (v:unknown)=>void;
+ invoke.mockImplementation((command:string) => command.endsWith("_prepare") ? Promise.resolve({id:"p",requestHash:"h",requirements:["independent-execute-approval"],request:{operation:"js_isolated_execute",target:"owned.cjs"}}) : command==="approve_analysis_task" ? new Promise(r=>{release=r;}) : Promise.resolve({}));
+ vi.spyOn(window,"confirm").mockReturnValue(true);
+ await prepareOwnedScenario();
+ await act(async () => Array.from(el.querySelectorAll("button")).find(b=>b.textContent?.includes("Approve Execute"))!.click());
+ expect(invoke.mock.calls.some(c=>c[0]==="approve_analysis_task")).toBe(true);
+ await act(async () => root.render(<ActiveJavaScriptScenario sessionId="other" environmentId="local" enabled={true} />));
+ await act(async () => release({executionToken:"old-token"}));
+ expect(invoke.mock.calls.some(c=>String(c[0]).endsWith("_run"))).toBe(false);
+});
+it("editing target discards prepared Execute plan and never executes automatically", async () => {
+ invoke.mockResolvedValue({id:"p",requestHash:"h",requirements:[],request:{operation:"js_isolated_execute"}});
+ await prepareOwnedScenario();
+ expect(el.textContent).toContain("Approve Execute and run once");
+ await act(async () => {
+  const input=el.querySelector<HTMLInputElement>('[aria-label="Isolated JavaScript target"]')!;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"changed.cjs");
+  input.dispatchEvent(new Event("input",{bubbles:true}));
+ });
+ expect(el.textContent).not.toContain("Approve Execute and run once");
+ expect(invoke.mock.calls.some(c=>c[0]==="approve_analysis_task"||String(c[0]).endsWith("_run"))).toBe(false);
 });

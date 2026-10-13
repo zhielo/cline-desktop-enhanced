@@ -365,6 +365,38 @@ export function inspectElectronBoundaries(
 			return undefined;
 		return object(ds[0].initializer, seen);
 	};
+	const functionShape = (
+		expr: ts.Expression,
+		seen = new Set<ts.Symbol>(),
+	):
+		| ts.ArrowFunction
+		| ts.FunctionExpression
+		| ts.FunctionDeclaration
+		| undefined => {
+		if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) return expr;
+		if (!ts.isIdentifier(expr)) return undefined;
+		const s = ts.isShorthandPropertyAssignment(expr.parent)
+			? checker.getShorthandAssignmentValueSymbol(expr.parent)
+			: symbol(expr);
+		if (
+			!s ||
+			invalid.has(s) ||
+			seen.has(s) ||
+			seen.size >= 4 ||
+			s.declarations?.length !== 1
+		)
+			return undefined;
+		seen.add(s);
+		const d = s.declarations[0];
+		if (ts.isFunctionDeclaration(d) && d.body) return d;
+		if (
+			ts.isVariableDeclaration(d) &&
+			d.parent.flags & ts.NodeFlags.Const &&
+			d.initializer
+		)
+			return functionShape(d.initializer, seen);
+		return undefined;
+	};
 	const nativeCalls = new Map<ts.CallExpression, number>(),
 		nativeLinks: Array<{ member: number; call: ts.CallExpression }> = [];
 	const apiNames = new Set<string>();
@@ -402,13 +434,21 @@ export function inspectElectronBoundaries(
 					return;
 				}
 				const keys: string[] = [],
-					props: Array<ts.PropertyAssignment | ts.MethodDeclaration> = [];
+					props: Array<
+						| ts.PropertyAssignment
+						| ts.MethodDeclaration
+						| ts.ShorthandPropertyAssignment
+					> = [];
 				for (const p of o.properties) {
-					if (!ts.isPropertyAssignment(p) && !ts.isMethodDeclaration(p)) {
+					if (
+						!ts.isPropertyAssignment(p) &&
+						!ts.isMethodDeclaration(p) &&
+						!ts.isShorthandPropertyAssignment(p)
+					) {
 						emit(file, n, "preload-unresolved", {
 							api,
 							path,
-							reason: "Getter, spread, shorthand or unsupported property shape",
+							reason: "Getter, spread or unsupported property shape",
 						});
 						return;
 					}
@@ -432,16 +472,20 @@ export function inspectElectronBoundaries(
 				for (let i = 0; i < props.length; i++) {
 					const p = props[i],
 						key = [...path, keys[i]],
-						value = ts.isPropertyAssignment(p) ? p.initializer : undefined;
+						value = ts.isPropertyAssignment(p)
+							? p.initializer
+							: ts.isShorthandPropertyAssignment(p) &&
+									!p.objectAssignmentInitializer
+								? p.name
+								: undefined;
 					if (value && object(value)) {
 						inspect(value, key, depth + 1);
 						continue;
 					}
 					const fn = ts.isMethodDeclaration(p)
 						? p
-						: value &&
-								(ts.isArrowFunction(value) || ts.isFunctionExpression(value))
-							? value
+						: value
+							? functionShape(value)
 							: undefined;
 					const body = fn?.body,
 						call =
@@ -451,13 +495,15 @@ export function inspectElectronBoundaries(
 									? body.statements[0].expression
 									: undefined
 								: body;
+					const unwrappedCall =
+						call && ts.isAwaitExpression(call) ? call.expression : call;
 					const ipc =
-							call && ts.isCallExpression(call)
-								? bound(call.expression)
+							unwrappedCall && ts.isCallExpression(unwrappedCall)
+								? bound(unwrappedCall.expression)
 								: undefined,
 						channel =
-							call && ts.isCallExpression(call)
-								? literal(call.arguments[0])
+							unwrappedCall && ts.isCallExpression(unwrappedCall)
+								? literal(unwrappedCall.arguments[0])
 								: undefined;
 					const index = emit(file, p, "preload-member", {
 						api,
@@ -492,8 +538,12 @@ export function inspectElectronBoundaries(
 					});
 					if (index !== undefined) {
 						members.push({ api, path: key, index, callable: !!fn });
-						if (ipc?.role === "native" && call && ts.isCallExpression(call))
-							nativeLinks.push({ member: index, call });
+						if (
+							ipc?.role === "native" &&
+							unwrappedCall &&
+							ts.isCallExpression(unwrappedCall)
+						)
+							nativeLinks.push({ member: index, call: unwrappedCall });
 					}
 				}
 			};

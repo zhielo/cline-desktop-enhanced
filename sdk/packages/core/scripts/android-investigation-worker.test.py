@@ -261,6 +261,15 @@ class AndroidTests(unittest.TestCase):
         body=w.disassemble_selected(data,endpoint,4096,ambiguous)
         self.assertEqual(body['strings'],[])
         self.assertEqual(w.disassemble_selected(data,endpoint,4096)['strings'],[])
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_bounded_indirect_register_calls_and_subregister_invalidation(self):
+        for code,resolved in [(bytes.fromhex('48b8c000400000000000ffd0c3'),True),(bytes.fromhex('48b8c000400000000000b001ffd0c3'),False),(bytes.fromhex('48b8c000400000000000eb00ffd0c3'),False),(bytes.fromhex('ffd0c3'),False)]:
+            self.path.write_bytes(elf_fixture(62,code));result=w.native_selection({'target':str(self.path),'options':{'function':{'symbol':'Java_Fixture_native_1work'}}})
+            call=result['evidence']['selectedFunctions'][0]['indirectCalls'][0]
+            self.assertEqual('targetAddressHex' in call,resolved)
+            if resolved:self.assertEqual(call['targetAddressHex'],'0x4000c0')
+            else:self.assertEqual(call['resolution'],'unknown-register-or-memory-target')
+
     def test_readiness_never_confuses_missing_engine_with_verified_execution(self):
         result=w.analysis_readiness()
         for check in result['evidence']['checks']:self.assertEqual(check['executionVerified'],check['status']=='completed')

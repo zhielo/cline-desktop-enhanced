@@ -276,6 +276,12 @@ export function unifiedEvidenceView(
 					: [],
 			contradictions,
 			authority: "host-completed-approved-task-result",
+			scenarioReconciliation:
+				s.tool === "windows-appcontainer-js" &&
+				s.operation === "js_isolated_execute" &&
+				s.domain === "execution"
+					? report.scenario
+					: undefined,
 			verifiedBehavior: false,
 			evidence: s.result,
 			limitations: [
@@ -325,7 +331,9 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 					: address.toLowerCase();
 			const normalizedRva =
 				preferred &&
-				image.addressSpace === "elf-link-time-virtual" &&
+				["elf-link-time-virtual", "ghidra-program-virtual"].includes(
+					String(image.addressSpace),
+				) &&
 				BigInt(normalizedAddress) >= BigInt(preferred)
 					? `0x${(BigInt(normalizedAddress) - BigInt(preferred)).toString(16)}`
 					: "unknown";
@@ -354,14 +362,65 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 				runtimeImageBase: "unknown",
 				disassembly: f.disassembly ?? "unknown",
 				pseudocode: f.pseudocode ?? "unknown",
+				signature: f.signature ?? "unknown",
+				indirectCalls:
+					f.indirectCalls ??
+					(Array.isArray(f.callees)
+						? f.callees.filter((c) => object(c).kind === "indirect")
+						: "unknown"),
 				references: f.references ?? "unknown",
 				strings: f.strings ?? "unknown",
 				callers: f.callers ?? "unknown",
 				callees: f.callees ?? "unknown",
 				limitations: [
-					"Engine-qualified exact artifact/address. Preferred ELF base and derived RVA are link-time provider claims, never an observed runtime base. Thumb entry-bit normalization only; no arbitrary relocation, symbol equivalence, runtime call proof or missing-component inference.",
+					"Engine-qualified exact artifact/address. Preferred ELF base and derived RVA are link-time provider claims, never an observed runtime base. Thumb entry-bit normalization plus separately approved exact Windows process-birth/module/address observations when present; no inferred provider relocation, symbol equivalence, runtime call proof or missing-component inference.",
 				],
 			});
+		}
+	}
+	for (const target of dossiers) {
+		const identity = object(target.identity);
+		const observations = snapshots
+			.filter(
+				(s) =>
+					s.tool === "windows-native-module" &&
+					s.operation === "native_module_observe" &&
+					s.domain === "debugger" &&
+					s.targetSha256 === identity.sha256,
+			)
+			.flatMap((s) => {
+				const report = object(object(s.result).result ?? s.result),
+					m = object(report.moduleObservation);
+				const architecture = String(identity.architecture).startsWith(
+					"x86:LE:64",
+				)
+					? "x86_64"
+					: identity.architecture;
+				if (
+					m.artifactSha256 !== identity.sha256 ||
+					m.rva !== identity.normalizedRva ||
+					m.architecture !== architecture ||
+					m.scope !==
+						"host-read-process-memory-exact-birth-and-module-32-byte-range" ||
+					typeof m.processToken !== "string" ||
+					typeof m.runtimeImageBase !== "string"
+				)
+					return [];
+				return [
+					{
+						snapshotId: s.id,
+						snapshotHash: s.snapshotHash,
+						...m,
+						runtimeImageBase: m.runtimeImageBase,
+					},
+				];
+			});
+		if (observations.length) {
+			target.runtimeObservations = observations.slice(0, 20);
+			target.runtimeImageBase =
+				observations.length === 1
+					? observations[0].runtimeImageBase
+					: "multiple-process-scoped-observations";
 		}
 	}
 	for (const target of dossiers) {
@@ -389,7 +448,9 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 						dossierId: candidate.id,
 						fromAddressHex: c.fromAddressHex,
 						confidence:
-							"retained-static-direct-call-candidate-not-complete-callgraph",
+							c.kind === "indirect" || String(c.confidence).includes("indirect")
+								? "retained-static-indirect-call-candidate-not-complete-callgraph"
+								: "retained-static-direct-call-candidate-not-complete-callgraph",
 					});
 			}
 		}

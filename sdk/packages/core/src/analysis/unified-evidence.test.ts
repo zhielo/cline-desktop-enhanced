@@ -208,3 +208,89 @@ it("retains link-time RVA and derives only selected same-artifact static callers
 		),
 	).toHaveLength(250);
 });
+
+it("ties runtime RVA observations to host observer, exact artifact and process-specific scope", () => {
+	const snapshot = (
+		result: unknown,
+		tool = "native-static",
+		operation = "decompile",
+		domain = "static",
+	) => ({
+		id: tool,
+		sessionId: "s",
+		workspace: "owned",
+		taskId: tool,
+		domain,
+		operation,
+		tool,
+		targetSha256: hash,
+		resultHash: digest(result),
+		requestHash: hash,
+		at: new Date().toISOString(),
+		result,
+		snapshotHash: hash,
+	});
+	const native = snapshot({
+		engine: "ghidra",
+		input: { sha256: hash },
+		evidence: {
+			selectedFunctions: [
+				{
+					name: "owned",
+					addressHex: "0x401000",
+					architecture: "x86:LE:64:default",
+					image: {
+						preferredBaseHex: "0x400000",
+						addressSpace: "ghidra-program-virtual",
+					},
+					pseudocode: "return 42;",
+				},
+			],
+		},
+	});
+	const result = {
+		moduleObservation: {
+			artifactSha256: hash,
+			architecture: "x86_64",
+			rva: "0x1000",
+			processToken: "win32:638000000000000001",
+			pid: 42,
+			runtimeImageBase: "0x700000",
+			runtimeAddress: "0x701000",
+			scope: "host-read-process-memory-exact-birth-and-module-32-byte-range",
+		},
+	};
+	const observed = snapshot(
+		result,
+		"windows-native-module",
+		"native_module_observe",
+		"debugger",
+	);
+	expect(nativeDossiers([native, observed])[0].runtimeImageBase).toBe(
+		"0x700000",
+	);
+	expect(
+		nativeDossiers([
+			native,
+			snapshot(
+				result,
+				"untrusted-provider",
+				"native_module_observe",
+				"debugger",
+			),
+		])[0].runtimeImageBase,
+	).toBe("unknown");
+	expect(
+		nativeDossiers([native, { ...observed, targetSha256: "b".repeat(64) }])[0]
+			.runtimeImageBase,
+	).toBe("unknown");
+	const different = snapshot(
+		{ moduleObservation: { ...result.moduleObservation, rva: "0x2000" } },
+		"windows-native-module",
+		"native_module_observe",
+		"debugger",
+	);
+	expect(nativeDossiers([native, different])[0].runtimeImageBase).toBe(
+		"unknown",
+	);
+});

@@ -86,7 +86,8 @@ it("reports readiness separately without certifying native or runtime capabiliti
 		installed: true,
 		staticFixture: { status: "not-tested" },
 	});
-	expect(firstPartyReadiness().runtimeCapture).toContain("not implemented");
+	expect(firstPartyReadiness().runtimeCapture).toContain("Separately Execute-approved");
+ expect(firstPartyReadiness().runtimeCapture).toContain("no unsandboxed fallback");
 });
 
 let ownedRoot: string | undefined;

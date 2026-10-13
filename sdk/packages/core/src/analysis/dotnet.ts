@@ -1,5 +1,6 @@
 import { inspectManagedSignature } from "./managed-signature";
 import { inspectExceptionSections } from "./managed-exceptions";
+import { modelManagedStack } from "./managed-stack";
 import { decodeIL } from "./il";
 import { byteDigest } from "./contracts";
 /** Bounded ECMA-335 PE metadata and method-body inspection. No CLR load/execute. */
@@ -11,7 +12,8 @@ export type ManagedRecord = {
 		| "managed-il-instruction"
 		| "managed-control-flow"
 		| "managed-exception-region"
-		| "managed-exception-unresolved";
+		| "managed-exception-unresolved"
+		| "managed-stack-model";
 	value: string;
 	offset: number;
 };
@@ -460,6 +462,19 @@ export function inspectManagedPE(
 			const decoded = decodeIL(
 				b.subarray(body + header, body + header + length),
 			);
+			const stackModel =
+				tag === 3 && u16(body) & 8
+					? {
+							status: "partial",
+							reason:
+								"Exception-bearing method has no straight-line semantic summary",
+						}
+					: modelManagedStack(decoded);
+			add({
+				kind: "managed-stack-model",
+				offset: body + header,
+				value: JSON.stringify({ methodToken: token, ...stackModel }),
+			});
 			for (const instruction of decoded.instructions) {
 				const { bytes, operand, ...detail } = instruction;
 				add({

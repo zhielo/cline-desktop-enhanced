@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 import { telemetryDefineArgs } from "./telemetry-define-args";
+import { buildJavaScriptIsolation } from "./build-javascript-isolation";
+let isolationDigest: string | undefined;
 
 const resolveTargetTriple = async (): Promise<string> => {
 	const fromEnv = process.env.TAURI_ENV_TARGET_TRIPLE ?? process.env.TARGET;
@@ -55,6 +57,7 @@ const buildSidecar = async (
 	// Verify with `<binary> --telemetry-selfcheck` after building.
 	const defines = [
 		...telemetryDefineArgs(),
+		`--define=process.env.CLINE_JS_ISOLATION_MANIFEST_SHA256=${JSON.stringify(isolationDigest ?? "")}`,
 		`--define=process.env.CLINE_DESKTOP_BUILD_COMMIT=${JSON.stringify(process.env.GITHUB_SHA ?? "development")}`,
 	];
 	const optimizationArgs = minify ? ["--minify"] : [];
@@ -145,7 +148,15 @@ const main = async () => {
 		fileURLToPath(new URL("../../../../", import.meta.url)),
 	);
 	const targetTriple = await resolveTargetTriple();
-	await $`mkdir -p src-tauri/bin src-tauri/bin/remote-helpers`;
+	await $`mkdir -p src-tauri/bin src-tauri/bin/remote-helpers src-tauri/bin/javascript-isolation`;
+	await Bun.write(
+		"src-tauri/bin/javascript-isolation/NOTICE.txt",
+		"Windows x64 AppContainer only. Other platforms have no active execution fallback.\n",
+	);
+	if (targetTriple.startsWith("x86_64-pc-windows"))
+		isolationDigest = buildJavaScriptIsolation(
+			"./src-tauri/bin/javascript-isolation",
+		);
 	if (targetTriple === "universal-apple-darwin") {
 		await buildUniversalMacSidecar();
 	} else {

@@ -96,3 +96,8 @@ export function queryFirstPartyEvidence(
 			q.offset + q.limit < filtered.length ? q.offset + q.limit : null,
 	};
 }
+
+export {
+	ScenarioExpectationSchema,
+	reconcileProcessScenario,
+} from "./scenario";

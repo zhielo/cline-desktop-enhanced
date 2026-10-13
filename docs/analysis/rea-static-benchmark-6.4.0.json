@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 1,
+  "scope": "owned JS/Electron static feature-discovery microbenchmark, not whole-product superiority",
+  "recordedAt": "2026-10-13T07:24:27.428Z",
+  "provenance": {
+    "reaPackageVersion": "6.4.0",
+    "reaCliSha256": "3554288a08c455fa419dad662d73710fb17debe94b9e71dd1282761117c5981e",
+    "clineWorkerSha256": "ed661ac5f37061c78dfdecaf3b7af3aa27a7ed1a1a4befaa2babe9a098f1f0a1",
+    "corpusSha256": "8c280afe271c4998081fff5379850f5470b12cae7b8ca39f775b41c96c2fce77",
+    "node": "v24.14.1",
+    "os": "linux",
+    "kernel": "6.18.49",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+    "limits": {
+      "wallMs": 65000,
+      "reaSourceHeapMb": 256,
+      "repetitions": 3,
+      "cline": "production fixed worker budgets; not identical memory internals"
+    },
+    "setupExcluded": true,
+    "sourceSha256": {
+      "scripts/benchmark-rea-static.mjs": "7db7633f2ea6a81f48cf88288ce2c4dc174c3c44ae12057e4de6f370ad4269dc",
+      "scripts/benchmark-first-party-entry.ts": "ddfe953c8a407a59bd26235f7b414af42aef4cb19c64149e97b2b3d4beb17e33",
+      "sdk/packages/core/src/analysis/parser.ts": "3ae41906a72d7dbe8931bb8264c1a1f7f2eaa89ec78fc290d9225b8fc0916ba3"
+    },
+    "reaNpmTarballIntegrity": "sha512-Vj1zWfSlna5bphGoaoI/TcVBuYvze9u+OyPC3Shz8YkBqaCTqB4COnnRoX7XDwMpwI24ZlFEel2yEj0k8LTWEQ==",
+    "reaNpmTarballSha256": "59eb1604b8db75f522d4a975c36ce6b4a2ad465e43bad165f9a8f728391db9b8",
+    "concurrentWorkspaceValidation": true
+  },
+  "limitations": [
+    "Small owned corpus, not representative all-target accuracy, false-positive rate or tool parity. Twelve explicit feature-discovery checks only; dedicated semantic-family absence in Cline is not guessed from string matches.",
+    "Cold process startup plus analysis/end-to-end JSON output. Different shipped runtimes (compiled Bun worker vs Node CLI) and default extractors; same target bytes and wall deadline, not equal internal heap budgets.",
+    "No native decompiler, managed assembly, GUI/device, active execution or LLM benchmark in this comparison. No superiority claim.",
+    "Concurrent repository validation ran on this shared host. Timings are descriptive only, not an uncontended performance measurement."
+  ],
+  "runs": [
+    {
+      "fixture": "electron",
+      "engine": "cline",
+      "repetition": 0,
+      "elapsedMs": 726.04668,
+      "outputBytes": 10348,
+      "stdoutSha256": "42d0f80ebcbd78349809a7e0d637ba6dabc3ec745ee19d7e6d2d29930b7ba6f7",
+      "checks": {
+        "ipc-channel": true,
+        "ipc-handler": true,
+        "preload-member": true,
+        "computed-request": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "electron",
+      "engine": "rea",
+      "repetition": 0,
+      "elapsedMs": 4261.799883,
+      "outputBytes": 184697,
+      "stdoutSha256": "4d68ceab7e3c693de04528de3b1d2aa0c41727c362f9c99feb42424b5fd2fb13",
+      "checks": {
+        "ipc-channel": true,
+        "ipc-handler": true,
+        "preload-member": true,
+        "computed-request": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "electron",
+      "engine": "rea",
+      "repetition": 1,
+      "elapsedMs": 3474.143047999999,
+      "outputBytes": 184697,
+      "stdoutSha256": "67194998ca9c523dfdf335d38b314fe8c76dc0e2f2b666dbf44d5287ca816af2",
+      "checks": {
+        "ipc-channel": true,
+        "ipc-handler": true,
+        "preload-member": true,
+        "computed-request": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "electron",
+      "engine": "cline",
+      "repetition": 1,
+      "elapsedMs": 506.88331800000014,
+      "outputBytes": 10348,
+      "stdoutSha256": "42d0f80ebcbd78349809a7e0d637ba6dabc3ec745ee19d7e6d2d29930b7ba6f7",
+      "checks": {
+        "ipc-channel": true,
+        "ipc-handler": true,
+        "preload-member": true,
+        "computed-request": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "electron",
+      "engine": "cline",
+      "repetition": 2,
+      "elapsedMs": 680.7947439999989,
+      "outputBytes": 10348,
+      "stdoutSha256": "42d0f80ebcbd78349809a7e0d637ba6dabc3ec745ee19d7e6d2d29930b7ba6f7",
+      "checks": {
+        "ipc-channel": true,
+        "ipc-handler": true,
+        "preload-member": true,
+        "computed-request": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "electron",
+      "engine": "rea",
+      "repetition": 2,
+      "elapsedMs": 3930.566789999999,
+      "outputBytes": 184697,
+      "stdoutSha256": "f1d6b1937f36cd42fea0934cde9f0bf3a05cb7071097ed0d2819c30bb2bc151c",
+      "checks": {
+        "ipc-channel": true,
+        "ipc-handler": true,
+        "preload-member": true,
+        "computed-request": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "modules",
+      "engine": "cline",
+      "repetition": 0,
+      "elapsedMs": 894.243273,
+      "outputBytes": 7050,
+      "stdoutSha256": "ea71315151cb8609c0bb78c9c1b1ad6c9707f08fb81fc9cc9c58f05c70a7c70b",
+      "checks": {
+        "module-import": true,
+        "computed-module-request": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "modules",
+      "engine": "rea",
+      "repetition": 0,
+      "elapsedMs": 3722.3711220000005,
+      "outputBytes": 74129,
+      "stdoutSha256": "9a56d17d6aeeaccb194d75d3e267c6fa6553ef4df69541910d5a900e9040e838",
+      "checks": {
+        "module-import": true,
+        "computed-module-request": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "modules",
+      "engine": "rea",
+      "repetition": 1,
+      "elapsedMs": 3764.035333,
+      "outputBytes": 74129,
+      "stdoutSha256": "e5b8bc99a70a7bac51e435676dd6366205ec52785fb254c2650f90c786ed10cf",
+      "checks": {
+        "module-import": true,
+        "computed-module-request": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "modules",
+      "engine": "cline",
+      "repetition": 1,
+      "elapsedMs": 543.6020529999987,
+      "outputBytes": 7050,
+      "stdoutSha256": "ea71315151cb8609c0bb78c9c1b1ad6c9707f08fb81fc9cc9c58f05c70a7c70b",
+      "checks": {
+        "module-import": true,
+        "computed-module-request": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "modules",
+      "engine": "cline",
+      "repetition": 2,
+      "elapsedMs": 627.5271959999991,
+      "outputBytes": 7050,
+      "stdoutSha256": "ea71315151cb8609c0bb78c9c1b1ad6c9707f08fb81fc9cc9c58f05c70a7c70b",
+      "checks": {
+        "module-import": true,
+        "computed-module-request": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "modules",
+      "engine": "rea",
+      "repetition": 2,
+      "elapsedMs": 3536.829052000001,
+      "outputBytes": 74129,
+      "stdoutSha256": "b2438fad3560c28fede73db0dfb7d025caa23c6148c6f3b16a295d4daeca6d06",
+      "checks": {
+        "module-import": true,
+        "computed-module-request": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "preload-alias",
+      "engine": "cline",
+      "repetition": 0,
+      "elapsedMs": 653.8521980000005,
+      "outputBytes": 5147,
+      "stdoutSha256": "090a6181d9b20e218c4331aa925b6297b846c4cdff7fa625384b9c2332dab615",
+      "checks": {
+        "aliased-preload-member": true,
+        "ipc-read-channel": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "preload-alias",
+      "engine": "rea",
+      "repetition": 0,
+      "elapsedMs": 3619.163848,
+      "outputBytes": 100976,
+      "stdoutSha256": "1b83f3ff0e035bc6310b707f20018adc4010b8796456083dab0fe9d5d6392952",
+      "checks": {
+        "aliased-preload-member": true,
+        "ipc-read-channel": true
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "preload-alias",
+      "engine": "rea",
+      "repetition": 1,
+      "elapsedMs": 3515.340635999997,
+      "outputBytes": 100975,
+      "stdoutSha256": "6d50e29032e2387f23e5d14d57a0073f975330d7c5c6a449ae64d6bb2cb324f3",
+      "checks": {
+        "aliased-preload-member": true,
+        "ipc-read-channel": true
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "preload-alias",
+      "engine": "cline",
+      "repetition": 1,
+      "elapsedMs": 539.0763609999995,
+      "outputBytes": 5147,
+      "stdoutSha256": "090a6181d9b20e218c4331aa925b6297b846c4cdff7fa625384b9c2332dab615",
+      "checks": {
+        "aliased-preload-member": true,
+        "ipc-read-channel": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "preload-alias",
+      "engine": "cline",
+      "repetition": 2,
+      "elapsedMs": 810.2384499999971,
+      "outputBytes": 5147,
+      "stdoutSha256": "090a6181d9b20e218c4331aa925b6297b846c4cdff7fa625384b9c2332dab615",
+      "checks": {
+        "aliased-preload-member": true,
+        "ipc-read-channel": true
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "preload-alias",
+      "engine": "rea",
+      "repetition": 2,
+      "elapsedMs": 3062.1602520000015,
+      "outputBytes": 100975,
+      "stdoutSha256": "1bdc60591dbd4e1e73ba73ae3ac8df3b125ce0ca1be212ca60ac4d2cf583e7b3",
+      "checks": {
+        "aliased-preload-member": true,
+        "ipc-read-channel": true
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "lifecycle",
+      "engine": "cline",
+      "repetition": 0,
+      "elapsedMs": 785.0790439999982,
+      "outputBytes": 3797,
+      "stdoutSha256": "759c8dc9a2013c1961ba6cae194be5d26fcbeb5ab869329c394e014990ade536",
+      "checks": {
+        "literal-request": true,
+        "timer-lifecycle": false,
+        "child-process-boundary": false,
+        "resource-lifecycle": false
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "lifecycle",
+      "engine": "rea",
+      "repetition": 0,
+      "elapsedMs": 3559.4254530000035,
+      "outputBytes": 90999,
+      "stdoutSha256": "1965f3fe255197ac7357ec43d19e93192e86a55cbd69bbe85dfbc0d8b6dcbf9b",
+      "checks": {
+        "literal-request": true,
+        "timer-lifecycle": true,
+        "child-process-boundary": false,
+        "resource-lifecycle": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "lifecycle",
+      "engine": "rea",
+      "repetition": 1,
+      "elapsedMs": 3815.806822999999,
+      "outputBytes": 90999,
+      "stdoutSha256": "f33935674b7f14d04f778eac7777da30d1e14d1f888f745ae73eaa35a4dd5f3c",
+      "checks": {
+        "literal-request": true,
+        "timer-lifecycle": true,
+        "child-process-boundary": false,
+        "resource-lifecycle": false
+      },
+      "profile": "rea-agents/6.4.0"
+    },
+    {
+      "fixture": "lifecycle",
+      "engine": "cline",
+      "repetition": 1,
+      "elapsedMs": 647.5576569999976,
+      "outputBytes": 3797,
+      "stdoutSha256": "759c8dc9a2013c1961ba6cae194be5d26fcbeb5ab869329c394e014990ade536",
+      "checks": {
+        "literal-request": true,
+        "timer-lifecycle": false,
+        "child-process-boundary": false,
+        "resource-lifecycle": false
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "lifecycle",
+      "engine": "cline",
+      "repetition": 2,
+      "elapsedMs": 858.0144129999971,
+      "outputBytes": 3797,
+      "stdoutSha256": "759c8dc9a2013c1961ba6cae194be5d26fcbeb5ab869329c394e014990ade536",
+      "checks": {
+        "literal-request": true,
+        "timer-lifecycle": false,
+        "child-process-boundary": false,
+        "resource-lifecycle": false
+      },
+      "profile": "cline-js-static/7"
+    },
+    {
+      "fixture": "lifecycle",
+      "engine": "rea",
+      "repetition": 2,
+      "elapsedMs": 3262.365279999998,
+      "outputBytes": 90999,
+      "stdoutSha256": "075027d884441156eed6a1f120e35c6b7590c2e92002a65bbeca5469a7ad761b",
+      "checks": {
+        "literal-request": true,
+        "timer-lifecycle": true,
+        "child-process-boundary": false,
+        "resource-lifecycle": false
+      },
+      "profile": "rea-agents/6.4.0"
+    }
+  ],
+  "summary": {
+    "cline": {
+      "runs": 12,
+      "featureChecksSupported": 9,
+      "featureChecksTotal": 12,
+      "medianEndToEndMs": 667.3234709999997
+    },
+    "rea": {
+      "runs": 12,
+      "featureChecksSupported": 8,
+      "featureChecksTotal": 12,
+      "medianEndToEndMs": 3589.294650500002
+    }
+  }
+}

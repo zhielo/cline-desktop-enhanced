@@ -1,3 +1,8 @@
+import {
+	bindNativeModuleObservation,
+	NativeModuleRequestSchema,
+	observeNativeModule,
+} from "./native-module-observation";
 import { realpathSync } from "node:fs";
 import { mkdtemp, writeFile, rm, realpath } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,6 +24,12 @@ import {
 } from "@cline/core";
 
 import { desktopAnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
+
+import {
+	bindJavaScriptExecution,
+	JavaScriptExecutionSchema,
+	runIsolatedJavaScript,
+} from "./javascript-isolation";
 
 let store: FirstPartyAnalysisStore | undefined;
 let taskEvidence: UnifiedEvidenceStore | undefined;
@@ -65,9 +76,11 @@ export function firstPartyReadiness() {
 		nativeProvider:
 			"Use existing engine-specific Setup Center tests; no new parity claim",
 		runtimeCapture:
-			"Separately approved exact-process loopback Node Inspector observation; loaded source hash reconciliation only. No eval; active scenarios not implemented.",
+			"Separately approved exact-process loopback Node Inspector observation; loaded source hash reconciliation. Separately Execute-approved Windows x64 AppContainer standalone scenarios; no unsandboxed fallback.",
 		behaviorVerification:
-			"Not established by static analysis or a successful build",
+			"Not established by static analysis or a successful build. Active process-interface assertions have exact per-scenario scope, not universal verification.",
+		activeExecution:
+			"Packaged Windows x64 helper/runtime only. Installation is not readiness: kernel token/job verification is performed before each approved target resume.",
 	};
 }
 export async function testFirstPartyFixture() {
@@ -126,7 +139,7 @@ export async function testFirstPartyFixture() {
 		fixtureReceipt = {
 			status: "failed",
 			checkedAt: new Date().toISOString(),
-			profile: "cline-js-static/6",
+			profile: "cline-js-static/7",
 			error: e instanceof Error ? e.message : "Fixture failed",
 		};
 		throw e;
@@ -210,6 +223,160 @@ export async function handleFirstPartyCommand(
 			"Analysis changes require a trusted desktop approval connection",
 		);
 
+	if (command.startsWith("first_party_analysis_native_")) {
+		if (
+			bound?.mode !== "runtime" ||
+			session.busy ||
+			inspectorSlots.has(session.id)
+		)
+			throw new Error(
+				"Native memory observation requires an idle Runtime session and independent Debug approval",
+			);
+		if (command === "first_party_analysis_native_prepare") {
+			const request = await bindNativeModuleObservation(args.input);
+			const plan = await desktopAnalysisTaskOrchestrator.prepare({
+				workspaceRoot: session.workspace,
+				kind: "debugger",
+				request,
+				allowExternalTarget: args.allowExternalTarget === true,
+				timeoutMs: 20000,
+			});
+			bindFirstPartyTaskEvidence(session.id, session.workspace, plan);
+			return plan;
+		}
+		if (command === "first_party_analysis_native_run") {
+			if (args.confirmDebug !== true)
+				throw new Error(
+					"Independent Debug and sensitive memory-read confirmation required",
+				);
+			if (inspectorSlots.size >= 2)
+				throw new Error("Runtime observation slots occupied");
+			const request = NativeModuleRequestSchema.parse(args.input),
+				planId = String(args.planId ?? "");
+			inspectorSlots.set(session.id, planId);
+			let consumed = false;
+			try {
+				const plan = await desktopAnalysisTaskOrchestrator.consume({
+					planId,
+					executionToken: String(args.executionToken ?? ""),
+					workspaceRoot: session.workspace,
+					kind: "debugger",
+					request,
+				});
+				consumed = true;
+				if (!plan.targetIdentity?.sha256 || !plan.target)
+					throw new Error("Exact native artifact required");
+				const result = await observeNativeModule(
+					{ ...request, target: plan.target },
+					plan.targetIdentity.sha256,
+					desktopAnalysisTaskOrchestrator.signal(planId),
+				);
+				const completed = desktopAnalysisTaskOrchestrator.complete(
+					planId,
+					result,
+					"windows-native-module",
+				);
+				let evidenceWarning: string | undefined;
+				try {
+					recordFirstPartyTaskEvidence(
+						session.id,
+						session.workspace,
+						completed,
+						result,
+					);
+				} catch {
+					evidenceWarning =
+						"Observation completed; evidence metadata failed, do not replay";
+				}
+				return { result, plan: completed, evidenceWarning };
+			} catch (e) {
+				if (consumed) desktopAnalysisTaskOrchestrator.fail(planId, e);
+				throw e;
+			} finally {
+				if (inspectorSlots.get(session.id) === planId)
+					inspectorSlots.delete(session.id);
+			}
+		}
+		throw new Error("Unknown native observation operation");
+	}
+	if (command.startsWith("first_party_analysis_execute_")) {
+		if (
+			bound?.mode !== "runtime" ||
+			session.busy ||
+			inspectorSlots.has(session.id)
+		)
+			throw new Error(
+				"Active execution requires an idle Runtime-enabled session and independent Execute approval",
+			);
+		if (command === "first_party_analysis_execute_prepare") {
+			const request = await bindJavaScriptExecution(args.input);
+			const plan = await desktopAnalysisTaskOrchestrator.prepare({
+				workspaceRoot: session.workspace,
+				kind: "execution",
+				request,
+				allowExternalTarget: args.allowExternalTarget === true,
+				timeoutMs: request.timeoutMs + 25000,
+				maxOutputBytes: 262144,
+			});
+			bindFirstPartyTaskEvidence(session.id, session.workspace, plan);
+			return plan;
+		}
+		if (command === "first_party_analysis_execute_run") {
+			if (args.confirmExecution !== true)
+				throw new Error("Independent Execute confirmation required");
+			if (inspectorSlots.size >= 2)
+				throw new Error("Runtime execution slots occupied");
+			const request = JavaScriptExecutionSchema.parse(args.input),
+				planId = String(args.planId ?? "");
+			inspectorSlots.set(session.id, planId);
+			let consumed = false;
+			try {
+				const plan = await desktopAnalysisTaskOrchestrator.consume({
+					planId,
+					executionToken: String(args.executionToken ?? ""),
+					workspaceRoot: session.workspace,
+					kind: "execution",
+					request,
+				});
+				consumed = true;
+				if (!plan.targetIdentity?.sha256 || !plan.target)
+					throw new Error("Exact reviewed standalone file required");
+				const result = await runIsolatedJavaScript(
+					{ ...request, target: plan.target },
+					{
+						targetSha256: plan.targetIdentity.sha256,
+						requestHash: plan.requestHash,
+					},
+					desktopAnalysisTaskOrchestrator.signal(planId),
+				);
+				const completed = desktopAnalysisTaskOrchestrator.complete(
+					planId,
+					result,
+					"windows-appcontainer-js",
+				);
+				let evidenceWarning: string | undefined;
+				try {
+					recordFirstPartyTaskEvidence(
+						session.id,
+						session.workspace,
+						completed,
+						result,
+					);
+				} catch {
+					evidenceWarning =
+						"Execution completed but evidence metadata was not saved; do not replay";
+				}
+				return { result, plan: completed, evidenceWarning };
+			} catch (e) {
+				if (consumed) desktopAnalysisTaskOrchestrator.fail(planId, e);
+				throw e;
+			} finally {
+				if (inspectorSlots.get(session.id) === planId)
+					inspectorSlots.delete(session.id);
+			}
+		}
+		throw new Error("Unknown active JavaScript operation");
+	}
 	if (command.startsWith("first_party_analysis_inspector_")) {
 		if (
 			bound?.mode !== "runtime" ||

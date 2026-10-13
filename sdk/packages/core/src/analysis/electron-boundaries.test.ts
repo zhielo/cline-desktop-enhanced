@@ -244,3 +244,41 @@ it("does not qualify CommonJS bindings after loader reassignment, mutation or es
 		).toBe(false);
 	}
 });
+
+it("tracks lexical function/shorthand exposure aliases and awaited IPC wrappers", () => {
+	for (const declaration of [
+		'const read=(x)=>ir.invoke("owned:read",x);',
+		'function read(x){return ir.invoke("owned:read",x);}',
+		'const read=async(x)=>await ir.invoke("owned:read",x);',
+	]) {
+		const r = run(
+			`import {contextBridge as cb,ipcRenderer as ir} from "electron";${declaration}cb.exposeInMainWorld("owned",{read});`,
+		);
+		expect(
+			r.facts.some(
+				(f) =>
+					f.kind === "preload-member" &&
+					JSON.parse(f.value).channel === "owned:read",
+			),
+		).toBe(true);
+		expect(r.edges.some((e) => e.kind === "preload-candidate")).toBe(true);
+	}
+});
+it("does not resolve mutable, overwritten or cyclic exposure function aliases", () => {
+	for (const declaration of [
+		'let read=(x)=>ir.invoke("owned:read",x);',
+		'function read(x){return ir.invoke("owned:read",x);} read=()=>9;',
+		"const read=other;const other=read;",
+	]) {
+		const r = run(
+			`import {contextBridge as cb,ipcRenderer as ir} from "electron";${declaration}cb.exposeInMainWorld("owned",{read});`,
+		);
+		expect(
+			r.facts.some(
+				(f) =>
+					f.kind === "preload-member" &&
+					JSON.parse(f.value).channel === "owned:read",
+			),
+		).toBe(false);
+	}
+});
