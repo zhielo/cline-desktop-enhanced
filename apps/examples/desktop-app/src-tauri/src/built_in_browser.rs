@@ -57,6 +57,11 @@ pub fn built_in_browser_start(
 #[tauri::command]
 pub fn built_in_browser_stop(app: tauri::AppHandle, session_id: String) -> Result<Value, String> {
     let label = browser_label(&session_id)?;
+    #[cfg(windows)]
+    if let Some(window) = app.get_webview_window(&label) {
+        let cleanup_label=label.clone();
+        let _=window.with_webview(move |_| unsafe {let _=crate::browser_capture::end(&cleanup_label);});
+    }
     if let Some(window) = app.get_webview_window(&label) {
         window
             .close()
@@ -145,4 +150,20 @@ pub async fn built_in_browser_cdp(
     _params: Value,
 ) -> Result<Value, String> {
     Err("structured built-in browser control is currently available on Windows only".to_string())
+}
+
+#[tauri::command]
+pub async fn built_in_browser_capture(app: tauri::AppHandle, session_id: String, action: String) -> Result<Value,String> {
+    #[cfg(not(windows))] { let _=(app,session_id,action); return Err("Browser scenario recording is Windows-only; no simulated fallback".into()); }
+    #[cfg(windows)] {
+        if !matches!(action.as_str(),"start"|"stop") { return Err("Unsupported capture action".into()); }
+        let label=browser_label(&session_id)?;
+        let window=app.get_webview_window(&label).ok_or("Unknown browser session")?;
+        let (sender,receiver)=tokio::sync::oneshot::channel();
+        window.with_webview(move |webview| unsafe {
+            let result=webview.controller().CoreWebView2().map_err(|_|"Browser core unavailable".to_string()).and_then(|core|if action=="start"{crate::browser_capture::begin(&core,&label)}else{crate::browser_capture::end(&label)});
+            if sender.send(result).is_err(){ let _=crate::browser_capture::end(&label); }
+        }).map_err(|_|"Browser capture dispatch unavailable".to_string())?;
+        tokio::time::timeout(std::time::Duration::from_secs(30),receiver).await.map_err(|_|"Browser capture timed out; cleanup must be confirmed".to_string())?.map_err(|_|"Browser capture callback dropped".to_string())?
+    }
 }

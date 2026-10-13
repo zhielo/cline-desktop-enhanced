@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod built_in_browser;
+mod browser_capture;
 #[cfg(any(windows, test))]
 mod installed_webview_launch;
 #[cfg(target_os = "macos")]
@@ -1493,6 +1494,7 @@ fn main() {
             get_desktop_backend_endpoint,
             built_in_browser::built_in_browser_start,
             built_in_browser::built_in_browser_cdp,
+            built_in_browser::built_in_browser_capture,
             built_in_browser::built_in_browser_stop,
             pick_workspace_directory,
             open_mcp_settings_file,

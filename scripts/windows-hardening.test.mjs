@@ -33,7 +33,10 @@ test("supported Bun has one exact canonical package metadata value", () => {
 test("every main PR gets an unsigned installer gate without signing secrets or publication", () => {
 	const source = load(".github/workflows/build-custom-windows-installer.yml");
 	expect(source).toContain("pull_request:\n    branches: [main]");
-	expect(source).toContain('"fix/**"');
+	expect(source).not.toContain('"fix/**"');
+	expect(source).not.toContain('"feat/**"');
+	expect(source).toContain("Restore exact Windows engine wheel cache");
+	expect(source).toContain("install-windows-engine-wheels.ps1");
 	expect(source).not.toContain("pull_request_target");
 	expect(source).not.toContain("WINDOWS_CERTIFICATE");
 	expect(source).not.toContain("gh release create");

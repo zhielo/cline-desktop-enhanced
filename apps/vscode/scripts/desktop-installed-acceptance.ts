@@ -4,7 +4,7 @@
  */
 
 import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
-import { createHash } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
@@ -547,6 +547,27 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-sidecar-isolated-hub-bootstrapped");
     let page = await launch();
     stages.push("installed-webview-rendered");
+    // Exercise the installed app's actual event receivers against our own blank
+    // WebView. Never attach to user browsers or execute a supplied target.
+    const captureBrowserId=randomUUID();
+    const nativeCaptureInvoke=<T,>(name:string,args:Record<string,unknown>)=>page.evaluate(async({name,args})=>{
+      const native=(window as unknown as {__TAURI_INTERNALS__:{invoke:(name:string,args:Record<string,unknown>)=>Promise<unknown>}}).__TAURI_INTERNALS__;
+      return await native.invoke(name,args);
+    },{name,args}) as Promise<T>;
+    try {
+      await nativeCaptureInvoke("built_in_browser_start",{sessionId:captureBrowserId,url:"about:blank"});
+      await nativeCaptureInvoke("built_in_browser_capture",{sessionId:captureBrowserId,action:"start"});
+      await nativeCaptureInvoke("built_in_browser_cdp",{sessionId:captureBrowserId,method:"Runtime.enable",params:{}});
+      await nativeCaptureInvoke("built_in_browser_cdp",{sessionId:captureBrowserId,method:"Runtime.evaluate",params:{expression:"console.log('owned-capture-secret-fixture')",returnByValue:true}});
+      await delay(100);
+      const captured=await nativeCaptureInvoke<{cleanupVerified:boolean;events:Array<{kind:string;argumentCount?:number}>}>("built_in_browser_capture",{sessionId:captureBrowserId,action:"stop"});
+      if(!captured.cleanupVerified||!captured.events.some(e=>e.kind==="console-event"&&e.argumentCount===1))throw new Error("Installed native browser capture failed");
+      if(JSON.stringify(captured).includes("owned-capture-secret-fixture"))throw new Error("Installed native capture retained console argument values");
+      stages.push("installed-browser-native-metadata-capture-cleanup-verified");
+    } finally {
+      await nativeCaptureInvoke("built_in_browser_stop",{sessionId:captureBrowserId});
+    }
+
 		// Create an idle session with explicit local configuration: no paid/live model turn.
     const session = await rpc<{ sessionId: string }>(
       page,

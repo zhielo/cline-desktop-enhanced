@@ -58,6 +58,8 @@ export function recordFirstPartyTaskEvidence(
 		throw new Error("Task evidence session workspace mismatch");
 	return taskStore().record(sessionId, bound.workspace, plan, result);
 }
+export const sessionTaskSnapshots = (sessionId: string, workspace: string) =>
+	taskStore().list(sessionId, workspace);
 export const firstPartyStore = () => (store ??= new FirstPartyAnalysisStore());
 let fixtureReceipt:
 	| { status: string; checkedAt: string; profile: string; error?: string }

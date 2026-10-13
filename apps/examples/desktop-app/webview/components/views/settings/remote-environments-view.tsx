@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackendConnectionStatus } from "@/components/backend-connection-status";
 import { desktopClient } from "@/lib/desktop-client";
 import {
 	createRemoteEnvironmentDraft,
@@ -380,6 +381,7 @@ export function RemoteEnvironmentsContent() {
 				title="Remote Environments"
 				description="Manage your remote SSH hosts and their configurations."
 			/>
+			<BackendConnectionStatus />
 
 			{error ? (
 				<Alert className="mb-5" variant="destructive">

@@ -1,4 +1,5 @@
 "use client";
+import { clearAcceptedDraft, draftRecoveryKey } from "@/lib/draft-recovery";
 import { ProjectOutputBar } from "@/components/views/chat/project-output-bar";
 
 import { CLINE_DEFAULT_MODEL_ID } from "@cline/shared/browser";
@@ -1276,7 +1277,9 @@ function ChatThreadPane({
 		writeWorkInToWindow(next);
 	}, []);
 	const [showDiffView, setShowDiffView] = useState(false);
- const [workspaceInitialTab,setWorkspaceInitialTab]=useState<"changes"|"analysis">("changes");
+	const [workspaceInitialTab, setWorkspaceInitialTab] = useState<
+		"changes" | "analysis"
+	>("changes");
 	const [deletingSession, setDeletingSession] = useState(false);
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 	const [renamingSession, setRenamingSession] = useState(false);
@@ -2015,6 +2018,21 @@ function ChatThreadPane({
 						}
 					: {}),
 			});
+			if (promptTaken && sessionId) {
+				try {
+					clearAcceptedDraft(
+						localStorage,
+						draftRecoveryKey(
+							environmentId,
+							config.workspaceRoot ?? config.cwd ?? "",
+							sessionId,
+						),
+						trimmed,
+					);
+				} catch {
+					/* Keep unsent/newer text if storage is unavailable. */
+				}
+			}
 			// The prompt never reached the runtime (e.g. the provider connection
 			// failed): hand it back so the user can fix the provider and resend
 			// without retyping. Leave anything they typed meanwhile alone.
@@ -2039,6 +2057,9 @@ function ChatThreadPane({
 			setPromptInput,
 			threadId,
 			workIn,
+			environmentId,
+			config.workspaceRoot,
+			config.cwd,
 		],
 	);
 
@@ -2612,6 +2633,8 @@ function ChatThreadPane({
 				</div>
 			) : null}
 			<ChatInputBar
+				recoverySessionId={sessionId ?? undefined}
+				recoveryWorkspace={config.workspaceRoot ?? config.cwd ?? ""}
 				readOnly={isCloudSessionExpired}
 				attachments={attachmentList}
 				environmentId={environmentId}
@@ -2679,7 +2702,14 @@ function ChatThreadPane({
 					<WindowTitleBarContent>
 						<div className="cline-view-enter z-20 border-b border-border/70 bg-background/85 backdrop-blur-sm">
 							<AgentHeader
- sessionId={isCloudSession?undefined:displayedSessionId??undefined} environmentId={environmentId} onOpenAnalysis={()=>{setWorkspaceInitialTab("analysis");setShowDiffView(true);}}
+								sessionId={
+									isCloudSession ? undefined : (displayedSessionId ?? undefined)
+								}
+								environmentId={environmentId}
+								onOpenAnalysis={() => {
+									setWorkspaceInitialTab("analysis");
+									setShowDiffView(true);
+								}}
 								agentActivity={isCloudSession ? undefined : agentActivity}
 								agents={isCloudSession ? undefined : agents}
 								agentsError={agentsError}
@@ -2702,7 +2732,12 @@ function ChatThreadPane({
 								status={headerStatus}
 								title={threadTitle}
 							/>
-        {!isCloudSession ? <ProjectOutputBar cwd={config.workspaceRoot || config.cwd} environmentId={environmentId} /> : null}
+							{!isCloudSession ? (
+								<ProjectOutputBar
+									cwd={config.workspaceRoot || config.cwd}
+									environmentId={environmentId}
+								/>
+							) : null}
 						</div>
 					</WindowTitleBarContent>
 				) : null}
@@ -2716,7 +2751,9 @@ function ChatThreadPane({
 							<CloudProvisioningPane phase="Opening session..." />
 						) : showDiffView && !isCloudSession ? (
 							<DiffView
- key={workspaceInitialTab} initialTab={workspaceInitialTab} sessionId={displayedSessionId??undefined}
+								key={workspaceInitialTab}
+								initialTab={workspaceInitialTab}
+								sessionId={displayedSessionId ?? undefined}
 								cwd={config.cwd || config.workspaceRoot}
 								environmentId={environmentId}
 								fileDiffs={fileDiffs}
