@@ -266,7 +266,7 @@ export async function observeJavaScriptInspector(
 		timer = setTimeout(() => {
 			ws.terminate();
 			reject(new Error("Inspector observation deadline exceeded"));
-		}, 10000);
+		}, process.platform === "win32" ? 25000 : 10000);
 	});
 	const abort = () => ws.terminate();
 	signal?.addEventListener("abort", abort, { once: true });

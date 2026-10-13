@@ -405,7 +405,7 @@ export async function handleFirstPartyCommand(
 				workspaceRoot: session.workspace,
 				kind: "debugger",
 				request,
-				timeoutMs: 15000,
+				timeoutMs: process.platform === "win32" ? 40000 : 15000,
 				maxOutputBytes: 262144,
 			});
 			bindFirstPartyTaskEvidence(session.id, session.workspace, plan);

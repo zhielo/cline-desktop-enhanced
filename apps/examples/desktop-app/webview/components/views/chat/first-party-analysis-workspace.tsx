@@ -248,7 +248,7 @@ export function FirstPartyAnalysisWorkspace({
 					executionToken: approved.executionToken,
 					input: plan.request,
 				},
-				{ timeoutMs: 20000 },
+				{ timeoutMs: 45000 },
 			);
 			if (revision === inspectorRevision.current) setInspectorResult(result);
 		} catch (e) {

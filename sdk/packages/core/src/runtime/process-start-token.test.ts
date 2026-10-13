@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	processStartProbeTimeoutMs,
 	getProcessStartToken,
 	getProcessStartTokenAsync,
 	parseLinuxProcessStartToken,
@@ -158,4 +159,10 @@ describe("Windows invariant process identity", () => {
 			});
 		},
 	);
+});
+
+it("keeps sync probes short and grants only bounded async Windows startup time", () => {
+	expect(processStartProbeTimeoutMs(false, "win32")).toBe(2000);
+	expect(processStartProbeTimeoutMs(true, "win32")).toBe(5000);
+	expect(processStartProbeTimeoutMs(true, "linux")).toBe(2000);
 });

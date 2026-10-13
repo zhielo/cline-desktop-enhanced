@@ -144,6 +144,13 @@ export async function runIsolatedJavaScript(
 	approved: { targetSha256: string; requestHash: string },
 	signal?: AbortSignal,
 	resources = installedJavaScriptIsolationResources(),
+	// Internal owned-fixture hook only; not exposed through desktop request schemas.
+	// Production callers omit it and retain only output hashes/byte counts.
+	ownedFixtureCapture?: (capture: {
+		stdout: Uint8Array;
+		stderr: Uint8Array;
+		exitCode: number;
+	}) => void,
 ) {
 	const request = JavaScriptExecutionSchema.parse(input);
 	if (request.resourceDigest !== resources.manifestDigest)
@@ -225,6 +232,7 @@ export async function runIsolatedJavaScript(
 		const receipt = Receipt.parse(JSON.parse(encoded));
 		const stdout = base64(receipt.stdoutBase64),
 			stderr = base64(receipt.stderrBase64);
+		ownedFixtureCapture?.({ stdout, stderr, exitCode: receipt.exitCode });
 		const scenario = reconcileProcessScenario(request.scenario, {
 			...receipt,
 			stdout,

@@ -5,6 +5,15 @@ import { readFile } from "node:fs/promises";
 
 const PROCESS_PROBE_TIMEOUT_MS = 2_000;
 const PROCESS_PROBE_MAX_BUFFER_BYTES = 4_096;
+/** Cold Windows PowerShell startup may exceed 2s. Async probes do not block heartbeats. */
+export function processStartProbeTimeoutMs(
+	asynchronous: boolean,
+	platform: NodeJS.Platform = process.platform,
+) {
+	return asynchronous && platform === "win32"
+		? 5_000
+		: PROCESS_PROBE_TIMEOUT_MS;
+}
 
 export type ProcessStartTokenProbeResult =
 	| { status: "found"; token: string }
@@ -285,7 +294,7 @@ export async function probeProcessStartTokenAsync(
 					encoding: "utf8",
 					env: command.env,
 					maxBuffer: PROCESS_PROBE_MAX_BUFFER_BYTES,
-					timeout: PROCESS_PROBE_TIMEOUT_MS,
+					timeout: processStartProbeTimeoutMs(true),
 					windowsHide: true,
 				},
 				(error, stdout) => {

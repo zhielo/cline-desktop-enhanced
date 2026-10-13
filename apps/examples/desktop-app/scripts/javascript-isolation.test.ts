@@ -53,8 +53,44 @@ describe.skipIf(!windows)(
 				{ targetSha256: sha(source), requestHash: sha(source + expected) },
 				options.signal,
 				resources,
+				(capture) => {
+					if (
+						capture.exitCode !== 0 ||
+						createHash("sha256").update(capture.stdout).digest("hex") !==
+							sha(expected)
+					)
+						console.error(
+							`OWNED_RUNNER_CAPTURE exit=0x${capture.exitCode.toString(16)} stdoutBytes=${capture.stdout.length} stderr=${JSON.stringify(Buffer.from(capture.stderr).toString("utf8").slice(0, 3000))}`,
+						);
+				},
 			);
 		}
+		test("compiled runner executes owned target under minimal environment before OS isolation", () => {
+			const target = join(root, "preflight-target.cjs");
+			writeFileSync(target, "console.log(42);");
+			const result = spawnSync(
+				join(resources.root, "javascript-isolation-runtime.exe"),
+				[target],
+				{
+					encoding: "utf8",
+					timeout: 10000,
+					env: {
+						APPDATA: root,
+						LOCALAPPDATA: root,
+						SystemRoot: process.env.SystemRoot,
+						TEMP: root,
+						TMP: root,
+						USERPROFILE: root,
+					},
+				},
+			);
+			if (result.status !== 0)
+				console.error(
+					`OWNED_PREFLIGHT_CAPTURE exit=${result.status} stderr=${JSON.stringify(result.stderr.slice(0, 3000))}`,
+				);
+			expect(result.status).toBe(0);
+			expect(result.stdout).toBe("42\n");
+		}, 15000);
 		test("actual zero-capability lowbox token verified before resume and host-observed output", async () => {
 			const r = await run("console.log(21*2);", "42\n");
 			expect(r.isolation).toMatchObject({
