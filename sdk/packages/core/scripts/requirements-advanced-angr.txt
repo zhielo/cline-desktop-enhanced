@@ -1,2 +1,4 @@
 angr==9.2.185
 pycparser==2.22
+# pyvex 9.2.185 needs ConstBitStream/BitStream, removed by bitstring 5.x.
+bitstring==4.3.1

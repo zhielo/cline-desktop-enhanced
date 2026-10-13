@@ -1,3 +1,9 @@
+import { loadTargetedNativeEvidence } from "./targeted-native-evidence";
+import {
+	runFirstPartyAnalysis,
+	queryFirstPartyEvidence,
+	FirstPartyAnalysisStore,
+} from "../../../analysis/index";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -97,7 +103,7 @@ const ANALYSIS_MANIFEST = "cline-analysis.json";
 const ANALYSIS_SCHEMA_VERSION = 2;
 const FORENSIC_REPORT_SCHEMA_VERSION = 1;
 const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
-const GHIDRA_SCRIPT_VERSION = 3;
+const GHIDRA_SCRIPT_VERSION = 4;
 const IDA_DECOMPILE_SCRIPT_VERSION = "ida-decompile-phase-deadline-v3";
 const DISCOVERY_CACHE_TTL_MS = 5 * 60_000;
 const DISCOVERY_PROBE_TIMEOUT_MS = 5_000;
@@ -2438,6 +2444,44 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
 		if (
+			input.operation === "javascript_analysis" ||
+			input.operation === "analysis_evidence"
+		) {
+			if (!context.sessionId)
+				throw new Error("First-party analysis requires an owning session");
+			const store = new FirstPartyAnalysisStore();
+			try {
+				if (input.operation === "analysis_evidence")
+					return JSON.stringify(
+						queryFirstPartyEvidence(
+							context.sessionId,
+							input.evidence_query,
+							store,
+						),
+					);
+				if (!input.target)
+					throw new Error("JavaScript analysis target required");
+				const receipt = await runFirstPartyAnalysis(
+					context.sessionId,
+					{ target: input.target, ...input.javascript_options },
+					context.signal,
+					store,
+				);
+				return JSON.stringify({
+					id: receipt.id,
+					status: receipt.status,
+					resultHash: receipt.resultHash,
+					error: receipt.error,
+					artifacts: receipt.result?.artifacts.length,
+					findings: receipt.result?.facts.length,
+					limitations: receipt.result?.limitations,
+					next: "Use analysis_evidence with this receiptId for bounded findings/artifacts/graph/verification views. No execution or behavior verification implied.",
+				});
+			} finally {
+				store.close();
+			}
+		}
+		if (
 			input.managed_worker === true &&
 			(input.operation !== "decompile" ||
 				!input.function_selector ||
@@ -3757,6 +3801,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					await Promise.all([
 						fs.rm(decompileOutput, { force: true }),
 						fs.rm(`${decompileOutput}.error.txt`, { force: true }),
+						fs.rm(`${decompileOutput}.native.json`, { force: true }),
 					]);
 				}
 				const result =
@@ -3810,6 +3855,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					!result.cancelled &&
 					!result.outputDrainTimedOut &&
 					artifactVerified;
+				const selectedNativeEvidence =
+					succeeded &&
+					engine === "ghidra" &&
+					input.operation === "decompile" &&
+					input.function_selector &&
+					!input.script_path
+						? await loadTargetedNativeEvidence(decompileOutput)
+						: undefined;
 				if (succeeded) {
 					if (engine === "ida" && !input.script_path)
 						await publishIdaDatabase(workspaceDir, outputDir, databaseKey);
@@ -3830,6 +3883,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				return JSON.stringify(
 					{
 						engine,
+						engineVersion: engineIdentity.version,
+						...(selectedNativeEvidence
+							? {
+									input: { sha256: hash },
+									evidence: { selectedFunctions: [selectedNativeEvidence] },
+								}
+							: {}),
 						operation: input.operation,
 						target,
 						sha256: hash,

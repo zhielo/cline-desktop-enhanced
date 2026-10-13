@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ANALYSIS_PROFILE } from "../sdk/packages/core/src/analysis/contracts.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -8,6 +9,7 @@ import {
 	verifyRestartInstructions,
 	verifyRecoveredHubSession,
 	waitForInstalledBackendEndpoint,
+	verifyInstalledAnalysisProfile,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("Hub crash acceptance reattaches before local discovery without replay or hiding errors", async () => {
@@ -188,4 +190,11 @@ test("descendant diagnostics reject recycled parent PIDs and unrelated processes
 		),
 		[],
 	);
+});
+
+test("new installed receipt must match current parser profile, not historical profiles", () => {
+  assert.equal(ANALYSIS_PROFILE, "cline-js-static/7");
+  assert.doesNotThrow(() => verifyInstalledAnalysisProfile(ANALYSIS_PROFILE));
+  for (const profile of ["cline-js-static/6", "cline-js-static/1", "", "unknown"])
+    assert.throws(() => verifyInstalledAnalysisProfile(profile), /Installed analysis profile is stale/);
 });

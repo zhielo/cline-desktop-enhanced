@@ -443,6 +443,16 @@ describe("Hub agenda task vertical slice", () => {
 
 	it("keeps agenda spec watchers off while the todo tool is disabled", async () => {
 		const root = mkdtempSync(join(tmpdir(), "cline-hub-agenda-watch-"));
+		// Both the positive control and transport must use fixture-owned global storage.
+		// Otherwise parallel Windows workers contend on the runner's shared ~/.cline DB.
+		const clineHome = join(root, "cline-home");
+		mkdirSync(clineHome);
+		const previousClineDir = process.env.CLINE_DIR;
+		process.env.CLINE_DIR = clineHome;
+		onTestFinished(() => {
+			if (previousClineDir === undefined) delete process.env.CLINE_DIR;
+			else process.env.CLINE_DIR = previousClineDir;
+		});
 		const canonicalRoot = realpathSync.native(root);
 		const specWatchTargets = () =>
 			fsWatchSpy.mock.calls

@@ -433,6 +433,12 @@ jobs:
             }
           }
 
+          # The installed executable must host its fixed parser child without system Node/npm.
+          $analysisSelfcheck = & $sidecarExe.FullName --cline-analysis-selfcheck
+          if ($LASTEXITCODE -ne 0) { throw 'Installed first-party parser fixture failed' }
+          $analysisReceipt = $analysisSelfcheck | ConvertFrom-Json
+          if ($analysisReceipt.status -ne 'passed') { throw 'Installed parser did not produce a passed receipt' }
+
           # Validate the installed sidecar by its observable contract instead of
           # relying on a Win32_Process name/path snapshot. The app can replace
           # its first sidecar with the detached Hub daemon during startup, so a

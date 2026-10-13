@@ -31,6 +31,19 @@ export function formatValidationNotice(message) {
   return `::notice title=Custom validation progress::${data}`;
 }
 
+export function formatValidationFailureNotice(message) {
+  return formatValidationNotice(message).replace("::notice title=Custom validation progress::", "::error title=Required validation gate::");
+}
+
+export function formatValidationSummary(report, sourceCommit) {
+  // Only fixed gate names/statuses/timings. Never child log contents, requests or environment.
+  const cell = value => String(value ?? "").replace(/[|`<>\r\n\x00-\x1f\x7f]/g, " ").slice(0, 180);
+  const commit = /^[a-f0-9]{40}$/.test(sourceCommit) ? sourceCommit : "unavailable";
+  const status = ["passed", "failed"].includes(report.status) ? report.status : "unknown";
+  const rows = report.results.map(r => `| ${cell(r.name)} | ${cell(r.status)} | ${Number.isFinite(r.durationMs) ? Math.max(0, Math.round(r.durationMs / 1000)) : "—"} |`);
+  return `## Required desktop validation: ${status}\n\nSource commit: ${commit}\n\n| Gate | Status | Seconds |\n| --- | --- | ---: |\n${rows.join("\n")}\n\nDetailed logs and the machine-readable summary are in the regression artifact. A passing validation suite does not certify behavioral superiority or complete unimplemented capabilities.\n`;
+}
+
 export function recordValidationProgress(file, event) {
   // Open/write/close each record: evidence survives a child crash without
   // depending on the final summary or a buffered persistent stream.
@@ -80,8 +93,12 @@ async function main() {
     job("Check Android worker embed", ["scripts/generate-android-investigation.mjs", "--check"]),
     job("Verify custom fork preservation", ["run", "scripts/verify-custom-fork.ts"]),
     job("Build SDK packages", ["run", "build:sdk"]),
+    job("Build CLI workspace quality prerequisite", ["run", "-F", "@cline/cli", "build"]),
   ];
   const checks = [
+    job("Type-check complete workspace including tests and smoke declarations", ["run", "types"]),
+    job("Lint complete workspace", ["run", "lint"]),
+    job("Test first-party static parser, evidence and supervised workers", ["x", "vitest", "run", "src/analysis/analysis.test.ts", "src/analysis/semantic.test.ts", "src/analysis/recovery.test.ts", "src/analysis/module-context.test.ts", "src/analysis/dotnet.test.ts", "src/analysis/il.test.ts", "src/analysis/managed-signature.test.ts", "src/analysis/scenario.test.ts", "src/analysis/managed-stack.test.ts", "src/analysis/electron-boundaries.test.ts", "src/analysis/managed-exceptions.test.ts", "src/analysis/unified-evidence.test.ts", "src/analysis/inspector.test.ts", "src/analysis/inspector-console.test.ts", "src/runtime/process-start-token.test.ts", "--config", "vitest.config.ts"], path.join(root,"sdk/packages/core")),
     job("Test real Hub singleton crash recovery", ["x", "vitest", "run", "src/hub/daemon/singleton.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
     { ...job("Test native Node installed process harness", ["--experimental-strip-types", "--test", "scripts/installed-node-process.test.mjs", "scripts/e2e-dependency-install.test.mjs"]), executable: "node" },
     job("Test native Bun SQLite memory startup", ["test", "sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs"]),
@@ -94,6 +111,7 @@ async function main() {
     job("Type-check desktop", ["x", "tsc", "-p", "apps/examples/desktop-app/tsconfig.dev.json", "--noEmit"]),
     job("Type-check core", ["x", "tsc", "-p", "sdk/packages/core/tsconfig.build.json", "--noEmit"]),
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),
+    job("Test real Windows AppContainer execution boundary", ["test", "scripts/isolation-host-failure.test.ts", "scripts/javascript-isolation.test.ts"], desktop),
     job("Test Windows installer configuration", ["-F", "@cline/code", "test:windows-installer"]),
     job("Test AI task report", ["x", "vitest", "run", "webview/lib/task-report.test.ts", "--config", "vitest.config.mts"], desktop),
     job("Test desktop authentication boundary", ["x", "vitest", "run",
@@ -154,6 +172,7 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/advanced-analysis.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/analysis-environment.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/ida-job-diagnostics.test.ts",
+      "sdk/packages/core/src/extensions/tools/executors/targeted-native-evidence.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/ida-analysis-workspace.test.ts",
       "sdk/packages/core/src/hub/discovery/startup-lock.test.ts",
       "sdk/packages/core/src/hub/daemon/index.test.ts",
@@ -231,6 +250,7 @@ async function main() {
         if (settled) return; settled = true; clearTimeout(timer); active.delete(child); stream.end();
         const status = cancelled ? "cancelled" : timedOut ? "timed-out" : code === 0 ? "passed" : "failed";
         console.log(`[${status.toUpperCase()}] ${step.name}`);
+        if (process.env.GITHUB_ACTIONS === "true" && status !== "passed") console.log(formatValidationFailureNotice(`[${status.toUpperCase()}] ${step.name}`));
         recordValidationProgress(progressFile, { event: "check-finish", name: step.name, status, exitCode: code, durationMs: Date.now() - start });
         resolve({ name: step.name, status, exitCode: code, durationMs: Date.now() - start, log: logName });
       };
@@ -253,6 +273,10 @@ async function main() {
     engineProfile: flags.includes("--engines") ? (process.platform === "win32" ? "windows-portable" : "full") : "not-requested",
     windowsInstallerBuilt: false, ...report,
   }, null, 2) + "\n");
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try { await writeFile(process.env.GITHUB_STEP_SUMMARY, formatValidationSummary(report, sourceCommit), {flag:"a"}); }
+    catch { console.warn("CI display summary unavailable; use the retained regression artifact. No check was replayed."); }
+  }
   console.log(`Validation ${report.status}: ${path.relative(root, output)}/summary.json`);
   process.exitCode = report.status === "passed" ? 0 : 1;
 }

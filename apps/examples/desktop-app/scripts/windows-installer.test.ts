@@ -34,6 +34,7 @@ const children: ChildProcess[] = [];
 let root: string;
 let fixture: string;
 let installer: string;
+let installerSource: string;
 
 function nsisString(value: string): string {
 	return value.replaceAll("$", "$$").replaceAll('"', '$\\"');
@@ -114,10 +115,32 @@ async function start(dir: string, name: string): Promise<ChildProcess> {
 	return child;
 }
 
-test("locked Tauri CLI is the version whose NSIS pin this suite mirrors", () => {
-	const resolved = readFileSync(lockfile, "utf8").match(
-		/"@tauri-apps\/cli": \["@tauri-apps\/cli@([^"]+)"/,
+function lockedTauriCliVersion(text: string) {
+	return text.match(
+		/"@tauri-apps\/cli":\s*\[\s*"@tauri-apps\/cli@([^"]+)"/,
 	)?.[1];
+}
+
+test("Tauri CLI resolution is whitespace-independent but remains exact", () => {
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli": ["@tauri-apps/cli@2.11.4"'),
+	).toBe("2.11.4");
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli":["@tauri-apps/cli@2.11.4"'),
+	).toBe("2.11.4");
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli":\n[\n"@tauri-apps/cli@2.11.4"'),
+	).toBe("2.11.4");
+	expect(
+		lockedTauriCliVersion('"@tauri-apps/cli":["@tauri-apps/cli@2.12.0"'),
+	).not.toBe(TAURI_CLI_VERSION);
+	expect(
+		lockedTauriCliVersion('"another-package":["@tauri-apps/cli@2.11.4"'),
+	).toBeUndefined();
+});
+
+test("locked Tauri CLI is the version whose NSIS pin this suite mirrors", () => {
+	const resolved = lockedTauriCliVersion(readFileSync(lockfile, "utf8"));
 	expect(
 		resolved,
 		`@tauri-apps/cli moved from ${TAURI_CLI_VERSION}; re-read its bundler's NSIS_URL/NSIS_SHA1 and update TAURI_CLI_VERSION, NSIS_VERSION and the download in desktop-test.yml`,
@@ -153,6 +176,7 @@ describe.skipIf(!windows)("Windows installer process cleanup", () => {
 
 		installer = path.join(root, "setup.exe");
 		const script = path.join(root, "installer.nsi");
+		installerSource = script;
 		// Match Tauri's ordering: hooks are included BEFORE MAINBINARYNAME is
 		// defined. Both hooks must compile and preserve caller registers.
 		writeFileSync(
@@ -232,6 +256,30 @@ SectionEnd
 			"replaced",
 		);
 	}, 120_000);
+
+	test("actual NSIS upgrade then rollback preserves user data and repairs a damaged installed payload", async () => {
+		const dir = path.join(root, "upgrade-rollback"),
+			data = path.join(dir, "owned-user-data.json");
+		expect(await run(installer, ["/S", `/D=${dir}`])).toBe(0);
+		writeFileSync(data, '{"preserve":true}');
+		const upgraded = path.join(root, "upgrade-installer.exe"),
+			script = path.join(root, "upgrade.nsi");
+		const source = readFileSync(installerSource, "utf8")
+			.replace(nsisString(installer), nsisString(upgraded))
+			.replace('FileWrite $0 "replaced"', 'FileWrite $0 "upgrade-v2"');
+		writeFileSync(script, source);
+		expect(await run(nsis, ["/V2", script])).toBe(0);
+		expect(await run(upgraded, ["/S", `/D=${dir}`])).toBe(0);
+		expect(readFileSync(path.join(dir, "code-sidecar.exe"), "utf8")).toBe(
+			"upgrade-v2",
+		);
+		writeFileSync(path.join(dir, "code-sidecar.exe"), "damaged-v2");
+		expect(await run(installer, ["/S", `/D=${dir}`])).toBe(0);
+		expect(readFileSync(path.join(dir, "code-sidecar.exe"), "utf8")).toBe(
+			"replaced",
+		);
+		expect(readFileSync(data, "utf8")).toBe('{"preserve":true}');
+	}, 120000);
 
 	test("stops all target x64 processes, releases the file, and preserves another install", async () => {
 		const dir = path.join(root, "Cline 'quoted' $ space (测试)");

@@ -13,7 +13,13 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { assertAnalysisSandboxReady } from "./analysis-sandbox-client";
 
-export type AnalysisTaskKind = "static" | "debugger" | "gui" | "dynamic" | "device" | "execution";
+export type AnalysisTaskKind =
+	| "static"
+	| "debugger"
+	| "gui"
+	| "dynamic"
+	| "device"
+	| "execution";
 export type AnalysisPermission =
 	| "Inspect"
 	| "Execute"
@@ -154,9 +160,13 @@ function permissionFor(
 	kind: AnalysisTaskKind,
 	operation: string,
 ): AnalysisPermission {
-	if(kind==="execution")return "Execute";
-	if (kind === "device") return ["observe_apk","collect_apk_debug"].includes(operation) ? "Inspect" : "Execute";
-	if (kind === "static") return operation === "project_edit" ? "Modify" : "Inspect";
+	if (kind === "execution") return "Execute";
+	if (kind === "device")
+		return ["observe_apk", "collect_apk_debug"].includes(operation)
+			? "Inspect"
+			: "Execute";
+	if (kind === "static")
+		return operation === "project_edit" ? "Modify" : "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
 	if (["launch", "continue", "step"].includes(operation)) return "Execute";
 	return "Debug";
@@ -169,21 +179,57 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
- if(kind==="execution"){
- requirements.add("trusted-host-work");requirements.add("full-access-execution");requirements.add("side-effect-review");
- if(request?.archive_logs===true)requirements.add("captured-artifact-write");
- const stages=Array.isArray(request?.stages)?request.stages as {backend?:string;request?:Record<string,unknown>}[]:[];
- if(stages.some(s=>s.backend==="debugger"))requirements.add("authorized-debug-target");
- if(stages.some(s=>s.backend==="debugger"&&["launch","continue","step"].includes(String(s.request?.operation))))requirements.add("execution-control");
- if(stages.some(s=>s.request?.advanced_action==="decrypt_blob")){requirements.add("authorized-decryption");requirements.add("sensitive-plaintext-processing");}
- if(stages.some(s=>s.request?.project_action==="annotate"))requirements.add("reviewed-project-modification");
- }
- if (kind === "device") {
-  requirements.add("authorized-target"); requirements.add("sensitive-device-logs"); requirements.add("captured-artifact-write");
-  if(!["observe_apk","collect_apk_debug"].includes(operation)) requirements.add("execution-control");
- if(operation === "collect_apk_debug") {requirements.add("selected-diagnostic-path-read");if(request?.use_root===true)requirements.add("explicit-root-read-without-policy-change");}
-  if(["validate_apk_patch", "rollback_apk"].includes(operation)) {requirements.add("package-change"); requirements.add("dedicated-test-device"); requirements.add("rollback-plan");}
- }
+	if (operation === "js_isolated_execute") {
+		requirements.add("independent-execute-approval");
+		requirements.add("authorized-target-execution");
+		requirements.add("appcontainer-boundary-review");
+		requirements.add("private-staged-target-write");
+	} else if (kind === "execution") {
+		requirements.add("trusted-host-work");
+		requirements.add("full-access-execution");
+		requirements.add("side-effect-review");
+		if (request?.archive_logs === true)
+			requirements.add("captured-artifact-write");
+		const stages = Array.isArray(request?.stages)
+			? (request.stages as {
+					backend?: string;
+					request?: Record<string, unknown>;
+				}[])
+			: [];
+		if (stages.some((s) => s.backend === "debugger"))
+			requirements.add("authorized-debug-target");
+		if (
+			stages.some(
+				(s) =>
+					s.backend === "debugger" &&
+					["launch", "continue", "step"].includes(String(s.request?.operation)),
+			)
+		)
+			requirements.add("execution-control");
+		if (stages.some((s) => s.request?.advanced_action === "decrypt_blob")) {
+			requirements.add("authorized-decryption");
+			requirements.add("sensitive-plaintext-processing");
+		}
+		if (stages.some((s) => s.request?.project_action === "annotate"))
+			requirements.add("reviewed-project-modification");
+	}
+	if (kind === "device") {
+		requirements.add("authorized-target");
+		requirements.add("sensitive-device-logs");
+		requirements.add("captured-artifact-write");
+		if (!["observe_apk", "collect_apk_debug"].includes(operation))
+			requirements.add("execution-control");
+		if (operation === "collect_apk_debug") {
+			requirements.add("selected-diagnostic-path-read");
+			if (request?.use_root === true)
+				requirements.add("explicit-root-read-without-policy-change");
+		}
+		if (["validate_apk_patch", "rollback_apk"].includes(operation)) {
+			requirements.add("package-change");
+			requirements.add("dedicated-test-device");
+			requirements.add("rollback-plan");
+		}
+	}
 	if (externalTarget) requirements.add("external-target");
 	if (
 		kind === "static" &&
@@ -193,9 +239,29 @@ function requirementsFor(
 		requirements.add("authorized-decryption");
 		requirements.add("sensitive-plaintext-processing");
 	}
-	if (kind === "static" && request?.managed_worker === true) {requirements.add("managed-persistent-engine-process"); requirements.add("private-analysis-project-write");}
-	if (kind === "static" && operation === "project_edit") {requirements.add("authorized-target");requirements.add("isolated-analysis-project-write");requirements.add("reviewed-native-project-state");requirements.add("candidate-pointer-change-not-gui-replacement");}
+	if (kind === "static" && request?.managed_worker === true) {
+		requirements.add("managed-persistent-engine-process");
+		requirements.add("private-analysis-project-write");
+	}
+	if (kind === "static" && operation === "project_edit") {
+		requirements.add("authorized-target");
+		requirements.add("isolated-analysis-project-write");
+		requirements.add("reviewed-native-project-state");
+		requirements.add("candidate-pointer-change-not-gui-replacement");
+	}
 	if (kind === "debugger") requirements.add("authorized-target");
+	if (operation === "native_module_observe") {
+		requirements.add("exact-process-memory-read");
+		requirements.add("sensitive-memory-hash-retention");
+	}
+	if (
+		kind === "debugger" &&
+		operation === "js_inspector_observe" &&
+		request?.captureConsole === true
+	) {
+		requirements.add("sensitive-console-protocol-capture");
+		requirements.add("private-evidence-write");
+	}
 	if (
 		kind === "gui" ||
 		kind === "dynamic" ||
@@ -306,6 +372,12 @@ export class AnalysisTaskOrchestrator {
 		const request = normalizeRequestPaths(input.request, workspaceRoot);
 		const operation = String(request.operation ?? "").trim();
 		if (!operation) throw new Error("Analysis request operation is required.");
+		if (operation === "js_isolated_execute" && input.kind !== "execution")
+			throw new Error(
+				"Active JavaScript requires independent Execute task kind",
+			);
+		if (operation === "native_module_observe" && input.kind !== "debugger")
+			throw new Error("Native memory observation requires Debug task kind");
 		const target =
 			typeof request.target === "string" ? request.target : undefined;
 		const externalTarget = Boolean(target && !isWithin(workspaceRoot, target));
@@ -351,7 +423,12 @@ export class AnalysisTaskOrchestrator {
 					Math.max(input.maxOutputBytes ?? 1024 * 1024, 64 * 1024),
 					16 * 1024 * 1024,
 				),
-				network: ["device","execution"].includes(input.kind) ? "recorded" : "disabled",
+				network:
+					operation === "js_isolated_execute"
+						? "disabled"
+						: ["device", "execution"].includes(input.kind)
+							? "recorded"
+							: "disabled",
 			},
 			createdAt: new Date(this.now()).toISOString(),
 			expiresAt: new Date(this.now() + this.approvalTtlMs).toISOString(),

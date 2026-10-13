@@ -1,0 +1,28 @@
+{
+  "scope": "actual Ghidra selected owned ELF pseudocode and p-code calls only; no target execution",
+  "status": "passed",
+  "adapterSha256": "35eac73c19071dbec48eb186f13e46d415d534348267e0bb923d04b394f6c392",
+  "fixtureSourceSha256": "bc98ac58c57cbce119ac0649965120c23cca68df843712c712a26ba38d84a649",
+  "fixtureArtifactSha256": "9b7fe8ff999c99cc136069d968eb2f67f95a79ba3a8ae607931c876530a07083",
+  "directCalls": [
+    {
+      "fromAddressHex": "0x101146",
+      "kind": "direct",
+      "targetAddressHex": "0x101030",
+      "resolution": "bounded-high-pcode-constant-candidate"
+    }
+  ],
+  "indirectCalls": [
+    {
+      "fromAddressHex": "0x101132",
+      "kind": "indirect",
+      "resolution": "unknown-memory-register-or-ambiguous-phi"
+    }
+  ],
+  "provenance": {
+    "version": "12.1.4",
+    "releaseArchiveSha256": "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db",
+    "java": "Corretto 21",
+    "scope": "Linux x64 selected owned ELF; not Windows installation"
+  }
+}

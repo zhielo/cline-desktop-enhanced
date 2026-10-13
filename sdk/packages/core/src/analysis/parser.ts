@@ -1,0 +1,695 @@
+import ts from "typescript";
+import { inspectElectronBoundaries } from "./electron-boundaries";
+import { analyzeLocalSemantics } from "./semantic";
+import { inspectManagedPE } from "./dotnet";
+import { closedModuleContext } from "./module-context";
+import { sourceMapLocations } from "./source-maps";
+import path from "node:path";
+import {
+	ANALYSIS_PROFILE,
+	LIMITS,
+	type AnalysisFact,
+	type AnalysisResult,
+	digest,
+} from "./contracts";
+
+export type SourceArtifact = {
+	path: string;
+	sha256: string;
+	bytes: number;
+	source: string;
+	binary?: Uint8Array;
+};
+/** Parses syntax only. Never imports, evaluates, transpiles or executes target source. */
+export function analyzeSources(
+	sources: SourceArtifact[],
+	partial: string[] = [],
+): AnalysisResult {
+	const facts: AnalysisFact[] = [],
+		limitations = [...partial];
+	const counts = new Map<string, number>();
+	for (const s of sources) counts.set(s.path, (counts.get(s.path) ?? 0) + 1);
+	const ambiguous = [...counts].filter(([, n]) => n > 1).map(([p]) => p);
+	if (ambiguous.length) {
+		limitations.push(
+			"Ambiguous duplicate inventory labels were excluded; no provider bytes were attributed to a conflicting source path.",
+		);
+		sources = sources.filter((s) => counts.get(s.path) === 1);
+	}
+	const artifacts: AnalysisResult["artifacts"] = sources
+		.slice(0, LIMITS.files)
+		.map((s) => ({
+			path: s.path,
+			sha256: s.sha256,
+			bytes: s.bytes,
+			role: "source-uninspected",
+		}));
+	const setArtifact = (a: AnalysisResult["artifacts"][number]) => {
+		const i = artifacts.findIndex((x) => x.path === a.path);
+		if (i >= 0) artifacts[i] = a;
+		else if (artifacts.length < LIMITS.files) artifacts.push(a);
+	};
+	const semanticEdges: AnalysisResult["edges"] = [];
+	const moduleContext = closedModuleContext(sources);
+	let nodes = 0,
+		stopped = false;
+	const add = (
+		source: SourceArtifact,
+		file: ts.SourceFile,
+		node: ts.Node,
+		kind: AnalysisFact["kind"],
+		value: string,
+		confidence: AnalysisFact["confidence"] = "observed",
+		notes: string[] = [],
+	) => {
+		if (facts.length >= LIMITS.facts) {
+			stopped = true;
+			return;
+		}
+		const loc = file.getLineAndCharacterOfPosition(node.getStart(file));
+		const data = {
+			kind,
+			value: value.slice(0, 1000),
+			confidence,
+			authority: "shipped-artifact" as const,
+			location: {
+				path: source.path,
+				sha256: source.sha256,
+				line: loc.line + 1,
+				column: loc.character + 1,
+			},
+			limitations: notes,
+		};
+		const fact: AnalysisFact = {
+			id: `ev_${digest({ profile: ANALYSIS_PROFILE, parserVersion: ts.version, ...data })}`,
+			...data,
+		};
+		facts.push(fact);
+		return fact;
+	};
+	const literal = (n?: ts.Node) =>
+		n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
+			? n.text
+			: undefined;
+	for (const source of sources) {
+		if (stopped) break;
+		if (source.binary) {
+			setArtifact({
+				path: source.path,
+				sha256: source.sha256,
+				bytes: source.bytes,
+				role: "managed-pe-candidate",
+			});
+			const file = ts.createSourceFile(
+				source.path,
+				"{}",
+				ts.ScriptTarget.Latest,
+				true,
+			);
+			try {
+				const managed = inspectManagedPE(
+					source.binary,
+					Math.min(256, LIMITS.facts - facts.length),
+				);
+				const instructions = new Map<string, AnalysisFact>();
+				const regions: Array<{
+					methodToken: string;
+					tryOffset: number;
+					handlerOffset: number;
+					kind: string;
+				}> = [];
+				const flow: Array<{
+					methodToken: string;
+					source: number;
+					target: number;
+					kind: string;
+				}> = [];
+				for (const record of managed.records) {
+					const detail = JSON.parse(record.value);
+					const value = JSON.stringify({
+						offset: record.offset,
+						record: detail,
+					});
+					if (value.length > 1000) {
+						limitations.push(
+							"Managed evidence value budget reached; record omitted without truncating JSON",
+						);
+						continue;
+					}
+					const fact = add(
+						source,
+						file,
+						file,
+						record.kind,
+						value,
+						record.kind === "managed-control-flow" ||
+							record.kind === "managed-exception-region"
+							? "derived"
+							: "observed",
+						[
+							"Exact binary file offset is in value; line/column are placeholders. Decoded normal-flow candidates are not exception flow, stack verification or execution.",
+						],
+					);
+					if (fact && record.kind === "managed-il-instruction")
+						instructions.set(`${detail.methodToken}:${detail.offset}`, fact);
+					if (fact && record.kind === "managed-control-flow") flow.push(detail);
+					if (fact && record.kind === "managed-exception-region")
+						regions.push(detail);
+				}
+				for (const edge of flow) {
+					const from = instructions.get(`${edge.methodToken}:${edge.source}`),
+						to = instructions.get(`${edge.methodToken}:${edge.target}`);
+					if (from && to && semanticEdges.length < LIMITS.facts)
+						semanticEdges.push({
+							source: from.id,
+							target: to.id,
+							kind: "managed-flow",
+							confidence: "derived",
+							limitations: [
+								`Static ${edge.kind} candidate; no exception flow, reachability or execution proof`,
+							],
+						});
+				}
+				for (const region of regions) {
+					const from = instructions.get(
+							`${region.methodToken}:${region.tryOffset}`,
+						),
+						to = instructions.get(
+							`${region.methodToken}:${region.handlerOffset}`,
+						);
+					if (from && to && semanticEdges.length < LIMITS.facts)
+						semanticEdges.push({
+							source: from.id,
+							target: to.id,
+							kind: "managed-exception-candidate",
+							confidence: "derived",
+							limitations: [
+								`Declared ${region.kind} region association only; not a throw/catch transition, dispatch precedence or runtime reachability proof`,
+							],
+						});
+				}
+				limitations.push(...managed.limitations);
+			} catch (e) {
+				limitations.push(
+					`Unsupported managed PE ${source.path}: ${e instanceof Error ? e.message : "invalid"}`,
+				);
+			}
+			continue;
+		}
+		if (source.path.endsWith(".map")) {
+			setArtifact({
+				path: source.path,
+				sha256: source.sha256,
+				bytes: source.bytes,
+				role: "source-map",
+			});
+			const mapFile = ts.createSourceFile(
+				source.path,
+				"{}",
+				ts.ScriptTarget.Latest,
+				true,
+			);
+			try {
+				const records = sourceMapLocations(
+					source.source,
+					LIMITS.facts - facts.length,
+				);
+				for (const record of records.locations) {
+					const value = JSON.stringify(record);
+					if (value.length > 1000) {
+						limitations.push(
+							`Source-map label too long for retained evidence: ${source.path}`,
+						);
+						continue;
+					}
+					add(
+						source,
+						mapFile,
+						mapFile,
+						"source-map-location",
+						value,
+						"derived",
+						[
+							"Untrusted source-map declaration; original labels are not opened or executed. Embedded source hash is not execution proof.",
+						],
+					);
+				}
+				if (records.partial)
+					limitations.push(`Source map coverage incomplete: ${source.path}`);
+			} catch {
+				limitations.push(`Unsupported/malformed source map: ${source.path}`);
+			}
+			continue;
+		}
+		if (source.path.endsWith(".json")) {
+			setArtifact({
+				path: source.path,
+				sha256: source.sha256,
+				bytes: source.bytes,
+				role: "package-metadata",
+			});
+			try {
+				const p = JSON.parse(source.source);
+				const file = ts.createSourceFile(
+					source.path,
+					"{}",
+					ts.ScriptTarget.Latest,
+					true,
+				);
+				for (const key of ["main", "module", "browser"])
+					if (typeof p[key] === "string")
+						add(source, file, file, "entrypoint", p[key], "observed", [
+							"Declared metadata; execution and resolved destination unverified.",
+						]);
+			} catch {
+				limitations.push(`Invalid package metadata: ${source.path}`);
+			}
+			continue;
+		}
+		const file =
+			moduleContext.files.find((f) => f.fileName === source.path) ??
+			ts.createSourceFile(
+				source.path,
+				source.source,
+				ts.ScriptTarget.Latest,
+				true,
+				/\.[jt]sx$/.test(source.path)
+					? ts.ScriptKind.TSX
+					: /\.[cm]?ts$/.test(source.path)
+						? ts.ScriptKind.TS
+						: ts.ScriptKind.JS,
+			);
+		const errors =
+			(file as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] })
+				.parseDiagnostics ?? [];
+		if (errors.length)
+			limitations.push(
+				`Parse diagnostics in ${source.path}; recovered syntax is partial.`,
+			);
+		const declared = new Set<string>();
+		const ipcAliases = new Map<string, string>(),
+			contextAliases = new Set<string>();
+		// Only unshadowed top-level ES imports are treated as Electron candidates.
+		for (const statement of file.statements) {
+			if (
+				ts.isImportDeclaration(statement) &&
+				literal(statement.moduleSpecifier) === "electron"
+			) {
+				const bindings = statement.importClause?.namedBindings;
+				if (bindings && ts.isNamedImports(bindings))
+					for (const e of bindings.elements) {
+						const imported = e.propertyName?.text ?? e.name.text;
+						if (["ipcMain", "ipcRenderer"].includes(imported))
+							ipcAliases.set(e.name.text, imported);
+						if (imported === "contextBridge") contextAliases.add(e.name.text);
+					}
+			}
+		}
+		const ownedBindings = new Set<ts.Node>();
+		for (const statement of file.statements)
+			if (ts.isVariableStatement(statement)) {
+				for (const d of statement.declarationList.declarations) {
+					if (
+						!ts.isObjectBindingPattern(d.name) ||
+						!d.initializer ||
+						!ts.isCallExpression(d.initializer) ||
+						!ts.isIdentifier(d.initializer.expression) ||
+						d.initializer.expression.text !== "require" ||
+						literal(d.initializer.arguments[0]) !== "electron"
+					)
+						continue;
+					for (const binding of d.name.elements) {
+						if (
+							!ts.isIdentifier(binding.name) ||
+							binding.dotDotDotToken ||
+							binding.initializer
+						)
+							continue;
+						const imported =
+							binding.propertyName && ts.isIdentifier(binding.propertyName)
+								? binding.propertyName.text
+								: binding.name.text;
+						if (["ipcMain", "ipcRenderer"].includes(imported)) {
+							ipcAliases.set(binding.name.text, imported);
+							ownedBindings.add(binding);
+						} else if (imported === "contextBridge") {
+							contextAliases.add(binding.name.text);
+							ownedBindings.add(binding);
+						}
+					}
+				}
+			}
+		setArtifact({
+			path: source.path,
+			sha256: source.sha256,
+			bytes: source.bytes,
+			role: contextAliases.size
+				? "preload-candidate"
+				: [...ipcAliases.values()].includes("ipcMain")
+					? "main-candidate"
+					: [...ipcAliases.values()].includes("ipcRenderer")
+						? "renderer-candidate"
+						: "source",
+		});
+		add(source, file, file, "module", source.path);
+		// Shadowing anywhere is conservatively unresolved (not a complete lexical resolver).
+		const collect = (n: ts.Node) => {
+			if (++nodes > LIMITS.nodes) {
+				stopped = true;
+				return;
+			}
+			if (
+				(ts.isParameter(n) ||
+					ts.isVariableDeclaration(n) ||
+					ts.isFunctionDeclaration(n) ||
+					ts.isClassDeclaration(n)) &&
+				n.name
+			) {
+				if (ts.isIdentifier(n.name)) declared.add(n.name.text);
+				else if (
+					ts.isObjectBindingPattern(n.name) ||
+					ts.isArrayBindingPattern(n.name)
+				)
+					for (const e of n.name.elements)
+						if (
+							ts.isBindingElement(e) &&
+							ts.isIdentifier(e.name) &&
+							!ownedBindings.has(e)
+						)
+							declared.add(e.name.text);
+			}
+			if (
+				ts.isBinaryExpression(n) &&
+				n.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+				n.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+				ts.isIdentifier(n.left)
+			)
+				declared.add(n.left.text);
+			if (ts.isImportDeclaration(n)) {
+				const c = n.importClause;
+				if (c?.name) declared.add(c.name.text);
+				if (c?.namedBindings && ts.isNamespaceImport(c.namedBindings))
+					declared.add(c.namedBindings.name.text);
+				if (c?.namedBindings && ts.isNamedImports(c.namedBindings))
+					for (const e of c.namedBindings.elements)
+						if (
+							!ipcAliases.has(e.name.text) &&
+							!contextAliases.has(e.name.text)
+						)
+							declared.add(e.name.text);
+			}
+			ts.forEachChild(n, collect);
+		};
+		collect(file);
+		if (stopped) break;
+		// A locally shadowed require cannot establish CommonJS Electron identity.
+		if (declared.has("require"))
+			for (const b of ownedBindings) {
+				const binding = b as ts.BindingElement;
+				if (ts.isIdentifier(binding.name)) {
+					ipcAliases.delete(binding.name.text);
+					contextAliases.delete(binding.name.text);
+				}
+			}
+		const visit = (n: ts.Node) => {
+			if (stopped) return;
+			if (++nodes > LIMITS.nodes) {
+				stopped = true;
+				return;
+			}
+			if (ts.isImportDeclaration(n)) {
+				const v = literal(n.moduleSpecifier);
+				if (v !== undefined)
+					add(
+						source,
+						file,
+						n,
+						v.endsWith(".node") ? "native-addon" : "import",
+						v,
+					);
+			}
+			if (ts.isExportDeclaration(n) || ts.isExportAssignment(n))
+				add(
+					source,
+					file,
+					n,
+					"export",
+					ts.isExportDeclaration(n)
+						? (literal(n.moduleSpecifier) ??
+								n.exportClause?.getText(file) ??
+								"*")
+						: "default",
+				);
+			if (ts.isFunctionDeclaration(n) && n.name)
+				add(source, file, n, "function", n.name.text);
+			if (ts.isCallExpression(n)) {
+				const expr = n.expression,
+					arg = literal(n.arguments[0]);
+				if (
+					(ts.isIdentifier(expr) &&
+						expr.text === "require" &&
+						!declared.has("require")) ||
+					expr.kind === ts.SyntaxKind.ImportKeyword
+				) {
+					add(
+						source,
+						file,
+						n,
+						arg === undefined
+							? "dynamic"
+							: arg.endsWith(".node")
+								? "native-addon"
+								: "import",
+						arg ?? "Unresolved dynamic module expression",
+					);
+				} else if (
+					ts.isPropertyAccessExpression(expr) &&
+					ts.isIdentifier(expr.expression)
+				) {
+					const owner = expr.expression.text,
+						member = expr.name.text;
+					if (
+						!declared.has(owner) &&
+						ipcAliases.has(owner) &&
+						((ipcAliases.get(owner) === "ipcMain" &&
+							["handle", "on", "once"].includes(member)) ||
+							(ipcAliases.get(owner) === "ipcRenderer" &&
+								["send", "invoke", "sendSync"].includes(member)))
+					) {
+						add(
+							source,
+							file,
+							n,
+							arg === undefined
+								? "dynamic"
+								: ipcAliases.get(owner) === "ipcMain"
+									? "ipc-handler"
+									: "ipc-send",
+							arg ?? "Unresolved IPC channel",
+							"derived",
+							[
+								"Syntactic Electron import candidate; execution and handler reachability unverified.",
+							],
+						);
+					} else if (
+						!declared.has(owner) &&
+						contextAliases.has(owner) &&
+						member === "exposeInMainWorld"
+					)
+						add(
+							source,
+							file,
+							n,
+							arg === undefined ? "dynamic" : "preload-api",
+							arg ?? "Unresolved exposed API",
+							"derived",
+							["Syntactic preload exposure; runtime context unverified."],
+						);
+				}
+				if (
+					ts.isIdentifier(expr) &&
+					expr.text === "fetch" &&
+					!declared.has("fetch")
+				)
+					add(
+						source,
+						file,
+						n,
+						arg === undefined ? "dynamic" : "endpoint",
+						arg ?? "Unresolved fetch URL",
+						"derived",
+						["Syntactic global-fetch candidate; no request was sent."],
+					);
+				if (ts.isIdentifier(expr) && !["require", "fetch"].includes(expr.text))
+					add(source, file, n, "call", expr.text, "observed", [
+						"Call syntax only; callee identity and data flow unresolved.",
+					]);
+			}
+			ts.forEachChild(n, visit);
+		};
+		visit(file);
+		if (!stopped) {
+			const semantic = analyzeLocalSemantics(
+				file,
+				source,
+				(node, kind, value, notes) =>
+					add(source, file, node, kind, value, "derived", notes),
+				LIMITS.facts - semanticEdges.length,
+				moduleContext,
+			);
+			semanticEdges.push(...semantic.edges);
+			nodes += semantic.visits;
+			if (semantic.exhausted || nodes > LIMITS.nodes) stopped = true;
+		}
+	}
+	if (!stopped) {
+		const boundary = inspectElectronBoundaries(
+			moduleContext,
+			Math.min(50000, LIMITS.nodes - nodes),
+		);
+		if (boundary.electronBindingsExcluded) {
+			for (let i = facts.length - 1; i >= 0; i--)
+				if (["ipc-send", "ipc-handler", "preload-api"].includes(facts[i].kind))
+					facts.splice(i, 1);
+			const retainedIds = new Set(facts.map((f) => f.id));
+			for (let i = semanticEdges.length - 1; i >= 0; i--)
+				if (
+					!retainedIds.has(semanticEdges[i].source) ||
+					!retainedIds.has(semanticEdges[i].target)
+				)
+					semanticEdges.splice(i, 1);
+		}
+		const retained = new Map<number, AnalysisFact>();
+		for (const [index, item] of boundary.findings.entries()) {
+			const source = sources.find((s) => s.path === item.file.fileName);
+			if (!source) continue;
+			const fact = add(
+				source,
+				item.file,
+				item.node,
+				item.kind,
+				item.value,
+				"derived",
+				[
+					"Closed-inventory lexical/literal candidate; runtime exposure, native exports, control-flow reachability and argument behavior are not verified.",
+				],
+			);
+			if (fact) retained.set(index, fact);
+		}
+		for (const edge of boundary.links) {
+			const a = retained.get(edge.source),
+				b = retained.get(edge.target);
+			if (a && b && semanticEdges.length < LIMITS.facts)
+				semanticEdges.push({
+					source: a.id,
+					target: b.id,
+					kind: edge.kind,
+					confidence: "derived",
+					limitations: [
+						"Static API/property or direct native-call syntax association only; runtime binding, native exports, window/context identity and entrypoint co-execution are unverified.",
+					],
+				});
+		}
+		nodes += boundary.visits;
+		limitations.push(...boundary.notes);
+	}
+	if (stopped)
+		limitations.push(
+			"AST node or finding budget reached; remaining syntax was not inspected.",
+		);
+	const edges: AnalysisResult["edges"] = [...semanticEdges];
+	const modules = new Map(
+		facts.filter((f) => f.kind === "module").map((f) => [f.value, f]),
+	);
+	for (const f of facts.filter(
+		(f) => f.kind === "import" && f.value.startsWith("."),
+	)) {
+		const base = path.posix.normalize(
+			path.posix.join(path.posix.dirname(f.location.path), f.value),
+		);
+		const matches = [
+			base,
+			...[
+				".js",
+				".ts",
+				".mjs",
+				".cjs",
+				".tsx",
+				".jsx",
+				"/index.js",
+				"/index.ts",
+			].map((e) => base + e),
+		].filter((p) => modules.has(p));
+		if (matches.length === 1 && edges.length < LIMITS.facts)
+			edges.push({
+				source: f.id,
+				target: modules.get(matches[0])!.id,
+				kind: "imports",
+				confidence: "derived",
+				limitations: [
+					"Literal relative-path candidate; package exports and runtime resolution not modeled.",
+				],
+			});
+	}
+	const sends = facts.filter((f) => f.kind === "ipc-send"),
+		handlers = facts.filter((f) => f.kind === "ipc-handler");
+	const channels = new Map<string, AnalysisFact[]>();
+	for (const handler of handlers) {
+		const items = channels.get(handler.value) ?? [];
+		items.push(handler);
+		channels.set(handler.value, items);
+	}
+
+	for (const member of facts.filter((f) => f.kind === "preload-member")) {
+		const detail = JSON.parse(member.value);
+		if (typeof detail.channel !== "string") continue;
+		const matches = channels.get(detail.channel) ?? [];
+		if (matches.length === 1 && edges.length < LIMITS.facts)
+			edges.push({
+				source: member.id,
+				target: matches[0].id,
+				kind: "ipc-candidate",
+				confidence: "derived",
+				limitations: [
+					"Literal preload IPC channel candidate; handler kind/registration, runtime routing, reachability and argument validation are unverified.",
+				],
+			});
+	}
+
+	ipcEdges: for (const send of sends)
+		for (const handler of channels.get(send.value) ?? []) {
+			if (edges.length >= LIMITS.facts) break ipcEdges;
+			edges.push({
+				source: send.id,
+				target: handler.id,
+				kind: "ipc-candidate",
+				confidence: "derived",
+				limitations: [
+					"Equal literal channel names; not proof of delivery, unique routing, or execution.",
+				],
+			});
+		}
+	if (edges.length >= LIMITS.facts)
+		limitations.push(
+			"Relationship budget reached; graph coverage may be incomplete.",
+		);
+	const status = limitations.length ? "partial" : "completed";
+	return {
+		profile: ANALYSIS_PROFILE,
+		parserVersion: ts.version,
+		status,
+		artifacts,
+		facts,
+		edges,
+		limitations: [
+			...limitations.slice(0, 90),
+			"Bounded syntax, local symbol/value reduction and pure-return call candidates only; no complete alias analysis or interprocedural recovery, universal deobfuscation or execution proof.",
+			"Source-map labels are untrusted declarations; unpacked ASAR entries, dynamic imports and native addons are not executed or decompiled.",
+		],
+		counters: {
+			entries: sources.length,
+			bytes: sources.reduce((n, s) => n + s.bytes, 0),
+			nodes,
+		},
+	};
+}

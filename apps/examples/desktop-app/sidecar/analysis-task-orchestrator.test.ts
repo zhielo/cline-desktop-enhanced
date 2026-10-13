@@ -384,9 +384,139 @@ it("requires separate persistent engine process and private project acknowledgem
 	expect(() => tasks.approve(plan.id, [], plan.requestHash)).toThrow();
 });
 
+it("classifies native project candidates as Modify with explicit state/pointer approvals", async () => {
+	const root = workspace();
+	writeFileSync(join(root, "owned.so"), "owned fixture");
+	const tasks = new AnalysisTaskOrchestrator();
+	const plan = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: {
+			operation: "project_edit",
+			target: "owned.so",
+			engine: "ghidra",
+			project_edit: { mode: "preview" },
+			function_selector: { address: "0x10" },
+		},
+	});
+	expect(plan.permission).toBe("Modify");
+	expect(plan.requirements).toContain("reviewed-native-project-state");
+	expect(plan.requirements).toContain(
+		"candidate-pointer-change-not-gui-replacement",
+	);
+	expect(() => tasks.approve(plan.id, [], plan.requestHash)).toThrow();
+});
 
-it("classifies native project candidates as Modify with explicit state/pointer approvals",async()=>{
- const root=workspace();writeFileSync(join(root,"owned.so"),"owned fixture");const tasks=new AnalysisTaskOrchestrator();
- const plan=await tasks.prepare({workspaceRoot:root,kind:"static",request:{operation:"project_edit",target:"owned.so",engine:"ghidra",project_edit:{mode:"preview"},function_selector:{address:"0x10"}}});
- expect(plan.permission).toBe("Modify");expect(plan.requirements).toContain("reviewed-native-project-state");expect(plan.requirements).toContain("candidate-pointer-change-not-gui-replacement");expect(()=>tasks.approve(plan.id,[],plan.requestHash)).toThrow();
+it("binds opt-in console capture and private evidence requirements to exact Debug approval", async () => {
+	const tasks = new AnalysisTaskOrchestrator(),
+		root = workspace();
+	const target = join(root, "owned.js");
+	writeFileSync(target, "console.log('owned');");
+	const request = {
+		operation: "js_inspector_observe",
+		target,
+		pid: 1,
+		processToken: "owned",
+		endpoint: "ws://127.0.0.1:9229/00000000-0000-0000-0000-000000000000",
+		durationMs: 1000,
+		captureConsole: true,
+	};
+	const plan = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "debugger",
+		request,
+	});
+	expect(plan.permission).toBe("Debug");
+	expect(plan.requirements).toContain("sensitive-console-protocol-capture");
+	expect(plan.requirements).toContain("private-evidence-write");
+	expect(() =>
+		tasks.approve(plan.id, ["authorized-target"], plan.requestHash),
+	).toThrow("sensitive-console");
+	const approval = tasks.approve(plan.id, plan.requirements, plan.requestHash);
+	await expect(
+		tasks.consume({
+			planId: plan.id,
+			executionToken: approval.executionToken,
+			workspaceRoot: root,
+			kind: "debugger",
+			request: { ...request, captureConsole: false },
+		}),
+	).rejects.toThrow("exact request envelope");
+	await expect(
+		tasks.consume({
+			planId: plan.id,
+			executionToken: approval.executionToken,
+			workspaceRoot: root,
+			kind: "debugger",
+			request,
+		}),
+	).resolves.toMatchObject({ status: "running" });
+	const off = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "debugger",
+		request: { ...request, captureConsole: false },
+	});
+	expect(off.requirements).not.toContain("sensitive-console-protocol-capture");
+});
+
+it("requires independent Execute kind for active JS and exact reviewed scenario hash", async () => {
+	const o = new AnalysisTaskOrchestrator(),
+		root = workspace(),
+		target = join(root, "owned.cjs");
+	writeFileSync(target, "console.log(42)");
+	const request = {
+		operation: "js_isolated_execute",
+		target,
+		scenario: {
+			id: "owned",
+			purpose: "output",
+			exitCode: 0,
+			stdoutSha256: "a".repeat(64),
+		},
+		resourceDigest: "b".repeat(64),
+	};
+	for (const kind of ["static", "debugger"] as const)
+		await expect(
+			o.prepare({ workspaceRoot: root, kind, request }),
+		).rejects.toThrow("Execute task kind");
+	const plan = await o.prepare({
+		workspaceRoot: root,
+		kind: "execution",
+		request,
+	});
+	expect(plan.permission).toBe("Execute");
+	expect(plan.budget.network).toBe("disabled");
+	expect(plan.requirements).toContain("independent-execute-approval");
+	expect(plan.requirements).not.toContain("full-access-execution");
+	expect(() => o.approve(plan.id, [], plan.requestHash)).toThrow(
+		"Missing required approvals",
+	);
+	const approved = o.approve(plan.id, plan.requirements, plan.requestHash);
+	await expect(
+		o.consume({
+			planId: plan.id,
+			executionToken: approved.executionToken,
+			workspaceRoot: root,
+			kind: "execution",
+			request: { ...request, scenario: { ...request.scenario, exitCode: 1 } },
+		}),
+	).rejects.toThrow("exact request envelope");
+	const running = await o.consume({
+		planId: plan.id,
+		executionToken: approved.executionToken,
+		workspaceRoot: root,
+		kind: "execution",
+		request,
+	});
+	expect(running.status).toBe("running");
+	await expect(
+		o.consume({
+			planId: plan.id,
+			executionToken: approved.executionToken,
+			workspaceRoot: root,
+			kind: "execution",
+			request,
+		}),
+	).rejects.toThrow();
+	o.complete(plan.id, { owned: true }, "owned-test");
 });

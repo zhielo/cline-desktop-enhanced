@@ -118,7 +118,25 @@ jobs:
 
             - name: Run SDK Tests (Windows)
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'windows-latest' }}
-              run: bun -F './sdk/packages/**' test
+              shell: pwsh
+              run: |
+                  New-Item -ItemType Directory -Force .sdk-test-evidence | Out-Null
+                  $PSNativeCommandUseErrorActionPreference = $false
+                  $ErrorActionPreference = 'Continue'
+                  $global:LASTEXITCODE = 1
+                  bun -F './sdk/packages/**' test 2>&1 | Tee-Object -FilePath .sdk-test-evidence/windows-sdk-tests.log
+                  $code = $LASTEXITCODE
+                  exit $code
+
+            - name: Upload Windows SDK test evidence
+              if: ${{ always() && matrix.os == 'windows-latest' }}
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: sdk-windows-tests-${{ github.run_id }}-${{ github.run_attempt }}
+                  path: .sdk-test-evidence/windows-sdk-tests.log
+                  include-hidden-files: true
+                  if-no-files-found: warn
+                  retention-days: 14
 
             - name: Run Desktop Sidecar Tests
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && matrix.os == 'ubuntu-latest' }}

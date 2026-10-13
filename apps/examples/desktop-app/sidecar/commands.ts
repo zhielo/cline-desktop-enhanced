@@ -1,3 +1,5 @@
+import {analysisParserNotices} from "./analysis-parser-notices";
+import {handleFirstPartyCommand, bindFirstPartyTaskEvidence, recordFirstPartyTaskEvidence, firstPartyReadiness, testFirstPartyFixture} from "./first-party-analysis";
 import { assertSetupIdle, getSetupJob, startSetupJob } from "./setup-jobs";
 import {
 	getSetupCenterStatus,
@@ -2391,6 +2393,11 @@ function recordInvestigation(
 	result: unknown,
 	signed = false,
 ) {
+
+	if (typeof args?.sessionId === "string" && plan.status === "completed") {
+		try { recordFirstPartyTaskEvidence(args.sessionId, root, plan, result); }
+		catch { console.warn("Unified evidence was not saved; do not replay the completed task to repair metadata."); }
+	}
 	if (typeof args?.investigationId !== "string") return;
 	try {
 		investigations().record(root, args.investigationId, plan, result, signed);
@@ -2780,6 +2787,24 @@ export async function handleCommand(
 		if (binding) ctx = getEnvironmentContext(ctx, binding.environmentId);
 	}
 
+    if(command.startsWith("first_party_analysis_")) {
+        if(getCommandRuntimeBinding(ctx,args).kind!=="local") throw new Error("First-party analysis is local-only");
+        if(command==="first_party_analysis_notices")return {notices:analysisParserNotices};
+        if(command==="first_party_analysis_selftest") {
+            if(!options?.connection?.data?.canApproveTools || args?.confirmed!==true) throw new Error("Explicit trusted owned-fixture test approval required");
+            return testFirstPartyFixture();
+        }
+        const id=String(args?.sessionId??"").trim();
+        if(!id) throw new Error("Owning session required");
+        const binding=await getCommandSessionBinding(ctx,id,args);
+        if(!binding || binding.kind!=="local") throw new Error("Owning local session required");
+        const saved=await binding.sessionManager.get(id);
+        if(!saved) throw new Error("Owning session not found");
+        const live=ctx.liveSessions.get(id);
+        const root=String(saved.workspaceRoot || saved.cwd || "");
+        if(!root) throw new Error("Session workspace is unavailable");
+        return handleFirstPartyCommand(command,args??{}, {id,workspace:root,busy:!!live?.busy || !!live?.transitioningProvider || ["running","starting","stopping"].includes(String(saved.status))},!!options?.connection?.data?.canApproveTools);
+    }
 	// Upload binary attachments outside the chat command envelope. Keeping
 	// every chunk bounded prevents Bun from closing the WebSocket before the
 	// sidecar can return a useful validation error.
@@ -4227,7 +4252,7 @@ export async function handleCommand(
 	if (command.startsWith("setup_center_")) {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
 			throw new Error("Setup Center is local-only");
-		if (command === "setup_center_status") return await getSetupCenterStatus();
+		if (command === "setup_center_status") return {...await getSetupCenterStatus(),firstPartyAnalysis:firstPartyReadiness()};
 		if (command === "setup_center_job_status")
 			return {
 				job: getSetupJob(
@@ -5679,8 +5704,9 @@ export async function handleCommand(
 						? Math.min(300000, Number(suppliedRequest.timeout_ms) + 180000)
 						: Number(suppliedRequest.timeout_ms),
 			});
-			if (typeof args?.investigationId === "string")
-				investigations().bind(baseDir, args.investigationId, prepared);
+			if(typeof args?.sessionId === "string") bindFirstPartyTaskEvidence(args.sessionId,baseDir,prepared);
+   if (typeof args?.investigationId === "string")
+    investigations().bind(baseDir, args.investigationId, prepared);
 			return prepared;
 		}
 		if (command === "approve_analysis_task") {
@@ -5773,6 +5799,7 @@ export async function handleCommand(
 					result,
 					"live-debugger",
 				);
+				recordInvestigation(args, baseDir, plan, result);
 				return { kind: "debugger", result, plan };
 			} catch (error) {
 				desktopAnalysisTaskOrchestrator.fail(planId, error);

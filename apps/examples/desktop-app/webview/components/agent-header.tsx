@@ -1,4 +1,5 @@
 "use client";
+import { AnalysisModeControl } from "./views/chat/analysis-mode-control";
 
 import { SessionStatus } from "@cline/ui";
 import {
@@ -41,6 +42,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { normalizeTitle } from "./utils";
 
 type AgentHeaderProps = {
+ sessionId?:string; environmentId?:string; onOpenAnalysis?:()=>void;
 	title?: string;
 	canEditTitle?: boolean;
 	renamingTitle?: boolean;
@@ -74,6 +76,7 @@ type AgentHeaderProps = {
 };
 
 function AgentHeaderImpl({
+ sessionId,environmentId,onOpenAnalysis,
 	title,
 	canEditTitle,
 	renamingTitle,
@@ -248,6 +251,7 @@ function AgentHeaderImpl({
 						<SquareTerminal className="h-3.5 w-3.5" />
 						<span className="hidden md:inline">Workspace</span>
 					</Button>
+					<AnalysisModeControl key={sessionId} sessionId={sessionId} environmentId={environmentId} status={status} onOpen={onOpenAnalysis}/>
 					<AgentActivityStatus
 						activity={agentActivity}
 						agents={agents}

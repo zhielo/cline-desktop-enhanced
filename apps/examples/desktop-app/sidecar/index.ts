@@ -1,3 +1,4 @@
+import { configureFirstPartyAnalysisHost, runAnalysisWorkerEntrypoint } from "@cline/core";
 import { loadSetupPreferences } from "./setup-center";
 import { loadResourceProfile } from "./optimization-status";
 import { initializeBundledAnalysisRuntime } from "./bundled-analysis-runtime";
@@ -236,6 +237,19 @@ function runTelemetrySelfcheck(): void {
 }
 
 async function runEntrypoint(): Promise<void> {
+    // Fixed data-only parser branch: no Hub, setup, listener, telemetry or target imports.
+    if (process.argv.includes("--cline-analysis-worker")) {
+        await runAnalysisWorkerEntrypoint();
+        return;
+    }
+    const entry = (globalThis as {Bun?:{main?:string}}).Bun?.main;
+    configureFirstPartyAnalysisHost({executable:process.execPath,
+        args:entry && !entry.startsWith("/$bunfs/") ? [entry] : []});
+    if (process.argv.includes("--cline-analysis-selfcheck")) {
+        const {testFirstPartyFixture}=await import("./first-party-analysis");
+        process.stdout.write(JSON.stringify(await testFirstPartyFixture())+"\n");
+        return;
+    }
 	// Before the daemon-sentinel claim: the selfcheck only inspects build-time
 	// config and must not consume the sentinel or start anything.
 	if (process.argv.includes("--telemetry-selfcheck")) {

@@ -4,6 +4,11 @@ $ErrorActionPreference = 'Stop'
 $version = '3.13.12'
 $expected = '76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0'
 if (-not [IO.Path]::IsPathFullyQualified($EnginePython)) { throw 'Absolute build interpreter required' }
+$angrDependencyContract = Join-Path $PSScriptRoot '../sdk/packages/core/scripts/angr-dependency-contract.py'
+if ($Pack -eq 'angr') {
+  & $EnginePython -I -B $angrDependencyContract
+  if ($LASTEXITCODE -ne 0) { throw 'Source angr dependency contract failed; rebuild from pinned angr requirements' }
+}
 $resource = if ($Pack -eq 'core') { 'analysis-runtime' } else { "analysis-runtime-$Pack" }
 $root = Join-Path $PSScriptRoot "../apps/examples/desktop-app/src-tauri/resources/$resource"
 $archive = Join-Path $env:RUNNER_TEMP "python-$version-embed-amd64.zip"
@@ -33,6 +38,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Bundled Android owned fixtures failed' }
   & $python -I -B sdk/packages/core/scripts/full-analysis-readiness.test.py --pack full
   if ($LASTEXITCODE -ne 0) { throw 'Full owned execution fixtures failed' }
 } else {
+  & $python -I -B $angrDependencyContract
+  if ($LASTEXITCODE -ne 0) { throw 'Packaged angr dependency contract failed' }
   & $python -I -B sdk/packages/core/scripts/full-analysis-readiness.test.py --pack angr
   if ($LASTEXITCODE -ne 0) { throw 'Isolated angr execution fixture failed' }
 }

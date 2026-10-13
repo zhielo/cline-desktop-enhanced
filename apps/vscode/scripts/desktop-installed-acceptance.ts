@@ -3,6 +3,9 @@
  * No dev web server, model credential, browser download, or production test bypass.
  */
 
+import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -11,6 +14,18 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
+
+/** Newly produced receipts must match the shipped parser, not a stale test literal.
+ * Persisted historical receipts remain governed by their own immutable profile. */
+export function verifyInstalledAnalysisProfile(profile: string) {
+  // This Node strip-types driver is also checked by a project which disallows
+  // .ts imports. Read only the trusted checkout's exact constant declaration;
+  // never load target code or accept a caller-selected expected profile.
+  const contract = readFileSync(new URL("../../../sdk/packages/core/src/analysis/contracts.ts", import.meta.url), "utf8");
+  const current = /^export const ANALYSIS_PROFILE = "(cline-js-static\/[1-9][0-9]*)";$/m.exec(contract);
+  if (!current) throw new Error("Shipped analysis profile declaration unavailable");
+  if (profile !== current[1]) throw new Error("Installed analysis profile is stale");
+}
 
 export function startAcceptanceProcess(
   executable: string,
@@ -186,6 +201,25 @@ export async function main() {
     "Deterministic installer acceptance fixture.\n",
   );
   await writeFile(join(workspace, "OWNED_SCROLL_REPORT.md"), Array.from({length: 240}, (_, i) => `Owned Markdown scroll line ${i}`).join("\n"));
+  await writeFile(join(workspace,"owned-main.js"),'import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42);');
+  await writeFile(join(workspace,"owned-renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
+  const analysisCurrent=join(workspace,"owned-analysis-current"), analysisPrevious=join(workspace,"owned-analysis-previous");
+  await mkdir(analysisCurrent);await mkdir(analysisPrevious);
+  for(const [directory,route] of [[analysisCurrent,"/v2"],[analysisPrevious,"/v1"]]) {
+    await writeFile(join(directory,"config.ts"),`export const config={host:"https://owned.invalid",route:${JSON.stringify(route)}};`);
+    await writeFile(join(directory,"main.js"),`import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42); import {config} from "./config"; function endpoint(h,r){return h+r;} fetch(endpoint(config.host,config.route));`);
+    await writeFile(join(directory,"renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
+  }
+  await writeFile(join(analysisCurrent,"main.js.map"),JSON.stringify({version:3,file:"main.js",sources:["original.ts"],sourcesContent:["export const owned=42;"],names:[],mappings:"AAAA"}));
+  const managedFixture=Buffer.from(OWNED_MANAGED_BASE64,"base64");
+  if(createHash("sha256").update(managedFixture).digest("hex")!==OWNED_MANAGED_SHA256)throw new Error("Owned managed fixture hash drift");
+  await writeFile(join(analysisCurrent,"owned.dll"),managedFixture);
+  const exceptionFixture=Buffer.from(OWNED_EH_BASE64,"base64");
+  if(createHash("sha256").update(exceptionFixture).digest("hex")!==OWNED_EH_SHA256)throw new Error("Owned exception fixture hash drift");
+  await writeFile(join(analysisCurrent,"owned-eh.dll"),exceptionFixture);
+  await writeFile(join(analysisCurrent,"preload.js"),'const {contextBridge:cb,ipcRenderer:ir}=require("electron");const addon=require("./owned.node");const api={read:(x)=>ir.invoke("owned:fixture",x),hash:(x)=>addon.hash(x)};cb.exposeInMainWorld("ownedApi",api);');
+  await writeFile(join(analysisCurrent,"renderer.js"),'import {ipcRenderer} from "electron";ipcRenderer.invoke("owned:fixture");window.ownedApi.read(42);window.ownedApi.hash(42);');
+
   let port = 0;
   const discoveryPath = join(root, "hub.json");
 	const environment = Object.fromEntries(
@@ -555,6 +589,60 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			.first()
       .click();
     stages.push("owned-workspace-idle-session-opened");
+    const analysisArgs={sessionId:session.sessionId,environmentId:"local"};
+    const beforeAnalysis=await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs);
+    if(beforeAnalysis.mode!=="off")throw new Error("New session analysis must default Off");
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("static");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="static"&&!select.disabled;});
+    const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"owned-analysis-current",compareTarget:"owned-analysis-previous"}});
+    if(!["completed","partial"].includes(parsed.status))throw new Error("Installed static parser failed");
+    const allEvidence=async(view:string,filter?:string)=>{
+      const items:Array<{kind:string;value:string}>=[];let offset=0;
+      for(let count=0;count<20;count++) {
+        const result=await rpc<{items:Array<{kind:string;value:string}>;nextOffset:number|null}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view,filter,offset,limit:50}});
+        items.push(...result.items);if(result.nextOffset===null)return {items};
+        if(!Number.isSafeInteger(result.nextOffset)||result.nextOffset<=offset)throw new Error("Installed evidence pagination stalled");offset=result.nextOffset;
+      }
+      throw new Error("Installed owned evidence exceeded fixture budget");
+    };
+    const graph=await allEvidence("graph");
+    if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
+    const values=await rpc<{items:Array<{kind:string;value:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"resolved-endpoint"}});
+    if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed cross-module object/value/return reduction failed");
+    const preloadMembers=await allEvidence("findings","preload-member");
+    if(!preloadMembers.items.some(f=>f.kind==="preload-member"&&JSON.parse(f.value).channel==="owned:fixture")||!graph.items.some(e=>e.kind==="preload-candidate")||!graph.items.some(e=>e.kind==="native-boundary-candidate"))throw new Error("Installed lexical preload/native-boundary candidate inspection failed");
+    const exceptionRegions=await allEvidence("findings","managed-exception-region");
+    const exceptionKinds=exceptionRegions.items.filter(f=>f.kind==="managed-exception-region").map(f=>JSON.parse(f.value).record.kind);
+    if(!exceptionKinds.includes("catch")||!exceptionKinds.includes("finally")||!graph.items.some(e=>e.kind==="managed-exception-candidate"))throw new Error("Installed managed exception region inspection failed");
+    const managedDeclarations=await allEvidence("findings","managed-method");
+    const managedAdd=managedDeclarations.items.filter(f=>f.kind==="managed-method").map(f=>JSON.parse(f.value).record).find(f=>f.name==="Add");
+    if(managedAdd?.declaringType?.name!=="Fixture"||managedAdd?.declaringType?.namespace!=="ClineOwned"||managedAdd?.signature?.status!=="completed"||managedAdd?.signature?.display!=="int32 (int32, int32)")throw new Error("Installed declaring-type/signature inspection failed");
+    const managed=await allEvidence("findings","managed-il-instruction");
+    const managedInstructions=managed.items.filter(f=>f.kind==="managed-il-instruction").map(f=>JSON.parse(f.value).record);
+    if(!managedInstructions.some(f=>f.opcode==="call"&&f.resolution?.name==="Add")||!managedInstructions.some(f=>f.opcode==="ldstr"&&f.resolution?.preview==="https://owned.invalid/managed")||!managedInstructions.some(f=>f.opcode==="ldc.i8"&&f.operand==="9007199254740993"))throw new Error("Installed managed IL inspection failed");
+    if(!graph.items.some(f=>f.kind==="managed-flow"))throw new Error("Installed managed normal-flow graph unavailable");
+    const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
+    if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
+    const verification=await rpc<{profile:string}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"verification"}});
+    verifyInstalledAnalysisProfile(verification.profile);
+    const unified=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,receiptId:parsed.id});
+    if(!Array.isArray(unified.items))throw new Error("Installed unified evidence route unavailable");
+    const dossiers=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,view:"dossiers"});
+    if(!Array.isArray(dossiers.items))throw new Error("Installed native dossier route unavailable");
+
+    const changes=await rpc<{items:Array<{kind:string;value:string;change:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"comparison",filter:"resolved-endpoint"}});
+    if(!changes.items.some(f=>f.change==="removed"&&f.value==="https://owned.invalid/v1")||!changes.items.some(f=>f.change==="added"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed endpoint finding comparison failed");
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
+    await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();
+    await page.getByLabel("First-party Analysis Workspace",{exact:true}).waitFor();
+    await page.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
+    if(await page.getByRole("button",{name:"Inspect static sources",exact:true}).isEnabled())throw new Error("Off analysis must block new inspection");
+    await page.getByRole("button",{name:"verification",exact:true}).click();
+    await page.getByText("Receipt integrity and static inspection are not behavioral certification.",{exact:false}).waitFor();
+    stages.push("installed-first-party-mode-parser-evidence-passed");
+    await page.getByRole("button",{name:"Close diff view",exact:true}).click();
+
     await page.waitForFunction(() => document.querySelectorAll('[data-message-role="user"]').length >= 120);
     for (let sample = 0; sample < 3; sample++) {
       const started = performance.now();

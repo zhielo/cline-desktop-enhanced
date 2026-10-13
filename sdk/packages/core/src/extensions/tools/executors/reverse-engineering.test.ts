@@ -813,7 +813,7 @@ describe("targeted adapter routing (mock engines, not real decompilation)", () =
 			"analyzeHeadless",
 			`mkdir -p "$1"; touch "$1/$2.gpr"
 while [ "$#" -gt 0 ]; do
- if [ "$1" = "-postScript" ]; then shift 2; printf '/* mock selected */' > "$1"; break; else shift; fi
+ if [ "$1" = "-postScript" ]; then shift 2; printf '/* mock selected */' > "$1"; printf '%s' '{"schemaVersion":1,"addressHex":"0x1000","name":"mock-selected","signature":"int mock_selected(void)","pseudocode":"/* mock selected */","architecture":"x86:LE:64:default","image":{"preferredBaseHex":"0x0","addressSpace":"ghidra-program-virtual"},"callees":[],"relationsTruncated":false,"coverage":"selected-function-decompiler-and-bounded-high-pcode-not-runtime"}' > "$1.native.json"; break; else shift; fi
 done`,
 		);
 		process.env.GHIDRA_HOME = home;
