@@ -4,8 +4,8 @@
  */
 
 import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
-import { ANALYSIS_PROFILE } from "../../../sdk/packages/core/src/analysis/contracts.ts";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -18,7 +18,13 @@ import { type Browser, chromium, type Locator, type Page } from "playwright";
 /** Newly produced receipts must match the shipped parser, not a stale test literal.
  * Persisted historical receipts remain governed by their own immutable profile. */
 export function verifyInstalledAnalysisProfile(profile: string) {
-  if (profile !== ANALYSIS_PROFILE) throw new Error("Installed analysis profile is stale");
+  // This Node strip-types driver is also checked by a project which disallows
+  // .ts imports. Read only the trusted checkout's exact constant declaration;
+  // never load target code or accept a caller-selected expected profile.
+  const contract = readFileSync(new URL("../../../sdk/packages/core/src/analysis/contracts.ts", import.meta.url), "utf8");
+  const current = /^export const ANALYSIS_PROFILE = "(cline-js-static\/[1-9][0-9]*)";$/m.exec(contract);
+  if (!current) throw new Error("Shipped analysis profile declaration unavailable");
+  if (profile !== current[1]) throw new Error("Installed analysis profile is stale");
 }
 
 export function startAcceptanceProcess(
