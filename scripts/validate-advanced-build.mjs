@@ -103,7 +103,7 @@ async function main() {
     { ...job("Test native Node installed process harness", ["--experimental-strip-types", "--test", "scripts/installed-node-process.test.mjs", "scripts/e2e-dependency-install.test.mjs", "scripts/wheelhouse-manifest.test.mjs"]), executable: "node" },
     job("Test native Bun SQLite memory startup", ["test", "sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs"]),
     job("Test SQLite database path boundaries", ["x", "vitest", "run", "sdk/packages/shared/src/db/sqlite-db-paths.test.ts", "--config", "vitest.config.mts"]),
-    job("Test measured performance budget policy", ["test", "scripts/performance-budget.test.mjs"]),
+    job("Test measured performance budget policy", ["test", "scripts/performance-budget.test.mjs", "scripts/benchmark-command-execution.test.mjs"]),
     job("Test bounded acceptance diagnostics", ["test", "scripts/report-installed-acceptance.test.mjs"]),
     { ...job("Measure fixed owned command workload", ["scripts/benchmark-command-execution.mjs", "--out", path.join(output, "command-performance.json")]), executable: "node" },
     job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),

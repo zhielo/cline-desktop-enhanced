@@ -218,7 +218,7 @@ const requiredMarkers: Array<{
 	{
 		path: "scripts/benchmark-command-execution.mjs",
 		markers: [
-			"owned-shared-executor-ready/v1",
+			"owned-shared-executor-ready/v2",
 			"environmentId",
 			"not installed UI startup",
 		],
