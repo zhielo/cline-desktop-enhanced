@@ -55,6 +55,15 @@ class JavaScriptIsolation {
   security.AddAccessRule(new FileSystemAccessRule(me,FileSystemRights.FullControl,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow));
   security.AddAccessRule(new FileSystemAccessRule(sid,FileSystemRights.ReadAndExecute,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow));
   Directory.SetAccessControl(root,security);
+  // These files already exist before the directory ACL is replaced. Grant the
+  // exact lowbox SID explicitly; never assume parent inheritance rewrites an
+  // existing/protected file DACL (especially target.cjs created mode 0400).
+  foreach(string name in new[]{"runtime.exe","target.cjs"}) {
+   var fileSecurity=new FileSecurity();fileSecurity.SetAccessRuleProtection(true,false);
+   fileSecurity.AddAccessRule(new FileSystemAccessRule(me,FileSystemRights.FullControl,AccessControlType.Allow));
+   fileSecurity.AddAccessRule(new FileSystemAccessRule(sid,name=="runtime.exe"?FileSystemRights.ReadAndExecute:FileSystemRights.Read,AccessControlType.Allow));
+   File.SetAccessControl(Path.Combine(root,name),fileSecurity);
+  }
   var rw=Directory.GetAccessControl(scratch); rw.AddAccessRule(new FileSystemAccessRule(sid,FileSystemRights.Modify,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow)); Directory.SetAccessControl(scratch,rw);
   IntPtr label; uint size; Check(ConvertStringSecurityDescriptorToSecurityDescriptor("S:(ML;OICI;NW;;;LW)",1,out label,out size));
   try { Check(SetFileSecurity(scratch,0x10,label)); } finally { LocalFree(label); }
