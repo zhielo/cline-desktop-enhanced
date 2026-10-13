@@ -1,5 +1,6 @@
 import { execFile, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+import { win32 } from "node:path";
 import { readFile } from "node:fs/promises";
 
 const PROCESS_PROBE_TIMEOUT_MS = 2_000;
@@ -18,18 +19,76 @@ type ProcessStartCommand = {
 	env?: NodeJS.ProcessEnv;
 };
 
+/** Prefer installed System-wide PowerShell 7; never resolve identity interpreters from PATH/CWD. */
+export function resolveWindowsProcessStartCommand(
+	pid: number,
+	env: NodeJS.ProcessEnv,
+	available: (file: string) => boolean,
+): ProcessStartCommand | undefined {
+	if (!Number.isSafeInteger(pid) || pid <= 0 || pid > 4294967295)
+		return undefined;
+	const local = (p: string | undefined): p is string =>
+		!!p && /^[a-z]:[\\/]/i.test(p) && !p.includes("\0");
+	const candidates: string[] = [];
+	if (local(env.ProgramFiles))
+		candidates.push(
+			win32.join(env.ProgramFiles, "PowerShell", "7", "pwsh.exe"),
+		);
+	if (local(env.SystemRoot))
+		candidates.push(
+			win32.join(
+				env.SystemRoot,
+				"System32",
+				"WindowsPowerShell",
+				"v1.0",
+				"powershell.exe",
+			),
+		);
+	const file = candidates.find(available);
+	if (!file) return undefined;
+	return {
+		file,
+		args: [
+			"-NoLogo",
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			`[Console]::Write((Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks.ToString([Globalization.CultureInfo]::InvariantCulture))`,
+		],
+	};
+}
+
+/** Exact DateTime ticks, not a PID-only token, a rounded timestamp or localized display value. */
+export function parseWindowsProcessStartToken(
+	output: string,
+): string | undefined {
+	const value = output.trim();
+	if (
+		!/^[1-9]\d{0,18}$/.test(value) ||
+		BigInt(value) > BigInt("3155378975999999999")
+	)
+		return undefined;
+	return `win32:${value}`;
+}
+
 function resolveProcessStartCommand(pid: number): ProcessStartCommand {
 	if (process.platform === "win32") {
-		return {
-			file: "powershell.exe",
-			args: [
-				"-NoLogo",
-				"-NoProfile",
-				"-NonInteractive",
-				"-Command",
-				`(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
-			],
-		};
+		const command = resolveWindowsProcessStartCommand(
+			pid,
+			process.env,
+			(file) => {
+				try {
+					return statSync(file).isFile();
+				} catch {
+					return false;
+				}
+			},
+		);
+		if (!command)
+			throw new Error(
+				"Trusted Windows process identity interpreter unavailable",
+			);
+		return command;
 	}
 	return {
 		file: "ps",
@@ -63,6 +122,10 @@ function classifyFailedProbe(pid: number): ProcessStartTokenProbeResult {
 function formatExternalProcessStartToken(
 	output: string,
 ): ProcessStartTokenProbeResult | undefined {
+	if (process.platform === "win32") {
+		const token = parseWindowsProcessStartToken(output);
+		return token ? { status: "found", token } : undefined;
+	}
 	const startTime = output.trim();
 	return startTime
 		? { status: "found", token: `${process.platform}:${startTime}` }

@@ -54,7 +54,9 @@ export function windowsInspectorOwnsListener(
 	const local = `127.0.0.1:${port}`;
 	for (const line of output.split(/\r?\n/)) {
 		const c = line.trim().split(/\s+/);
-		if (c[0] !== "TCP" || c[1] !== local) continue;
+		// Connecting creates ESTABLISHED rows at the same local port. Only
+		// LISTENING rows identify the listener; connected peers do not replace it.
+		if (c[0] !== "TCP" || c[1] !== local || c[3] !== "LISTENING") continue;
 		if (
 			c.length !== 5 ||
 			c[2] !== "0.0.0.0:0" ||

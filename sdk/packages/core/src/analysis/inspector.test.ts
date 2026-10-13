@@ -390,3 +390,21 @@ it("requires one exact numeric native Windows IPv4 loopback LISTENING owner", ()
 	])
 		expect(windowsInspectorOwnsListener(row, pid, port)).toBe(false);
 });
+
+it("retains exact listener proof after connected rows appear at the same Inspector port", () => {
+	const listener = "TCP 127.0.0.1:9229 0.0.0.0:0 LISTENING 1234\r\n";
+	const connection = "TCP 127.0.0.1:9229 127.0.0.1:54321 ESTABLISHED 1234\r\n";
+	expect(windowsInspectorOwnsListener(listener + connection, 1234, 9229)).toBe(
+		true,
+	);
+	expect(windowsInspectorOwnsListener(connection + listener, 1234, 9229)).toBe(
+		true,
+	);
+	expect(windowsInspectorOwnsListener(connection, 1234, 9229)).toBe(false);
+	expect(windowsInspectorOwnsListener(listener + connection, 54321, 9229)).toBe(
+		false,
+	);
+	expect(
+		windowsInspectorOwnsListener(listener + listener + connection, 1234, 9229),
+	).toBe(false);
+});
