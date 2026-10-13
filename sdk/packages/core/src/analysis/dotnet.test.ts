@@ -1,4 +1,8 @@
 import {
+	OWNED_EH_BASE64,
+	OWNED_EH_SHA256,
+} from "../../scripts/owned-managed-fixture.mjs";
+import {
 	OWNED_MANAGED_BASE64,
 	OWNED_MANAGED_SHA256,
 } from "../../scripts/owned-managed-fixture.mjs";
@@ -207,4 +211,36 @@ it("does not guess owners or signatures when owned metadata is corrupted", () =>
 	);
 	expect(JSON.parse(damaged!.value).signature.status).toBe("partial");
 	expect(JSON.parse(damaged!.value).signature).not.toHaveProperty("display");
+});
+
+it("retains real owned catch/finally declarations without inventing exception dispatch", () => {
+	const b = Buffer.from(OWNED_EH_BASE64, "base64");
+	expect(byteDigest(b)).toBe(OWNED_EH_SHA256);
+	const r = inspectManagedPE(b),
+		regions = r.records
+			.filter((x) => x.kind === "managed-exception-region")
+			.map((x) => JSON.parse(x.value));
+	expect(
+		regions.some(
+			(x) =>
+				x.kind === "catch" && x.catchType?.name === "DivideByZeroException",
+		),
+	).toBe(true);
+	expect(regions.some((x) => x.kind === "finally")).toBe(true);
+	expect(r.records.some((x) => x.kind === "managed-exception-unresolved")).toBe(
+		false,
+	);
+	const result = analyzeSources([
+		{
+			path: "owned-eh.dll",
+			source: "",
+			binary: b,
+			bytes: b.length,
+			sha256: byteDigest(b),
+		},
+	]);
+	expect(() => ResultSchema.parse(result)).not.toThrow();
+	expect(
+		result.edges.some((x) => x.kind === "managed-exception-candidate"),
+	).toBe(true);
 });

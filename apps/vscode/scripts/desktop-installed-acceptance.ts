@@ -3,7 +3,7 @@
  * No dev web server, model credential, browser download, or production test bypass.
  */
 
-import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
+import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
@@ -201,6 +201,12 @@ export async function main() {
   const managedFixture=Buffer.from(OWNED_MANAGED_BASE64,"base64");
   if(createHash("sha256").update(managedFixture).digest("hex")!==OWNED_MANAGED_SHA256)throw new Error("Owned managed fixture hash drift");
   await writeFile(join(analysisCurrent,"owned.dll"),managedFixture);
+  const exceptionFixture=Buffer.from(OWNED_EH_BASE64,"base64");
+  if(createHash("sha256").update(exceptionFixture).digest("hex")!==OWNED_EH_SHA256)throw new Error("Owned exception fixture hash drift");
+  await writeFile(join(analysisCurrent,"owned-eh.dll"),exceptionFixture);
+  await writeFile(join(analysisCurrent,"preload.js"),'const {contextBridge:cb,ipcRenderer:ir}=require("electron");const addon=require("./owned.node");const api={read:(x)=>ir.invoke("owned:fixture",x),hash:(x)=>addon.hash(x)};cb.exposeInMainWorld("ownedApi",api);');
+  await writeFile(join(analysisCurrent,"renderer.js"),'import {ipcRenderer} from "electron";ipcRenderer.invoke("owned:fixture");window.ownedApi.read(42);window.ownedApi.hash(42);');
+
   let port = 0;
   const discoveryPath = join(root, "hub.json");
 	const environment = Object.fromEntries(
@@ -590,6 +596,11 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
     const values=await rpc<{items:Array<{kind:string;value:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"resolved-endpoint"}});
     if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed cross-module object/value/return reduction failed");
+    const preloadMembers=await allEvidence("findings","preload-member");
+    if(!preloadMembers.items.some(f=>f.kind==="preload-member"&&JSON.parse(f.value).channel==="owned:fixture")||!graph.items.some(e=>e.kind==="preload-candidate")||!graph.items.some(e=>e.kind==="native-boundary-candidate"))throw new Error("Installed lexical preload/native-boundary candidate inspection failed");
+    const exceptionRegions=await allEvidence("findings","managed-exception-region");
+    const exceptionKinds=exceptionRegions.items.filter(f=>f.kind==="managed-exception-region").map(f=>JSON.parse(f.value).record.kind);
+    if(!exceptionKinds.includes("catch")||!exceptionKinds.includes("finally")||!graph.items.some(e=>e.kind==="managed-exception-candidate"))throw new Error("Installed managed exception region inspection failed");
     const managedDeclarations=await allEvidence("findings","managed-method");
     const managedAdd=managedDeclarations.items.filter(f=>f.kind==="managed-method").map(f=>JSON.parse(f.value).record).find(f=>f.name==="Add");
     if(managedAdd?.declaringType?.name!=="Fixture"||managedAdd?.declaringType?.namespace!=="ClineOwned"||managedAdd?.signature?.status!=="completed"||managedAdd?.signature?.display!=="int32 (int32, int32)")throw new Error("Installed declaring-type/signature inspection failed");
@@ -600,7 +611,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
     if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
     const verification=await rpc<{profile:string}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"verification"}});
-    if(verification.profile!=="cline-js-static/5")throw new Error("Installed analysis profile is stale");
+    if(verification.profile!=="cline-js-static/6")throw new Error("Installed analysis profile is stale");
     const unified=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,receiptId:parsed.id});
     if(!Array.isArray(unified.items))throw new Error("Installed unified evidence route unavailable");
     const dossiers=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,view:"dossiers"});

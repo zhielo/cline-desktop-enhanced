@@ -1,4 +1,5 @@
 import { inspectManagedSignature } from "./managed-signature";
+import { inspectExceptionSections } from "./managed-exceptions";
 import { decodeIL } from "./il";
 import { byteDigest } from "./contracts";
 /** Bounded ECMA-335 PE metadata and method-body inspection. No CLR load/execute. */
@@ -8,7 +9,9 @@ export type ManagedRecord = {
 		| "managed-method"
 		| "managed-il"
 		| "managed-il-instruction"
-		| "managed-control-flow";
+		| "managed-control-flow"
+		| "managed-exception-region"
+		| "managed-exception-unresolved";
 	value: string;
 	offset: number;
 };
@@ -487,10 +490,40 @@ export function inspectManagedPE(
 			limitations.push(
 				...decoded.limitations.map((note) => `Method ${token}: ${note}`),
 			);
-			if (tag === 3 && u16(body) & 8)
-				limitations.push(
-					`Method ${token}: additional/exception sections are not decoded; normal flow is not a complete CFG`,
+			if (tag === 3 && u16(body) & 8) {
+				const eh = inspectExceptionSections(
+					b,
+					v[0],
+					header + length,
+					length,
+					decoded,
+					(relative, size) => rva(v[0] + relative, size),
 				);
+				for (const region of eh.regions)
+					add({
+						kind: "managed-exception-region",
+						offset: region.offset,
+						value: JSON.stringify({
+							methodToken: token,
+							...region,
+							...(region.catchTypeToken
+								? { catchType: resolveToken(region.catchTypeToken) }
+								: {}),
+						}),
+					});
+				if (eh.status !== "completed")
+					add({
+						kind: "managed-exception-unresolved",
+						offset: body,
+						value: JSON.stringify({
+							methodToken: token,
+							reason: eh.limitations[0],
+						}),
+					});
+				limitations.push(
+					...eh.limitations.map((note) => `Method ${token}: ${note}`),
+				);
+			}
 		} catch (e) {
 			limitations.push(
 				`Method ${token}: ${e instanceof Error ? e.message : "unsupported IL"}`,

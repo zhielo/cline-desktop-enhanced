@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { inspectElectronBoundaries } from "./electron-boundaries";
 import { analyzeLocalSemantics } from "./semantic";
 import { inspectManagedPE } from "./dotnet";
 import { closedModuleContext } from "./module-context";
@@ -111,6 +112,12 @@ export function analyzeSources(
 					Math.min(256, LIMITS.facts - facts.length),
 				);
 				const instructions = new Map<string, AnalysisFact>();
+				const regions: Array<{
+					methodToken: string;
+					tryOffset: number;
+					handlerOffset: number;
+					kind: string;
+				}> = [];
 				const flow: Array<{
 					methodToken: string;
 					source: number;
@@ -135,7 +142,10 @@ export function analyzeSources(
 						file,
 						record.kind,
 						value,
-						record.kind === "managed-control-flow" ? "derived" : "observed",
+						record.kind === "managed-control-flow" ||
+							record.kind === "managed-exception-region"
+							? "derived"
+							: "observed",
 						[
 							"Exact binary file offset is in value; line/column are placeholders. Decoded normal-flow candidates are not exception flow, stack verification or execution.",
 						],
@@ -143,6 +153,8 @@ export function analyzeSources(
 					if (fact && record.kind === "managed-il-instruction")
 						instructions.set(`${detail.methodToken}:${detail.offset}`, fact);
 					if (fact && record.kind === "managed-control-flow") flow.push(detail);
+					if (fact && record.kind === "managed-exception-region")
+						regions.push(detail);
 				}
 				for (const edge of flow) {
 					const from = instructions.get(`${edge.methodToken}:${edge.source}`),
@@ -155,6 +167,24 @@ export function analyzeSources(
 							confidence: "derived",
 							limitations: [
 								`Static ${edge.kind} candidate; no exception flow, reachability or execution proof`,
+							],
+						});
+				}
+				for (const region of regions) {
+					const from = instructions.get(
+							`${region.methodToken}:${region.tryOffset}`,
+						),
+						to = instructions.get(
+							`${region.methodToken}:${region.handlerOffset}`,
+						);
+					if (from && to && semanticEdges.length < LIMITS.facts)
+						semanticEdges.push({
+							source: from.id,
+							target: to.id,
+							kind: "managed-exception-candidate",
+							confidence: "derived",
+							limitations: [
+								`Declared ${region.kind} region association only; not a throw/catch transition, dispatch precedence or runtime reachability proof`,
 							],
 						});
 				}
@@ -512,6 +542,57 @@ export function analyzeSources(
 			if (semantic.exhausted || nodes > LIMITS.nodes) stopped = true;
 		}
 	}
+	if (!stopped) {
+		const boundary = inspectElectronBoundaries(
+			moduleContext,
+			Math.min(50000, LIMITS.nodes - nodes),
+		);
+		if (boundary.electronBindingsExcluded) {
+			for (let i = facts.length - 1; i >= 0; i--)
+				if (["ipc-send", "ipc-handler", "preload-api"].includes(facts[i].kind))
+					facts.splice(i, 1);
+			const retainedIds = new Set(facts.map((f) => f.id));
+			for (let i = semanticEdges.length - 1; i >= 0; i--)
+				if (
+					!retainedIds.has(semanticEdges[i].source) ||
+					!retainedIds.has(semanticEdges[i].target)
+				)
+					semanticEdges.splice(i, 1);
+		}
+		const retained = new Map<number, AnalysisFact>();
+		for (const [index, item] of boundary.findings.entries()) {
+			const source = sources.find((s) => s.path === item.file.fileName);
+			if (!source) continue;
+			const fact = add(
+				source,
+				item.file,
+				item.node,
+				item.kind,
+				item.value,
+				"derived",
+				[
+					"Closed-inventory lexical/literal candidate; runtime exposure, native exports, control-flow reachability and argument behavior are not verified.",
+				],
+			);
+			if (fact) retained.set(index, fact);
+		}
+		for (const edge of boundary.links) {
+			const a = retained.get(edge.source),
+				b = retained.get(edge.target);
+			if (a && b && semanticEdges.length < LIMITS.facts)
+				semanticEdges.push({
+					source: a.id,
+					target: b.id,
+					kind: edge.kind,
+					confidence: "derived",
+					limitations: [
+						"Static API/property or direct native-call syntax association only; runtime binding, native exports, window/context identity and entrypoint co-execution are unverified.",
+					],
+				});
+		}
+		nodes += boundary.visits;
+		limitations.push(...boundary.notes);
+	}
 	if (stopped)
 		limitations.push(
 			"AST node or finding budget reached; remaining syntax was not inspected.",
@@ -557,6 +638,22 @@ export function analyzeSources(
 		const items = channels.get(handler.value) ?? [];
 		items.push(handler);
 		channels.set(handler.value, items);
+	}
+
+	for (const member of facts.filter((f) => f.kind === "preload-member")) {
+		const detail = JSON.parse(member.value);
+		if (typeof detail.channel !== "string") continue;
+		const matches = channels.get(detail.channel) ?? [];
+		if (matches.length === 1 && edges.length < LIMITS.facts)
+			edges.push({
+				source: member.id,
+				target: matches[0].id,
+				kind: "ipc-candidate",
+				confidence: "derived",
+				limitations: [
+					"Literal preload IPC channel candidate; handler kind/registration, runtime routing, reachability and argument validation are unverified.",
+				],
+			});
 	}
 
 	ipcEdges: for (const send of sends)
