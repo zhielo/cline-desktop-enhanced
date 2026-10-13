@@ -301,15 +301,43 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 			? evidence.selectedFunctions
 			: [];
 		for (const item of selected.slice(0, 50)) {
+			if (dossiers.length >= 250) break;
 			const f = object(item),
 				address = f.addressHex;
 			if (
 				typeof address !== "string" ||
-				!/^0x[a-f0-9]+$/i.test(address) ||
+				!/^0x[a-f0-9]{1,16}$/i.test(address) ||
 				typeof report.engine !== "string"
 			)
 				continue;
+			const disassembly = object(f.disassembly),
+				image = object(f.image);
+			const preferred =
+				typeof image.preferredBaseHex === "string" &&
+				/^0x[a-f0-9]{1,16}$/i.test(image.preferredBaseHex)
+					? image.preferredBaseHex.toLowerCase()
+					: undefined;
+			const architecture =
+				typeof f.architecture === "string" ? f.architecture : "unknown";
+			const normalizedAddress =
+				architecture === "thumb"
+					? `0x${(BigInt(address) & ~BigInt(1)).toString(16)}`
+					: address.toLowerCase();
+			const normalizedRva =
+				preferred &&
+				image.addressSpace === "elf-link-time-virtual" &&
+				BigInt(normalizedAddress) >= BigInt(preferred)
+					? `0x${(BigInt(normalizedAddress) - BigInt(preferred)).toString(16)}`
+					: "unknown";
 			const identity = {
+				architecture,
+				addressSpace: image.addressSpace ?? "unknown",
+				preferredBase: preferred ?? "unknown",
+				normalizedRva,
+				disassembler: disassembly.engine ?? "unknown",
+				disassemblerVersion: disassembly.engineVersion ?? null,
+				byteFingerprint: disassembly.byteFingerprint ?? "unknown",
+				requestedBytes: disassembly.requestedBytes ?? "unknown",
 				sha256: s.targetSha256,
 				engine: report.engine,
 				engineVersion: report.engineVersion ?? null,
@@ -322,7 +350,8 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 				snapshotHash: s.snapshotHash,
 				at: s.at,
 				name: f.name ?? "unknown",
-				imageBase: object(f.image).base ?? "unknown",
+				imageBase: preferred ?? "unknown",
+				runtimeImageBase: "unknown",
 				disassembly: f.disassembly ?? "unknown",
 				pseudocode: f.pseudocode ?? "unknown",
 				references: f.references ?? "unknown",
@@ -330,10 +359,41 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 				callers: f.callers ?? "unknown",
 				callees: f.callees ?? "unknown",
 				limitations: [
-					"Engine-qualified exact address; no automatic relocation, symbol equivalence or missing-component inference. Unavailable fields are unknown.",
+					"Engine-qualified exact artifact/address. Preferred ELF base and derived RVA are link-time provider claims, never an observed runtime base. Thumb entry-bit normalization only; no arbitrary relocation, symbol equivalence, runtime call proof or missing-component inference.",
 				],
 			});
 		}
+	}
+	for (const target of dossiers) {
+		const ti = object(target.identity),
+			callers: Array<Record<string, unknown>> = [];
+		for (const candidate of dossiers) {
+			const ci = object(candidate.identity);
+			if (
+				ci.sha256 !== ti.sha256 ||
+				ci.addressSpace !== ti.addressSpace ||
+				ti.addressSpace === "unknown" ||
+				ci.architecture !== ti.architecture
+			)
+				continue;
+			for (const call of Array.isArray(candidate.callees)
+				? candidate.callees.slice(0, 128)
+				: []) {
+				const c = object(call);
+				if (
+					typeof c.targetAddressHex === "string" &&
+					/^0x[a-f0-9]{1,16}$/i.test(c.targetAddressHex) &&
+					BigInt(c.targetAddressHex) === BigInt(String(ti.address))
+				)
+					callers.push({
+						dossierId: candidate.id,
+						fromAddressHex: c.fromAddressHex,
+						confidence:
+							"retained-static-direct-call-candidate-not-complete-callgraph",
+					});
+			}
+		}
+		if (callers.length) target.callers = callers.slice(0, 128);
 	}
 	return dossiers.slice(0, 250);
 }
@@ -352,9 +412,33 @@ export function dossierDisagreements(dossiers: Array<Record<string, unknown>>) {
 			identity: object(g[0].identity),
 			snapshots: g.map((d) => d.snapshotId),
 			disagreement:
-				new Set(g.map((d) => digest(d.disassembly))).size > 1
-					? "different-engine-output"
-					: "same-retained-output",
+				g.some((d) => {
+					const i = object(d.identity);
+					return (
+						i.byteFingerprint === "unknown" ||
+						typeof i.byteFingerprint !== "string" ||
+						!/^[a-f0-9]{64}$/.test(i.byteFingerprint) ||
+						!Number.isSafeInteger(i.requestedBytes) ||
+						i.addressSpace === "unknown" ||
+						i.architecture === "unknown"
+					);
+				}) ||
+				new Set(
+					g.map((d) => {
+						const i = object(d.identity);
+						return canonical([
+							i.byteFingerprint,
+							i.requestedBytes,
+							i.architecture,
+							i.addressSpace,
+							i.preferredBase,
+						]);
+					}),
+				).size !== 1
+					? "not-comparable-range-or-architecture"
+					: new Set(g.map((d) => digest(d.disassembly))).size > 1
+						? "different-engine-output"
+						: "same-retained-output",
 			interpretation:
 				"Output difference, not proof either engine is wrong; image base and execution remain separately unverified",
 			nextTest:

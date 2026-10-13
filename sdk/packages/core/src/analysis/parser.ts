@@ -110,21 +110,54 @@ export function analyzeSources(
 					source.binary,
 					Math.min(256, LIMITS.facts - facts.length),
 				);
-				for (const record of managed.records)
-					add(
+				const instructions = new Map<string, AnalysisFact>();
+				const flow: Array<{
+					methodToken: string;
+					source: number;
+					target: number;
+					kind: string;
+				}> = [];
+				for (const record of managed.records) {
+					const detail = JSON.parse(record.value);
+					const value = JSON.stringify({
+						offset: record.offset,
+						record: detail,
+					});
+					if (value.length > 1000) {
+						limitations.push(
+							"Managed evidence value budget reached; record omitted without truncating JSON",
+						);
+						continue;
+					}
+					const fact = add(
 						source,
 						file,
 						file,
 						record.kind,
-						JSON.stringify({
-							offset: record.offset,
-							record: JSON.parse(record.value),
-						}),
-						"observed",
+						value,
+						record.kind === "managed-control-flow" ? "derived" : "observed",
 						[
-							"Exact binary byte offset is in value; line/column are placeholders, not source coordinates. Static metadata/IL bytes, never execution.",
+							"Exact binary file offset is in value; line/column are placeholders. Decoded normal-flow candidates are not exception flow, stack verification or execution.",
 						],
 					);
+					if (fact && record.kind === "managed-il-instruction")
+						instructions.set(`${detail.methodToken}:${detail.offset}`, fact);
+					if (fact && record.kind === "managed-control-flow") flow.push(detail);
+				}
+				for (const edge of flow) {
+					const from = instructions.get(`${edge.methodToken}:${edge.source}`),
+						to = instructions.get(`${edge.methodToken}:${edge.target}`);
+					if (from && to && semanticEdges.length < LIMITS.facts)
+						semanticEdges.push({
+							source: from.id,
+							target: to.id,
+							kind: "managed-flow",
+							confidence: "derived",
+							limitations: [
+								`Static ${edge.kind} candidate; no exception flow, reachability or execution proof`,
+							],
+						});
+				}
 				limitations.push(...managed.limitations);
 			} catch (e) {
 				limitations.push(

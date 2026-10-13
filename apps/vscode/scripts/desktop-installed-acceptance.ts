@@ -3,6 +3,8 @@
  * No dev web server, model credential, browser download, or production test bypass.
  */
 
+import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -196,6 +198,9 @@ export async function main() {
     await writeFile(join(directory,"renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
   }
   await writeFile(join(analysisCurrent,"main.js.map"),JSON.stringify({version:3,file:"main.js",sources:["original.ts"],sourcesContent:["export const owned=42;"],names:[],mappings:"AAAA"}));
+  const managedFixture=Buffer.from(OWNED_MANAGED_BASE64,"base64");
+  if(createHash("sha256").update(managedFixture).digest("hex")!==OWNED_MANAGED_SHA256)throw new Error("Owned managed fixture hash drift");
+  await writeFile(join(analysisCurrent,"owned.dll"),managedFixture);
   let port = 0;
   const discoveryPath = join(root, "hub.json");
 	const environment = Object.fromEntries(
@@ -572,14 +577,27 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="static"&&!select.disabled;});
     const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"owned-analysis-current",compareTarget:"owned-analysis-previous"}});
     if(!["completed","partial"].includes(parsed.status))throw new Error("Installed static parser failed");
-    const graph=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"graph"}});
+    const allEvidence=async(view:string,filter?:string)=>{
+      const items:Array<{kind:string;value:string}>=[];let offset=0;
+      for(let count=0;count<20;count++) {
+        const result=await rpc<{items:Array<{kind:string;value:string}>;nextOffset:number|null}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view,filter,offset,limit:50}});
+        items.push(...result.items);if(result.nextOffset===null)return {items};
+        if(!Number.isSafeInteger(result.nextOffset)||result.nextOffset<=offset)throw new Error("Installed evidence pagination stalled");offset=result.nextOffset;
+      }
+      throw new Error("Installed owned evidence exceeded fixture budget");
+    };
+    const graph=await allEvidence("graph");
     if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
     const values=await rpc<{items:Array<{kind:string;value:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"resolved-endpoint"}});
     if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed cross-module object/value/return reduction failed");
+    const managed=await allEvidence("findings","managed-il-instruction");
+    const managedInstructions=managed.items.filter(f=>f.kind==="managed-il-instruction").map(f=>JSON.parse(f.value).record);
+    if(!managedInstructions.some(f=>f.opcode==="call"&&f.resolution?.name==="Add")||!managedInstructions.some(f=>f.opcode==="ldstr"&&f.resolution?.preview==="https://owned.invalid/managed")||!managedInstructions.some(f=>f.opcode==="ldc.i8"&&f.operand==="9007199254740993"))throw new Error("Installed managed IL inspection failed");
+    if(!graph.items.some(f=>f.kind==="managed-flow"))throw new Error("Installed managed normal-flow graph unavailable");
     const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
     if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
     const verification=await rpc<{profile:string}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"verification"}});
-    if(verification.profile!=="cline-js-static/3")throw new Error("Installed analysis profile is stale");
+    if(verification.profile!=="cline-js-static/4")throw new Error("Installed analysis profile is stale");
     const unified=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,receiptId:parsed.id});
     if(!Array.isArray(unified.items))throw new Error("Installed unified evidence route unavailable");
     const dossiers=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,view:"dossiers"});

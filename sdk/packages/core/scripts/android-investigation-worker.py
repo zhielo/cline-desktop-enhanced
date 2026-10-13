@@ -11,7 +11,7 @@ import sys
 import zipfile
 import zlib
 
-VERSION = "android-static/v2"
+VERSION = "android-static/v3"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -267,10 +267,11 @@ def native_metadata(data, artifact_id, limit):
             functions.append(record)
             if source=="dynamic" and name.startswith("Java_") and str(symbol.binding).split(".")[-1] in ("GLOBAL","WEAK") and str(symbol.visibility).split(".")[-1] in ("DEFAULT","PROTECTED"):
                 exports.append(dict(record,exportEvidence="defined-global-or-weak-ELF-symbol"))
-        return {"engine":"lief","engineVersion":importlib.metadata.version("lief"),"architecture":architecture,"segments":segments[:limit],"segmentsTruncated":len(segments)>limit,"functions":functions[:limit],"functionCount":len(functions),"functionsTruncated":len(functions)>limit,"jniExports":exports[:limit],"jniExportsTruncated":len(exports)>limit},functions
+        return {"engine":"lief","engineVersion":importlib.metadata.version("lief"),"architecture":architecture,"image":{"preferredBaseHex":hex(int(binary.imagebase)),"addressSpace":"elf-link-time-virtual","runtimeBase":"unknown"},"segments":segments[:limit],"segmentsTruncated":len(segments)>limit,"functions":functions[:limit],"functionCount":len(functions),"functionsTruncated":len(functions)>limit,"jniExports":exports[:limit],"jniExportsTruncated":len(exports)>limit},functions
 
 
-def disassemble_selected(data, method, maximum):
+def disassemble_selected(data, method, maximum, segments=None):
+    import importlib.metadata
     import capstone
     if method["rangeValidation"] != "mapped-file-backed-range" or not method["size"]:
         return {"status":"blocked","reason":"No unique file-backed nonzero symbol range; no function extent is inferred"}
@@ -282,16 +283,32 @@ def disassemble_selected(data, method, maximum):
     engine=capstone.Cs(*architectures[method["architecture"]]);engine.detail=True
     address=int(method["addressHex"],16)
     if method["architecture"]=="thumb":address &= ~1
-    instructions=[];decoded=0
+    instructions=[];decoded=0;references=[];strings=[];callees=[]
     for instruction in engine.disasm(data[offset:offset+count],address):
         if len(instructions)>=1000:break
         calls=[]
         if instruction.group(capstone.CS_GRP_CALL):
             for operand in instruction.operands:
                 if operand.type==capstone.CS_OP_IMM:calls.append(hex(operand.imm))
+        callees.extend({"fromAddressHex":hex(instruction.address),"targetAddressHex":call,"confidence":"decoded-direct-call-candidate"} for call in calls)
+        if method["architecture"]=="x86_64" and segments is not None:
+            for operand in instruction.operands:
+                if operand.type != capstone.CS_OP_MEM or operand.mem.base != capstone.x86_const.X86_REG_RIP:continue
+                target=instruction.address+instruction.size+operand.mem.disp
+                if target<0 or len(references)>=128:continue
+                references.append({"fromAddressHex":hex(instruction.address),"targetAddressHex":hex(target),"confidence":"decoded-rip-relative-address-candidate"})
+                mappings=[seg for seg in segments if int(seg["addressHex"],16)<=target<int(seg["addressHex"],16)+seg["fileBytes"]]
+                if len(mappings)!=1 or len(strings)>=64:continue
+                seg=mappings[0];at=seg["fileOffset"]+target-int(seg["addressHex"],16)
+                end=min(at+129,seg["fileOffset"]+seg["fileBytes"],len(data))
+                if at<0 or at>=end:continue
+                preview=data[at:end];terminator=preview.find(b"\0")
+                if not 3<=terminator<=128 or any(c<32 or c>126 for c in preview[:terminator]):continue
+                value=preview[:terminator]
+                strings.append({"fromAddressHex":hex(instruction.address),"addressHex":hex(target),"fileOffset":at,"value":value.decode("ascii"),"sha256":hashlib.sha256(value).hexdigest(),"confidence":"file-backed-ascii-reference-candidate-not-runtime-read"})
         instructions.append({"addressHex":hex(instruction.address),"bytes":instruction.bytes.hex(),"mnemonic":instruction.mnemonic,"operands":instruction.op_str,"directCallCandidates":calls})
         decoded+=instruction.size
-    return {"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
+    return {"engine":"capstone","engineVersion":importlib.metadata.version("capstone"),"architecture":method["architecture"],"references":references,"strings":strings,"callees":callees[:128],"relationsTruncated":len(callees)>128 or len(references)>=128 or len(strings)>=64,"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
 
 
 def selected_dex_code(data, selector, limit):
@@ -328,10 +345,10 @@ def native_selection(request):
     matches=[m for m in functions if m["name"]==selector.get("symbol") or (address is not None and int(m["addressHex"],16)==address)]
     selections=[]
     for method in matches[:20]:
-        try:body=disassemble_selected(data,method,selector.get("max_bytes",4096))
+        try:body=disassemble_selected(data,method,selector.get("max_bytes",4096),None if meta["segmentsTruncated"] else meta["segments"])
         except ImportError:body={"status":"blocked","reason":"Capstone is not installed"}
-        selections.append(dict(method,disassembly=body))
-    return {"protocol":"cline-advanced-analysis/v1","status":"completed" if len(matches)==1 and selections[0]["disassembly"]["status"]=="completed" and not meta["functionsTruncated"] else "partial","engine":"android-static","engineVersion":VERSION,"input":{"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data),"format":"elf"},"evidence":{"schemaVersion":1,"artifacts":[{"id":artifact,"sha256":hashlib.sha256(data).hexdigest(),"format":"elf","validation":"LIEF-parsed-bounded-file-mappings","native":meta}],"relationships":[],"selectedFunctions":selections,"matchCount":len(matches),"ambiguous":len(matches)>1,"coverage":{"truncated":len(matches)>20 or meta["functionsTruncated"]}},"limitations":["Static bounded ELF symbol analysis only; not function discovery in stripped/virtualized code, runtime execution, JNI registration proof or semantic equivalence.","Capstone output is linear range disassembly, not a complete CFG. Addresses are preserved as hexadecimal strings."]}
+        selections.append(dict(method,image=meta["image"],disassembly=body,references=body.get("references","unknown"),strings=body.get("strings","unknown"),callees=body.get("callees","unknown")))
+    return {"protocol":"cline-advanced-analysis/v1","status":"completed" if len(matches)==1 and selections[0]["disassembly"]["status"]=="completed" and not meta["functionsTruncated"] else "partial","engine":"android-static","engineVersion":VERSION,"input":{"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data),"format":"elf"},"evidence":{"schemaVersion":1,"artifacts":[{"id":artifact,"sha256":hashlib.sha256(data).hexdigest(),"format":"elf","validation":"LIEF-parsed-bounded-file-mappings","native":meta}],"relationships":[],"selectedFunctions":selections,"matchCount":len(matches),"ambiguous":len(matches)>1,"coverage":{"truncated":len(matches)>20 or meta["functionsTruncated"]}},"limitations":["Static bounded ELF symbol analysis only; not function discovery in stripped/virtualized code, runtime execution, JNI registration proof or semantic equivalence.","Capstone output is linear range disassembly, not a complete CFG; direct calls and x86_64 RIP-relative ASCII references are static candidates, not runtime accesses. Preferred ELF base is link-time metadata, not ASLR/load-base proof. Addresses are preserved as hexadecimal strings."]}
 
 
 def analysis_readiness():

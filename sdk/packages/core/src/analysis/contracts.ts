@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-export const ANALYSIS_PROFILE = "cline-js-static/3";
+export const ANALYSIS_PROFILE = "cline-js-static/4";
 export const AnalysisModeSchema = z.enum(["off", "static", "runtime"]);
 export type AnalysisMode = z.infer<typeof AnalysisModeSchema>;
 export const AnalysisInputSchema = z
@@ -74,6 +74,8 @@ export const FactSchema = z
 			"managed-type",
 			"managed-method",
 			"managed-il",
+			"managed-il-instruction",
+			"managed-control-flow",
 		]),
 		value: z.string().max(1000),
 		confidence: z.enum(["observed", "derived", "inferred"]),
@@ -107,7 +109,13 @@ export const ResultSchema = z
 					.object({
 						source: z.string(),
 						target: z.string(),
-						kind: z.enum(["imports", "ipc-candidate", "data-flow", "calls"]),
+						kind: z.enum([
+							"imports",
+							"ipc-candidate",
+							"data-flow",
+							"calls",
+							"managed-flow",
+						]),
 						confidence: z.literal("derived"),
 						limitations: z.array(z.string()),
 					})

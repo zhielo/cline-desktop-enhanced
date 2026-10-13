@@ -87,7 +87,16 @@ it("retains approved completed task provenance, exact hash matches and explicit 
 	}
 });
 it("reports differing engine outputs, not inferred truth or equivalence", () => {
-	const identity = { sha256: hash, address: "0x1", engine: "one" },
+	const identity = {
+			sha256: hash,
+			address: "0x1",
+			engine: "one",
+			architecture: "x86_64",
+			addressSpace: "elf-link-time-virtual",
+			preferredBase: "0x0",
+			byteFingerprint: hash,
+			requestedBytes: 1,
+		},
 		a = { identity, snapshotId: "a", disassembly: "ret" },
 		b = {
 			...a,
@@ -99,4 +108,103 @@ it("reports differing engine outputs, not inferred truth or equivalence", () => 
 		"different-engine-output",
 	);
 	expect(dossierDisagreements([a, b])[0].interpretation).toContain("not proof");
+});
+
+it("refuses to compare native outputs with different ranges or missing scope", () => {
+	const identity = {
+		sha256: hash,
+		address: "0x1",
+		architecture: "x86_64",
+		addressSpace: "elf-link-time-virtual",
+		preferredBase: "0x0",
+		byteFingerprint: hash,
+		requestedBytes: 1,
+	};
+	expect(
+		dossierDisagreements([
+			{ identity, disassembly: "ret" },
+			{ identity: { ...identity, requestedBytes: 2 }, disassembly: "nop" },
+		])[0].disagreement,
+	).toBe("not-comparable-range-or-architecture");
+	expect(
+		dossierDisagreements([
+			{ identity: { sha256: hash, address: "0x1" } },
+			{ identity: { sha256: hash, address: "0x1" } },
+		])[0].disagreement,
+	).toBe("not-comparable-range-or-architecture");
+});
+
+it("retains link-time RVA and derives only selected same-artifact static callers", () => {
+	const fn = (addressHex: string, callees: unknown[]) => ({
+		addressHex,
+		name: "owned",
+		architecture: "x86_64",
+		image: {
+			preferredBaseHex: "0x1000000000000000",
+			addressSpace: "elf-link-time-virtual",
+		},
+		callees,
+		disassembly: {
+			engine: "capstone",
+			engineVersion: "5.0.9",
+			byteFingerprint: hash,
+			requestedBytes: 8,
+			instructions: [],
+		},
+	});
+	const snapshot = {
+		targetSha256: hash,
+		id: "owned",
+		snapshotHash: hash,
+		at: "owned",
+		result: {
+			engine: "android-static",
+			engineVersion: "v3",
+			input: { sha256: hash },
+			evidence: {
+				selectedFunctions: [
+					fn("0x1000000000000010", [
+						{
+							targetAddressHex: "0x1000000000000020",
+							fromAddressHex: "0x1000000000000010",
+						},
+					]),
+					fn("0x1000000000000020", []),
+				],
+			},
+		},
+	};
+	const rows = nativeDossiers([
+		snapshot as Parameters<typeof nativeDossiers>[0][number],
+	]);
+	expect(rows[0].identity).toMatchObject({
+		normalizedRva: "0x10",
+		disassembler: "capstone",
+		preferredBase: "0x1000000000000000",
+	});
+	expect(rows[0].runtimeImageBase).toBe("unknown");
+	expect(rows[1].callers).toHaveLength(1);
+	const changed = { ...snapshot, targetSha256: "b".repeat(64) };
+	expect(
+		nativeDossiers([changed as Parameters<typeof nativeDossiers>[0][number]]),
+	).toEqual([]);
+	const many = {
+		...snapshot,
+		result: {
+			...snapshot.result,
+			evidence: {
+				selectedFunctions: Array.from({ length: 50 }, () =>
+					fn("0x1000000000000010", []),
+				),
+			},
+		},
+	};
+	expect(
+		nativeDossiers(
+			Array.from(
+				{ length: 10 },
+				() => many as Parameters<typeof nativeDossiers>[0][number],
+			),
+		),
+	).toHaveLength(250);
 });

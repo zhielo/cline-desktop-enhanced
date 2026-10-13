@@ -1,3 +1,7 @@
+import {
+	OWNED_MANAGED_BASE64,
+	OWNED_MANAGED_SHA256,
+} from "../../scripts/owned-managed-fixture.mjs";
 import { expect, it } from "vitest";
 import { inspectManagedPE } from "./dotnet";
 import { analyzeSources } from "./parser";
@@ -59,7 +63,7 @@ function fixture() {
 it("inspects owned type/method metadata and bounded IL bytes without loading CLR", () => {
 	const b = fixture(),
 		r = inspectManagedPE(b);
-	expect(r.records.map((x) => x.kind)).toEqual([
+	expect(r.records.slice(0, 3).map((x) => x.kind)).toEqual([
 		"managed-type",
 		"managed-method",
 		"managed-il",
@@ -99,4 +103,42 @@ it("limits method bytes and record coverage rather than inventing IL semantics",
 	expect(r.records).toHaveLength(1);
 	expect(r.limitations).toContain("Managed record budget reached");
 	expect(r.limitations[0]).toContain("no CLR execution");
+});
+
+it("decodes a real owned Roslyn assembly without executing it", () => {
+	// Source: Add(a,b)=>a+b; Branch(x)=>x>3?Add(x,2):7; Endpoint()=>owned URL;
+	// Choose switch(0..3); Wide()=>9007199254740993L. SDK 8.0.100 csc, deterministic, optimized.
+	const b = Buffer.from(OWNED_MANAGED_BASE64, "base64");
+	expect(byteDigest(b)).toBe(OWNED_MANAGED_SHA256);
+	const r = inspectManagedPE(b),
+		details = r.records
+			.filter((x) => x.kind === "managed-il-instruction")
+			.map((x) => JSON.parse(x.value));
+	expect(
+		details.some((x) => x.opcode === "call" && x.resolution?.name === "Add"),
+	).toBe(true);
+	expect(
+		details.some(
+			(x) =>
+				x.opcode === "ldstr" &&
+				x.resolution?.preview === "https://owned.invalid/managed",
+		),
+	).toBe(true);
+	expect(
+		details.some(
+			(x) => x.opcode === "ldc.i8" && x.operand === "9007199254740993",
+		),
+	).toBe(true);
+	expect(details.some((x) => x.opcode === "switch")).toBe(true);
+	const result = analyzeSources([
+		{
+			path: "owned.dll",
+			source: "",
+			binary: b,
+			bytes: b.length,
+			sha256: byteDigest(b),
+		},
+	]);
+	expect(() => ResultSchema.parse(result)).not.toThrow();
+	expect(result.edges.some((x) => x.kind === "managed-flow")).toBe(true);
 });

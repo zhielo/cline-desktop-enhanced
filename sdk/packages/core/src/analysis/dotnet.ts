@@ -1,6 +1,13 @@
+import { decodeIL } from "./il";
+import { byteDigest } from "./contracts";
 /** Bounded ECMA-335 PE metadata and method-body inspection. No CLR load/execute. */
 export type ManagedRecord = {
-	kind: "managed-type" | "managed-method" | "managed-il";
+	kind:
+		| "managed-type"
+		| "managed-method"
+		| "managed-il"
+		| "managed-il-instruction"
+		| "managed-control-flow";
 	value: string;
 	offset: number;
 };
@@ -224,6 +231,8 @@ export function inspectManagedPE(
 			throw new Error("Metadata rows exceed table stream");
 	}
 	const values = (table: number, index: number) => {
+		if (!schema[table] || index < 0 || index >= rows[table])
+			throw new Error("Metadata token row outside table");
 		let o = offsets[table] + index * widths[table];
 		return schema[table].split(" ").map((c) => {
 			const w = width(c),
@@ -232,9 +241,63 @@ export function inspectManagedPE(
 			return v;
 		});
 	};
+	const userString = (index: number) => {
+		const heap = streams.get("#US");
+		if (!heap || index < 1 || index >= heap.size)
+			throw new Error("User-string heap index outside range");
+		let at = heap.offset + index;
+		const end = heap.offset + heap.size;
+		const read = () => {
+			if (at >= end) throw new Error("Truncated user-string length");
+			return b[at++];
+		};
+		const first = read();
+		let length: number;
+		if (first < 128) length = first;
+		else if ((first & 192) === 128) length = ((first & 63) << 8) | read();
+		else if ((first & 224) === 192)
+			length =
+				(first & 31) * 16777216 + (read() << 16) + (read() << 8) + read();
+		else throw new Error("Reserved compressed user-string length");
+		if (!length || length > 4097 || length % 2 !== 1 || at + length > end)
+			throw new Error("Invalid/budgeted user-string bytes");
+		const bytes = b.subarray(at, at + length - 1);
+		const value = bytes.toString("utf16le");
+		return {
+			kind: "user-string",
+			preview: value.slice(0, 160),
+			truncated: value.length > 160,
+			sha256: byteDigest(bytes),
+		};
+	};
+	const resolveToken = (token: string) => {
+		const n = Number.parseInt(token.slice(2), 16),
+			table = n >>> 24,
+			index = (n & 0xffffff) - 1;
+		try {
+			if (table === 0x70) return userString(n & 0xffffff);
+			if (![1, 2, 4, 6, 10].includes(table))
+				return { kind: "unresolved-token", token };
+			const v = values(table, index);
+			return {
+				kind: "metadata-declaration",
+				table,
+				name: str(v[table === 6 ? 3 : 1]).slice(0, 120),
+				...(table === 1 || table === 2
+					? { namespace: str(v[2]).slice(0, 120) }
+					: {}),
+			};
+		} catch {
+			return {
+				kind: "unresolved-token",
+				token,
+				reason: "Invalid, unsupported or budgeted heap/table reference",
+			};
+		}
+	};
 	const records: ManagedRecord[] = [],
 		limitations = [
-			"Static metadata declarations and bounded IL bytes only; no CLR execution, decompilation, obfuscation recovery or behavioral proof.",
+			"Static metadata declarations, bounded decoded IL and normal-flow candidates only; no CLR execution, decompilation, obfuscation recovery or behavioral proof.",
 		];
 	const add = (r: ManagedRecord) => {
 		if (records.length < budget) records.push(r);
@@ -268,6 +331,15 @@ export function inspectManagedPE(
 				implementationFlags: v[1],
 			}),
 		});
+	}
+	for (let i = 0; i < Math.min(rows[6], budget); i++) {
+		if (records.length >= budget) {
+			if (!limitations.includes("Managed record budget reached"))
+				limitations.push("Managed record budget reached");
+			break;
+		}
+		const v = values(6, i),
+			token = `0x${(0x06000001 + i).toString(16)}`;
 		if (!v[0] || v[1] & 3) continue;
 		try {
 			const body = rva(v[0], 1),
@@ -297,6 +369,43 @@ export function inspectManagedPE(
 					truncated: length > 256,
 				}),
 			});
+			const decoded = decodeIL(
+				b.subarray(body + header, body + header + length),
+			);
+			for (const instruction of decoded.instructions) {
+				const { bytes, operand, ...detail } = instruction;
+				add({
+					kind: "managed-il-instruction",
+					offset: body + header + instruction.offset,
+					value: JSON.stringify({
+						methodToken: token,
+						...detail,
+						bytes: bytes.slice(0, 128),
+						bytesTruncated: bytes.length > 128,
+						...(Array.isArray(operand)
+							? {}
+							: operand !== undefined
+								? { operand }
+								: {}),
+						...(instruction.token
+							? { resolution: resolveToken(instruction.token) }
+							: {}),
+					}),
+				});
+			}
+			for (const edge of decoded.edges)
+				add({
+					kind: "managed-control-flow",
+					offset: body + header + edge.source,
+					value: JSON.stringify({ methodToken: token, ...edge }),
+				});
+			limitations.push(
+				...decoded.limitations.map((note) => `Method ${token}: ${note}`),
+			);
+			if (tag === 3 && u16(body) & 8)
+				limitations.push(
+					`Method ${token}: additional/exception sections are not decoded; normal flow is not a complete CFG`,
+				);
 		} catch (e) {
 			limitations.push(
 				`Method ${token}: ${e instanceof Error ? e.message : "unsupported IL"}`,

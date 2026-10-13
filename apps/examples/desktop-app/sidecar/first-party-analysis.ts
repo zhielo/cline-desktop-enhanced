@@ -126,7 +126,7 @@ export async function testFirstPartyFixture() {
 		fixtureReceipt = {
 			status: "failed",
 			checkedAt: new Date().toISOString(),
-			profile: "cline-js-static/3",
+			profile: "cline-js-static/4",
 			error: e instanceof Error ? e.message : "Fixture failed",
 		};
 		throw e;
