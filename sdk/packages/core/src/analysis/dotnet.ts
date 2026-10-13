@@ -1,3 +1,4 @@
+import { inspectManagedSignature } from "./managed-signature";
 import { decodeIL } from "./il";
 import { byteDigest } from "./contracts";
 /** Bounded ECMA-335 PE metadata and method-body inspection. No CLR load/execute. */
@@ -270,6 +271,75 @@ export function inspectManagedPE(
 			sha256: byteDigest(bytes),
 		};
 	};
+	const signature = (
+		index: number,
+		expected: "method" | "field" | "member" = "member",
+	) => {
+		const heap = streams.get("#Blob");
+		try {
+			if (!heap || index < 1 || index >= heap.size)
+				throw new Error("Signature heap index outside range");
+			let at = heap.offset + index;
+			const end = heap.offset + heap.size;
+			const read = () => {
+				if (at >= end) throw new Error("Truncated signature blob length");
+				return b[at++];
+			};
+			const first = read();
+			let length: number;
+			if (first < 128) length = first;
+			else if ((first & 192) === 128) {
+				length = ((first & 63) << 8) | read();
+				if (length < 128) throw new Error("Noncanonical blob length");
+			} else if ((first & 224) === 192) {
+				length =
+					(first & 31) * 16777216 + (read() << 16) + (read() << 8) + read();
+				if (length < 16384) throw new Error("Noncanonical blob length");
+			} else throw new Error("Reserved signature blob length");
+			if (length > 256 || at + length > end)
+				throw new Error("Signature blob range/budget exceeded");
+			return inspectManagedSignature(b.subarray(at, at + length), expected);
+		} catch (e) {
+			return {
+				status: "partial",
+				reason: e instanceof Error ? e.message : "Unsupported signature heap",
+			};
+		}
+	};
+	const ownerStarts: number[] = [];
+	let ownersValid = !rows[5];
+	for (let i = 0; i < rows[2]; i++) {
+		const first = values(2, i)[5];
+		if (
+			first < 1 ||
+			first > rows[6] + 1 ||
+			(i > 0 && first < ownerStarts[i - 1])
+		)
+			ownersValid = false;
+		ownerStarts.push(first);
+	}
+	const declaringType = (methodRow: number) => {
+		if (!ownersValid)
+			return "unknown:invalid-or-pointer-indirected-method-lists";
+		let lo = 0,
+			hi = ownerStarts.length;
+		while (lo < hi) {
+			const mid = Math.floor((lo + hi) / 2);
+			if (ownerStarts[mid] <= methodRow) lo = mid + 1;
+			else hi = mid;
+		}
+		if (!lo) return "unknown:unowned-method-row";
+		const row = lo - 1,
+			v = values(2, row),
+			name = str(v[1]),
+			namespace = str(v[2]);
+		return {
+			token: `0x${(0x02000001 + row).toString(16)}`,
+			name: name.slice(0, 60),
+			namespace: namespace.slice(0, 60),
+			namesTruncated: name.length > 60 || namespace.length > 60,
+		};
+	};
 	const resolveToken = (token: string) => {
 		const n = Number.parseInt(token.slice(2), 16),
 			table = n >>> 24,
@@ -282,7 +352,20 @@ export function inspectManagedPE(
 			return {
 				kind: "metadata-declaration",
 				table,
-				name: str(v[table === 6 ? 3 : 1]).slice(0, 120),
+				name: str(v[table === 6 ? 3 : 1]).slice(0, 80),
+				namesTruncated:
+					str(v[table === 6 ? 3 : 1]).length > 80 ||
+					((table === 1 || table === 2) && str(v[2]).length > 120),
+				...(table === 6
+					? {
+							declaringType: declaringType(index + 1),
+							signature: signature(v[4], "method"),
+						}
+					: {}),
+				...(table === 4 || table === 10
+					? { signature: signature(v[2], table === 4 ? "field" : "member") }
+					: {}),
+				...(table === 10 ? { parentCodedIndex: v[0] } : {}),
 				...(table === 1 || table === 2
 					? { namespace: str(v[2]).slice(0, 120) }
 					: {}),
@@ -329,6 +412,8 @@ export function inspectManagedPE(
 				rva: v[0],
 				flags: v[2],
 				implementationFlags: v[1],
+				declaringType: declaringType(i + 1),
+				signature: signature(v[4], "method"),
 			}),
 		});
 	}

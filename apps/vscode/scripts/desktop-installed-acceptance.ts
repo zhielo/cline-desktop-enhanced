@@ -590,6 +590,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
     const values=await rpc<{items:Array<{kind:string;value:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"resolved-endpoint"}});
     if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed cross-module object/value/return reduction failed");
+    const managedDeclarations=await allEvidence("findings","managed-method");
+    const managedAdd=managedDeclarations.items.filter(f=>f.kind==="managed-method").map(f=>JSON.parse(f.value).record).find(f=>f.name==="Add");
+    if(managedAdd?.declaringType?.name!=="Fixture"||managedAdd?.declaringType?.namespace!=="ClineOwned"||managedAdd?.signature?.status!=="completed"||managedAdd?.signature?.display!=="int32 (int32, int32)")throw new Error("Installed declaring-type/signature inspection failed");
     const managed=await allEvidence("findings","managed-il-instruction");
     const managedInstructions=managed.items.filter(f=>f.kind==="managed-il-instruction").map(f=>JSON.parse(f.value).record);
     if(!managedInstructions.some(f=>f.opcode==="call"&&f.resolution?.name==="Add")||!managedInstructions.some(f=>f.opcode==="ldstr"&&f.resolution?.preview==="https://owned.invalid/managed")||!managedInstructions.some(f=>f.opcode==="ldc.i8"&&f.operand==="9007199254740993"))throw new Error("Installed managed IL inspection failed");
@@ -597,7 +600,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
     if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
     const verification=await rpc<{profile:string}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"verification"}});
-    if(verification.profile!=="cline-js-static/4")throw new Error("Installed analysis profile is stale");
+    if(verification.profile!=="cline-js-static/5")throw new Error("Installed analysis profile is stale");
     const unified=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,receiptId:parsed.id});
     if(!Array.isArray(unified.items))throw new Error("Installed unified evidence route unavailable");
     const dossiers=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,view:"dossiers"});

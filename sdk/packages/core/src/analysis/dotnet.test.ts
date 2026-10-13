@@ -142,3 +142,69 @@ it("decodes a real owned Roslyn assembly without executing it", () => {
 	expect(() => ResultSchema.parse(result)).not.toThrow();
 	expect(result.edges.some((x) => x.kind === "managed-flow")).toBe(true);
 });
+
+it("retains owned method declaring type and exact bounded signature", () => {
+	const b = Buffer.from(OWNED_MANAGED_BASE64, "base64"),
+		r = inspectManagedPE(b);
+	const add = r.records
+		.filter((x) => x.kind === "managed-method")
+		.map((x) => JSON.parse(x.value))
+		.find((x) => x.name === "Add");
+	expect(add.declaringType).toMatchObject({
+		name: "Fixture",
+		namespace: "ClineOwned",
+	});
+	expect(add.signature).toMatchObject({
+		status: "completed",
+		display: "int32 (int32, int32)",
+		parameterCount: 2,
+	});
+	const result = analyzeSources([
+		{
+			path: "owned.dll",
+			source: "",
+			binary: b,
+			bytes: b.length,
+			sha256: byteDigest(b),
+		},
+	]);
+	expect(
+		result.facts.some(
+			(f) =>
+				f.kind === "managed-method" &&
+				JSON.parse(f.value).record.name === "Add",
+		),
+	).toBe(true);
+	expect(() => ResultSchema.parse(result)).not.toThrow();
+});
+
+it("does not guess owners or signatures when owned metadata is corrupted", () => {
+	const original = Buffer.from(OWNED_MANAGED_BASE64, "base64"),
+		r = inspectManagedPE(original);
+	const type = r.records.find(
+		(x) => x.kind === "managed-type" && JSON.parse(x.value).name === "Fixture",
+	);
+	expect(type).toBeDefined();
+	const invalidOwner = Buffer.from(original);
+	invalidOwner.writeUInt16LE(0, type!.offset + 12);
+	const method = inspectManagedPE(invalidOwner).records.find(
+		(x) => x.kind === "managed-method" && JSON.parse(x.value).name === "Add",
+	);
+	expect(JSON.parse(method!.value).declaringType).toBe(
+		"unknown:invalid-or-pointer-indirected-method-lists",
+	);
+	const md = original.indexOf(Buffer.from("BSJB")),
+		blobName = original.indexOf(Buffer.from("#Blob\0")),
+		blob = md + original.readUInt32LE(blobName - 8),
+		length = original.readUInt32LE(blobName - 4);
+	const signature = original.indexOf(Buffer.from("050002080808", "hex"), blob);
+	expect(signature).toBeGreaterThanOrEqual(blob);
+	expect(signature + 6).toBeLessThanOrEqual(blob + length);
+	const invalidSignature = Buffer.from(original);
+	invalidSignature[signature] = 0xe0;
+	const damaged = inspectManagedPE(invalidSignature).records.find(
+		(x) => x.kind === "managed-method" && JSON.parse(x.value).name === "Add",
+	);
+	expect(JSON.parse(damaged!.value).signature.status).toBe("partial");
+	expect(JSON.parse(damaged!.value).signature).not.toHaveProperty("display");
+});
