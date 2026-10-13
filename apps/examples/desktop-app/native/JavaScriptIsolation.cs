@@ -21,6 +21,7 @@ class JavaScriptIsolation {
  [StructLayout(LayoutKind.Sequential)] struct LIMIT { public BASIC basic; public IO io; public UIntPtr processMemory,jobMemory,peakProcess,peakJob; }
  [DllImport("userenv.dll",CharSet=CharSet.Unicode)] static extern int CreateAppContainerProfile(string name,string display,string description,IntPtr capabilities,uint count,out IntPtr sid);
  [DllImport("userenv.dll",CharSet=CharSet.Unicode)] static extern int DeleteAppContainerProfile(string name);
+ [DllImport("userenv.dll",CharSet=CharSet.Unicode)] static extern int GetAppContainerFolderPath(string sid,out IntPtr path);
  [DllImport("advapi32.dll")] static extern IntPtr FreeSid(IntPtr sid);
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetTokenInformation(IntPtr token,int kind,IntPtr buffer,int size,out int required);
@@ -150,7 +151,10 @@ class JavaScriptIsolation {
    staging=root;
    stage="profile"; int hr=CreateAppContainerProfile(name,name,"Ephemeral Cline JS standalone scenario",IntPtr.Zero,0,out sid);
    if(hr!=0) Marshal.ThrowExceptionForHR(hr); profile=true;
-   var identity=new SecurityIdentifier(sid); stage="acl"; Grant(root,scratch,identity);
+   var identity=new SecurityIdentifier(sid); stage="profile-directory";
+   IntPtr profilePath; hr=GetAppContainerFolderPath(identity.Value,out profilePath); if(hr!=0)Marshal.ThrowExceptionForHR(hr);
+   string privateLocal;try{privateLocal=Marshal.PtrToStringUni(profilePath);if(string.IsNullOrEmpty(privateLocal)||privateLocal.IndexOf('\0')>=0)throw new Exception("Invalid private AppContainer directory");}finally{Marshal.FreeCoTaskMem(profilePath);}
+   stage="acl"; Grant(root,scratch,identity);
    stage="job"; job=CreateJobObject(IntPtr.Zero,null); if(job==IntPtr.Zero) throw new Win32Exception();
    LIMIT limits=new LIMIT(); limits.basic.flags=0x2000|0x8|0x200; limits.basic.active=4; limits.jobMemory=new UIntPtr(256*1024*1024);
    Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(LIMIT))));
@@ -165,7 +169,9 @@ class JavaScriptIsolation {
    handles=Marshal.AllocHGlobal(3*IntPtr.Size); Marshal.WriteIntPtr(handles,0,input);Marshal.WriteIntPtr(handles,IntPtr.Size,outWrite);Marshal.WriteIntPtr(handles,2*IntPtr.Size,errWrite);
    Check(UpdateProcThreadAttribute(attributes,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));
    // Exact minimal environment; never inherit API keys, PATH, NODE_OPTIONS, HOME or application settings.
-   env=Marshal.StringToHGlobalUni("SystemRoot="+Environment.GetFolderPath(Environment.SpecialFolder.Windows)+"\0TEMP="+scratch+"\0TMP="+scratch+"\0\0");
+   // Windows AppContainer creation needs profile-related bootstrap names.
+   // Keep this block sorted and private: no caller USERPROFILE/APPDATA paths or secrets.
+   env=Marshal.StringToHGlobalUni("APPDATA="+scratch+"\0LOCALAPPDATA="+privateLocal+"\0SystemRoot="+Environment.GetFolderPath(Environment.SpecialFolder.Windows)+"\0TEMP="+scratch+"\0TMP="+scratch+"\0USERPROFILE="+scratch+"\0\0");
    SIX startup=new SIX();startup.si.cb=(uint)Marshal.SizeOf(typeof(SIX));startup.si.flags=0x100;startup.si.input=input;startup.si.output=outWrite;startup.si.error=errWrite;startup.attributes=attributes;
    stage="launch"; Check(CreateProcess(runtime,new StringBuilder(Quote(runtime)+" "+Quote(target)),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x4|0x400|0x08000000,env,scratch,ref startup,out child));
    // No target instruction can run before exact lowbox token + job assignment verification.

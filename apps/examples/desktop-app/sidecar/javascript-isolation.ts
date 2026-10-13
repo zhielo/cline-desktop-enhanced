@@ -1,3 +1,4 @@
+import { isolationHostEnvironment } from "./isolation-host-environment";
 import { isolationHostFailureMessage } from "./isolation-host-failure";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -154,6 +155,7 @@ export async function runIsolatedJavaScript(
 		throw new Error("Target bytes changed after Execute approval");
 	if (signal?.aborted)
 		throw new Error("Isolated execution cancelled before staging");
+	const helperEnvironment = isolationHostEnvironment(process.env, tmpdir());
 	const profileName = `cline-js-${randomUUID().replaceAll("-", "")}`;
 	const root = await mkdtemp(join(tmpdir(), "cline-js-isolated-"));
 	try {
@@ -177,11 +179,7 @@ export async function runIsolatedJavaScript(
 					stdio: ["ignore", "pipe", "ignore"],
 					windowsHide: true,
 					cwd: resourceRoot,
-					env: {
-						SystemRoot: process.env.SystemRoot ?? "C:\\Windows",
-						TEMP: tmpdir(),
-						TMP: tmpdir(),
-					},
+					env: helperEnvironment,
 				},
 			);
 			let out = Buffer.alloc(0),
@@ -267,11 +265,7 @@ export async function runIsolatedJavaScript(
 				stdio: "ignore",
 				windowsHide: true,
 				timeout: 10000,
-				env: {
-					SystemRoot: process.env.SystemRoot ?? "C:\\Windows",
-					TEMP: tmpdir(),
-					TMP: tmpdir(),
-				},
+				env: helperEnvironment,
 			},
 		);
 		await rm(root, {

@@ -48,3 +48,40 @@ test("rejects oversized and invalid output", () => {
 	expect(isolationHostFailureMessage("x".repeat(4097))).not.toContain("stage=");
 	expect(isolationHostFailureMessage("invalid JSON")).not.toContain("stage=");
 });
+
+import { isolationHostEnvironment } from "../sidecar/isolation-host-environment";
+const host = {
+	APPDATA: "C:\\Users\\owned\\AppData\\Roaming",
+	LOCALAPPDATA: "C:\\Users\\owned\\AppData\\Local",
+	SystemRoot: "C:\\Windows",
+	USERPROFILE: "C:\\Users\\owned",
+};
+test("helper bootstrap uses only reviewed OS variables, never API/PATH/options", () => {
+	const env = isolationHostEnvironment(
+		{
+			...host,
+			PATH: "secret-path",
+			API_KEY: "secret",
+			NODE_OPTIONS: "secret",
+			HOME: "secret",
+		},
+		"C:\\Temp",
+	);
+	expect(Object.keys(env)).toEqual([
+		"APPDATA",
+		"LOCALAPPDATA",
+		"SystemRoot",
+		"TEMP",
+		"TMP",
+		"USERPROFILE",
+	]);
+	expect(JSON.stringify(env)).not.toContain("secret");
+});
+test("helper bootstrap fails closed on absent or malformed OS profile variables", () => {
+	for (const bad of [
+		{ ...host, USERPROFILE: undefined },
+		{ ...host, LOCALAPPDATA: "relative" },
+		{ ...host, APPDATA: "C:\\bad\0" },
+	])
+		expect(() => isolationHostEnvironment(bad, "C:\\Temp")).toThrow();
+});

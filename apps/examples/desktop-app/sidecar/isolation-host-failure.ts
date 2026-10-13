@@ -2,6 +2,7 @@
 const stages = new Set([
 	"staging",
 	"profile",
+	"profile-directory",
 	"acl",
 	"job",
 	"pipes",
