@@ -214,7 +214,8 @@ it("captures only opt-in source-bound primitive console reports from a running o
 			pid: child.pid!,
 			processToken: identity.token,
 			endpoint,
-			durationMs: 300,
+			// Use the normal bounded window; 300 ms is too narrow for loaded Windows CI.
+			durationMs: 1000,
 		};
 		const off = await observeJavaScriptInspector(request);
 		expect(off.captureConsole).toBe(false);
@@ -224,7 +225,10 @@ it("captures only opt-in source-bound primitive console reports from a running o
 			captureConsole: true,
 		});
 		expect(on.protocol).toBe("cline-js-inspector/2");
-		expect(on.console!.reports.length).toBeGreaterThan(0);
+		expect(
+			on.console!.reports.length,
+			`Owned console capture: discarded=${on.console!.discarded}; matchedScripts=${on.scripts.filter((script) => script.staticMatch).length}`,
+		).toBeGreaterThan(0);
 		expect(on.console!.reports[0]).toMatchObject({
 			sourceSha256: byteDigest(Buffer.from(text)),
 			association: "source-bound-protocol-report",
