@@ -24,9 +24,14 @@ async function navigateToCodexProvider(sidebar: import("@playwright/test").Frame
 	await sidebar.getByText("Bring my own API key").click()
 	await sidebar.getByRole("button", { name: "Continue" }).click()
 	const providerSelectorInput = sidebar.getByTestId("provider-selector-input")
-	await providerSelectorInput.click({ delay: 100 })
-	await providerSelectorInput.pressSequentially("chatgpt", { delay: 50 })
-	await sidebar.getByTestId("provider-option-openai-codex").click({ delay: 100 })
+	await expect(providerSelectorInput).toBeVisible()
+	await providerSelectorInput.click()
+	// This scenario tests OAuth wiring, not a catalog display-name alias or
+	// keyboard forwarding through a VSCodeTextField shadow root. Select the
+	// exact provider ID, as the other provider-setup journey does.
+	const codexOption = sidebar.getByTestId("provider-option-openai-codex")
+	await expect(codexOption).toBeVisible()
+	await codexOption.click()
 }
 
 async function occupy(host: string, port: number): Promise<net.Server> {

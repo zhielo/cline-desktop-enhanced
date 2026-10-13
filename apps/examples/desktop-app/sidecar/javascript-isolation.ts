@@ -1,3 +1,4 @@
+import { finalizeIsolationCleanup } from "./isolation-cleanup";
 import { isolationHostEnvironment } from "./isolation-host-environment";
 import { isolationHostFailureMessage } from "./isolation-host-failure";
 import { spawn, spawnSync } from "node:child_process";
@@ -165,6 +166,7 @@ export async function runIsolatedJavaScript(
 	const helperEnvironment = isolationHostEnvironment(process.env, tmpdir());
 	const profileName = `cline-js-${randomUUID().replaceAll("-", "")}`;
 	const root = await mkdtemp(join(tmpdir(), "cline-js-isolated-"));
+	let hostReceiptVerified = false;
 	try {
 		await mkdir(join(root, "scratch"));
 		await writeFile(join(root, "target.cjs"), source, { mode: 0o400 });
@@ -232,6 +234,10 @@ export async function runIsolatedJavaScript(
 		const receipt = Receipt.parse(JSON.parse(encoded));
 		const stdout = base64(receipt.stdoutBase64),
 			stderr = base64(receipt.stderrBase64);
+		// The encoded receipt can resolve only after host exit 0. The verified
+		// native host sets a nonzero exit on profile or staging cleanup failure.
+		// Set this only after strict receipt and bounded capture validation.
+		hostReceiptVerified = true;
 		ownedFixtureCapture?.({ stdout, stderr, exitCode: receipt.exitCode });
 		const scenario = reconcileProcessScenario(request.scenario, {
 			...receipt,
@@ -266,26 +272,31 @@ export async function runIsolatedJavaScript(
 			],
 		};
 	} finally {
-		const cleanup = spawnSync(
-			join(resourceRoot, "javascript-isolation-host.exe"),
-			["--cleanup", profileName],
-			{
-				stdio: "ignore",
-				windowsHide: true,
-				timeout: 10000,
-				env: helperEnvironment,
+		await finalizeIsolationCleanup(
+			hostReceiptVerified,
+			() => {
+				const cleanup = spawnSync(
+					join(resourceRoot, "javascript-isolation-host.exe"),
+					["--cleanup", profileName],
+					{
+						stdio: "ignore",
+						windowsHide: true,
+						timeout: 10000,
+						env: helperEnvironment,
+					},
+				);
+				if (cleanup.status !== 0)
+					throw new Error(
+						"AppContainer profile cleanup failed; no successful execution receipt",
+					);
 			},
+			() =>
+				rm(root, {
+					recursive: true,
+					force: true,
+					maxRetries: 5,
+					retryDelay: 100,
+				}),
 		);
-		await rm(root, {
-			recursive: true,
-			force: true,
-			maxRetries: 5,
-			retryDelay: 100,
-		});
-		if (cleanup.status !== 0)
-			// biome-ignore lint/correctness/noUnsafeFinally: Unconfirmed cleanup must discard even an otherwise successful receipt; never authorize replay.
-			throw new Error(
-				"AppContainer profile cleanup failed; no successful execution receipt",
-			);
 	}
 }

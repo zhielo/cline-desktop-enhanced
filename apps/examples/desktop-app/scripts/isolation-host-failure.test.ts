@@ -99,3 +99,89 @@ test("native policy explicitly limits the job to one process before target resum
 		native.indexOf("ResumeThread(child.thread)"),
 	);
 });
+
+import { finalizeIsolationCleanup } from "../sidecar/isolation-cleanup";
+test("validated native host receipt avoids racing a redundant profile delete", async () => {
+	const calls: string[] = [];
+	await finalizeIsolationCleanup(
+		true,
+		() => {
+			calls.push("profile");
+			throw new Error("redundant delete must not run");
+		},
+		() => {
+			calls.push("stage");
+		},
+	);
+	expect(calls).toEqual(["stage"]);
+});
+test("unconfirmed host cleanup still requires controller profile and stage cleanup", async () => {
+	const calls: string[] = [];
+	await finalizeIsolationCleanup(
+		false,
+		() => {
+			calls.push("profile");
+		},
+		() => {
+			calls.push("stage");
+		},
+	);
+	expect(calls).toEqual(["profile", "stage"]);
+});
+test("failed controller profile cleanup remains a failure but stage removal is still attempted", async () => {
+	const calls: string[] = [];
+	await expect(
+		finalizeIsolationCleanup(
+			false,
+			() => {
+				calls.push("profile");
+				throw new Error("profile cleanup unconfirmed");
+			},
+			() => {
+				calls.push("stage");
+			},
+		),
+	).rejects.toThrow("profile cleanup unconfirmed");
+	expect(calls).toEqual(["profile", "stage"]);
+});
+test("unconfirmed stage cleanup discards even a validated host receipt", async () => {
+	await expect(
+		finalizeIsolationCleanup(
+			true,
+			() => {},
+			() => {
+				throw new Error("stage cleanup unconfirmed");
+			},
+		),
+	).rejects.toThrow("stage cleanup unconfirmed");
+});
+test("native success exit follows required profile and staging cleanup", () => {
+	const native = readFileSync(
+		new URL("../native/JavaScriptIsolation.cs", import.meta.url),
+		"utf8",
+	);
+	expect(native).toContain(
+		'if(profile && DeleteAppContainerProfile(name)!=0) CleanupFailure(ref receipt,"profile-cleanup",ref code);',
+	);
+	expect(native).toContain(
+		'if(!removed) CleanupFailure(ref receipt,"staging-cleanup",ref code);',
+	);
+	expect(native).toContain(
+		'((List<string>)receipt["cleanupFailures"]).Add(stage);code=1;',
+	);
+	expect(
+		native.indexOf("if(profile && DeleteAppContainerProfile(name)!=0)"),
+	).toBeLessThan(
+		native.lastIndexOf(
+			"Console.WriteLine(new JavaScriptSerializer().Serialize(receipt)); return code;",
+		),
+	);
+	const controller = readFileSync(
+		new URL("../sidecar/javascript-isolation.ts", import.meta.url),
+		"utf8",
+	);
+	expect(controller.indexOf("hostReceiptVerified = true")).toBeGreaterThan(
+		controller.indexOf("const receipt = Receipt.parse(JSON.parse(encoded));"),
+	);
+	expect(controller).toContain("code !== 0");
+});
