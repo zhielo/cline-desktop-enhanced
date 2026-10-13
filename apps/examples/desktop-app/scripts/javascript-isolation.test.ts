@@ -133,13 +133,21 @@ describe.skipIf(!windows)(
 				server.stop(true);
 			}
 		}, 30000);
-		test("timeout and descendants release private runtime before cleanup, no false scenario pass", async () => {
+		test("single-process policy denies child creation without running child code", async () => {
 			const r = await run(
-				`const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');const marker=path.join(process.cwd(),'owned-child-ready');if(process.env.OWNED_CHILD){fs.writeFileSync(marker,'ready');setInterval(()=>{},1000);}else{cp.spawn(process.execPath,[__filename],{env:{...process.env,OWNED_CHILD:'1'},stdio:'ignore'});const poll=setInterval(()=>{if(fs.existsSync(marker)){console.log('child-ready');clearInterval(poll);}},10);setInterval(()=>{},1000);}`,
-				"child-ready\n",
+				`const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');const marker=path.join(process.cwd(),'owned-child-ready');if(process.env.OWNED_CHILD){fs.writeFileSync(marker,'unexpected');process.exit(0);}let denied=false;try{const r=cp.spawnSync(process.execPath,[__filename],{env:{...process.env,OWNED_CHILD:'1'},stdio:'ignore',timeout:1000});denied=!!r.error&&['EPERM','EACCES','EAGAIN'].includes(r.error.code);}catch(e){denied=['EPERM','EACCES','EAGAIN'].includes(e.code);}if(fs.existsSync(marker))throw new Error('Child code unexpectedly executed');console.log(denied?'DENIED':'UNEXPECTED');`,
+				"DENIED\n",
+			);
+			expect(r.timedOut).toBe(false);
+			expect(r.scenario.outcome).toBe("supported");
+		}, 30000);
+		test("timeout terminates single-process job before cleanup, no false scenario pass", async () => {
+			const r = await run(
+				"console.log('owned-ready');setInterval(()=>{},1000);",
+				"owned-ready\n",
 				{ timeoutMs: 5000 },
 			);
-			expect(r.stdout.sha256).toBe(sha("child-ready\n"));
+			expect(r.stdout.sha256).toBe(sha("owned-ready\n"));
 			expect(r.timedOut).toBe(true);
 			expect(r.scenario.outcome).toBe("inconclusive");
 		}, 30000);

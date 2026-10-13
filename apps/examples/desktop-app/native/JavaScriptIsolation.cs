@@ -165,7 +165,7 @@ class JavaScriptIsolation {
    string privateLocal;try{privateLocal=Marshal.PtrToStringUni(profilePath);if(string.IsNullOrEmpty(privateLocal)||privateLocal.IndexOf('\0')>=0)throw new Exception("Invalid private AppContainer directory");}finally{Marshal.FreeCoTaskMem(profilePath);}
    stage="acl"; Grant(root,scratch,identity);
    stage="job"; job=CreateJobObject(IntPtr.Zero,null); if(job==IntPtr.Zero) throw new Win32Exception();
-   LIMIT limits=new LIMIT(); limits.basic.flags=0x2000|0x8|0x200; limits.basic.active=4; limits.jobMemory=new UIntPtr(256*1024*1024);
+   LIMIT limits=new LIMIT(); limits.basic.flags=0x2000|0x8|0x200; limits.basic.active=1; limits.jobMemory=new UIntPtr(256*1024*1024);
    Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(LIMIT))));
    stage="pipes"; SA sa=new SA(); sa.length=Marshal.SizeOf(typeof(SA)); sa.inherit=1;
    Check(CreatePipe(out outRead,out outWrite,ref sa,0)); Check(SetHandleInformation(outRead,1,0));

@@ -85,3 +85,17 @@ test("helper bootstrap fails closed on absent or malformed OS profile variables"
 	])
 		expect(() => isolationHostEnvironment(bad, "C:\\Temp")).toThrow();
 });
+
+// Source guard complements (never substitutes for) the actual Windows denial test.
+import { readFileSync } from "node:fs";
+test("native policy explicitly limits the job to one process before target resume", () => {
+	const native = readFileSync(
+		new URL("../native/JavaScriptIsolation.cs", import.meta.url),
+		"utf8",
+	);
+	expect(native).toContain("limits.basic.active=1;");
+	expect(native).toContain("limits.basic.flags=0x2000|0x8|0x200;");
+	expect(native.indexOf("SetInformationJobObject(job,9")).toBeLessThan(
+		native.indexOf("ResumeThread(child.thread)"),
+	);
+});

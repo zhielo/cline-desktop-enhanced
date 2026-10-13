@@ -8,8 +8,8 @@ if (process.argv.length !== 3 || !process.argv[2].endsWith("target.cjs"))
 	throw new Error("Fixed standalone staged target required");
 const target = resolve(process.argv[2]);
 try {
-	// Open only the approved staged file. Bun's filesystem module resolver also
-	// probes ancestor directories, which AppContainer is deliberately not granted.
+	// Open only the approved staged file; avoid filesystem module-resolution
+	// ancestor probes, whose permissions are deliberately not granted.
 	let source = readFileSync(target, "utf8");
 	if (source.charCodeAt(0) === 0xfeff) source = source.slice(1);
 	source = source.replace(/^#![^\r\n]*/, "");

@@ -261,7 +261,7 @@ export async function runIsolatedJavaScript(
 			verifiedBehavior: scenario.outcome === "supported",
 			verificationScope: scenario.scope,
 			limitations: [
-				"Windows x64 kernel AppContainer, not a VM. No capabilities or network exemptions are provisioned. OS/all-application-package-readable files can remain accessible; not complete host filesystem secrecy.",
+				"Windows x64 single-process kernel AppContainer, not a VM. Child process creation is denied. No capabilities or network exemptions are provisioned. OS/all-application-package-readable files can remain accessible; not complete host filesystem secrecy.",
 				"Standalone staged CommonJS file only; no external dependencies, Electron desktop or automatic target retries. Raw output is not retained.",
 			],
 		};
