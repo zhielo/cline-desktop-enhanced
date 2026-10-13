@@ -390,3 +390,18 @@ it("classifies native project candidates as Modify with explicit state/pointer a
  const plan=await tasks.prepare({workspaceRoot:root,kind:"static",request:{operation:"project_edit",target:"owned.so",engine:"ghidra",project_edit:{mode:"preview"},function_selector:{address:"0x10"}}});
  expect(plan.permission).toBe("Modify");expect(plan.requirements).toContain("reviewed-native-project-state");expect(plan.requirements).toContain("candidate-pointer-change-not-gui-replacement");expect(()=>tasks.approve(plan.id,[],plan.requestHash)).toThrow();
 });
+
+it("binds opt-in console capture and private evidence requirements to exact Debug approval", async () => {
+ const tasks = new AnalysisTaskOrchestrator(), root = workspace();
+ const target = join(root,"owned.js"); writeFileSync(target,"console.log('owned');");
+ const request = {operation:"js_inspector_observe",target,pid:1,processToken:"owned",endpoint:"ws://127.0.0.1:9229/00000000-0000-0000-0000-000000000000",durationMs:1000,captureConsole:true};
+ const plan=await tasks.prepare({workspaceRoot:root,kind:"debugger",request});
+ expect(plan.permission).toBe("Debug");
+ expect(plan.requirements).toContain("sensitive-console-protocol-capture"); expect(plan.requirements).toContain("private-evidence-write");
+ expect(()=>tasks.approve(plan.id,["authorized-target"],plan.requestHash)).toThrow("sensitive-console");
+ const approval=tasks.approve(plan.id,plan.requirements,plan.requestHash);
+ await expect(tasks.consume({planId:plan.id,executionToken:approval.executionToken,workspaceRoot:root,kind:"debugger",request:{...request,captureConsole:false}})).rejects.toThrow("exact request envelope");
+ await expect(tasks.consume({planId:plan.id,executionToken:approval.executionToken,workspaceRoot:root,kind:"debugger",request})).resolves.toMatchObject({status:"running"});
+ const off=await tasks.prepare({workspaceRoot:root,kind:"debugger",request:{...request,captureConsole:false}});
+ expect(off.requirements).not.toContain("sensitive-console-protocol-capture");
+});

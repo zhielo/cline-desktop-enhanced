@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { z } from "zod";
+import { InspectorConsoleCollector } from "./inspector-console";
 import { byteDigest } from "./contracts";
 import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 /** Lexical source-label comparison only; never opens/fetches an Inspector URL. */
@@ -29,6 +30,7 @@ export const InspectorRequestSchema = z
 		pid: z.number().int().positive(),
 		processToken: z.string().min(1).max(300),
 		endpoint: z.string().max(2048),
+		captureConsole: z.boolean().default(false),
 		durationMs: z.number().int().min(200).max(5000).default(1000),
 	})
 	.strict();
@@ -144,6 +146,7 @@ export async function observeJavaScriptInspector(
 	const targetHash = byteDigest(bytes);
 	if (approvedTargetHash && targetHash !== approvedTargetHash)
 		throw new Error("Inspector selected source hash changed after approval");
+	const consoleCollector = new InspectorConsoleCollector();
 	const scripts: Array<{
 			scriptId: string;
 			url: string;
@@ -201,6 +204,11 @@ export async function observeJavaScriptInspector(
 					else p.resolve(m.result ?? {});
 				}
 			} else if (
+				m.method === "Runtime.consoleAPICalled" &&
+				input.captureConsole
+			) {
+				consoleCollector.accept(m.params, Date.now());
+			} else if (
 				m.method === "Debugger.scriptParsed" &&
 				scripts.length < 128 &&
 				typeof m.params?.scriptId === "string" &&
@@ -235,7 +243,14 @@ export async function observeJavaScriptInspector(
 				});
 				await identity();
 				await send("Debugger.enable");
+				if (input.captureConsole) {
+					// Runtime.enable can replay buffered events. Do not accept events until its response.
+					await send("Runtime.enable");
+					consoleCollector.start(Date.now());
+				}
 				await new Promise((r) => setTimeout(r, input.durationMs));
+				consoleCollector.stop();
+				if (input.captureConsole) await send("Runtime.disable");
 				for (const s of scripts) {
 					let file: string;
 					try {
@@ -261,9 +276,15 @@ export async function observeJavaScriptInspector(
 				await send("Debugger.disable");
 				if (signal?.aborted) throw new Error("Inspector observation cancelled");
 				return {
-					protocol: "cline-js-inspector/1",
+					protocol: "cline-js-inspector/2",
+					captureConsole: input.captureConsole,
+					...(input.captureConsole
+						? { console: consoleCollector.reconcile(scripts, targetHash) }
+						: {}),
 					status:
-						eventCount >= 2000 || scripts.length >= 128
+						eventCount >= 2000 ||
+						scripts.length >= 128 ||
+						consoleCollector.saturated
 							? "partial"
 							: "completed",
 					input: {
@@ -282,6 +303,7 @@ export async function observeJavaScriptInspector(
 					verifiedBehavior: false,
 					limitations: [
 						"Attaching Debugger can affect a target; explicit Debug authorization is required. No eval, object inspection, resume, breakpoint or target launch command is sent.",
+						"The selected listener can emulate Inspector messages. Process ownership and byte matching do not authenticate VM execution. Optional console capture may contain sensitive primitive values and is limited to source-bound protocol reports; no remote object ID, preview or property request is retained.",
 						"ScriptParsed means loaded/parsed, not executed. Not observed is not absence. Source maps and sourceURL may mislabel scripts; source byte equality is not reachability or execution proof.",
 					],
 				};

@@ -196,6 +196,10 @@ function requirementsFor(
 	if (kind === "static" && request?.managed_worker === true) {requirements.add("managed-persistent-engine-process"); requirements.add("private-analysis-project-write");}
 	if (kind === "static" && operation === "project_edit") {requirements.add("authorized-target");requirements.add("isolated-analysis-project-write");requirements.add("reviewed-native-project-state");requirements.add("candidate-pointer-change-not-gui-replacement");}
 	if (kind === "debugger") requirements.add("authorized-target");
+    if (kind === "debugger" && operation === "js_inspector_observe" && request?.captureConsole === true) {
+        requirements.add("sensitive-console-protocol-capture");
+        requirements.add("private-evidence-write");
+    }
 	if (
 		kind === "gui" ||
 		kind === "dynamic" ||

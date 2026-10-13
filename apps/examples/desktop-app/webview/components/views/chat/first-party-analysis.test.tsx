@@ -182,3 +182,161 @@ it("reads bounded finding comparisons while Off without starting a worker", asyn
 		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
 	).toBe(false);
 });
+
+it("keeps sensitive console capture opt-in, invalidates reviewed plans and resets across sessions", async () => {
+	invoke.mockImplementation(
+		async (command: string, args?: Record<string, unknown>) =>
+			command === "first_party_analysis_inspector_prepare"
+				? {
+						id: "owned",
+						requestHash: "owned-hash",
+						requirements: [
+							"authorized-target",
+							"sensitive-console-protocol-capture",
+						],
+						request: args?.input,
+					}
+				: { mode: "runtime", receipts: [], readiness: {} },
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="s" environmentId="local" />,
+		),
+	);
+	const checkbox = el.querySelector<HTMLInputElement>(
+		'[aria-label="Capture source-bound console reports"]',
+	)!;
+	expect(checkbox.checked).toBe(false);
+	expect(el.textContent).toContain("may include secrets");
+	await act(async () => checkbox.click());
+	expect(checkbox.checked).toBe(true);
+	const review = () =>
+		[...el.querySelectorAll("button")].find(
+			(b) => b.textContent === "Review Inspector plan",
+		)!;
+	await act(async () => review().click());
+	expect(invoke).toHaveBeenCalledWith(
+		"first_party_analysis_inspector_prepare",
+		expect.objectContaining({
+			input: expect.objectContaining({ captureConsole: true }),
+		}),
+	);
+	expect(el.textContent).toContain("Authorize reviewed observation");
+	await act(async () => checkbox.click());
+	expect(el.textContent).not.toContain("Authorize reviewed observation");
+	await act(async () => checkbox.click());
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="other" environmentId="local" />,
+		),
+	);
+	expect(
+		el.querySelector<HTMLInputElement>(
+			'[aria-label="Capture source-bound console reports"]',
+		)!.checked,
+	).toBe(false);
+	expect(
+		invoke.mock.calls.some(
+			(c) => c[0] === "first_party_analysis_inspector_run",
+		),
+	).toBe(false);
+});
+it("does not restore a stale opt-in plan after its checkbox changes", async () => {
+	let resolvePlan: (value: unknown) => void = () => {};
+	invoke.mockImplementation(async (command: string) => {
+		if (command === "first_party_analysis_inspector_prepare")
+			return await new Promise((r) => {
+				resolvePlan = r;
+			});
+		return { mode: "runtime", receipts: [], readiness: {} };
+	});
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="s" environmentId="local" />,
+		),
+	);
+	const checkbox = el.querySelector<HTMLInputElement>(
+		'[aria-label="Capture source-bound console reports"]',
+	)!;
+	await act(async () => checkbox.click());
+	await act(async () => {
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "Review Inspector plan")!
+			.click();
+	});
+	await act(async () => checkbox.click());
+	await act(async () =>
+		resolvePlan({
+			id: "stale",
+			requestHash: "stale",
+			requirements: [],
+			request: { captureConsole: true },
+		}),
+	);
+	expect(el.textContent).not.toContain("Authorize reviewed observation");
+});
+
+it.each([
+	"session-change",
+	"unmount",
+])("never starts an old observation after asynchronous approval and %s", async (action) => {
+	let resolveApproval: (value: unknown) => void = () => {};
+	invoke.mockImplementation(
+		async (command: string, args?: Record<string, unknown>) => {
+			if (command === "first_party_analysis_inspector_prepare")
+				return {
+					id: "old",
+					requestHash: "owned",
+					requirements: ["authorized-target"],
+					request: args?.input,
+				};
+			if (command === "approve_analysis_task")
+				return await new Promise((r) => {
+					resolveApproval = r;
+				});
+			return { mode: "runtime", receipts: [], readiness: {} };
+		},
+	);
+	vi.spyOn(window, "confirm").mockReturnValue(true);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="old" environmentId="local" />,
+		),
+	);
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "Review Inspector plan")!
+			.click(),
+	);
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "Authorize reviewed observation")!
+			.click(),
+	);
+	expect(
+		el.querySelector<HTMLInputElement>(
+			'[aria-label="Capture source-bound console reports"]',
+		)!.disabled,
+	).toBe(true);
+	await act(async () =>
+		root.render(
+			action === "unmount" ? (
+				<p>Closed</p>
+			) : (
+				<FirstPartyAnalysisWorkspace sessionId="new" environmentId="local" />
+			),
+		),
+	);
+	await act(async () => resolveApproval({ executionToken: "owned" }));
+	expect(
+		invoke.mock.calls.some(
+			(c) => c[0] === "first_party_analysis_inspector_run",
+		),
+	).toBe(false);
+	if (action !== "unmount")
+		expect(
+			el.querySelector<HTMLInputElement>(
+				'[aria-label="Capture source-bound console reports"]',
+			)!.disabled,
+		).toBe(false);
+});

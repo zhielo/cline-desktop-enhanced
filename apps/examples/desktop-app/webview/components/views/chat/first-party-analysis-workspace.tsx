@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
 import type { AnalysisMode } from "./analysis-mode-control";
@@ -45,6 +45,8 @@ export function FirstPartyAnalysisWorkspace({
 	const [inspectorTarget, setInspectorTarget] = useState(""),
 		[inspectorPid, setInspectorPid] = useState(""),
 		[inspectorEndpoint, setInspectorEndpoint] = useState("");
+	const [captureConsole, setCaptureConsole] = useState(false);
+	const inspectorRevision = useRef(0);
 	const [inspectorPlan, setInspectorPlan] = useState<{
 		id: string;
 		requestHash: string;
@@ -70,6 +72,9 @@ export function FirstPartyAnalysisWorkspace({
 	useEffect(() => {
 		let disposed = false;
 		setStatus(null);
+		inspectorRevision.current++;
+		setCaptureConsole(false);
+		setRunning(false);
 		setInspectorPlan(null);
 		setInspectorResult(null);
 		setSelected("");
@@ -93,6 +98,7 @@ export function FirstPartyAnalysisWorkspace({
 		window.addEventListener("cline-analysis-changed", update);
 		return () => {
 			disposed = true;
+			inspectorRevision.current++;
 			clearInterval(timer);
 			window.removeEventListener("cline-analysis-changed", update);
 		};
@@ -181,6 +187,7 @@ export function FirstPartyAnalysisWorkspace({
 		}
 	};
 	const prepareInspector = async () => {
+		const revision = ++inspectorRevision.current;
 		setError("");
 		setInspectorPlan(null);
 		try {
@@ -198,22 +205,25 @@ export function FirstPartyAnalysisWorkspace({
 					pid: Number(inspectorPid),
 					endpoint: inspectorEndpoint,
 					durationMs: 1000,
+					captureConsole,
 				},
 			});
-			setInspectorPlan(p);
+			if (revision === inspectorRevision.current) setInspectorPlan(p);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Inspector plan unavailable");
+			if (revision === inspectorRevision.current)
+				setError(e instanceof Error ? e.message : "Inspector plan unavailable");
 		}
 	};
 	const observeInspector = async () => {
 		if (
 			!inspectorPlan ||
 			!window.confirm(
-				`Authorize Debug attachment to the reviewed exact target? Attachment can affect the process. Required approvals: ${inspectorPlan.requirements.join(", ")}. No eval, resume or launch will be sent.`,
+				`Authorize Debug attachment to the reviewed exact target? Attachment can affect the process. Required approvals: ${inspectorPlan.requirements.join(", ")}. No eval, resume or launch will be sent. Console capture: ${inspectorPlan.request.captureConsole === true ? "ON — primitive values may contain secrets and will be stored in private evidence" : "OFF"}.`,
 			)
 		)
 			return;
 		const plan = inspectorPlan;
+		const revision = inspectorRevision.current;
 		setInspectorPlan(null);
 		setRunning(true);
 		try {
@@ -227,6 +237,7 @@ export function FirstPartyAnalysisWorkspace({
 					requirements: plan.requirements,
 				},
 			);
+			if (revision !== inspectorRevision.current) return;
 			const result = await desktopClient.invoke(
 				"first_party_analysis_inspector_run",
 				{
@@ -238,15 +249,16 @@ export function FirstPartyAnalysisWorkspace({
 				},
 				{ timeoutMs: 20000 },
 			);
-			setInspectorResult(result);
+			if (revision === inspectorRevision.current) setInspectorResult(result);
 		} catch (e) {
-			setError(
-				e instanceof Error
-					? e.message
-					: "Inspector observation failed; do not replay automatically",
-			);
+			if (revision === inspectorRevision.current)
+				setError(
+					e instanceof Error
+						? e.message
+						: "Inspector observation failed; do not replay automatically",
+				);
 		} finally {
-			setRunning(false);
+			if (revision === inspectorRevision.current) setRunning(false);
 		}
 	};
 	const cancel = async (id: string) => {
@@ -311,35 +323,61 @@ export function FirstPartyAnalysisWorkspace({
 					execution. Active eval/resume/launch is unavailable.
 				</p>
 				<input
+					disabled={running}
 					aria-label="Inspector source target"
 					className="rounded border bg-background p-2"
 					value={inspectorTarget}
 					onChange={(e) => {
 						setInspectorTarget(e.target.value);
+						inspectorRevision.current++;
 						setInspectorPlan(null);
 					}}
 					placeholder="Workspace-relative exact source file"
 				/>
 				<input
+					disabled={running}
 					aria-label="Inspector owning PID"
 					className="rounded border bg-background p-2"
 					value={inspectorPid}
 					onChange={(e) => {
 						setInspectorPid(e.target.value);
+						inspectorRevision.current++;
 						setInspectorPlan(null);
 					}}
 					placeholder="Exact running Node PID"
 				/>
 				<input
+					disabled={running}
 					aria-label="Inspector loopback endpoint"
 					className="rounded border bg-background p-2"
 					value={inspectorEndpoint}
 					onChange={(e) => {
 						setInspectorEndpoint(e.target.value);
+						inspectorRevision.current++;
 						setInspectorPlan(null);
 					}}
 					placeholder="ws://127.0.0.1:port/inspector-uuid"
 				/>
+				<label className="flex items-center gap-2">
+					<input
+						type="checkbox"
+						checked={captureConsole}
+						disabled={running}
+						aria-label="Capture source-bound console reports"
+						onChange={(e) => {
+							setCaptureConsole(e.target.checked);
+							inspectorRevision.current++;
+							setInspectorPlan(null);
+						}}
+					/>
+					Capture source-bound console reports (off by default)
+				</label>
+				<p>
+					Optional console capture stores bounded primitive values in private
+					evidence; these may include secrets. Objects remain opaque.
+					Target-reported events and coordinates are not authenticated execution
+					or scenario proof.
+				</p>
 				<button
 					type="button"
 					disabled={running || status?.mode !== "runtime"}
