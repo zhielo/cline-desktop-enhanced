@@ -4,6 +4,7 @@
  */
 
 import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
+import { ANALYSIS_PROFILE } from "../../../sdk/packages/core/src/analysis/contracts.ts";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
@@ -13,6 +14,12 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
+
+/** Newly produced receipts must match the shipped parser, not a stale test literal.
+ * Persisted historical receipts remain governed by their own immutable profile. */
+export function verifyInstalledAnalysisProfile(profile: string) {
+  if (profile !== ANALYSIS_PROFILE) throw new Error("Installed analysis profile is stale");
+}
 
 export function startAcceptanceProcess(
   executable: string,
@@ -611,7 +618,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
     if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
     const verification=await rpc<{profile:string}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"verification"}});
-    if(verification.profile!=="cline-js-static/6")throw new Error("Installed analysis profile is stale");
+    verifyInstalledAnalysisProfile(verification.profile);
     const unified=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,receiptId:parsed.id});
     if(!Array.isArray(unified.items))throw new Error("Installed unified evidence route unavailable");
     const dossiers=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,view:"dossiers"});
