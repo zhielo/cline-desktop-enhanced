@@ -10,7 +10,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, isAbsolute } from "node:path";
 import { z } from "zod";
 import {
 	ScenarioExpectationSchema,
@@ -88,12 +88,17 @@ export async function verifyJavaScriptIsolationResources(
 ) {
 	if (process.platform !== "win32" || process.arch !== "x64")
 		throw new Error("Windows x64 isolation required");
-	const root = await realpath(resources.root);
+	// Windows realpath can expand RUNNER~1 / 8.3 names and normalize separators.
+	// Text inequality is not proof of a link. Use actual directory/file types,
+	// reject leaf links and pin every executable's bytes to the build manifest.
+	const stat = await lstat(resources.root);
 	if (
-		(await lstat(resources.root)).isSymbolicLink() ||
-		root.toLowerCase() !== resolve(resources.root).toLowerCase()
+		!isAbsolute(resources.root) ||
+		!stat.isDirectory() ||
+		stat.isSymbolicLink()
 	)
 		throw new Error("Non-linked absolute packaged isolation root required");
+	const root = await realpath(resources.root);
 	const bytes = await boundedFile(join(root, "manifest.json"), 4096);
 	if (sha(bytes) !== resources.manifestDigest)
 		throw new Error(
@@ -102,10 +107,7 @@ export async function verifyJavaScriptIsolationResources(
 	const manifest = Manifest.parse(JSON.parse(bytes.toString("utf8")));
 	for (const [name, hash] of Object.entries(manifest.files)) {
 		const file = join(root, name);
-		if (
-			(await realpath(file)).toLowerCase() !== file.toLowerCase() ||
-			sha(await boundedFile(file, 128 * 1024 * 1024)) !== hash
-		)
+		if (sha(await boundedFile(file, 128 * 1024 * 1024)) !== hash)
 			throw new Error(
 				"Isolation executable changed; reinstall trusted desktop",
 			);
