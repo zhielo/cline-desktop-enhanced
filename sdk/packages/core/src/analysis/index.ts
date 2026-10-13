@@ -1,3 +1,14 @@
+export {
+	InspectorRequestSchema,
+	observeJavaScriptInspector,
+} from "./inspector";
+export {
+	UnifiedEvidenceStore,
+	unifiedEvidenceView,
+	nativeDossiers,
+	dossierDisagreements,
+} from "./unified-evidence";
+export { recoverFirstPartyReservation } from "./recovery";
 export * from "./contracts";
 export { FirstPartyAnalysisStore } from "./store";
 export {
@@ -44,6 +55,7 @@ export function queryFirstPartyEvidence(
 			createdAt: receipt.createdAt,
 			completedAt: receipt.completedAt,
 			error: receipt.error,
+			recovery: store.recovery(receipt.id),
 			limitations: result?.limitations,
 			comparison: result?.comparison
 				? {

@@ -1,5 +1,7 @@
 import ts from "typescript";
 import { analyzeLocalSemantics } from "./semantic";
+import { inspectManagedPE } from "./dotnet";
+import { closedModuleContext } from "./module-context";
 import { sourceMapLocations } from "./source-maps";
 import path from "node:path";
 import {
@@ -15,6 +17,7 @@ export type SourceArtifact = {
 	sha256: string;
 	bytes: number;
 	source: string;
+	binary?: Uint8Array;
 };
 /** Parses syntax only. Never imports, evaluates, transpiles or executes target source. */
 export function analyzeSources(
@@ -23,8 +26,30 @@ export function analyzeSources(
 ): AnalysisResult {
 	const facts: AnalysisFact[] = [],
 		limitations = [...partial];
-	const artifacts: AnalysisResult["artifacts"] = [];
+	const counts = new Map<string, number>();
+	for (const s of sources) counts.set(s.path, (counts.get(s.path) ?? 0) + 1);
+	const ambiguous = [...counts].filter(([, n]) => n > 1).map(([p]) => p);
+	if (ambiguous.length) {
+		limitations.push(
+			"Ambiguous duplicate inventory labels were excluded; no provider bytes were attributed to a conflicting source path.",
+		);
+		sources = sources.filter((s) => counts.get(s.path) === 1);
+	}
+	const artifacts: AnalysisResult["artifacts"] = sources
+		.slice(0, LIMITS.files)
+		.map((s) => ({
+			path: s.path,
+			sha256: s.sha256,
+			bytes: s.bytes,
+			role: "source-uninspected",
+		}));
+	const setArtifact = (a: AnalysisResult["artifacts"][number]) => {
+		const i = artifacts.findIndex((x) => x.path === a.path);
+		if (i >= 0) artifacts[i] = a;
+		else if (artifacts.length < LIMITS.files) artifacts.push(a);
+	};
 	const semanticEdges: AnalysisResult["edges"] = [];
+	const moduleContext = closedModuleContext(sources);
 	let nodes = 0,
 		stopped = false;
 	const add = (
@@ -67,8 +92,49 @@ export function analyzeSources(
 			: undefined;
 	for (const source of sources) {
 		if (stopped) break;
+		if (source.binary) {
+			setArtifact({
+				path: source.path,
+				sha256: source.sha256,
+				bytes: source.bytes,
+				role: "managed-pe-candidate",
+			});
+			const file = ts.createSourceFile(
+				source.path,
+				"{}",
+				ts.ScriptTarget.Latest,
+				true,
+			);
+			try {
+				const managed = inspectManagedPE(
+					source.binary,
+					Math.min(256, LIMITS.facts - facts.length),
+				);
+				for (const record of managed.records)
+					add(
+						source,
+						file,
+						file,
+						record.kind,
+						JSON.stringify({
+							offset: record.offset,
+							record: JSON.parse(record.value),
+						}),
+						"observed",
+						[
+							"Exact binary byte offset is in value; line/column are placeholders, not source coordinates. Static metadata/IL bytes, never execution.",
+						],
+					);
+				limitations.push(...managed.limitations);
+			} catch (e) {
+				limitations.push(
+					`Unsupported managed PE ${source.path}: ${e instanceof Error ? e.message : "invalid"}`,
+				);
+			}
+			continue;
+		}
 		if (source.path.endsWith(".map")) {
-			artifacts.push({
+			setArtifact({
 				path: source.path,
 				sha256: source.sha256,
 				bytes: source.bytes,
@@ -113,7 +179,7 @@ export function analyzeSources(
 			continue;
 		}
 		if (source.path.endsWith(".json")) {
-			artifacts.push({
+			setArtifact({
 				path: source.path,
 				sha256: source.sha256,
 				bytes: source.bytes,
@@ -137,17 +203,19 @@ export function analyzeSources(
 			}
 			continue;
 		}
-		const file = ts.createSourceFile(
-			source.path,
-			source.source,
-			ts.ScriptTarget.Latest,
-			true,
-			/\.[jt]sx$/.test(source.path)
-				? ts.ScriptKind.TSX
-				: /\.[cm]?ts$/.test(source.path)
-					? ts.ScriptKind.TS
-					: ts.ScriptKind.JS,
-		);
+		const file =
+			moduleContext.files.find((f) => f.fileName === source.path) ??
+			ts.createSourceFile(
+				source.path,
+				source.source,
+				ts.ScriptTarget.Latest,
+				true,
+				/\.[jt]sx$/.test(source.path)
+					? ts.ScriptKind.TSX
+					: /\.[cm]?ts$/.test(source.path)
+						? ts.ScriptKind.TS
+						: ts.ScriptKind.JS,
+			);
 		const errors =
 			(file as ts.SourceFile & { parseDiagnostics?: ts.Diagnostic[] })
 				.parseDiagnostics ?? [];
@@ -208,7 +276,7 @@ export function analyzeSources(
 					}
 				}
 			}
-		artifacts.push({
+		setArtifact({
 			path: source.path,
 			sha256: source.sha256,
 			bytes: source.bytes,
@@ -404,6 +472,7 @@ export function analyzeSources(
 				(node, kind, value, notes) =>
 					add(source, file, node, kind, value, "derived", notes),
 				LIMITS.facts - semanticEdges.length,
+				moduleContext,
 			);
 			semanticEdges.push(...semantic.edges);
 			nodes += semantic.visits;

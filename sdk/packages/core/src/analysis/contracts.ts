@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-export const ANALYSIS_PROFILE = "cline-js-static/2";
+export const ANALYSIS_PROFILE = "cline-js-static/3";
 export const AnalysisModeSchema = z.enum(["off", "static", "runtime"]);
 export type AnalysisMode = z.infer<typeof AnalysisModeSchema>;
 export const AnalysisInputSchema = z
@@ -70,6 +70,10 @@ export const FactSchema = z
 			"resolved-call",
 			"resolved-endpoint",
 			"source-map-location",
+			"module-value",
+			"managed-type",
+			"managed-method",
+			"managed-il",
 		]),
 		value: z.string().max(1000),
 		confidence: z.enum(["observed", "derived", "inferred"]),
@@ -152,6 +156,7 @@ export type AnalysisReceipt = {
 		| "timed-out"
 		| "termination-unconfirmed";
 	pid?: number;
+	ownership?: import("./recovery").AnalysisOwnership;
 	exitCode?: number | null;
 	signal?: string | null;
 	result?: AnalysisResult;

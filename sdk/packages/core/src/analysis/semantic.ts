@@ -1,8 +1,10 @@
 import ts from "typescript";
 import { LIMITS, type AnalysisFact, type AnalysisResult } from "./contracts";
 import type { SourceArtifact } from "./parser";
+import type { ClosedModuleContext } from "./module-context";
 
-type Value = string | number | boolean | null;
+type Scalar = string | number | boolean | null;
+type Value = Scalar | { readonly [key: string]: Scalar };
 type Emit = (
 	node: ts.Node,
 	kind: AnalysisFact["kind"],
@@ -15,6 +17,7 @@ export function analyzeLocalSemantics(
 	source: SourceArtifact,
 	emit: Emit,
 	edgeBudget: number,
+	context?: ClosedModuleContext,
 ) {
 	const options: ts.CompilerOptions = {
 		allowJs: true,
@@ -34,9 +37,9 @@ export function analyzeLocalSemantics(
 		useCaseSensitiveFileNames: () => true,
 		getNewLine: () => "\n",
 	};
-	const checker = ts
-		.createProgram([file.fileName], options, host)
-		.getTypeChecker();
+	const checker =
+		context?.checker ??
+		ts.createProgram([file.fileName], options, host).getTypeChecker();
 	const invalid = new Set<ts.Symbol>(),
 		declarations = new Map<ts.Symbol, ts.VariableDeclaration>();
 	const functions = new Map<
@@ -53,7 +56,17 @@ export function analyzeLocalSemantics(
 		}
 		return true;
 	};
-	const symbol = (n: ts.Node) => checker.getSymbolAtLocation(n);
+	const symbol = (n: ts.Node) => {
+		const s = checker.getSymbolAtLocation(n);
+		if (s && s.flags & ts.SymbolFlags.Alias) {
+			try {
+				return checker.getAliasedSymbol(s);
+			} catch {
+				return undefined;
+			}
+		}
+		return s;
+	};
 	const walk = (n: ts.Node, fn: (n: ts.Node) => void) => {
 		if (!count()) return;
 		fn(n);
@@ -65,53 +78,90 @@ export function analyzeLocalSemantics(
 			return binding(n.expression);
 		return undefined;
 	};
-	walk(file, (n) => {
-		if (
-			ts.isVariableDeclaration(n) &&
-			ts.isIdentifier(n.name) &&
-			ts.isVariableDeclarationList(n.parent) &&
-			n.parent.flags & ts.NodeFlags.Const
-		) {
-			const s = symbol(n.name);
-			if (s) {
-				declarations.set(s, n);
-				if (
-					n.initializer &&
-					(ts.isArrowFunction(n.initializer) ||
-						ts.isFunctionExpression(n.initializer))
-				) {
-					functions.set(s, n.initializer);
+	for (const inventoryFile of context?.files ?? [file])
+		walk(inventoryFile, (n) => {
+			if (
+				ts.isVariableDeclaration(n) &&
+				ts.isIdentifier(n.name) &&
+				ts.isVariableDeclarationList(n.parent) &&
+				n.parent.flags & ts.NodeFlags.Const
+			) {
+				const s = symbol(n.name);
+				if (s) {
+					declarations.set(s, n);
+					if (
+						n.initializer &&
+						(ts.isArrowFunction(n.initializer) ||
+							ts.isFunctionExpression(n.initializer))
+					) {
+						functions.set(s, n.initializer);
+						functionNames.set(s, n.name.text);
+					}
+				}
+			}
+			if (ts.isFunctionDeclaration(n) && n.name) {
+				const s = symbol(n.name);
+				if (s) {
+					functions.set(s, n);
 					functionNames.set(s, n.name.text);
 				}
 			}
-		}
-		if (ts.isFunctionDeclaration(n) && n.name) {
-			const s = symbol(n.name);
-			if (s) {
-				functions.set(s, n);
-				functionNames.set(s, n.name.text);
+			if (
+				ts.isBinaryExpression(n) &&
+				n.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+				n.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+			) {
+				const s = binding(n.left);
+				if (s) invalid.add(s);
 			}
-		}
-		if (
-			ts.isBinaryExpression(n) &&
-			n.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-			n.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-		) {
-			const s = binding(n.left);
-			if (s) invalid.add(s);
-		}
-		if (
-			(ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n)) &&
-			[ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(
-				n.operator,
-			)
-		) {
-			const s = binding(n.operand);
-			if (s) invalid.add(s);
-		}
-	});
+			if (
+				(ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n)) &&
+				[ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(
+					n.operator,
+				)
+			) {
+				const s = binding(n.operand);
+				if (s) invalid.add(s);
+			}
+			if (ts.isCallExpression(n))
+				for (const arg of n.arguments)
+					if (ts.isIdentifier(arg)) {
+						const s = symbol(arg),
+							d = s && declarations.get(s);
+						if (
+							s &&
+							d?.initializer &&
+							ts.isObjectLiteralExpression(d.initializer)
+						)
+							invalid.add(s);
+					}
+		});
+	// Imported object alias writes resolve to the original symbol above. Local object
+	// aliasing or object escape is conservatively unknown rather than pretending const is frozen.
+	for (const inventoryFile of context?.files ?? [file])
+		walk(inventoryFile, (n) => {
+			if (ts.isIdentifier(n)) {
+				const s = symbol(n),
+					d = s && declarations.get(s);
+				if (
+					s &&
+					d?.initializer &&
+					ts.isObjectLiteralExpression(d.initializer) &&
+					n !== d.name &&
+					!(
+						ts.isPropertyAccessExpression(n.parent) && n.parent.expression === n
+					) &&
+					!(
+						ts.isElementAccessExpression(n.parent) && n.parent.expression === n
+					) &&
+					!ts.isImportSpecifier(n.parent) &&
+					!ts.isExportSpecifier(n.parent)
+				)
+					invalid.add(s);
+			}
+		});
 	const notes = [
-		"Bounded local static reduction only; not observed execution, complete data flow or behavioral proof.",
+		"Bounded closed-inventory static reduction; literal relative ES module bindings and selected const object reads only. Not execution or complete data flow.",
 	];
 	const facts = new Map<ts.Symbol, AnalysisFact>(),
 		functionFacts = new Map<ts.Symbol, AnalysisFact>();
@@ -141,6 +191,52 @@ export function analyzeLocalSemantics(
 			ts.isNonNullExpression(n)
 		)
 			return next(n.expression);
+		if (ts.isObjectLiteralExpression(n)) {
+			if (n.properties.length > 32) return undefined;
+			const object: Record<string, Scalar> = Object.create(null);
+			for (const p of n.properties) {
+				if (
+					!ts.isPropertyAssignment(p) ||
+					![
+						ts.SyntaxKind.Identifier,
+						ts.SyntaxKind.StringLiteral,
+						ts.SyntaxKind.NumericLiteral,
+					].includes(p.name.kind)
+				)
+					return undefined;
+				const key = ts.isIdentifier(p.name)
+					? p.name.text
+					: (p.name as ts.StringLiteral).text;
+				if (
+					["__proto__", "constructor", "prototype"].includes(key) ||
+					Object.hasOwn(object, key)
+				)
+					return undefined;
+				const value = next(p.initializer);
+				if (
+					value === undefined ||
+					(typeof value === "object" && value !== null)
+				)
+					return undefined;
+				object[key] = value;
+			}
+			return object;
+		}
+		if (ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) {
+			const object = next(n.expression),
+				key = ts.isPropertyAccessExpression(n)
+					? n.name.text
+					: next(n.argumentExpression);
+			if (
+				!object ||
+				typeof object !== "object" ||
+				(typeof key !== "string" && typeof key !== "number")
+			)
+				return undefined;
+			return Object.hasOwn(object, String(key))
+				? object[String(key)]
+				: undefined;
+		}
 		if (ts.isIdentifier(n)) {
 			const s = symbol(n);
 			if (!s || invalid.has(s)) return undefined;
@@ -159,6 +255,11 @@ export function analyzeLocalSemantics(
 			const a = next(n.left),
 				b = next(n.right);
 			if (a === undefined || b === undefined) return undefined;
+			if (
+				(typeof a === "object" && a !== null) ||
+				(typeof b === "object" && b !== null)
+			)
+				return undefined;
 			if (typeof a === "string" || typeof b === "string") {
 				const v = String(a) + String(b);
 				return v.length <= 1000 ? v : undefined;
@@ -175,7 +276,8 @@ export function analyzeLocalSemantics(
 			let v = n.head.text;
 			for (const span of n.templateSpans) {
 				const part = next(span.expression);
-				if (part === undefined) return undefined;
+				if (part === undefined || (typeof part === "object" && part !== null))
+					return undefined;
 				v += String(part) + span.literal.text;
 				if (v.length > 1000) return undefined;
 			}
@@ -221,6 +323,7 @@ export function analyzeLocalSemantics(
 		return undefined;
 	};
 	for (const [s, d] of declarations) {
+		if (d.getSourceFile().fileName !== file.fileName) continue;
 		refs.clear();
 		const v = reduced(d.initializer);
 		if (v === undefined || invalid.has(s)) continue;
@@ -233,6 +336,7 @@ export function analyzeLocalSemantics(
 		if (f) facts.set(s, f);
 	}
 	for (const [s, f] of functions) {
+		if (f.getSourceFile().fileName !== file.fileName) continue;
 		const fact = emit(f, "semantic-function", functionNames.get(s)!, [
 			...notes,
 			"Lexically bound local function; invocation and reachability unverified.",
@@ -274,7 +378,25 @@ export function analyzeLocalSemantics(
 					...notes,
 					"Unshadowed global-fetch candidate; no request was sent.",
 				]);
-				for (const r of refs) edge(facts.get(r), request, "data-flow");
+				for (const r of refs) {
+					let support = facts.get(r);
+					const declaration = declarations.get(r);
+					if (
+						!support &&
+						declaration &&
+						declaration.getSourceFile().fileName !== file.fileName
+					)
+						support = emit(
+							n,
+							"module-value",
+							`${declaration.getSourceFile().fileName}::${declaration.name.getText()} -> ${JSON.stringify(url)}`,
+							[
+								...notes,
+								"Imported value candidate; location identifies consumer. Provider bytes are retained in artifacts.",
+							],
+						);
+					edge(support, request, "data-flow");
+				}
 			}
 		}
 	});

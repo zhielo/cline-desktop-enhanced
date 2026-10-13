@@ -1,5 +1,5 @@
 import {analysisParserNotices} from "./analysis-parser-notices";
-import {handleFirstPartyCommand, firstPartyReadiness, testFirstPartyFixture} from "./first-party-analysis";
+import {handleFirstPartyCommand, bindFirstPartyTaskEvidence, recordFirstPartyTaskEvidence, firstPartyReadiness, testFirstPartyFixture} from "./first-party-analysis";
 import { assertSetupIdle, getSetupJob, startSetupJob } from "./setup-jobs";
 import {
 	getSetupCenterStatus,
@@ -2393,6 +2393,11 @@ function recordInvestigation(
 	result: unknown,
 	signed = false,
 ) {
+
+	if (typeof args?.sessionId === "string" && plan.status === "completed") {
+		try { recordFirstPartyTaskEvidence(args.sessionId, root, plan, result); }
+		catch { console.warn("Unified evidence was not saved; do not replay the completed task to repair metadata."); }
+	}
 	if (typeof args?.investigationId !== "string") return;
 	try {
 		investigations().record(root, args.investigationId, plan, result, signed);
@@ -5699,8 +5704,9 @@ export async function handleCommand(
 						? Math.min(300000, Number(suppliedRequest.timeout_ms) + 180000)
 						: Number(suppliedRequest.timeout_ms),
 			});
-			if (typeof args?.investigationId === "string")
-				investigations().bind(baseDir, args.investigationId, prepared);
+			if(typeof args?.sessionId === "string") bindFirstPartyTaskEvidence(args.sessionId,baseDir,prepared);
+   if (typeof args?.investigationId === "string")
+    investigations().bind(baseDir, args.investigationId, prepared);
 			return prepared;
 		}
 		if (command === "approve_analysis_task") {
@@ -5793,6 +5799,7 @@ export async function handleCommand(
 					result,
 					"live-debugger",
 				);
+				recordInvestigation(args, baseDir, plan, result);
 				return { kind: "debugger", result, plan };
 			} catch (error) {
 				desktopAnalysisTaskOrchestrator.fail(planId, error);

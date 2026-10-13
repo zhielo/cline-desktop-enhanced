@@ -9,6 +9,7 @@ type Summary = {
 	target: string;
 	createdAt: string;
 	error?: string;
+	reservationReleasedAt?: string;
 };
 type Status = {
 	mode: AnalysisMode;
@@ -21,7 +22,10 @@ type View =
 	| "graph"
 	| "comparison"
 	| "timeline"
-	| "verification";
+	| "verification"
+	| "cross-domain"
+	| "dossiers"
+	| "disagreements";
 type PageResult = {
 	items?: unknown[];
 	nextOffset?: number | null;
@@ -38,6 +42,16 @@ export function FirstPartyAnalysisWorkspace({
 	const [status, setStatus] = useState<Status | null>(null),
 		[target, setTarget] = useState("."),
 		[compareTarget, setCompareTarget] = useState("");
+	const [inspectorTarget, setInspectorTarget] = useState(""),
+		[inspectorPid, setInspectorPid] = useState(""),
+		[inspectorEndpoint, setInspectorEndpoint] = useState("");
+	const [inspectorPlan, setInspectorPlan] = useState<{
+		id: string;
+		requestHash: string;
+		requirements: string[];
+		request: Record<string, unknown>;
+	} | null>(null);
+	const [inspectorResult, setInspectorResult] = useState<unknown>(null);
 	const [error, setError] = useState(""),
 		[running, setRunning] = useState(false),
 		[selected, setSelected] = useState("");
@@ -56,6 +70,8 @@ export function FirstPartyAnalysisWorkspace({
 	useEffect(() => {
 		let disposed = false;
 		setStatus(null);
+		setInspectorPlan(null);
+		setInspectorResult(null);
 		setSelected("");
 		setPage(null);
 		setError("");
@@ -84,12 +100,22 @@ export function FirstPartyAnalysisWorkspace({
 	useEffect(() => {
 		setPage(null);
 		let disposed = false;
-		if (!selected || !sessionId || view === "timeline") return;
+		if (
+			(!selected &&
+				!["cross-domain", "dossiers", "disagreements"].includes(view)) ||
+			!sessionId ||
+			view === "timeline"
+		)
+			return;
 		void desktopClient
 			.invoke<PageResult>("first_party_analysis_evidence", {
 				sessionId,
 				environmentId,
-				query: { receiptId: selected, view, filter, offset, limit: 20 },
+				...(["cross-domain", "dossiers", "disagreements"].includes(view)
+					? { receiptId: selected, view, offset }
+					: {
+							query: { receiptId: selected, view, filter, offset, limit: 20 },
+						}),
 			})
 			.then((r) => {
 				if (!disposed) setPage(r);
@@ -135,6 +161,94 @@ export function FirstPartyAnalysisWorkspace({
 			setRunning(false);
 		}
 	};
+	const recover = async (id: string) => {
+		if (
+			!window.confirm(
+				"Release this reservation only if both original process instances are proved gone? This does not kill processes, replay work or change the evidence receipt.",
+			)
+		)
+			return;
+		try {
+			await desktopClient.invoke("first_party_analysis_recover", {
+				sessionId,
+				environmentId,
+				receiptId: id,
+				confirmed: true,
+			});
+			await refresh();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Recovery blocked");
+		}
+	};
+	const prepareInspector = async () => {
+		setError("");
+		setInspectorPlan(null);
+		try {
+			const p = await desktopClient.invoke<{
+				id: string;
+				requestHash: string;
+				requirements: string[];
+				request: Record<string, unknown>;
+			}>("first_party_analysis_inspector_prepare", {
+				sessionId,
+				environmentId,
+				input: {
+					operation: "js_inspector_observe",
+					target: inspectorTarget,
+					pid: Number(inspectorPid),
+					endpoint: inspectorEndpoint,
+					durationMs: 1000,
+				},
+			});
+			setInspectorPlan(p);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Inspector plan unavailable");
+		}
+	};
+	const observeInspector = async () => {
+		if (
+			!inspectorPlan ||
+			!window.confirm(
+				`Authorize Debug attachment to the reviewed exact target? Attachment can affect the process. Required approvals: ${inspectorPlan.requirements.join(", ")}. No eval, resume or launch will be sent.`,
+			)
+		)
+			return;
+		const plan = inspectorPlan;
+		setInspectorPlan(null);
+		setRunning(true);
+		try {
+			const approved = await desktopClient.invoke<{ executionToken: string }>(
+				"approve_analysis_task",
+				{
+					sessionId,
+					environmentId,
+					planId: plan.id,
+					requestHash: plan.requestHash,
+					requirements: plan.requirements,
+				},
+			);
+			const result = await desktopClient.invoke(
+				"first_party_analysis_inspector_run",
+				{
+					sessionId,
+					environmentId,
+					planId: plan.id,
+					executionToken: approved.executionToken,
+					input: plan.request,
+				},
+				{ timeoutMs: 20000 },
+			);
+			setInspectorResult(result);
+		} catch (e) {
+			setError(
+				e instanceof Error
+					? e.message
+					: "Inspector observation failed; do not replay automatically",
+			);
+		} finally {
+			setRunning(false);
+		}
+	};
 	const cancel = async (id: string) => {
 		try {
 			await desktopClient.invoke("first_party_analysis_cancel", {
@@ -155,9 +269,10 @@ export function FirstPartyAnalysisWorkspace({
 			<h3 className="font-semibold">First-party Analysis Workspace</h3>
 			<p className="text-xs text-muted-foreground">
 				Mode: {status?.mode ?? "unavailable"}. Static JS/TS/Electron syntax,
-				bounded local value/call relationships, declared source-map locations
-				and ASAR inspection. Never executes the target. Mode does not override
-				permissions or disable existing tools.
+				bounded cross-module/value/call relationships, managed PE metadata and
+				IL bytes, declared source-map locations and ASAR inspection. Never
+				executes the target. Mode does not override permissions or disable
+				existing tools.
 			</p>
 			<div className="flex flex-wrap gap-2">
 				<input
@@ -185,6 +300,74 @@ export function FirstPartyAnalysisWorkspace({
 					Inspect static sources
 				</button>
 			</div>
+			<details className="space-y-2 text-xs">
+				<summary>
+					Separately approved passive Node Inspector observation
+				</summary>
+				<p>
+					Requires Runtime mode, an authorized already-running loopback Node
+					Inspector target, exact owning PID and source file. This is a Debug
+					attachment, not an OS sandbox. Loaded/parsed scripts are not proof of
+					execution. Active eval/resume/launch is unavailable.
+				</p>
+				<input
+					aria-label="Inspector source target"
+					className="rounded border bg-background p-2"
+					value={inspectorTarget}
+					onChange={(e) => {
+						setInspectorTarget(e.target.value);
+						setInspectorPlan(null);
+					}}
+					placeholder="Workspace-relative exact source file"
+				/>
+				<input
+					aria-label="Inspector owning PID"
+					className="rounded border bg-background p-2"
+					value={inspectorPid}
+					onChange={(e) => {
+						setInspectorPid(e.target.value);
+						setInspectorPlan(null);
+					}}
+					placeholder="Exact running Node PID"
+				/>
+				<input
+					aria-label="Inspector loopback endpoint"
+					className="rounded border bg-background p-2"
+					value={inspectorEndpoint}
+					onChange={(e) => {
+						setInspectorEndpoint(e.target.value);
+						setInspectorPlan(null);
+					}}
+					placeholder="ws://127.0.0.1:port/inspector-uuid"
+				/>
+				<button
+					type="button"
+					disabled={running || status?.mode !== "runtime"}
+					className="rounded border p-2"
+					onClick={() => void prepareInspector()}
+				>
+					Review Inspector plan
+				</button>
+				{inspectorPlan ? (
+					<>
+						<pre className="overflow-auto whitespace-pre-wrap">
+							{JSON.stringify(inspectorPlan, null, 2)}
+						</pre>
+						<button
+							type="button"
+							className="rounded border p-2"
+							onClick={() => void observeInspector()}
+						>
+							Authorize reviewed observation
+						</button>
+					</>
+				) : null}
+				{inspectorResult ? (
+					<pre className="max-h-64 overflow-auto whitespace-pre-wrap">
+						{JSON.stringify(inspectorResult, null, 2)}
+					</pre>
+				) : null}
+			</details>
 			{error ? (
 				<p role="alert" className="text-xs text-destructive">
 					{error}
@@ -202,12 +385,16 @@ export function FirstPartyAnalysisWorkspace({
 				<option value="">Select saved evidence</option>
 				{status?.receipts.map((r) => (
 					<option key={r.id} value={r.id}>
-						{r.status} — {r.target} — {r.createdAt}
+						{r.status}
+						{r.reservationReleasedAt
+							? " (reservation released without replay)"
+							: ""}{" "}
+						— {r.target} — {r.createdAt}
 					</option>
 				))}
 			</select>
 			{status?.receipts
-				.filter((r) => r.status === "running")
+				.filter((r) => r.status === "running" && !r.reservationReleasedAt)
 				.map((r) => (
 					<button
 						key={r.id}
@@ -216,6 +403,22 @@ export function FirstPartyAnalysisWorkspace({
 						onClick={() => void cancel(r.id)}
 					>
 						Cancel worker {r.id}
+					</button>
+				))}
+			{status?.receipts
+				.filter(
+					(r) =>
+						["running", "termination-unconfirmed"].includes(r.status) &&
+						!r.reservationReleasedAt,
+				)
+				.map((r) => (
+					<button
+						key={`recover-${r.id}`}
+						type="button"
+						className="text-xs underline"
+						onClick={() => void recover(r.id)}
+					>
+						Check and release abandoned reservation {r.id}
 					</button>
 				))}
 			<nav
@@ -230,6 +433,9 @@ export function FirstPartyAnalysisWorkspace({
 						"comparison",
 						"timeline",
 						"verification",
+						"cross-domain",
+						"dossiers",
+						"disagreements",
 					] as View[]
 				).map((v) => (
 					<button
@@ -258,7 +464,11 @@ export function FirstPartyAnalysisWorkspace({
 									setView("verification");
 								}}
 							>
-								{r.createdAt} — {r.status} — {r.target}
+								{r.createdAt} — {r.status}
+								{r.reservationReleasedAt
+									? " (reservation released without replay)"
+									: ""}{" "}
+								— {r.target}
 							</button>
 							{r.error ? <p>{r.error}</p> : null}
 						</li>
@@ -367,9 +577,11 @@ export function FirstPartyAnalysisWorkspace({
 				<p>
 					Graph edges are candidate relationships, not execution proof. Native
 					analysis, project edits, device work and runtime actions remain in the
-					existing approved workbench tabs. General data-flow recovery, .NET
-					additions and JavaScript Inspector capture are not implemented by this
-					parser.
+					existing approved workbench tabs. Full program recovery and active
+					Inspector scenarios are not implemented. Passive observation needs its
+					own reviewed Debug approval. Managed inspection retains declarations
+					and bounded IL bytes, not high-level decompilation. Native dossiers
+					show retained engine output; absent components stay unknown.
 				</p>
 			</details>
 		</section>

@@ -191,7 +191,8 @@ export async function main() {
   const analysisCurrent=join(workspace,"owned-analysis-current"), analysisPrevious=join(workspace,"owned-analysis-previous");
   await mkdir(analysisCurrent);await mkdir(analysisPrevious);
   for(const [directory,route] of [[analysisCurrent,"/v2"],[analysisPrevious,"/v1"]]) {
-    await writeFile(join(directory,"main.js"),`import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42); const host="https://owned.invalid"; const route=${JSON.stringify(route)}; function endpoint(h,r){return h+r;} fetch(endpoint(host,route));`);
+    await writeFile(join(directory,"config.ts"),`export const config={host:"https://owned.invalid",route:${JSON.stringify(route)}};`);
+    await writeFile(join(directory,"main.js"),`import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42); import {config} from "./config"; function endpoint(h,r){return h+r;} fetch(endpoint(config.host,config.route));`);
     await writeFile(join(directory,"renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
   }
   await writeFile(join(analysisCurrent,"main.js.map"),JSON.stringify({version:3,file:"main.js",sources:["original.ts"],sourcesContent:["export const owned=42;"],names:[],mappings:"AAAA"}));
@@ -574,9 +575,16 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const graph=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"graph"}});
     if(!graph.items.some(e=>e.kind==="ipc-candidate"))throw new Error("Installed parser omitted owned IPC candidate");
     const values=await rpc<{items:Array<{kind:string;value:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"resolved-endpoint"}});
-    if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed local value/return reduction failed");
+    if(!values.items.some(f=>f.kind==="resolved-endpoint"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed cross-module object/value/return reduction failed");
     const mappings=await rpc<{items:Array<{kind:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"findings",filter:"source-map-location"}});
     if(!mappings.items.some(f=>f.kind==="source-map-location"))throw new Error("Installed source-map inspection failed");
+    const verification=await rpc<{profile:string}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"verification"}});
+    if(verification.profile!=="cline-js-static/3")throw new Error("Installed analysis profile is stale");
+    const unified=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,receiptId:parsed.id});
+    if(!Array.isArray(unified.items))throw new Error("Installed unified evidence route unavailable");
+    const dossiers=await rpc<{items:unknown[]}>(page,"first_party_analysis_cross_domain",{...analysisArgs,view:"dossiers"});
+    if(!Array.isArray(dossiers.items))throw new Error("Installed native dossier route unavailable");
+
     const changes=await rpc<{items:Array<{kind:string;value:string;change:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"comparison",filter:"resolved-endpoint"}});
     if(!changes.items.some(f=>f.change==="removed"&&f.value==="https://owned.invalid/v1")||!changes.items.some(f=>f.change==="added"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed endpoint finding comparison failed");
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");

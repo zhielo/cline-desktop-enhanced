@@ -11,6 +11,8 @@ import {
 	type AnalysisReceipt,
 } from "./contracts";
 import { FirstPartyAnalysisStore } from "./store";
+import { analysisHostIdentity, ownershipBinding } from "./recovery";
+import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 
 type WorkerHost = { executable: string; args: string[] };
 export function configureFirstPartyAnalysisHost(host: WorkerHost) {
@@ -181,7 +183,45 @@ export async function runFirstPartyAnalysis(
 			// Drain but never persist parser stderr (may contain source content or secrets).
 			child.stderr!.on("data", () => undefined);
 			child.stdin!.on("error", () => undefined);
-			child.stdin!.end(JSON.stringify({ workspace: receipt.workspace, input }));
+			// Worker blocks on stdin until both process birth identities are persisted.
+			void (async () => {
+				try {
+					const [hostId, owner, worker] = await Promise.all([
+						analysisHostIdentity(),
+						probeProcessStartTokenAsync(process.pid),
+						child!.pid
+							? probeProcessStartTokenAsync(child!.pid)
+							: Promise.resolve({ status: "unavailable" as const }),
+					]);
+					if (final || termination || signal?.aborted || abort.signal.aborted)
+						return;
+					if (
+						hostId &&
+						owner.status === "found" &&
+						worker.status === "found" &&
+						child!.pid
+					) {
+						const proof = {
+							version: 1 as const,
+							host: hostId,
+							nonce: randomUUID(),
+							owner: { pid: process.pid, token: owner.token },
+							worker: { pid: child!.pid, token: worker.token },
+						};
+						receipt.ownership = {
+							...proof,
+							binding: ownershipBinding(receipt, proof),
+						};
+						store.save(receipt);
+					}
+					child!.stdin!.end(
+						JSON.stringify({ workspace: receipt.workspace, input }),
+					);
+				} catch {
+					failure = "Worker ownership persistence failed";
+					stop();
+				}
+			})();
 			signal?.addEventListener("abort", stop, { once: true });
 			abort.signal.addEventListener("abort", stop, { once: true });
 			deadline = setTimeout(() => {

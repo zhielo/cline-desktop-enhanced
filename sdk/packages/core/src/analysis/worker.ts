@@ -13,6 +13,7 @@ import { analyzeSources, type SourceArtifact } from "./parser";
 const sourceName = (p: string) =>
 	/\.(?:[cm]?[jt]s|[jt]sx)$/i.test(p) ||
 	p.endsWith(".map") ||
+	/\.(?:dll|exe)$/i.test(p) ||
 	path.basename(p) === "package.json";
 export function within(root: string, target: string) {
 	const child = path.relative(root, target);
@@ -90,7 +91,8 @@ export async function readSources(
 			path: name,
 			bytes: data.length,
 			sha256: byteDigest(data),
-			source: data.toString("utf8"),
+			source: /\.(?:dll|exe)$/i.test(name) ? "" : data.toString("utf8"),
+			...(/\.(?:dll|exe)$/i.test(name) ? { binary: data } : {}),
 		});
 	};
 	const asar = async (p: string) => {

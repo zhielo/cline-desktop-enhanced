@@ -8,9 +8,45 @@ import {
 	runFirstPartyAnalysis,
 	queryFirstPartyEvidence,
 	cancelFirstPartyAnalysis,
+	recoverFirstPartyReservation,
+	InspectorRequestSchema,
+	observeJavaScriptInspector,
+	probeProcessStartTokenAsync,
+	UnifiedEvidenceStore,
+	unifiedEvidenceView,
+	nativeDossiers,
+	dossierDisagreements,
 } from "@cline/core";
 
+import { desktopAnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
+
 let store: FirstPartyAnalysisStore | undefined;
+let taskEvidence: UnifiedEvidenceStore | undefined;
+const inspectorSlots = new Map<string, string>();
+const taskStore = () => (taskEvidence ??= new UnifiedEvidenceStore());
+export function bindFirstPartyTaskEvidence(
+	sessionId: string,
+	workspace: string,
+	plan: unknown,
+) {
+	const bound = firstPartyStore().session(sessionId);
+	if (!bound || bound.mode === "off") return;
+	if (bound.workspace !== realpathSync(workspace))
+		throw new Error("Task ownership session workspace mismatch");
+	taskStore().bind(sessionId, bound.workspace, plan);
+}
+export function recordFirstPartyTaskEvidence(
+	sessionId: string,
+	workspace: string,
+	plan: unknown,
+	result: unknown,
+) {
+	const bound = firstPartyStore().session(sessionId);
+	if (!bound || bound.mode === "off") return;
+	if (bound.workspace !== realpathSync(workspace))
+		throw new Error("Task evidence session workspace mismatch");
+	return taskStore().record(sessionId, bound.workspace, plan, result);
+}
 export const firstPartyStore = () => (store ??= new FirstPartyAnalysisStore());
 let fixtureReceipt:
 	| { status: string; checkedAt: string; profile: string; error?: string }
@@ -21,15 +57,15 @@ export function firstPartyReadiness() {
 		parser: "TypeScript 5.9.3",
 		staticFixture: fixtureReceipt ?? { status: "not-tested" },
 		targetSupported:
-			"Determined per request; supported JS/TS/package metadata, basic source maps and bounded ASAR only",
+			"Determined per request; bounded JS/TS/package/source-map/ASAR and managed PE metadata/IL bytes",
 		localSemantics:
-			"Bounded immutable scalar expressions, lexical local calls and simple pure-return argument substitution; no complete program semantics",
+			"Closed-inventory relative ES bindings/reexports, const scalar object reads and simple pure-return substitutions; no complete program semantics",
 		sourceMaps:
 			"Basic v3 mapping declarations and embedded hashes only; runtime reconciliation not implemented",
 		nativeProvider:
 			"Use existing engine-specific Setup Center tests; no new parity claim",
 		runtimeCapture:
-			"Existing approved workbench tools only; JavaScript Inspector capture is not implemented",
+			"Separately approved exact-process loopback Node Inspector observation; loaded source hash reconciliation only. No eval; active scenarios not implemented.",
 		behaviorVerification:
 			"Not established by static analysis or a successful build",
 	};
@@ -90,7 +126,7 @@ export async function testFirstPartyFixture() {
 		fixtureReceipt = {
 			status: "failed",
 			checkedAt: new Date().toISOString(),
-			profile: "cline-js-static/2",
+			profile: "cline-js-static/3",
 			error: e instanceof Error ? e.message : "Fixture failed",
 		};
 		throw e;
@@ -116,17 +152,157 @@ export async function handleFirstPartyCommand(
 	if (command === "first_party_analysis_status")
 		return {
 			mode: db.session(session.id)?.mode ?? "off",
+			inspectorActive: inspectorSlots.has(session.id),
 			readiness: firstPartyReadiness(),
 			receipts: db.summaries(session.id),
 		};
+	if (command === "first_party_analysis_cross_domain") {
+		const snapshots = taskStore().list(session.id, session.workspace);
+		const receipt =
+			typeof args.receiptId === "string" && args.receiptId
+				? db.get(session.id, args.receiptId)
+				: undefined;
+		const dossiers = nativeDossiers(snapshots);
+		const view =
+			args.view === "dossiers"
+				? dossiers
+				: args.view === "disagreements"
+					? dossierDisagreements(dossiers)
+					: unifiedEvidenceView(receipt?.result, snapshots);
+		const offset = Number(args.offset ?? 0);
+		if (!Number.isInteger(offset) || offset < 0 || offset > 10000)
+			throw new Error("Invalid evidence offset");
+		const items: unknown[] = [];
+		let bytes = 0;
+		for (const item of view.slice(offset, offset + 20)) {
+			const encoded = JSON.stringify(item);
+			let shown: unknown = item;
+			if (Buffer.byteLength(encoded) > 65536) {
+				const v = item as Record<string, unknown>;
+				shown = {
+					id: v.id,
+					taskId: v.taskId,
+					snapshotId: v.snapshotId,
+					snapshotHash: v.snapshotHash,
+					resultHash: v.resultHash,
+					identity: v.identity,
+					name: v.name,
+					displayOmitted: true,
+					note: "Retained evidence exceeds display budget; snapshot integrity does not imply full evidence was displayed.",
+				};
+			}
+			const size = Buffer.byteLength(JSON.stringify(shown));
+			if (bytes + size > 196608 && items.length) break;
+			items.push(shown);
+			bytes += size;
+		}
+		return {
+			items,
+			total: view.length,
+			nextOffset:
+				offset + items.length < view.length ? offset + items.length : null,
+		};
+	}
 	if (command === "first_party_analysis_evidence")
 		return queryFirstPartyEvidence(session.id, args.query, db);
 	if (!trusted)
 		throw new Error(
 			"Analysis changes require a trusted desktop approval connection",
 		);
+
+	if (command.startsWith("first_party_analysis_inspector_")) {
+		if (
+			bound?.mode !== "runtime" ||
+			session.busy ||
+			inspectorSlots.has(session.id)
+		)
+			throw new Error(
+				"Inspector requires an idle, Runtime-enabled owning session and separate task approval",
+			);
+		if (command === "first_party_analysis_inspector_prepare") {
+			const supplied =
+				args.input && typeof args.input === "object"
+					? (args.input as Record<string, unknown>)
+					: {};
+			const pid = Number(supplied.pid);
+			if (!Number.isSafeInteger(pid) || pid < 1)
+				throw new Error("Exact Inspector PID required");
+			const identity = await probeProcessStartTokenAsync(pid);
+			if (identity.status !== "found")
+				throw new Error("Inspector process birth identity unavailable");
+			const request = InspectorRequestSchema.parse({
+				...supplied,
+				processToken: identity.token,
+			});
+			const plan = await desktopAnalysisTaskOrchestrator.prepare({
+				workspaceRoot: session.workspace,
+				kind: "debugger",
+				request,
+				timeoutMs: 15000,
+				maxOutputBytes: 262144,
+			});
+			bindFirstPartyTaskEvidence(session.id, session.workspace, plan);
+			return plan;
+		}
+		if (command === "first_party_analysis_inspector_run") {
+			const input = InspectorRequestSchema.parse(args.input);
+			const planId = String(args.planId ?? "");
+			if (inspectorSlots.size >= 2)
+				throw new Error(
+					"Two Inspector observation slots are already reserved; no automatic retry",
+				);
+			inspectorSlots.set(session.id, planId);
+			let consumed = false;
+			try {
+				const plan = await desktopAnalysisTaskOrchestrator.consume({
+					planId,
+					executionToken: String(args.executionToken ?? ""),
+					workspaceRoot: session.workspace,
+					kind: "debugger",
+					request: input,
+				});
+				consumed = true;
+				if (!plan.targetIdentity?.sha256)
+					throw new Error(
+						"Inspector requires an exact approved source file hash",
+					);
+				const result = await observeJavaScriptInspector(
+					{ ...input, target: plan.target },
+					desktopAnalysisTaskOrchestrator.signal(planId),
+					plan.targetIdentity.sha256,
+				);
+				const completed = desktopAnalysisTaskOrchestrator.complete(
+					planId,
+					result,
+					"node-inspector-passive",
+				);
+				let evidenceWarning: string | undefined;
+				try {
+					recordFirstPartyTaskEvidence(
+						session.id,
+						session.workspace,
+						completed,
+						result,
+					);
+				} catch {
+					evidenceWarning =
+						"Observation completed but unified metadata was not saved; do not replay to repair metadata.";
+				}
+				return { result, plan: completed, evidenceWarning };
+			} catch (e) {
+				if (consumed) desktopAnalysisTaskOrchestrator.fail(planId, e);
+				throw e;
+			} finally {
+				if (inspectorSlots.get(session.id) === planId)
+					inspectorSlots.delete(session.id);
+			}
+		}
+		throw new Error(
+			"Unknown Inspector operation; active execution scenarios are not exposed",
+		);
+	}
 	if (command === "first_party_analysis_mode") {
-		if (session.busy)
+		if (session.busy || inspectorSlots.has(session.id))
 			throw new Error(
 				"Change Analysis mode only while the chat session is idle",
 			);
@@ -135,6 +311,13 @@ export async function handleFirstPartyCommand(
 			session.workspace,
 			AnalysisModeSchema.parse(args.mode),
 		);
+	}
+	if (command === "first_party_analysis_recover") {
+		if (session.busy || args.confirmed !== true)
+			throw new Error(
+				"Explicit trusted idle-session recovery approval required",
+			);
+		return recoverFirstPartyReservation(session.id, String(args.receiptId), db);
 	}
 	if (command === "first_party_analysis_cancel") {
 		cancelFirstPartyAnalysis(String(args.receiptId), session.id);
