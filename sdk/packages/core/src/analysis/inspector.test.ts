@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 import {
 	observeJavaScriptInspector,
 	sameInspectorSourcePath,
+	windowsInspectorOwnsListener,
 } from "./inspector";
 import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 import { byteDigest } from "./contracts";
@@ -357,3 +358,35 @@ it("enforces the passive command set, drops replay and labels an emulated owned 
 		await rm(root, { recursive: true, force: true });
 	}
 }, 20000);
+
+it("requires one exact numeric native Windows IPv4 loopback LISTENING owner", () => {
+	const row = "  TCP    127.0.0.1:9229    0.0.0.0:0    LISTENING    1234\r\n";
+	expect(
+		windowsInspectorOwnsListener("Active Connections\r\n" + row, 1234, 9229),
+	).toBe(true);
+	for (const output of [
+		"",
+		row + row,
+		row.replace("1234", "1235"),
+		row.replace("LISTENING", "ESTABLISHED"),
+		row.replace("127.0.0.1", "0.0.0.0"),
+		row.replace("127.0.0.1:9229", "[::1]:9229"),
+		row.replace("127.0.0.1:9229", "127.0.0.1:19229"),
+		row.replace("0.0.0.0:0", "1.2.3.4:80"),
+		row.replace("1234", "01234"),
+		row.replace("1234", "1234x"),
+		row.replace("1234", "4294967296"),
+		row.replace("LISTENING", "UNKNOWN_LOCALIZED_STATE"),
+		row.replace("1234", "1234 extra"),
+		"x".repeat(262145) + row,
+	])
+		expect(windowsInspectorOwnsListener(output, 1234, 9229)).toBe(false);
+	for (const [pid, port] of [
+		[0, 9229],
+		[1234, 0],
+		[1234, 65536],
+		[1234.5, 9229],
+		[1234, 9229.5],
+	])
+		expect(windowsInspectorOwnsListener(row, pid, port)).toBe(false);
+});

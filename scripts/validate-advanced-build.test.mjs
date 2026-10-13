@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
+import { engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, formatValidationFailureNotice, formatValidationSummary, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
 const jobs = [1, 2, 3, 4, 5].map(n => ({ name: String(n) }));
 test("engine corpus explicitly selects the shipped Windows profile without weakening full-engine execution", () => {
   const corpus = "advanced-analysis-worker.test.py";
@@ -115,4 +115,25 @@ test("confirmed CI repairs preserve DB close/rollback and exact launched Bun ide
  const worker=readFileSync(new URL("../workers/android-capture/server.py",import.meta.url),"utf8");assert.ok(worker.includes("with connection:yield connection"));assert.ok(worker.includes("finally:connection.close()"));
  const shutdown=readFileSync(new URL("../sdk/packages/core/src/hub/daemon/shutdown.e2e.test.ts",import.meta.url),"utf8");assert.ok(shutdown.includes("probeBunRuntimeVersion(executable)"));assert.equal((shutdown.match(/runtime: bun \$\{daemon.runtimeVersion\}/g)||[]).length,2);assert.ok(!shutdown.includes("runtime: bun 1.3.13"));assert.ok(shutdown.includes("toBeLessThan(5_000)"));assert.ok(shutdown.includes("forced exit:"));
  const runner=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");assert.ok(runner.includes("Test real Hub shutdown runtime identity"));
+});
+
+
+test("full-quality gates include test/smoke typing and lint with the CLI prerequisite",()=>{
+ const runner=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");
+ assert.ok(runner.includes('job("Build CLI workspace quality prerequisite", ["run", "-F", "@cline/cli", "build"])'));
+ assert.ok(runner.includes('job("Type-check complete workspace including tests and smoke declarations", ["run", "types"])'));
+ assert.ok(runner.includes('job("Lint complete workspace", ["run", "lint"])'));
+ assert.ok(runner.includes('formatValidationFailureNotice(`[${status.toUpperCase()}] ${step.name}`)'));
+ assert.ok(runner.includes("GITHUB_STEP_SUMMARY"));
+});
+test("failed gates expose safe actionable CI annotations without raw child output",()=>{
+ const text=formatValidationFailureNotice("[FAILED] gate%\r\n::warning::injected\u0000");
+ assert.equal(text,"::error title=Required validation gate::[FAILED] gate%25%0D%0A::warning::injected");
+ assert.ok(!text.includes("\n"));
+});
+test("CI summaries retain failed/blocked statuses without leaking log contents or private fields",()=>{
+ const report={status:"failed",results:[{name:"gate|<>`\n",status:"failed",durationMs:1100,stderr:"SECRET",request:{key:"SECRET"}},{name:"later",status:"blocked"}]};
+ const text=formatValidationSummary(report,"a".repeat(40));
+ assert.ok(text.includes("validation: failed"));assert.ok(text.includes("| failed | 1 |"));assert.ok(text.includes("| later | blocked | — |"));assert.ok(!text.includes("SECRET"));assert.ok(!text.includes("<>"));
+ assert.ok(formatValidationSummary(report,"not-a-commit\nSECRET").includes("Source commit: unavailable"));
 });

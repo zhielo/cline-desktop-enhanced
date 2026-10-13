@@ -19,8 +19,11 @@ it("inspects primitive methods/fields, byrefs, arrays and generic variables with
 		genericArity: 1,
 		display: "!!0 (int32&, string[])",
 	});
-	expect(inspectManagedSignature(Buffer.from("00001205", "hex")).display).toBe(
-		"class:TypeRef#1 ()",
+	expect(inspectManagedSignature(Buffer.from("00001205", "hex"))).toMatchObject(
+		{
+			status: "completed",
+			display: "class:TypeRef#1 ()",
+		},
 	);
 });
 it("leaves malformed/unsupported/oversized signatures unresolved with exact provenance", () => {

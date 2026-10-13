@@ -34,6 +34,40 @@ export const InspectorRequestSchema = z
 		durationMs: z.number().int().min(200).max(5000).default(1000),
 	})
 	.strict();
+/** Native numeric netstat output only; unknown/localized/malformed output never proves ownership. */
+export function windowsInspectorOwnsListener(
+	output: string,
+	pid: number,
+	port: number,
+) {
+	if (
+		!Number.isSafeInteger(pid) ||
+		pid < 1 ||
+		pid > 4294967295 ||
+		!Number.isSafeInteger(port) ||
+		port < 1 ||
+		port > 65535 ||
+		Buffer.byteLength(output) > 262144
+	)
+		return false;
+	const candidates: number[] = [];
+	const local = `127.0.0.1:${port}`;
+	for (const line of output.split(/\r?\n/)) {
+		const c = line.trim().split(/\s+/);
+		if (c[0] !== "TCP" || c[1] !== local) continue;
+		if (
+			c.length !== 5 ||
+			c[2] !== "0.0.0.0:0" ||
+			c[3] !== "LISTENING" ||
+			!/^[1-9]\d{0,9}$/.test(c[4])
+		)
+			return false;
+		const owner = Number(c[4]);
+		if (!Number.isSafeInteger(owner) || owner > 4294967295) return false;
+		candidates.push(owner);
+	}
+	return candidates.length === 1 && candidates[0] === pid;
+}
 /** Endpoint must be bound to the selected live process, not merely accompanied by a PID. */
 export async function assertInspectorOwner(pid: number, port: number) {
 	if (process.platform === "linux") {
@@ -66,22 +100,22 @@ export async function assertInspectorOwner(pid: number, port: number) {
 	} else if (process.platform === "win32") {
 		const root = process.env.SystemRoot;
 		if (!root) throw new Error("Inspector owner probe unavailable");
-		const output = await new Promise<string>((resolve, reject) =>
-			execFile(
-				join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
-				[
-					"-NoLogo",
-					"-NoProfile",
-					"-NonInteractive",
-					"-Command",
-					`Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ${port} -State Listen -ErrorAction Stop | Select-Object -ExpandProperty OwningProcess`,
-				],
-				{ timeout: 2000, maxBuffer: 4096, windowsHide: true },
-				(e, out) => (e ? reject(e) : resolve(out)),
-			),
-		);
-		const owners = output.trim().split(/\s+/);
-		if (owners.length === 1 && owners[0] === String(pid)) return;
+		let output: string;
+		try {
+			output = await new Promise<string>((resolve, reject) =>
+				execFile(
+					join(root, "System32", "netstat.exe"),
+					["-a", "-n", "-o", "-p", "tcp"],
+					{ timeout: 2000, maxBuffer: 262144, windowsHide: true },
+					(e, out) => (e ? reject(e) : resolve(out)),
+				),
+			);
+		} catch {
+			throw new Error(
+				"Inspector listener ownership probe unavailable; attachment blocked",
+			);
+		}
+		if (windowsInspectorOwnsListener(output, pid, port)) return;
 	}
 	throw new Error(
 		"Inspector listener is not proved owned by this exact selected process",
