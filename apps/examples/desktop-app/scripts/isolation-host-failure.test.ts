@@ -185,3 +185,74 @@ test("native success exit follows required profile and staging cleanup", () => {
 	);
 	expect(controller).toContain("code !== 0");
 });
+
+import { createBoundedHostCancellation } from "../sidecar/isolation-cancellation";
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+test("cancellation requests host-owned teardown once and retains a bounded forced stop", async () => {
+	const calls: string[] = [];
+	const cancellation = createBoundedHostCancellation(
+		() => {
+			calls.push("cancel");
+		},
+		() => {
+			calls.push("kill");
+		},
+		10,
+	);
+	cancellation.stop();
+	cancellation.stop();
+	expect(calls).toEqual(["cancel"]);
+	await pause(30);
+	expect(calls).toEqual(["cancel", "kill"]);
+	cancellation.dispose();
+});
+test("host close cancels the forced stop and ignores late cancellation", async () => {
+	const calls: string[] = [];
+	const cancellation = createBoundedHostCancellation(
+		() => {
+			calls.push("cancel");
+		},
+		() => {
+			calls.push("kill");
+		},
+		10,
+	);
+	cancellation.stop();
+	cancellation.dispose();
+	cancellation.stop();
+	await pause(30);
+	expect(calls).toEqual(["cancel"]);
+});
+test("broken control pipe cannot bypass forced termination", async () => {
+	let killed = false;
+	const cancellation = createBoundedHostCancellation(
+		() => {
+			throw new Error("closed");
+		},
+		() => {
+			killed = true;
+		},
+		10,
+	);
+	cancellation.stop();
+	await pause(30);
+	cancellation.dispose();
+	expect(killed).toBe(true);
+});
+test("native controller EOF cancels without exposing its pipe to the target", () => {
+	const native = readFileSync(
+		new URL("../native/JavaScriptIsolation.cs", import.meta.url),
+		"utf8",
+	);
+	expect(native).toContain("Console.OpenStandardInput().ReadByte()");
+	expect(native).toContain("finally{cancelled.Set();}");
+	expect(native).toContain('input=CreateFile("NUL"');
+	expect(native).toContain("profile=true;CheckCancellation();");
+	expect(native).toContain('CheckCancellation();stage="resume";');
+	expect(native).toContain(
+		"if(WaitForSingleObject(child.process,5000)!=0){receipt=Failure",
+	);
+	expect(native.indexOf("// Do not delete a live target")).toBeLessThan(
+		native.indexOf("if(profile && DeleteAppContainerProfile(name)!=0)"),
+	);
+});

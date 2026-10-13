@@ -266,19 +266,20 @@ describe.skipIf(!windows)(
 				),
 			).rejects.toThrow("unavailable");
 		}, 30000);
-		test("cancellation after launch kills the host job and cleans private stage/profile", async () => {
-			const controller = new AbortController(),
-				timer = setTimeout(() => controller.abort(), 1000);
-			try {
-				await expect(
-					run("setInterval(()=>{},1000);", "", {
-						timeoutMs: 5000,
-						signal: controller.signal,
-					}),
-				).rejects.toThrow("cancelled");
-			} finally {
-				clearTimeout(timer);
-			}
-		}, 30000);
+		for (const cancelAfterMs of [1000, 8000])
+			test(`cancellation at ${cancelAfterMs} ms settles host teardown without a receipt`, async () => {
+				const controller = new AbortController(),
+					timer = setTimeout(() => controller.abort(), cancelAfterMs);
+				try {
+					await expect(
+						run("setInterval(()=>{},1000);", "", {
+							timeoutMs: 30000,
+							signal: controller.signal,
+						}),
+					).rejects.toThrow("cancelled");
+				} finally {
+					clearTimeout(timer);
+				}
+			}, 30000);
 	},
 );
