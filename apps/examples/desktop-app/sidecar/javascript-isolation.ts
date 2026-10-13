@@ -1,3 +1,4 @@
+import { isolationHostFailureMessage } from "./isolation-host-failure";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -218,9 +219,7 @@ export async function runIsolatedJavaScript(
 				finish(
 					failure ??
 						(code !== 0
-							? new Error(
-									"OS isolation failed closed before a successful receipt; no fallback",
-								)
+							? new Error(isolationHostFailureMessage(out.toString("utf8")))
 							: undefined),
 				),
 			);

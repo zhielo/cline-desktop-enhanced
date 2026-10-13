@@ -119,6 +119,14 @@ class JavaScriptIsolation {
    return new Dictionary<string,object>{{"profile","cline-native-module/1"},{"artifactSha256",hash},{"pid",pid},{"processToken","win32:"+ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)},{"architecture",architecture},{"runtimeImageBase","0x"+imageBase.ToString("x")},{"runtimeAddress","0x"+address.ToString("x")},{"rva","0x"+rva.ToString("x")},{"observedBytes",32},{"memorySha256",Sha(memory)},{"fileRangeSha256",Sha(disk)},{"byteMatch",Sha(memory)==Sha(disk)},{"scope","host-read-process-memory-exact-birth-and-module-32-byte-range"}};
   }
  }
+ static Dictionary<string,object> Failure(string stage,Exception error) {
+  var native=error as Win32Exception;
+  return new Dictionary<string,object>{{"schemaVersion",1},{"error","isolation-launch-failed"},{"stage",stage},{"win32Error",native==null?(object)null:native.NativeErrorCode},{"hresult",error.HResult},{"cleanupFailures",new List<string>()}};
+ }
+ static void CleanupFailure(ref Dictionary<string,object> receipt,string stage,ref int code) {
+  if(code==0 || receipt==null) receipt=Failure("cleanup",new InvalidOperationException());
+  ((List<string>)receipt["cleanupFailures"]).Add(stage);code=1;
+ }
  static int Main(string[] args) {
   if(args.Length>0 && args[0]=="--module") {
    try {Console.WriteLine(new JavaScriptSerializer().Serialize(ModuleObservation(args)));return 0;}
@@ -130,27 +138,27 @@ class JavaScriptIsolation {
    int removed=DeleteAppContainerProfile(args[1]);return removed==0||removed==unchecked((int)0x80070002)||removed==unchecked((int)0x80070003)?0:1;
   }
   PI child=new PI(); string name=args.Length==4?args[3]:""; bool profile=false,attributesInitialized=false;
-  Dictionary<string,object> receipt=null; int code=1;string staging=null;
+  Dictionary<string,object> receipt=null; int code=1;string staging=null,stage="staging";
   try {
    if(args.Length!=4||!System.Text.RegularExpressions.Regex.IsMatch(name,"^cline-js-[a-f0-9]{32}$")) throw new Exception("Expected staging root, timeout, mode, controller profile");
    string root=Path.GetFullPath(args[0]); int timeout=int.Parse(args[1]);
    if(timeout<1000||timeout>30000||args[2]!="run") throw new Exception("Invalid fixed run policy");
-   if(!System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(root),"^cline-js-isolated-[a-zA-Z0-9_-]{6,32}$") || !string.Equals(Path.GetDirectoryName(root).TrimEnd('\\'),Path.GetTempPath().TrimEnd('\\'),StringComparison.OrdinalIgnoreCase) || (File.GetAttributes(root)&FileAttributes.ReparsePoint)!=0)throw new Exception("Controller-owned private temporary staging required");
+   if(!System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(root),"^cline-js-isolated-[a-zA-Z0-9_-]{6,32}$") || !string.Equals(Path.GetDirectoryName(root).TrimEnd('\\'),Path.GetFullPath(Path.GetTempPath()).TrimEnd('\\'),StringComparison.OrdinalIgnoreCase) || (File.GetAttributes(root)&FileAttributes.ReparsePoint)!=0)throw new Exception("Controller-owned private temporary staging required");
    string runtime=Path.Combine(root,"runtime.exe"),target=Path.Combine(root,"target.cjs"),scratch=Path.Combine(root,"scratch");
    if(!File.Exists(runtime)||!File.Exists(target)||!Directory.Exists(scratch)) throw new Exception("Incomplete private staging");
    foreach(string path in Directory.GetFileSystemEntries(root)) if((File.GetAttributes(path)&FileAttributes.ReparsePoint)!=0) throw new Exception("Reparse staging entry");
    staging=root;
-   int hr=CreateAppContainerProfile(name,name,"Ephemeral Cline JS standalone scenario",IntPtr.Zero,0,out sid);
+   stage="profile"; int hr=CreateAppContainerProfile(name,name,"Ephemeral Cline JS standalone scenario",IntPtr.Zero,0,out sid);
    if(hr!=0) Marshal.ThrowExceptionForHR(hr); profile=true;
-   var identity=new SecurityIdentifier(sid); Grant(root,scratch,identity);
-   job=CreateJobObject(IntPtr.Zero,null); if(job==IntPtr.Zero) throw new Win32Exception();
+   var identity=new SecurityIdentifier(sid); stage="acl"; Grant(root,scratch,identity);
+   stage="job"; job=CreateJobObject(IntPtr.Zero,null); if(job==IntPtr.Zero) throw new Win32Exception();
    LIMIT limits=new LIMIT(); limits.basic.flags=0x2000|0x8|0x200; limits.basic.active=4; limits.jobMemory=new UIntPtr(256*1024*1024);
    Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(LIMIT))));
-   SA sa=new SA(); sa.length=Marshal.SizeOf(typeof(SA)); sa.inherit=1;
+   stage="pipes"; SA sa=new SA(); sa.length=Marshal.SizeOf(typeof(SA)); sa.inherit=1;
    Check(CreatePipe(out outRead,out outWrite,ref sa,0)); Check(SetHandleInformation(outRead,1,0));
    Check(CreatePipe(out errRead,out errWrite,ref sa,0)); Check(SetHandleInformation(errRead,1,0));
    input=CreateFile("NUL",0x80000000,3,ref sa,3,0,IntPtr.Zero); if(input==new IntPtr(-1)) throw new Win32Exception();
-   IntPtr size=IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero,2,0,ref size);
+   stage="startup-attributes"; IntPtr size=IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero,2,0,ref size);
    attributes=Marshal.AllocHGlobal(size); Check(InitializeProcThreadAttributeList(attributes,2,0,ref size));attributesInitialized=true;
    SC sc=new SC();sc.sid=sid; security=Marshal.AllocHGlobal(Marshal.SizeOf(typeof(SC)));Marshal.StructureToPtr(sc,security,false);
    Check(UpdateProcThreadAttribute(attributes,0,new IntPtr(0x20009),security,new IntPtr(Marshal.SizeOf(typeof(SC))),IntPtr.Zero,IntPtr.Zero));
@@ -159,34 +167,34 @@ class JavaScriptIsolation {
    // Exact minimal environment; never inherit API keys, PATH, NODE_OPTIONS, HOME or application settings.
    env=Marshal.StringToHGlobalUni("SystemRoot="+Environment.GetFolderPath(Environment.SpecialFolder.Windows)+"\0TEMP="+scratch+"\0TMP="+scratch+"\0\0");
    SIX startup=new SIX();startup.si.cb=(uint)Marshal.SizeOf(typeof(SIX));startup.si.flags=0x100;startup.si.input=input;startup.si.output=outWrite;startup.si.error=errWrite;startup.attributes=attributes;
-   Check(CreateProcess(runtime,new StringBuilder(Quote(runtime)+" "+Quote(target)),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x4|0x400|0x08000000,env,scratch,ref startup,out child));
+   stage="launch"; Check(CreateProcess(runtime,new StringBuilder(Quote(runtime)+" "+Quote(target)),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x4|0x400|0x08000000,env,scratch,ref startup,out child));
    // No target instruction can run before exact lowbox token + job assignment verification.
-   Verify(child.process,sid); Check(AssignProcessToJobObject(job,child.process));
-   long creation,exit,kernel,user; Check(GetProcessTimes(child.process,out creation,out exit,out kernel,out user));
+   stage="token-check"; Verify(child.process,sid); stage="job-assign"; Check(AssignProcessToJobObject(job,child.process));
+   stage="birth"; long creation,exit,kernel,user; Check(GetProcessTimes(child.process,out creation,out exit,out kernel,out user));
    Close(ref outWrite); Close(ref errWrite); Close(ref input);
-   Capture stdout=new Capture(outRead,job),stderr=new Capture(errRead,job);
-   if(ResumeThread(child.thread)==0xffffffff) throw new Win32Exception();
-   uint wait=WaitForSingleObject(child.process,(uint)timeout); bool timedOut=wait==258;
+   stage="capture"; Capture stdout=new Capture(outRead,job),stderr=new Capture(errRead,job);
+   stage="resume"; if(ResumeThread(child.thread)==0xffffffff) throw new Win32Exception();
+   stage="wait"; uint wait=WaitForSingleObject(child.process,(uint)timeout); bool timedOut=wait==258;
    if(wait!=0 && !timedOut) throw new Exception("Unknown child wait outcome");
-   if(timedOut) Check(TerminateJobObject(job,124));
+   stage="termination"; if(timedOut) Check(TerminateJobObject(job,124));
    Check(TerminateJobObject(job,124)); // terminate all remaining descendants even after root exit
    if(WaitForSingleObject(child.process,5000)!=0) throw new Exception("Child termination unconfirmed");
-   if(!stdout.thread.Join(5000)||!stderr.thread.Join(5000)) throw new Exception("Output drain unconfirmed");
-   uint exitCode;Check(GetExitCodeProcess(child.process,out exitCode));
+   stage="drain"; if(!stdout.thread.Join(5000)||!stderr.thread.Join(5000)) throw new Exception("Output drain unconfirmed");
+   stage="receipt"; uint exitCode;Check(GetExitCodeProcess(child.process,out exitCode));
    if(stdout.error!=null||stderr.error!=null) throw new Exception("Capture failed");
    receipt=new Dictionary<string,object>{{"profile","cline-js-appcontainer/1"},{"isolation","appcontainer"},{"sid",identity.Value},{"capabilityCount",0},{"verifiedBeforeResume",true},{"pid",child.pid},{"creationFileTime",creation.ToString(System.Globalization.CultureInfo.InvariantCulture)},{"exitCode",exitCode},{"timedOut",timedOut},{"overflow",stdout.overflow||stderr.overflow},{"stdoutBase64",Convert.ToBase64String(stdout.bytes.ToArray())},{"stderrBase64",Convert.ToBase64String(stderr.bytes.ToArray())}};
    code=0;
-  } catch(Exception e) {receipt=new Dictionary<string,object>{{"error",e.GetType().Name+": "+e.Message}};code=1;}
+  } catch(Exception e) {receipt=Failure(stage,e);code=1;}
   finally {
    if(child.process!=IntPtr.Zero) TerminateProcess(child.process,124);
    Close(ref job); Close(ref child.thread);Close(ref child.process);Close(ref outRead);Close(ref outWrite);Close(ref errRead);Close(ref errWrite);Close(ref input);
    if(attributesInitialized) DeleteProcThreadAttributeList(attributes);
    foreach(IntPtr p in new[]{attributes,security,handles,env}) if(p!=IntPtr.Zero)Marshal.FreeHGlobal(p);
-   if(profile && DeleteAppContainerProfile(name)!=0) {receipt=new Dictionary<string,object>{{"error","AppContainer profile cleanup failed"}};code=1;}
+   if(profile && DeleteAppContainerProfile(name)!=0) CleanupFailure(ref receipt,"profile-cleanup",ref code);
    if(sid!=IntPtr.Zero) FreeSid(sid);
    // Host owns bounded cleanup even when the desktop controller has exited/crashed.
    if(staging!=null){bool removed=false;for(int attempt=0;attempt<10;attempt++){try{foreach(string fixedName in new[]{"target.cjs","runtime.exe"}){string file=Path.Combine(staging,fixedName);if(File.Exists(file))File.SetAttributes(file,File.GetAttributes(file)&~FileAttributes.ReadOnly);}Directory.Delete(staging,true);removed=true;break;}catch(DirectoryNotFoundException){removed=true;break;}catch{Thread.Sleep(100);}}
-    if(!removed){receipt=new Dictionary<string,object>{{"error","Private staging cleanup unconfirmed"}};code=1;}}
+    if(!removed) CleanupFailure(ref receipt,"staging-cleanup",ref code);}
   }
   Console.WriteLine(new JavaScriptSerializer().Serialize(receipt)); return code;
  }

@@ -111,7 +111,7 @@ async function main() {
     job("Type-check desktop", ["x", "tsc", "-p", "apps/examples/desktop-app/tsconfig.dev.json", "--noEmit"]),
     job("Type-check core", ["x", "tsc", "-p", "sdk/packages/core/tsconfig.build.json", "--noEmit"]),
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),
-    job("Test real Windows AppContainer execution boundary", ["test", "scripts/javascript-isolation.test.ts"], desktop),
+    job("Test real Windows AppContainer execution boundary", ["test", "scripts/isolation-host-failure.test.ts", "scripts/javascript-isolation.test.ts"], desktop),
     job("Test Windows installer configuration", ["-F", "@cline/code", "test:windows-installer"]),
     job("Test AI task report", ["x", "vitest", "run", "webview/lib/task-report.test.ts", "--config", "vitest.config.mts"], desktop),
     job("Test desktop authentication boundary", ["x", "vitest", "run",
