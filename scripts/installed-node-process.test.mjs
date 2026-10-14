@@ -224,6 +224,18 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  const native=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/built_in_browser.rs",import.meta.url),"utf8");
  assert.match(native, /#\[tauri::command\]\s+pub async fn built_in_browser_start\(/);
  assert.ok(native.includes("safe_url(&url)?"));
+ assert.ok(native.includes("crate::browser_readiness::await_browser_ready("));
+ assert.ok(native.indexOf("await_browser_ready(") < native.indexOf(".show()"));
+ const readiness=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/browser_readiness.rs",import.meta.url),"utf8");
+ assert.ok(readiness.includes("timeout_at(deadline, receiver)"));
+ assert.ok(readiness.includes("for _ in 0..300"));
+ assert.ok(readiness.includes("Ok(Ok(result)) => return result"));
+ assert.ok(readiness.includes("creation was not acknowledged"));
+ assert.ok(!readiness.includes("built_in_browser_cdp("));
+ assert.ok(!readiness.includes("browser_capture::begin("));
+ const workflow=readFileSync(new URL("../.github/workflows/build-custom-windows-installer.yml",import.meta.url),"utf8");
+ assert.ok(workflow.includes("Cargo.toml browser_readiness::"));
+ assert.ok(workflow.includes("throw 'Native browser readiness fixtures failed'"));
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
  assert.ok(driver.includes('join(evidence, "phase.json")'));
  assert.ok(driver.includes('join(evidence, "action-progress.jsonl")'));

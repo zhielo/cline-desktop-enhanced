@@ -3,6 +3,8 @@
 mod built_in_browser;
 mod browser_capture;
 #[cfg(any(windows, test))]
+mod browser_readiness;
+#[cfg(any(windows, test))]
 mod installed_webview_launch;
 #[cfg(target_os = "macos")]
 mod macos_notification;

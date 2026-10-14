@@ -50,6 +50,32 @@ pub async fn built_in_browser_start(
         .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about"))
         .build()
         .map_err(|error| format!("failed creating built-in browser: {error}"))?;
+    #[cfg(windows)]
+    {
+        let readiness = crate::browser_readiness::await_browser_ready(
+            || {
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                window
+                    .with_webview(move |webview| unsafe {
+                        let result = webview
+                            .controller()
+                            .CoreWebView2()
+                            .map(|_| ())
+                            .map_err(|_| "Native browser core unavailable".to_string());
+                        let _ = sender.send(result);
+                    })
+                    .map_err(|_| "Native browser readiness dispatch unavailable".to_string())?;
+                Ok(receiver)
+            },
+            std::time::Duration::from_secs(30),
+        )
+        .await;
+        if let Err(error) = readiness {
+            // Closing is requested, not asserted as verified cleanup.
+            let _ = window.close();
+            return Err(format!("{error}; browser close requested, not confirmed"));
+        }
+    }
     window
         .show()
         .map_err(|error| format!("failed showing built-in browser: {error}"))?;

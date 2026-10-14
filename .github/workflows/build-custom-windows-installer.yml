@@ -281,6 +281,8 @@ jobs:
         run: |
           cargo test --locked --manifest-path apps/examples/desktop-app/src-tauri/Cargo.toml browser_capture::
           if ($LASTEXITCODE -ne 0) { throw 'Native browser capture boundary fixtures failed' }
+          cargo test --locked --manifest-path apps/examples/desktop-app/src-tauri/Cargo.toml browser_readiness::
+          if ($LASTEXITCODE -ne 0) { throw 'Native browser readiness fixtures failed' }
 
       - name: Select unsigned private installer
         id: signing
