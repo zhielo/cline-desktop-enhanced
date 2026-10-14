@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { z } from "zod";
+import { HybridContextSchema } from "./hybrid";
 import { InspectorConsoleCollector } from "./inspector-console";
 import { byteDigest } from "./contracts";
 import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
@@ -26,6 +27,7 @@ export function sameInspectorSourcePath(
 export const InspectorRequestSchema = z
 	.object({
 		operation: z.literal("js_inspector_observe"),
+		hybrid: HybridContextSchema.optional(),
 		target: z.string().min(1).max(4096),
 		pid: z.number().int().positive(),
 		processToken: z.string().min(1).max(300),
@@ -263,10 +265,13 @@ export async function observeJavaScriptInspector(
 	});
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const deadline = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => {
-			ws.terminate();
-			reject(new Error("Inspector observation deadline exceeded"));
-		}, process.platform === "win32" ? 25000 : 10000);
+		timer = setTimeout(
+			() => {
+				ws.terminate();
+				reject(new Error("Inspector observation deadline exceeded"));
+			},
+			process.platform === "win32" ? 25000 : 10000,
+		);
 	});
 	const abort = () => ws.terminate();
 	signal?.addEventListener("abort", abort, { once: true });

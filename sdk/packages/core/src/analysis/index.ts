@@ -10,6 +10,7 @@ export {
 } from "./unified-evidence";
 export { recoverFirstPartyReservation } from "./recovery";
 export * from "./contracts";
+export * from "./hybrid";
 export { FirstPartyAnalysisStore } from "./store";
 export {
 	configureFirstPartyAnalysisHost,

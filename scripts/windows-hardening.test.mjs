@@ -173,3 +173,5 @@ test("extension Bun cache saving is bounded without weakening E2E gates", () => 
  }
  expect(source).toContain("timeout-minutes: 20");
 });
+
+test("installed Hybrid exercises static prerequisites and separately approved isolated execution",()=>{const source=load("apps/vscode/scripts/desktop-installed-acceptance.ts");expect(source).toContain("installed-hybrid-mode-persistence-static-preflight-passed");expect(source).toContain("installed-hybrid-owned-isolated-execution-and-export-passed");expect(source).toContain("first_party_analysis_execute_prepare");expect(source).toContain('"approve_analysis_task"');expect(source).toContain("confirmExecution:true");expect(source).toContain('relation!=="exact-artifact-hash"');expect(source).toContain("verifiedBeforeResume!==true");expect(source).toContain("missingBasisDenied");});

@@ -375,3 +375,10 @@ it("editing target discards prepared Execute plan and never executes automatical
  expect(el.textContent).not.toContain("Approve Execute and run once");
  expect(invoke.mock.calls.some(c=>c[0]==="approve_analysis_task"||String(c[0]).endsWith("_run"))).toBe(false);
 });
+it("Hybrid selection is explicit and does not auto-run inspection or execution",async()=>{
+ await act(async()=>root.render(<AnalysisModeControl sessionId="s" environmentId="local" status="completed" />));
+ const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
+ await act(async()=>{const select=el.querySelector("select")!;select.value="hybrid";select.dispatchEvent(new Event("change",{bubbles:true}));});
+ expect(confirm).toHaveBeenCalledWith(expect.stringContaining("prior static evidence"));expect(el.querySelector("select")?.value).toBe("hybrid");
+ expect(invoke.mock.calls.map(c=>c[0]).every(c=>["first_party_analysis_status","first_party_analysis_mode"].includes(c))).toBe(true);
+});

@@ -168,6 +168,14 @@ export function InvestigationWorkflow({
 			{open && (
 				<>
 					<BackendConnectionStatus />
+					{mode === "hybrid" && (
+						<p>
+							Hybrid is static-first: select a completed static receipt or
+							native static task below. Scenario purpose must name the
+							unresolved runtime question. Browser observations provide
+							investigation context, not an exact binary-to-browser causal link.
+						</p>
+					)}
 					<p>
 						Static candidates and browser metadata are not causal feature
 						verification. Browser recording is Windows-only, opt-in,
@@ -313,7 +321,8 @@ export function InvestigationWorkflow({
 							className="rounded border bg-background px-3 py-2 disabled:opacity-50"
 							disabled={
 								busy ||
-								mode !== "runtime" ||
+								!(mode === "runtime" || mode === "hybrid") ||
+								(mode === "hybrid" && !receiptId && !taskId) ||
 								!browserId ||
 								!purpose.trim() ||
 								!!recording
@@ -332,6 +341,15 @@ export function InvestigationWorkflow({
 										action: "start",
 										confirmRecord: true,
 										purpose,
+										...(mode === "hybrid"
+											? {
+													hybridProposal: {
+														baselineKind: receiptId ? "receipt" : "static-task",
+														baselineId: receiptId || taskId,
+														question: purpose,
+													},
+												}
+											: {}),
 									});
 									if (r === revision.current) setRecording(browserId);
 									return v;
@@ -358,7 +376,7 @@ export function InvestigationWorkflow({
 									);
 									if (r === revision.current) {
 										setRecording("");
-										setScenarioId(v.id??"");
+										setScenarioId(v.id ?? "");
 									}
 									return v;
 								});
@@ -464,10 +482,7 @@ export function InvestigationWorkflow({
 					</div>
 					{error && <p role="alert">{error}</p>}
 					{result !== null && (
-						<pre
-							
-							className="max-h-72 overflow-auto whitespace-pre-wrap"
-						>
+						<pre className="max-h-72 overflow-auto whitespace-pre-wrap">
 							{JSON.stringify(result, null, 2)}
 						</pre>
 					)}

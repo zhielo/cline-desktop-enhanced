@@ -204,3 +204,14 @@ it("unknown workflow database versions are refused without overwriting their ver
 it("failed receipt persistence returns stopped capture evidence without replay",async()=>{const capture=vi.fn(async()=>({purpose:"owned",status:"partial"}));const store={put:vi.fn(()=>{throw new Error("disk full");})} as unknown as AnalysisWorkflowStore;const result=await handleAnalysisWorkflow("capture_browser_scenario",{action:"stop",browserSessionId:"11111111-1111-4111-8111-111111111111",purpose:"owned",confirmRecord:true},{sessionId:"s",workspace:"/owned"},{trusted:true,idle:true,mode:"runtime"},store,{capture,invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn()});expect(result).toMatchObject({capture:{purpose:"owned"},evidenceWarning:expect.stringContaining("do not replay")});expect(capture).toHaveBeenCalledTimes(1);});
 
 it("redacts derived report fields as well as original selected records",()=>{const bundle=buildEvidenceBundle({sessionId:"owned",workspace:"/owned"},[{providerSnapshot:{result:{evidence:{selectedFunctions:[{name:"api_key=private-derived-secret"}]}}}}]);expect(JSON.stringify(bundle)).not.toContain("private-derived-secret");});
+it("Hybrid browser start denies missing static basis or recording consent without capturing",async()=>{
+ const capture=vi.fn(),ports={capture,invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn()},scope={sessionId:"s",workspace:"/owned"},store={} as AnalysisWorkflowStore;
+ const req={browserSessionId:"11111111-1111-4111-8111-111111111111",action:"start",purpose:"owned question",confirmRecord:true};
+ for(const input of [req,{...req,confirmRecord:false}])await expect(handleAnalysisWorkflow("capture_browser_scenario",input,scope,{trusted:true,idle:true,mode:"hybrid"},store,ports)).rejects.toThrow();
+ expect(capture).not.toHaveBeenCalled();
+});
+it("Hybrid preflight is unavailable to untrusted, Off or busy UI callers",async()=>{
+ const ports={capture:vi.fn(),invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn()},scope={sessionId:"s",workspace:"/owned"};
+ for(const options of [{trusted:false,idle:true,mode:"hybrid"},{trusted:true,idle:true,mode:"off"},{trusted:true,idle:false,mode:"hybrid"}])await expect(handleAnalysisWorkflow("analysis_workflow_hybrid_prepare",{},scope,options,{} as AnalysisWorkflowStore,ports)).rejects.toThrow("trusted enabled");
+ expect(ports.capture).not.toHaveBeenCalled();expect(ports.invoke).not.toHaveBeenCalled();
+});

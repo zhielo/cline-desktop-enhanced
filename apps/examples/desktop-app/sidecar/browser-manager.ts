@@ -52,6 +52,7 @@ export class DesktopBrowserManager {
 		{
 			owner: string;
 			purpose: string;
+			hybrid?: unknown;
 			started: number;
 			actions: Array<Record<string, unknown>>;
 			droppedActions: number;
@@ -113,6 +114,7 @@ export class DesktopBrowserManager {
 			const capture = {
 				owner,
 				purpose: String(input.purpose ?? "").slice(0, 160),
+				hybrid: input.hybrid,
 				started: this.now(),
 				actions: [] as Array<Record<string, unknown>>,
 				droppedActions: 0,
@@ -142,6 +144,7 @@ export class DesktopBrowserManager {
 		};
 		return {
 			purpose: capture.purpose,
+			...(capture.hybrid ? { hybrid: capture.hybrid } : {}),
 			status:
 				m?.cleanupVerified === true &&
 				!m.expired &&

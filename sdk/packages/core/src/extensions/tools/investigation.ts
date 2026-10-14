@@ -5,6 +5,7 @@ import {
 	type AgentTool,
 	type AgentToolContext,
 } from "@cline/shared";
+import { HybridProposalSchema } from "../../analysis/hybrid";
 const Id = z.string().uuid();
 const Selector = z
 	.object({
@@ -42,6 +43,7 @@ export const InvestigationSchemas = {
 			action: z.enum(["list", "start", "stop"]),
 			browserSessionId: Id.optional(),
 			purpose: z.string().trim().min(1).max(160).optional(),
+			hybridProposal: HybridProposalSchema.optional(),
 		})
 		.strict()
 		.refine(
@@ -70,7 +72,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 	trace_application_feature:
 		"Reconcile selected owning-session static facts and recorded scenarios. Returns provenance, candidate links and unresolved boundaries, never proves runtime causality from label matches.",
 	capture_browser_scenario:
-		"List owned built-in browsers, or request bounded metadata-only recording. Start requires Runtime mode and fresh human recording consent. Stop remains available after mode changes. Never opens/replays a browser or captures bodies/cookies.",
+		"List owned built-in browsers, or request bounded metadata-only recording. Start requires Runtime or Hybrid mode and fresh human recording consent. In Hybrid, inspect first using available static tools, then supply hybridProposal (owning receipt/static-task ID and the unresolved question). Missing evidence must be gathered, never invented. Hybrid does not launch targets automatically. Stop remains available after mode changes. Never opens/replays a browser or captures bodies/cookies.",
 	get_evidence_bundle:
 		"Export explicitly selected owning-session evidence with integrity hash, provenance index and limitations. Not a backup; review best-effort redaction before sharing.",
 };

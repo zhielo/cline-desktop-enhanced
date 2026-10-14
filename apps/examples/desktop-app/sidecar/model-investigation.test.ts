@@ -166,3 +166,63 @@ it("surfaces unconfirmed cancellation rather than claiming cleanup succeeded", a
 		runModelInvestigation("analyze_function", req, p),
 	).rejects.toThrow("cancellation could not be confirmed");
 });
+it("Hybrid preflight precedes fresh consent; denial never captures", async () => {
+	const p = ports();
+	p.mode = "hybrid";
+	p.invoke = vi.fn(async () => ({ evidenceHash: "a".repeat(64) }));
+	p.review = vi.fn(async () => false);
+	const proposal = {
+		baselineKind: "receipt",
+		baselineId: id,
+		question: "Which event occurs?",
+	};
+	await expect(
+		runModelInvestigation(
+			"capture_browser_scenario",
+			{
+				action: "start",
+				browserSessionId: id,
+				purpose: "owned",
+				hybridProposal: proposal,
+			},
+			p,
+		),
+	).rejects.toThrow("denied");
+	expect(p.invoke).toHaveBeenCalledTimes(1);
+	expect(p.invoke).toHaveBeenCalledWith(
+		"analysis_workflow_hybrid_prepare",
+		proposal,
+	);
+	expect(p.review).toHaveBeenCalledWith(
+		expect.objectContaining({
+			hybrid: { evidenceHash: "a".repeat(64) },
+			independentRecordingConsent: true,
+		}),
+	);
+});
+it("missing Hybrid evidence never reaches consent; stopping remains cleanup", async () => {
+	const p = ports();
+	p.mode = "hybrid";
+	p.invoke = vi.fn(async (name) => {
+		if (name === "analysis_workflow_hybrid_prepare")
+			throw new Error("missing static basis");
+		return { stopped: true };
+	});
+	await expect(
+		runModelInvestigation(
+			"capture_browser_scenario",
+			{ action: "start", browserSessionId: id, purpose: "owned" },
+			p,
+		),
+	).rejects.toThrow("missing static basis");
+	expect(p.review).not.toHaveBeenCalled();
+	await runModelInvestigation(
+		"capture_browser_scenario",
+		{ action: "stop", browserSessionId: id, purpose: "stop" },
+		p,
+	);
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		"capture_browser_scenario",
+		expect.objectContaining({ action: "stop" }),
+	);
+});

@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, isAbsolute } from "node:path";
 import { z } from "zod";
+import { HybridContextSchema } from "@cline/core";
 import {
 	ScenarioExpectationSchema,
 	reconcileProcessScenario,
@@ -29,6 +30,10 @@ const Scenario = z
 export const JavaScriptExecutionSchema = z
 	.object({
 		operation: z.literal("js_isolated_execute"),
+		hybrid: z
+			.unknown()
+			.transform((value) => HybridContextSchema.parse(value))
+			.optional(),
 		target: z.string().min(1).max(4096),
 		timeoutMs: z.number().int().min(1000).max(30000).default(5000),
 		scenario: Scenario,

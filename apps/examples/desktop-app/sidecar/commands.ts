@@ -2826,6 +2826,7 @@ export async function executeModelInvestigation(
 			throw new Error("Analysis mode changed; request a new review");
 	};
 	return runModelInvestigation(name, input, {
+        mode,
 		signal: context.signal,
 		assertCurrent,
 		review,

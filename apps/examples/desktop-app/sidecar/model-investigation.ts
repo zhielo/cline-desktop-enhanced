@@ -9,6 +9,7 @@ export interface ModelInvestigationPorts {
 	cancel(planId: string): void;
 	assertCurrent(): void;
 	signal?: AbortSignal;
+	mode?: string;
 }
 /** Host-only transaction. The model never handles the approval token. */
 export async function runModelInvestigation(
@@ -27,17 +28,39 @@ export async function runModelInvestigation(
 		if (req.action === "list") {
 			const status = (await ports.invoke("analysis_workflow_status", {})) as {
 				browsers: unknown;
+				mode?: string;
 			};
-			return JSON.stringify(sanitizeEvidence({ browsers: status.browsers }));
+			return JSON.stringify(
+				sanitizeEvidence({
+					browsers: status.browsers,
+					mode: status.mode,
+					...(status.mode === "hybrid"
+						? {
+								workflow:
+									"Inspect first; name an unresolved question and static receipt/task basis before requesting human recording consent. No automatic execution.",
+							}
+						: {}),
+				}),
+			);
 		}
 		// Stopping existing observation is cleanup, not authorization to start it.
 		if (req.action === "start") {
+			const hybrid =
+				ports.mode === "hybrid"
+					? await ports.invoke(
+							"analysis_workflow_hybrid_prepare",
+							(input as { hybridProposal?: Record<string, unknown> })
+								.hybridProposal ?? {},
+						)
+					: undefined;
+			current();
 			if (
 				!(await ports.review({
 					operation: name,
 					...input,
 					scope: "owned-built-in-browser-metadata-only",
 					independentRecordingConsent: true,
+					...(hybrid ? { hybrid } : {}),
 				}))
 			)
 				throw new Error("Recording consent denied or unavailable");
