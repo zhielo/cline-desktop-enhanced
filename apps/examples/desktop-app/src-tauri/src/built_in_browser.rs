@@ -29,8 +29,10 @@ fn safe_url(value: &str) -> Result<tauri::Url, String> {
     Ok(url)
 }
 
+// WebView2 creation deadlocks in a synchronous Windows IPC handler.
+// Keep this command async as required by WebviewWindowBuilder::new.
 #[tauri::command]
-pub fn built_in_browser_start(
+pub async fn built_in_browser_start(
     app: tauri::AppHandle,
     session_id: String,
     url: String,

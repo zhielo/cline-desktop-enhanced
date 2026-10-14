@@ -993,13 +993,26 @@ describe("createShellExecutor", () => {
 		}
 	});
 
-	it("finishes abort cleanup before a descendant can outlive the command", async () => {
+	it.each([
+		0, 1250,
+	])("finishes abort cleanup after %i ms fixture startup delay", async (startupDelayMs) => {
 		const tempDir = await mkdtemp(join(tmpdir(), "shell-abort-tree-"));
 		const readyPath = join(tempDir, "ready");
+		const descendantReadyPath = join(tempDir, "descendant-ready");
+		const triggerPath = join(tempDir, "post-abort-trigger");
 		const descendantPath = join(tempDir, "descendant-survived");
 		const ac = new AbortController();
 		const shell = createShellExecutor();
-		const descendantScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(descendantPath)}, "survived"), 1_000)`;
+		// Only a descendant that remains alive after abort settlement can act
+		// on this trigger. Startup or taskkill delays must not cause a pre-abort
+		// timer effect to be misclassified as surviving cancellation.
+		const descendantScript = [
+			'const fs = require("node:fs")',
+			`fs.writeFileSync(${JSON.stringify(descendantReadyPath)}, "ready")`,
+			`setInterval(() => { if (fs.existsSync(${JSON.stringify(triggerPath)})) fs.writeFileSync(${JSON.stringify(descendantPath)}, "survived"); }, 50)`,
+			// Fixture-only lifetime bound if the production cancellation assertion fails.
+			"setTimeout(() => process.exit(0), 20_000)",
+		].join(";");
 		const parentScript = [
 			'const { spawn } = require("node:child_process")',
 			'const { writeFileSync } = require("node:fs")',
@@ -1007,19 +1020,45 @@ describe("createShellExecutor", () => {
 			`writeFileSync(${JSON.stringify(readyPath)}, "ready")`,
 			"setInterval(() => {}, 1_000)",
 		].join(";");
-
+		const execution = shell(
+			{
+				command: process.execPath,
+				args: [
+					"-e",
+					`setTimeout(() => { ${parentScript} }, ${startupDelayMs});`,
+				],
+			},
+			process.cwd(),
+			{ ...ctx, signal: ac.signal },
+		);
+		// Attach rejection handling immediately, including fixture-readiness failures.
+		const settled = execution.then(
+			() => ({ status: "completed" as const }),
+			(error: unknown) => ({ status: "rejected" as const, error }),
+		);
 		try {
-			const execution = shell(
-				{ command: process.execPath, args: ["-e", parentScript] },
-				process.cwd(),
-				{ ...ctx, signal: ac.signal },
-			);
-			await expect.poll(() => fileExists(readyPath)).toBe(true);
+			await expect
+				.poll(
+					async () =>
+						(await fileExists(readyPath)) &&
+						(await fileExists(descendantReadyPath)),
+					{ timeout: 5_000 },
+				)
+				.toBe(true);
 			ac.abort();
-			await expect(execution).rejects.toThrow("aborted");
+			const outcome = await settled;
+			expect(outcome.status).toBe("rejected");
+			if (outcome.status !== "rejected")
+				throw new Error("Abort did not reject owned command");
+			expect(outcome.error).toBeInstanceOf(Error);
+			expect((outcome.error as Error).message).toContain("aborted");
+			await writeFile(triggerPath, "probe-after-abort");
 			await new Promise((resolve) => setTimeout(resolve, 1_200));
 			expect(await fileExists(descendantPath)).toBe(false);
 		} finally {
+			// Never remove the stage under a live command, even if readiness times out.
+			ac.abort();
+			await settled;
 			await rm(tempDir, { recursive: true, force: true });
 		}
 	});
