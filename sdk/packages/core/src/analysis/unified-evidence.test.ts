@@ -68,9 +68,31 @@ it.skipIf(process.platform !== "win32")(
 		const root = await mkdtemp(join(tmpdir(), "cline-unified-short-path-"));
 		const store = new UnifiedEvidenceStore(join(root, "snapshots.sqlite"));
 		try {
+			// Avoid cmd /c FOR quoting: Node's Windows argument quoting can
+			// return quote characters as part of the path instead of a path.
+			const script = `
+Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class OwnedShortPath {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern uint GetShortPathNameW(string path, StringBuilder output, uint capacity);
+}
+'@
+$output = New-Object System.Text.StringBuilder 32768
+$length = [OwnedShortPath]::GetShortPathNameW('${root.replace(/'/g, "''")}', $output, 32768)
+if ($length -eq 0 -or $length -ge 32768) { throw 'Owned short-path resolution failed' }
+[Console]::Write($output.ToString())
+`;
 			const short = execFileSync(
-				"cmd.exe",
-				["/d", "/c", `for %I in ("${root}") do @echo %~sI`],
+				"powershell.exe",
+				[
+					"-NoProfile",
+					"-NonInteractive",
+					"-EncodedCommand",
+					Buffer.from(script, "utf16le").toString("base64"),
+				],
 				{ encoding: "utf8", timeout: 10000 },
 			).trim();
 			const nativeRoot = realpathSync.native(root);
@@ -108,6 +130,7 @@ it.skipIf(process.platform !== "win32")(
 			await rm(root, { recursive: true, force: true });
 		}
 	},
+	30000,
 );
 it("retains approved completed task provenance, exact hash matches and explicit unknowns", async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), "cline-unified-"))),

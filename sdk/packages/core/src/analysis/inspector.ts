@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { z } from "zod";
 import { HybridContextSchema } from "./hybrid";
+import { performance } from "node:perf_hooks";
 import { InspectorConsoleCollector } from "./inspector-console";
 import { byteDigest } from "./contracts";
 import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
@@ -245,7 +246,10 @@ export async function observeJavaScriptInspector(
 				m.method === "Runtime.consoleAPICalled" &&
 				input.captureConsole
 			) {
-				consoleCollector.accept(m.params, Date.now());
+				consoleCollector.accept(
+					m.params,
+					performance.timeOrigin + performance.now(),
+				);
 			} else if (
 				m.method === "Debugger.scriptParsed" &&
 				scripts.length < 128 &&
@@ -287,7 +291,11 @@ export async function observeJavaScriptInspector(
 				if (input.captureConsole) {
 					// Runtime.enable can replay buffered events. Do not accept events until its response.
 					await send("Runtime.enable");
-					consoleCollector.start(Date.now());
+					// CDP uses fractional epoch milliseconds. Date.now can be
+					// coarsely quantized on Windows and make a received event appear
+					// to be in the future. Use the host's high-resolution epoch clock
+					// for both window start and receipt; retain the strict time guard.
+					consoleCollector.start(performance.timeOrigin + performance.now());
 				}
 				await new Promise((r) => setTimeout(r, input.durationMs));
 				consoleCollector.stop();

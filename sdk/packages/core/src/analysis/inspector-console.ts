@@ -61,6 +61,9 @@ export class InspectorConsoleCollector {
 	private active = false;
 	private reports: ConsoleProtocolReport[] = [];
 	dropped = 0;
+	private discardedBeforeWindow = 0;
+	private discardedFuture = 0;
+	private discardedInvalid = 0;
 	saturated = false;
 	start(now: number) {
 		this.after = now;
@@ -103,6 +106,11 @@ export class InspectorConsoleCollector {
 			!Array.isArray(p.args)
 		) {
 			this.dropped++;
+			if (typeof p?.timestamp === "number" && Number.isFinite(p.timestamp)) {
+				if (p.timestamp < this.after) this.discardedBeforeWindow++;
+				else if (p.timestamp >= receivedAt + 1) this.discardedFuture++;
+				else this.discardedInvalid++;
+			} else this.discardedInvalid++;
 			return;
 		}
 		this.reports.push({
@@ -150,6 +158,12 @@ export class InspectorConsoleCollector {
 		return {
 			reports: bound,
 			discarded: this.dropped + unbound,
+			discardReasons: {
+				beforeWindow: this.discardedBeforeWindow,
+				futureTimestamp: this.discardedFuture,
+				invalidReport: this.discardedInvalid,
+				unboundSource: unbound,
+			},
 			saturated: this.saturated,
 			verifiedBehavior: false as const,
 			note: "Console events, timestamps and coordinates are target-supplied protocol claims. Exact source bytes do not authenticate VM execution or a scenario outcome. Objects remain opaque. Missing reports are not absence; replay/history and clock differences can be discarded.",
