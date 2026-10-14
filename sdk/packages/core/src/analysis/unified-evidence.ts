@@ -84,7 +84,13 @@ export class UnifiedEvidenceStore {
 			.passthrough()
 			.parse(planValue);
 		const root = realpathSync(workspace);
-		if (realpathSync(plan.workspaceRoot) !== root)
+		// The task planner uses native realpath. On Windows ordinary realpath
+		// can retain an 8.3 alias while native realpath expands it. Compare both
+		// resolved directories using the planner's resolver; retain the existing
+		// storage key so existing snapshots remain readable.
+		if (
+			realpathSync.native(plan.workspaceRoot) !== realpathSync.native(workspace)
+		)
 			throw new Error("Task ownership workspace mismatch");
 		const db = this.database();
 		db.exec("BEGIN IMMEDIATE");
@@ -130,12 +136,12 @@ export class UnifiedEvidenceStore {
 			resultHash = digest(result);
 		let planRoot: string;
 		try {
-			planRoot = realpathSync(plan.workspaceRoot);
+			planRoot = realpathSync.native(plan.workspaceRoot);
 		} catch {
 			throw new Error("Completed-task evidence binding mismatch");
 		}
 		if (
-			root !== planRoot ||
+			realpathSync.native(workspace) !== planRoot ||
 			resultHash !== plan.evidence.resultHash ||
 			plan.requestHash !== plan.evidence.requestHash
 		)
