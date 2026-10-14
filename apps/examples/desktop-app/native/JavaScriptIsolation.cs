@@ -11,6 +11,13 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Web.Script.Serialization;
 class JavaScriptIsolation {
+ // Controller-only control pipe. Target stdin is a separate NUL handle.
+ static readonly ManualResetEvent cancelled=new ManualResetEvent(false);
+ static void CheckCancellation() {if(cancelled.WaitOne(0))throw new OperationCanceledException();}
+ static void WatchController() {
+  var watcher=new Thread(delegate(){try{Console.OpenStandardInput().ReadByte();}catch{}finally{cancelled.Set();}});
+  watcher.IsBackground=true;watcher.Start();
+ }
  [StructLayout(LayoutKind.Sequential)] struct SI { public uint cb; public IntPtr reserved,desktop,title; public uint x,y,xs,ys,xc,yc,fill,flags; public ushort show,reserved2; public IntPtr reservedPtr,input,output,error; }
  [StructLayout(LayoutKind.Sequential)] struct SIX { public SI si; public IntPtr attributes; }
  [StructLayout(LayoutKind.Sequential)] struct PI { public IntPtr process,thread; public uint pid,tid; }
@@ -145,12 +152,15 @@ class JavaScriptIsolation {
   IntPtr sid=IntPtr.Zero,job=IntPtr.Zero,attributes=IntPtr.Zero,security=IntPtr.Zero,handles=IntPtr.Zero,env=IntPtr.Zero;
   IntPtr outRead=IntPtr.Zero,outWrite=IntPtr.Zero,errRead=IntPtr.Zero,errWrite=IntPtr.Zero,input=IntPtr.Zero;
   if(args.Length==2 && args[0]=="--cleanup" && System.Text.RegularExpressions.Regex.IsMatch(args[1],"^cline-js-[a-f0-9]{32}$")) {
-   int removed=DeleteAppContainerProfile(args[1]);return removed==0||removed==unchecked((int)0x80070002)||removed==unchecked((int)0x80070003)?0:1;
+   int removed=DeleteAppContainerProfile(args[1]);
+   if(removed==0||removed==unchecked((int)0x80070002)||removed==unchecked((int)0x80070003))return 0;
+   Console.WriteLine(new JavaScriptSerializer().Serialize(Failure("cleanup",Marshal.GetExceptionForHR(removed)??new InvalidOperationException())));return 1;
   }
   PI child=new PI(); string name=args.Length==4?args[3]:""; bool profile=false,attributesInitialized=false;
   Dictionary<string,object> receipt=null; int code=1;string staging=null,stage="staging";
   try {
    if(args.Length!=4||!System.Text.RegularExpressions.Regex.IsMatch(name,"^cline-js-[a-f0-9]{32}$")) throw new Exception("Expected staging root, timeout, mode, controller profile");
+   WatchController();CheckCancellation();
    string root=Path.GetFullPath(args[0]); int timeout=int.Parse(args[1]);
    if(timeout<1000||timeout>30000||args[2]!="run") throw new Exception("Invalid fixed run policy");
    if(!System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(root),"^cline-js-isolated-[a-zA-Z0-9_-]{6,32}$") || !string.Equals(Path.GetDirectoryName(root).TrimEnd('\\'),Path.GetFullPath(Path.GetTempPath()).TrimEnd('\\'),StringComparison.OrdinalIgnoreCase) || (File.GetAttributes(root)&FileAttributes.ReparsePoint)!=0)throw new Exception("Controller-owned private temporary staging required");
@@ -158,8 +168,8 @@ class JavaScriptIsolation {
    if(!File.Exists(runtime)||!File.Exists(target)||!Directory.Exists(scratch)) throw new Exception("Incomplete private staging");
    foreach(string path in Directory.GetFileSystemEntries(root)) if((File.GetAttributes(path)&FileAttributes.ReparsePoint)!=0) throw new Exception("Reparse staging entry");
    staging=root;
-   stage="profile"; int hr=CreateAppContainerProfile(name,name,"Ephemeral Cline JS standalone scenario",IntPtr.Zero,0,out sid);
-   if(hr!=0) Marshal.ThrowExceptionForHR(hr); profile=true;
+   CheckCancellation();stage="profile"; int hr=CreateAppContainerProfile(name,name,"Ephemeral Cline JS standalone scenario",IntPtr.Zero,0,out sid);
+   if(hr!=0) Marshal.ThrowExceptionForHR(hr); profile=true;CheckCancellation();
    var identity=new SecurityIdentifier(sid); stage="profile-directory";
    IntPtr profilePath; hr=GetAppContainerFolderPath(identity.Value,out profilePath); if(hr!=0)Marshal.ThrowExceptionForHR(hr);
    string privateLocal;try{privateLocal=Marshal.PtrToStringUni(profilePath);if(string.IsNullOrEmpty(privateLocal)||privateLocal.IndexOf('\0')>=0)throw new Exception("Invalid private AppContainer directory");}finally{Marshal.FreeCoTaskMem(profilePath);}
@@ -188,8 +198,10 @@ class JavaScriptIsolation {
    stage="birth"; long creation,exit,kernel,user; Check(GetProcessTimes(child.process,out creation,out exit,out kernel,out user));
    Close(ref outWrite); Close(ref errWrite); Close(ref input);
    stage="capture"; Capture stdout=new Capture(outRead,job),stderr=new Capture(errRead,job);
-   stage="resume"; if(ResumeThread(child.thread)==0xffffffff) throw new Win32Exception();
-   stage="wait"; uint wait=WaitForSingleObject(child.process,(uint)timeout); bool timedOut=wait==258;
+   CheckCancellation();stage="resume"; if(ResumeThread(child.thread)==0xffffffff) throw new Win32Exception();
+   stage="wait"; var elapsed=System.Diagnostics.Stopwatch.StartNew();uint wait=258;
+   while(elapsed.ElapsedMilliseconds<timeout){CheckCancellation();wait=WaitForSingleObject(child.process,(uint)Math.Min(50,Math.Max(1,timeout-elapsed.ElapsedMilliseconds)));if(wait!=258)break;}
+   CheckCancellation();bool timedOut=wait==258;
    if(wait!=0 && !timedOut) throw new Exception("Unknown child wait outcome");
    stage="termination"; if(timedOut) Check(TerminateJobObject(job,124));
    Check(TerminateJobObject(job,124)); // terminate all remaining descendants even after root exit
@@ -201,7 +213,11 @@ class JavaScriptIsolation {
    code=0;
   } catch(Exception e) {receipt=Failure(stage,e);code=1;}
   finally {
-   if(child.process!=IntPtr.Zero) TerminateProcess(child.process,124);
+   if(child.process!=IntPtr.Zero) {
+    TerminateProcess(child.process,124);
+    // Do not delete a live target's profile while kernel job teardown is pending.
+    if(WaitForSingleObject(child.process,5000)!=0){receipt=Failure("termination",new InvalidOperationException());code=1;}
+   }
    Close(ref job); Close(ref child.thread);Close(ref child.process);Close(ref outRead);Close(ref outWrite);Close(ref errRead);Close(ref errWrite);Close(ref input);
    if(attributesInitialized) DeleteProcThreadAttributeList(attributes);
    foreach(IntPtr p in new[]{attributes,security,handles,env}) if(p!=IntPtr.Zero)Marshal.FreeHGlobal(p);

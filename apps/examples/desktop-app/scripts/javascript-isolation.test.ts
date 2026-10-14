@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { probeProcessStartTokenAsync } from "@cline/core";
 import { observeNativeModule } from "../sidecar/native-module-observation";
@@ -10,6 +11,7 @@ import { tmpdir } from "node:os";
 import { buildJavaScriptIsolation } from "./build-javascript-isolation";
 import { runIsolatedJavaScript } from "../sidecar/javascript-isolation";
 const sha = (v: string) => createHash("sha256").update(v).digest("hex");
+const execFileAsync = promisify(execFile);
 const windows = process.platform === "win32" && process.arch === "x64";
 describe.skipIf(!windows)(
 	"real Windows kernel AppContainer standalone execution",
@@ -202,7 +204,7 @@ describe.skipIf(!windows)(
 						"v1.0",
 						"powershell.exe",
 					);
-			const output = spawnSync(
+			const output = await execFileAsync(
 				command,
 				[
 					"-NoProfile",
@@ -210,9 +212,17 @@ describe.skipIf(!windows)(
 					"-Command",
 					`[Console]::Write((Get-Process -Id ${process.pid}).MainModule.BaseAddress.ToInt64().ToString('x'))`,
 				],
-				{ encoding: "utf8", timeout: 10000 },
-			);
-			expect(output.status).toBe(0);
+				{
+					encoding: "utf8",
+					timeout: 10000,
+					maxBuffer: 8192,
+					windowsHide: true,
+				},
+			).catch((error: NodeJS.ErrnoException) => {
+				// Retain bounded launch diagnostics instead of a null sync status.
+				const code = String(error.code ?? "unknown").slice(0, 40);
+				throw new Error(`Owned module-address probe failed (${code})`);
+			});
 			expect(output.stdout).toMatch(/^[a-f0-9]+$/);
 			const birth = await probeProcessStartTokenAsync(process.pid);
 			if (birth.status !== "found")
@@ -256,19 +266,20 @@ describe.skipIf(!windows)(
 				),
 			).rejects.toThrow("unavailable");
 		}, 30000);
-		test("cancellation after launch kills the host job and cleans private stage/profile", async () => {
-			const controller = new AbortController(),
-				timer = setTimeout(() => controller.abort(), 1000);
-			try {
-				await expect(
-					run("setInterval(()=>{},1000);", "", {
-						timeoutMs: 5000,
-						signal: controller.signal,
-					}),
-				).rejects.toThrow("cancelled");
-			} finally {
-				clearTimeout(timer);
-			}
-		}, 30000);
+		for (const cancelAfterMs of [1000, 8000])
+			test(`cancellation at ${cancelAfterMs} ms settles host teardown without a receipt`, async () => {
+				const controller = new AbortController(),
+					timer = setTimeout(() => controller.abort(), cancelAfterMs);
+				try {
+					await expect(
+						run("setInterval(()=>{},1000);", "", {
+							timeoutMs: 30000,
+							signal: controller.signal,
+						}),
+					).rejects.toThrow("cancelled");
+				} finally {
+					clearTimeout(timer);
+				}
+			}, 30000);
 	},
 );

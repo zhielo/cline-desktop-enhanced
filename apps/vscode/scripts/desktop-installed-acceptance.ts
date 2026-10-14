@@ -4,10 +4,10 @@
  */
 
 import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
-import { createHash } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
@@ -60,6 +60,26 @@ export function startAcceptanceProcess(
   });
   const closed = new Promise<void>((done) => child.once("close", () => done()));
   return { child, exited, closed, diagnostics, startedAt };
+}
+
+/** Node-owned deadline: renderer timers can stop while a WebView/IPC call is stuck.
+ * Timeout fails acceptance, never retries or claims a submitted operation was undone. */
+export async function withInstalledActionDeadline<T>(
+  phase: string,
+  operation: () => Promise<T>,
+  timeoutMs = 95_000,
+): Promise<T> {
+  if (!/^[a-z][a-z0-9_-]{0,95}$/.test(phase) || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 180_000)
+    throw new Error("Invalid installed action deadline");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Installed action deadline exceeded: ${phase}; no replay`)), timeoutMs);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
 }
 
 // A settings textbox is disabled until the asynchronous persisted-settings read settles.
@@ -239,6 +259,31 @@ export async function main() {
   let app: ReturnType<typeof startAcceptanceProcess> | undefined;
   let browser: Browser | undefined;
   const stages: string[] = [];
+  let actionSequence = 0;
+  let lastAction = { phase: "setup", status: "running" };
+  async function acceptanceAction<T>(phase: string, operation: () => Promise<T>, timeoutMs = 95_000) {
+    const sequence = ++actionSequence;
+    if (sequence > 256) throw new Error("Installed action evidence budget reached");
+    lastAction = { phase, status: "running" };
+    const startedAt = new Date().toISOString();
+    const persist = async () => {
+      await appendFile(join(evidence, "action-progress.jsonl"), JSON.stringify({sequence, ...lastAction, at: new Date().toISOString()}) + "\n");
+      await writeFile(join(evidence, "phase.json"), JSON.stringify({
+        schemaVersion: 1, sourceCommit: process.env.GITHUB_SHA, sequence, lastAction, startedAt, stages,
+      }, null, 2));
+    };
+    await persist();
+    try {
+      const result = await withInstalledActionDeadline(phase, operation, timeoutMs);
+      lastAction = { phase, status: "completed" };
+      await persist();
+      return result;
+    } catch (error) {
+      lastAction = { phase, status: "failed" };
+      await persist();
+      throw error;
+    }
+  }
   let launchNumber = 0;
   const startupSamples: number[] = [];
   const appWorkingSetSamples: number[] = [];
@@ -256,7 +301,8 @@ export async function main() {
       workspace,
       environment,
     );
-    await killer.exited;
+    const code = await withInstalledActionDeadline("owned-process-tree-stop", () => killer.exited, 10_000).catch((error) => { killer.child.kill(); throw error; });
+    if (code !== 0) throw new Error("Owned process-tree cleanup was not confirmed");
 	}
 
   async function retainLaunchReceipt(
@@ -402,12 +448,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
       ),
     );
 		// Skip only first-run onboarding in an empty test profile, not app authentication.
-		await page.evaluate(() =>
+		await acceptanceAction("launch-onboarding-profile", () => page.evaluate(() =>
       localStorage.setItem(
         "cline.code.onboarding.v1",
         JSON.stringify({ completedAt: new Date().toISOString() }),
       ),
-    );
+    ), 30_000);
     await page.reload();
     await page
       .getByRole("button", { name: "Settings", exact: true })
@@ -438,13 +484,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
     command: string,
     args: Record<string, unknown> = {},
   ): Promise<T> {
-		const endpoint = await waitForInstalledBackendEndpoint(() => page.evaluate(async () => {
+		const endpoint = await acceptanceAction("backend-endpoint-discovery", () => waitForInstalledBackendEndpoint(() => page.evaluate(async () => {
 			const native = (window as unknown as {
 				__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> };
 			}).__TAURI_INTERNALS__;
 			return await native.invoke("get_desktop_backend_endpoint");
-		}));
-		return (await page.evaluate(
+		})), 95_000);
+		return (await acceptanceAction(`rpc-${command}`, () => page.evaluate(
 			async ({ command, args, endpoint }) => {
 				return await new Promise((resolve, reject) => {
           const socket = new WebSocket(endpoint);
@@ -485,7 +531,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
         });
 			},
       { command, args, endpoint },
-    )) as T;
+    ))) as T;
 	}
 	async function settings(page: Page, section: string) {
     await page
@@ -498,15 +544,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .click();
 	}
 	async function stop() {
-		if (browser) {
-      await browser.close();
+    try {
+      const ownedBrowser = browser;
+      if (ownedBrowser) await withInstalledActionDeadline("owned-browser-disconnect", () => ownedBrowser.close(), 10_000);
+    } finally {
+      // Disconnect failure must not bypass termination of this owned app.
       browser = undefined;
-		}
-		if (app && app.child.exitCode === null && app.child.pid) {
-      await killOwnedProcess(app.child.pid);
-      await app.exited;
-		}
-    app = undefined;
+      const ownedApp = app;
+      if (ownedApp && ownedApp.child.exitCode === null && ownedApp.child.pid) {
+        await killOwnedProcess(ownedApp.child.pid);
+        await withInstalledActionDeadline("owned-app-exit", () => ownedApp.exited, 10_000);
+      }
+      app = undefined;
+    }
 	}
 
 	try {
@@ -547,6 +597,27 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-sidecar-isolated-hub-bootstrapped");
     let page = await launch();
     stages.push("installed-webview-rendered");
+    // Exercise the installed app's actual event receivers against our own blank
+    // WebView. Never attach to user browsers or execute a supplied target.
+    const captureBrowserId=randomUUID();
+    const nativeCaptureInvoke=<T,>(name:string,args:Record<string,unknown>)=>acceptanceAction(`native-${name}`, () => page.evaluate(async({name,args})=>{
+      const native=(window as unknown as {__TAURI_INTERNALS__:{invoke:(name:string,args:Record<string,unknown>)=>Promise<unknown>}}).__TAURI_INTERNALS__;
+      return await native.invoke(name,args);
+    },{name,args}), 40_000) as Promise<T>;
+    try {
+      await nativeCaptureInvoke("built_in_browser_start",{sessionId:captureBrowserId,url:"about:blank"});
+      await nativeCaptureInvoke("built_in_browser_capture",{sessionId:captureBrowserId,action:"start"});
+      await nativeCaptureInvoke("built_in_browser_cdp",{sessionId:captureBrowserId,method:"Runtime.enable",params:{}});
+      await nativeCaptureInvoke("built_in_browser_cdp",{sessionId:captureBrowserId,method:"Runtime.evaluate",params:{expression:"console.log('owned-capture-secret-fixture')",returnByValue:true}});
+      await delay(100);
+      const captured=await nativeCaptureInvoke<{cleanupVerified:boolean;events:Array<{kind:string;argumentCount?:number}>}>("built_in_browser_capture",{sessionId:captureBrowserId,action:"stop"});
+      if(!captured.cleanupVerified||!captured.events.some(e=>e.kind==="console-event"&&e.argumentCount===1))throw new Error("Installed native browser capture failed");
+      if(JSON.stringify(captured).includes("owned-capture-secret-fixture"))throw new Error("Installed native capture retained console argument values");
+      stages.push("installed-browser-native-metadata-capture-cleanup-verified");
+    } finally {
+      await nativeCaptureInvoke("built_in_browser_stop",{sessionId:captureBrowserId});
+    }
+
 		// Create an idle session with explicit local configuration: no paid/live model turn.
     const session = await rpc<{ sessionId: string }>(
       page,
@@ -648,7 +719,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       const started = performance.now();
       await page.locator('[data-message-role="user"]').first().scrollIntoViewIfNeeded();
       await page.locator('[data-message-role="user"]').last().scrollIntoViewIfNeeded();
-      await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+      await acceptanceAction("owned-transcript-frame", () => page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())))), 30_000);
       transcriptScrollSamples.push(performance.now() - started);
     }
     stages.push("owned-120-row-transcript-scroll-acceptance-passed");
@@ -657,7 +728,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await preview.waitFor({state: "visible"});
     if (!(await preview.evaluate(el => el.scrollHeight > el.clientHeight))) throw new Error("Owned Markdown preview is not independently scrollable");
     const box = await preview.boundingBox();
-    if (!box || box.y < 0 || box.y + box.height > (page.viewportSize()?.height ?? await page.evaluate(() => innerHeight))) throw new Error("Markdown preview exceeds viewport");
+    if (!box || box.y < 0 || box.y + box.height > (page.viewportSize()?.height ?? await acceptanceAction("owned-viewport-read", () => page.evaluate(() => innerHeight), 30_000))) throw new Error("Markdown preview exceeds viewport");
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.wheel(0, 700);
     await page.waitForFunction(() => (document.querySelector('[data-testid="artifact-preview-scroll"]')?.scrollTop ?? 0) > 0);
@@ -895,7 +966,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v6",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v7",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },
@@ -903,6 +974,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           baselineStatus: "not-established",
           limitations: [
             "Three candidate observations per metric; no controlled before/after improvement claim.",
+            "Includes bounded acceptance phase-journal I/O; earlier v6 runs are not comparable.",
             "Working set includes the launched native app only, not WebView, Hub or analysis worker memory and not a peak-memory benchmark.",
             "Scroll measurements use 120 owned offline rows and two animation frames, not live model work or proof of all long-session workloads.",
           ],
@@ -911,6 +983,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
         2,
       ),
     );
+    await stop();
+    stages.push("installed-owned-app-cleanup-confirmed");
 		await writeFile(
 			join(evidence, "summary.json"),
 			JSON.stringify(
@@ -959,7 +1033,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     }
     await writeFile(
       join(evidence, "summary.json"),
-      JSON.stringify({ status: "failed", stages, reason, hubStartupDiagnostic }, null, 2),
+      JSON.stringify({ status: "failed", stages, lastAction, reason, hubStartupDiagnostic }, null, 2),
     );
     throw new Error(reason);
   } finally {

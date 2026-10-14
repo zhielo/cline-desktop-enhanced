@@ -29,8 +29,10 @@ fn safe_url(value: &str) -> Result<tauri::Url, String> {
     Ok(url)
 }
 
+// WebView2 creation deadlocks in a synchronous Windows IPC handler.
+// Keep this command async as required by WebviewWindowBuilder::new.
 #[tauri::command]
-pub fn built_in_browser_start(
+pub async fn built_in_browser_start(
     app: tauri::AppHandle,
     session_id: String,
     url: String,
@@ -40,14 +42,54 @@ pub fn built_in_browser_start(
         return Err("browser session already exists".to_string());
     }
     let target = safe_url(&url)?;
-    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target))
+    let builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target))
         .title("Cline Built-in Browser")
         .inner_size(1240.0, 820.0)
         .min_inner_size(720.0, 480.0)
         .resizable(true)
-        .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about"))
-        .build()
+        .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about"));
+    #[cfg(windows)]
+    let builder = {
+        let state = app
+            .try_state::<crate::installed_webview_launch::AcceptanceWebviewState>()
+            .ok_or("Native browser launch configuration unavailable")?;
+        match &state.0 {
+            // WebView2 shares a browser process/profile. Its environment options
+            // must match the main WebView, including arguments appended by the SDK.
+            Some(options) => builder
+                .additional_browser_args(&options.additional_browser_args)
+                .data_directory(options.data_directory.clone()),
+            None => builder,
+        }
+    };
+    let window = builder.build()
         .map_err(|error| format!("failed creating built-in browser: {error}"))?;
+    #[cfg(windows)]
+    {
+        let readiness = crate::browser_readiness::await_browser_ready(
+            || {
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                window
+                    .with_webview(move |webview| unsafe {
+                        let result = webview
+                            .controller()
+                            .CoreWebView2()
+                            .map(|_| ())
+                            .map_err(|_| "Native browser core unavailable".to_string());
+                        let _ = sender.send(result);
+                    })
+                    .map_err(|_| "Native browser readiness dispatch unavailable".to_string())?;
+                Ok(receiver)
+            },
+            std::time::Duration::from_secs(30),
+        )
+        .await;
+        if let Err(error) = readiness {
+            // Closing is requested, not asserted as verified cleanup.
+            let _ = window.close();
+            return Err(format!("{error}; browser close requested, not confirmed"));
+        }
+    }
     window
         .show()
         .map_err(|error| format!("failed showing built-in browser: {error}"))?;
@@ -57,6 +99,11 @@ pub fn built_in_browser_start(
 #[tauri::command]
 pub fn built_in_browser_stop(app: tauri::AppHandle, session_id: String) -> Result<Value, String> {
     let label = browser_label(&session_id)?;
+    #[cfg(windows)]
+    if let Some(window) = app.get_webview_window(&label) {
+        let cleanup_label=label.clone();
+        let _=window.with_webview(move |_| unsafe {let _=crate::browser_capture::end(&cleanup_label);});
+    }
     if let Some(window) = app.get_webview_window(&label) {
         window
             .close()
@@ -145,4 +192,20 @@ pub async fn built_in_browser_cdp(
     _params: Value,
 ) -> Result<Value, String> {
     Err("structured built-in browser control is currently available on Windows only".to_string())
+}
+
+#[tauri::command]
+pub async fn built_in_browser_capture(app: tauri::AppHandle, session_id: String, action: String) -> Result<Value,String> {
+    #[cfg(not(windows))] { let _=(app,session_id,action); return Err("Browser scenario recording is Windows-only; no simulated fallback".into()); }
+    #[cfg(windows)] {
+        if !matches!(action.as_str(),"start"|"stop") { return Err("Unsupported capture action".into()); }
+        let label=browser_label(&session_id)?;
+        let window=app.get_webview_window(&label).ok_or("Unknown browser session")?;
+        let (sender,receiver)=tokio::sync::oneshot::channel();
+        window.with_webview(move |webview| unsafe {
+            let result=webview.controller().CoreWebView2().map_err(|_|"Browser core unavailable".to_string()).and_then(|core|if action=="start"{crate::browser_capture::begin(&core,&label)}else{crate::browser_capture::end(&label)});
+            if sender.send(result).is_err(){ let _=crate::browser_capture::end(&label); }
+        }).map_err(|_|"Browser capture dispatch unavailable".to_string())?;
+        tokio::time::timeout(std::time::Duration::from_secs(30),receiver).await.map_err(|_|"Browser capture timed out; cleanup must be confirmed".to_string())?.map_err(|_|"Browser capture callback dropped".to_string())?
+    }
 }

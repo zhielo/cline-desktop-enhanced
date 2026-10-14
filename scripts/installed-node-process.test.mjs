@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ANALYSIS_PROFILE } from "../sdk/packages/core/src/analysis/contracts.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
+	withInstalledActionDeadline,
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	verifyRestartInstructions,
@@ -197,4 +199,61 @@ test("new installed receipt must match current parser profile, not historical pr
   assert.doesNotThrow(() => verifyInstalledAnalysisProfile(ANALYSIS_PROFILE));
   for (const profile of ["cline-js-static/6", "cline-js-static/1", "", "unknown"])
     assert.throws(() => verifyInstalledAnalysisProfile(profile), /Installed analysis profile is stale/);
+});
+
+
+test("installed action deadline is Node-owned, single-shot and keeps successful results", async () => {
+ let calls=0;
+ assert.equal(await withInstalledActionDeadline("owned-read",async()=>{calls++;return 42;},100),42);
+ assert.equal(calls,1);
+ await assert.rejects(withInstalledActionDeadline("owned-stalled-ipc",()=>new Promise(()=>{}),10),/owned-stalled-ipc; no replay/);
+});
+test("timed-out accepted action is never replayed and late rejection remains handled", async () => {
+ let calls=0;
+ await assert.rejects(withInstalledActionDeadline("owned-accepted-action",()=>{calls++;return new Promise((_,reject)=>setTimeout(()=>reject(new Error("late failure")),30));},5),/deadline exceeded/);
+ await new Promise(resolve=>setTimeout(resolve,50));
+ assert.equal(calls,1);
+});
+test("invalid phase or deadline cannot invoke an installed action", async () => {
+ let calls=0;
+ for(const [phase,ms] of [["bad\nphase",10],["owned",0],["owned",Infinity],["owned",180001]])
+  await assert.rejects(withInstalledActionDeadline(phase,async()=>{calls++;},ms),/Invalid installed action/);
+ assert.equal(calls,0);
+});
+test("Windows browser creation is async and acceptance writes bounded action evidence", () => {
+ const native=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/built_in_browser.rs",import.meta.url),"utf8");
+ assert.match(native, /#\[tauri::command\]\s+pub async fn built_in_browser_start\(/);
+ assert.ok(native.includes("safe_url(&url)?"));
+ assert.ok(native.includes("try_state::<crate::installed_webview_launch::AcceptanceWebviewState>()"));
+ assert.ok(native.includes(".additional_browser_args(&options.additional_browser_args)"));
+ assert.ok(native.includes(".data_directory(options.data_directory.clone())"));
+ const main=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/main.rs",import.meta.url),"utf8");
+ assert.ok(main.includes("builder.manage(installed_webview_launch::AcceptanceWebviewState(acceptance_options))"));
+ assert.ok(main.includes("window.additional_browser_args = Some(options.additional_browser_args.clone())"));
+ assert.ok(main.includes("window.data_directory = Some(options.data_directory.clone())"));
+ const installer=readFileSync(new URL("../apps/examples/desktop-app/scripts/windows-installer.test.ts",import.meta.url),"utf8");
+ assert.ok(!installer.includes('Bun.spawnSync([nsis, "/VERSION"])'));
+ assert.match(installer,/promisify\(execFile\)\(nsis, \["\/VERSION"\],[\s\S]*?timeout: 10_000/);
+ assert.ok(installer.includes("version.stdout.trim()"));
+ assert.ok(native.includes("crate::browser_readiness::await_browser_ready("));
+ assert.ok(native.indexOf("await_browser_ready(") < native.indexOf(".show()"));
+ const readiness=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/browser_readiness.rs",import.meta.url),"utf8");
+ assert.ok(readiness.includes("timeout_at(deadline, receiver)"));
+ assert.ok(readiness.includes("for _ in 0..300"));
+ assert.ok(readiness.includes("Ok(Ok(result)) => return result"));
+ assert.ok(readiness.includes("creation was not acknowledged"));
+ assert.ok(!readiness.includes("built_in_browser_cdp("));
+ assert.ok(!readiness.includes("browser_capture::begin("));
+ const workflow=readFileSync(new URL("../.github/workflows/build-custom-windows-installer.yml",import.meta.url),"utf8");
+ assert.ok(workflow.includes("Cargo.toml browser_readiness::"));
+ assert.ok(workflow.includes("throw 'Native browser readiness fixtures failed'"));
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.ok(driver.includes('join(evidence, "phase.json")'));
+ assert.ok(driver.includes('join(evidence, "action-progress.jsonl")'));
+ assert.ok(driver.includes('sequence > 256'));
+ assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v7'));
+ assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
+ assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
+ assert.ok(driver.includes('installed-owned-app-cleanup-confirmed'));
+ assert.ok(driver.indexOf('installed-owned-app-cleanup-confirmed')<driver.indexOf('status: "passed"'));
 });

@@ -3,8 +3,54 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, formatValidationFailureNotice, formatValidationSummary, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
+import { assertReusableCoreValidation, coreValidationReceiptPath, validationScope, engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, formatValidationFailureNotice, formatValidationSummary, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
 const jobs = [1, 2, 3, 4, 5].map(n => ({ name: String(n) }));
+test("core reuse requires every gate and the exact commit, job and run attempt", () => {
+  const source = "a".repeat(40);
+  const scope = { runId: "123", runAttempt: "2", job: "build" };
+  const gates = ["build", "types", "isolation", "installer"];
+  const receipt = { schemaVersion: 1, sourceCommit: source, status: "passed",
+    engineValidation: "not-requested", executionScope: scope,
+    results: gates.map(name => ({ name, status: "passed" })) };
+  assert.doesNotThrow(() => assertReusableCoreValidation(receipt, source, gates, scope));
+  for (const patch of [
+    { status: "failed" }, { sourceCommit: "b".repeat(40) }, { schemaVersion: 0 },
+    { engineValidation: "requested-see-corpus-results" }, { executionScope: { ...scope, runAttempt: "1" } },
+    { executionScope: { ...scope, runId: "other" } }, { executionScope: { ...scope, job: "other" } },
+    { results: receipt.results.slice(1) }, { results: [...receipt.results, { name: "extra", status: "passed" }] },
+    { results: receipt.results.map((r, i) => i ? r : { ...r, status: "blocked" }) },
+    { results: receipt.results.map((r, i) => i ? r : { ...r, status: "skipped" }) },
+    { results: receipt.results.map((r, i) => i ? r : { ...r, status: "failed" }) },
+    { results: receipt.results.map((r, i) => i ? r : { ...r, name: "types" }) },
+    { results: receipt.results.map((r, i) => i ? r : { ...r, name: "unknown" }) },
+  ]) assert.throws(() => assertReusableCoreValidation({ ...receipt, ...patch }, source, gates, scope));
+  assert.throws(() => assertReusableCoreValidation(receipt, "unavailable", gates, scope));
+  assert.throws(() => assertReusableCoreValidation(receipt, source, [...gates, "types"], scope));
+});
+test("core receipt path cannot select external, traversal or arbitrary JSON files", () => {
+  assert.equal(coreValidationReceiptPath("/owned", ".cline-validation/123-456/summary.json"),
+    path.join("/owned", ".cline-validation/123-456/summary.json"));
+  for (const value of [undefined, "", "/tmp/summary.json", "../summary.json",
+    ".cline-validation/../../summary.json", ".cline-validation/123-456/summary.json\n",
+    ".cline-validation/123-456/other.json"])
+    assert.throws(() => coreValidationReceiptPath("/owned", value));
+  assert.deepEqual(validationScope({}), { runId: null, runAttempt: null, job: null });
+});
+test("receipt-verified engine phase retains all actual corpora and blocks unproved reuse", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/build-custom-windows-installer.yml", import.meta.url), "utf8");
+  assert.ok(workflow.includes("CLINE_VALIDATION_CORE_RECEIPT: ${{ steps.consolidated.outputs.validation_receipt }}"));
+  assert.ok(workflow.includes("bun run validate:advanced --engines --reuse-core"));
+  assert.ok(workflow.includes("advanced-windows-engine-smoke.test.ts"));
+  const runner = readFileSync(new URL("./validate-advanced-build.mjs", import.meta.url), "utf8");
+  assert.ok(runner.includes("assertReusableCoreValidation(report, sourceCommit, coreGateNames, executionScope)"));
+  assert.ok(runner.includes('realpath(receipt)'));
+  assert.ok(runner.includes('size > 131072'));
+  assert.ok(runner.includes('coreValidationReceipt ? engineChecks : checks'));
+  assert.ok(runner.includes('!flags.includes("--engines")'));
+  for (const file of ["server.test.py", "capture_support.test.py", "setup-controller.test.py",
+    "advanced-analysis-worker.test.py", "advanced-ir.test.py", "advanced-crypto.test.py"])
+    assert.ok(runner.includes(file));
+});
 test("engine corpus explicitly selects the shipped Windows profile without weakening full-engine execution", () => {
   const corpus = "advanced-analysis-worker.test.py";
   assert.deepEqual(engineCorpusArgs(corpus, "/owned", "win32").slice(1), ["--engine-profile", "windows-portable"]);

@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod built_in_browser;
+mod browser_capture;
+#[cfg(any(windows, test))]
+mod browser_readiness;
 #[cfg(any(windows, test))]
 mod installed_webview_launch;
 #[cfg(target_os = "macos")]
@@ -1366,6 +1369,8 @@ fn set_tray_status(
 fn main() {
     let mut context = tauri::generate_context!();
     #[cfg(windows)]
+    let mut acceptance_options = None;
+    #[cfg(windows)]
     {
         let enabled = std::env::var("CLINE_INSTALLED_ACCEPTANCE").ok();
         let arguments = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").ok();
@@ -1383,12 +1388,13 @@ fn main() {
                     .iter_mut()
                     .find(|window| window.label == MAIN_WINDOW_LABEL)
                     .expect("configured main window required");
-                window.additional_browser_args = Some(options.additional_browser_args);
-                window.data_directory = Some(options.data_directory);
+                window.additional_browser_args = Some(options.additional_browser_args.clone());
+                window.data_directory = Some(options.data_directory.clone());
                 eprintln!(
                     "[installed-acceptance] explicit loopback WebView2 options applied on port {}",
                     options.port
                 );
+                acceptance_options = Some(options);
             }
             Ok(None) => {}
             Err(error) => {
@@ -1407,7 +1413,10 @@ fn main() {
         workspace_root,
     };
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    let builder = builder.manage(installed_webview_launch::AcceptanceWebviewState(acceptance_options));
+    builder
         // Closing the window only hides it, so on Windows a second launch from
         // Start used to start another full copy (tray icon, sidecar) instead
         // of showing this one. Must be the first plugin so the duplicate exits
@@ -1493,6 +1502,7 @@ fn main() {
             get_desktop_backend_endpoint,
             built_in_browser::built_in_browser_start,
             built_in_browser::built_in_browser_cdp,
+            built_in_browser::built_in_browser_capture,
             built_in_browser::built_in_browser_stop,
             pick_workspace_directory,
             open_mcp_settings_file,

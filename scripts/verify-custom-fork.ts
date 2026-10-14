@@ -4,12 +4,47 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"sdk/packages/core/src/analysis/recovery.ts",markers:["ownershipBinding", "originalInstanceGone", "recovery blocked"]},
- {path:"sdk/packages/core/src/analysis/inspector.ts",markers:["assertInspectorOwner", "Debugger.getScriptSource", "exact-loaded-source-byte-match"]},
- {path:"sdk/packages/core/src/analysis/contracts.ts",markers:["cline-js-static/7","shipped-artifact","termination-unconfirmed"]},
- {path:"sdk/packages/core/src/analysis/service.ts",markers:["--cline-analysis-worker","SIGKILL","reservation retained","do not replay"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx",markers:["Session Analysis mode","Runtime mode does not grant","first_party_analysis_mode"]},
- {path:"apps/examples/desktop-app/sidecar/analysis-parser-notices.ts",markers:["Apache License","Microsoft"]},
+	{
+		path: "sdk/packages/core/src/analysis/recovery.ts",
+		markers: ["ownershipBinding", "originalInstanceGone", "recovery blocked"],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/inspector.ts",
+		markers: [
+			"assertInspectorOwner",
+			"Debugger.getScriptSource",
+			"exact-loaded-source-byte-match",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/contracts.ts",
+		markers: [
+			"cline-js-static/7",
+			"shipped-artifact",
+			"termination-unconfirmed",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/service.ts",
+		markers: [
+			"--cline-analysis-worker",
+			"SIGKILL",
+			"reservation retained",
+			"do not replay",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx",
+		markers: [
+			"Session Analysis mode",
+			"Runtime mode does not grant",
+			"first_party_analysis_mode",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/analysis-parser-notices.ts",
+		markers: ["Apache License", "Microsoft"],
+	},
 	{
 		path: "apps/examples/desktop-app/webview/components/ui/preview-scroll-region.tsx",
 		markers: [
@@ -183,7 +218,7 @@ const requiredMarkers: Array<{
 	{
 		path: "scripts/benchmark-command-execution.mjs",
 		markers: [
-			"owned-shared-executor-ready/v1",
+			"owned-shared-executor-ready/v2",
 			"environmentId",
 			"not installed UI startup",
 		],
@@ -537,7 +572,7 @@ const requiredMarkers: Array<{
 		path: ".github/workflows/build-custom-windows-installer.yml",
 		markers: [
 			"pull_request:",
-			'"fix/**"',
+			"Restore exact Windows engine wheel cache",
 			"Select unsigned private installer",
 			"validate:advanced --engines",
 			"steps.ui_acceptance.outcome == 'success'",

@@ -1,4 +1,5 @@
 "use client";
+import { DraftRecoveryControl } from "./draft-recovery-control";
 
 import {
 	CLINE_DEFAULT_MODEL_ID,
@@ -304,6 +305,8 @@ export function buildWorkspaceFileSearchKey(
 }
 
 type ChatInputBarProps = {
+	recoverySessionId?: string;
+	recoveryWorkspace?: string;
 	environmentId: string;
 	variant?: "conversation" | "welcome";
 	readOnly?: boolean;
@@ -356,6 +359,8 @@ type ChatInputBarProps = {
 };
 
 function ChatInputBarImpl({
+	recoverySessionId,
+	recoveryWorkspace,
 	environmentId,
 	variant = "conversation",
 	readOnly = false,
@@ -1201,6 +1206,13 @@ function ChatInputBarImpl({
 			)}
 		>
 			{/* Input area */}
+			<DraftRecoveryControl
+				environmentId={environmentId}
+				workspace={recoveryWorkspace ?? workspaceRoot}
+				sessionId={recoverySessionId}
+				value={promptInput}
+				onRestore={setPromptInput}
+			/>
 			<WorktreeHandoffBar cwd={workspaceRoot} />
 			<PullRequestBar cwd={workspaceRoot} branch={gitBranch} />
 			<div

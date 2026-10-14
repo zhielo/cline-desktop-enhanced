@@ -1,6 +1,9 @@
+import { createBoundedHostCancellation } from "./isolation-cancellation";
+import { finalizeIsolationCleanup } from "./isolation-cleanup";
 import { isolationHostEnvironment } from "./isolation-host-environment";
 import { isolationHostFailureMessage } from "./isolation-host-failure";
-import { spawn, spawnSync } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import {
 	lstat,
@@ -18,6 +21,7 @@ import {
 	ScenarioExpectationSchema,
 	reconcileProcessScenario,
 } from "@cline/core";
+const execFileAsync = promisify(execFile);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Scenario = z
 	.unknown()
@@ -165,6 +169,7 @@ export async function runIsolatedJavaScript(
 	const helperEnvironment = isolationHostEnvironment(process.env, tmpdir());
 	const profileName = `cline-js-${randomUUID().replaceAll("-", "")}`;
 	const root = await mkdtemp(join(tmpdir(), "cline-js-isolated-"));
+	let hostReceiptVerified = false;
 	try {
 		await mkdir(join(root, "scratch"));
 		await writeFile(join(root, "target.cjs"), source, { mode: 0o400 });
@@ -178,12 +183,14 @@ export async function runIsolatedJavaScript(
 		)
 			throw new Error("Runtime resource changed while staging");
 		await writeFile(join(root, "runtime.exe"), runtimeBytes);
+		if (signal?.aborted)
+			throw new Error("Isolated execution cancelled before host launch");
 		const encoded = await new Promise<string>((resolveReceipt, reject) => {
 			const child = spawn(
 				join(resourceRoot, "javascript-isolation-host.exe"),
 				[root, String(request.timeoutMs), "run", profileName],
 				{
-					stdio: ["ignore", "pipe", "ignore"],
+					stdio: ["pipe", "pipe", "ignore"],
 					windowsHide: true,
 					cwd: resourceRoot,
 					env: helperEnvironment,
@@ -192,9 +199,18 @@ export async function runIsolatedJavaScript(
 			let out = Buffer.alloc(0),
 				failure: Error | undefined,
 				finished = false;
+			const cancellation = createBoundedHostCancellation(
+				() => child.stdin.end("cancel\n"),
+				() => {
+					child.kill();
+				},
+			);
+			// The host owns target termination and profile cleanup. EOF also cancels
+			// if the controller dies; the target receives NUL, never this pipe.
+			child.stdin.on("error", () => {});
 			const stop = (message: string) => {
 				failure ??= new Error(message);
-				child.kill();
+				cancellation.stop();
 			};
 			const abort = () =>
 				stop(
@@ -210,6 +226,8 @@ export async function runIsolatedJavaScript(
 				if (finished) return;
 				finished = true;
 				clearTimeout(timer);
+				cancellation.dispose();
+				child.stdin.destroy();
 				signal?.removeEventListener("abort", abort);
 				if (error) reject(error);
 				else resolveReceipt(out.toString("utf8"));
@@ -232,6 +250,10 @@ export async function runIsolatedJavaScript(
 		const receipt = Receipt.parse(JSON.parse(encoded));
 		const stdout = base64(receipt.stdoutBase64),
 			stderr = base64(receipt.stderrBase64);
+		// The encoded receipt can resolve only after host exit 0. The verified
+		// native host sets a nonzero exit on profile or staging cleanup failure.
+		// Set this only after strict receipt and bounded capture validation.
+		hostReceiptVerified = true;
 		ownedFixtureCapture?.({ stdout, stderr, exitCode: receipt.exitCode });
 		const scenario = reconcileProcessScenario(request.scenario, {
 			...receipt,
@@ -266,26 +288,37 @@ export async function runIsolatedJavaScript(
 			],
 		};
 	} finally {
-		const cleanup = spawnSync(
-			join(resourceRoot, "javascript-isolation-host.exe"),
-			["--cleanup", profileName],
-			{
-				stdio: "ignore",
-				windowsHide: true,
-				timeout: 10000,
-				env: helperEnvironment,
+		await finalizeIsolationCleanup(
+			hostReceiptVerified,
+			async () => {
+				await execFileAsync(
+					join(resourceRoot, "javascript-isolation-host.exe"),
+					["--cleanup", profileName],
+					{
+						windowsHide: true,
+						timeout: 10000,
+						maxBuffer: 8192,
+						env: helperEnvironment,
+					},
+				).catch(
+					(error: NodeJS.ErrnoException & { stdout?: string | Buffer }) => {
+						const diagnostic = isolationHostFailureMessage(
+							String(error.stdout ?? ""),
+						);
+						const code = String(error.code ?? "unknown").slice(0, 40);
+						throw new Error(
+							`AppContainer profile cleanup failed (${code}); ${diagnostic}; no successful execution receipt`,
+						);
+					},
+				);
 			},
+			() =>
+				rm(root, {
+					recursive: true,
+					force: true,
+					maxRetries: 5,
+					retryDelay: 100,
+				}),
 		);
-		await rm(root, {
-			recursive: true,
-			force: true,
-			maxRetries: 5,
-			retryDelay: 100,
-		});
-		if (cleanup.status !== 0)
-			// biome-ignore lint/correctness/noUnsafeFinally: Unconfirmed cleanup must discard even an otherwise successful receipt; never authorize replay.
-			throw new Error(
-				"AppContainer profile cleanup failed; no successful execution receipt",
-			);
 	}
 }

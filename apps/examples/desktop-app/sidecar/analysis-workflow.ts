@@ -1,0 +1,224 @@
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import { redactSensitiveText } from "@cline/core";
+import {
+	AnalysisWorkflowStore,
+	type WorkflowScope,
+} from "./analysis-workflow-store";
+const Id = z.string().uuid();
+export const WORKFLOW_COMMANDS = [
+	"open_binary",
+	"analyze_function",
+	"trace_application_feature",
+	"capture_browser_scenario",
+	"get_evidence_bundle",
+	"analysis_workflow_status",
+] as const;
+export interface WorkflowPorts {
+	invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>;
+	staticReceipt: (id: string) => unknown;
+	taskBundle: (id: string) => unknown;
+	capture: (input: Record<string, unknown>) => Promise<unknown>;
+	browsers?: () => unknown;
+}
+export function sanitizeEvidence(value: unknown): unknown {
+	const secrets = Object.entries(process.env)
+		.filter(([key]) => /token|secret|password|api.?key|credential/i.test(key))
+		.map(([, v]) => v ?? "");
+	const visit = (v: unknown, depth = 0): unknown => {
+		if (depth > 40) throw new Error("Evidence nesting budget");
+		if (typeof v === "string") return redactSensitiveText(v, secrets);
+		if (Array.isArray(v)) return v.map((x) => visit(x, depth + 1));
+		if (v && typeof v === "object")
+			return Object.fromEntries(
+				Object.entries(v).map(([k, x]) => [
+					k,
+					/^(password|secret|authorization|cookie|set-cookie|accessToken|refreshToken|executionToken|apiKey)$/i.test(
+						k,
+					)
+						? "[REDACTED]"
+						: visit(x, depth + 1),
+				]),
+			);
+		return v;
+	};
+	return visit(value);
+}
+export function buildEvidenceBundle(scope: WorkflowScope, records: unknown[]) {
+	const payload = {
+		schemaVersion: 1,
+		coverage: "selected-session-investigation-evidence",
+		sessionId: scope.sessionId,
+		exportedAt: new Date().toISOString(),
+		records: sanitizeEvidence(records),
+		limitations: [
+			"Selected records only; not a whole-database backup.",
+			"Redaction is best-effort; review before sharing. No settings, credential files, cookies or browser bodies are included.",
+			"Hashes establish integrity, not correctness or producer authentication.",
+		],
+	};
+	const encoded = JSON.stringify(payload);
+	if (Buffer.byteLength(encoded) > 4 * 1024 * 1024)
+		throw new Error("Evidence bundle exceeds 4 MiB; select fewer records");
+	return {
+		payload,
+		bundleHash: createHash("sha256").update(encoded).digest("hex"),
+	};
+}
+export function featureTrace(
+	feature: string,
+	receipt: unknown,
+	scenarios: unknown[],
+) {
+	const value = receipt as {
+		result?: { facts?: Array<{ kind: string; value: string; id?: string }> };
+	};
+	const facts = (value?.result?.facts ?? [])
+		.filter((f) => f.value?.toLowerCase().includes(feature.toLowerCase()))
+		.slice(0, 100);
+	return {
+		schemaVersion: 1,
+		feature,
+		status: facts.length || scenarios.length ? "partial" : "unresolved",
+		staticCandidates: facts.map((f) => ({
+			...f,
+			classification: "statically-inferred",
+		})),
+		scenarios,
+		limitations: [
+			"Feature-label matches are candidates, not observed causality.",
+			"Recorded browser actions/events do not prove a handler-to-IPC-to-native execution chain.",
+			"No target is launched, replayed or instrumented by this trace query.",
+		],
+	};
+}
+export async function handleAnalysisWorkflow(
+	command: string,
+	input: unknown,
+	scope: WorkflowScope,
+	options: { trusted: boolean; idle: boolean; mode: string },
+	store: AnalysisWorkflowStore,
+	ports: WorkflowPorts,
+) {
+	if (command === "analysis_workflow_status")
+		return {
+			workspace: scope.workspace,
+			artifacts: store.list(scope, "artifact"),
+			scenarios: store.list(scope, "scenario"),
+			browsers: ports.browsers?.() ?? [],
+			mode: options.mode,
+		};
+	if (command === "get_evidence_bundle") {
+		const req = z
+			.object({
+				receiptIds: z.array(Id).max(10).default([]),
+				taskIds: z.array(Id).max(10).default([]),
+				scenarioIds: z.array(Id).max(5).default([]),
+			})
+			.strict()
+			.parse(input);
+		if (
+			!req.receiptIds.length &&
+			!req.taskIds.length &&
+			!req.scenarioIds.length
+		)
+			throw new Error("Select evidence records explicitly");
+		return buildEvidenceBundle(scope, [
+			...req.receiptIds.map(ports.staticReceipt),
+			...req.taskIds.map(ports.taskBundle),
+			...req.scenarioIds.map((id) => store.get(scope, id, "scenario")),
+		]);
+	}
+	if (command === "trace_application_feature") {
+		const req = z
+			.object({
+				feature: z.string().min(1).max(160),
+				receiptId: Id.optional(),
+				scenarioIds: z.array(Id).max(5).default([]),
+			})
+			.strict()
+			.parse(input);
+		return featureTrace(
+			req.feature,
+			req.receiptId ? ports.staticReceipt(req.receiptId) : undefined,
+			req.scenarioIds.map((id) => store.get(scope, id, "scenario")),
+		);
+	}
+	if (command === "capture_browser_scenario") {
+		const req = z
+			.object({
+				browserSessionId: Id,
+				action: z.enum(["start", "stop"]),
+				confirmRecord: z.literal(true),
+				purpose: z.string().min(1).max(160),
+			})
+			.strict()
+			.parse(input);
+		if (!options.trusted)
+			throw new Error(
+				"Trusted connection required for browser recording control",
+			);
+		if (req.action === "start" && (!options.idle || options.mode !== "runtime"))
+			throw new Error(
+				"Browser scenario capture requires an idle Runtime session and explicit recording approval",
+			);
+		const result = await ports.capture(req);
+		if(req.action!=="stop")return result;
+        try{return store.put(scope,"scenario",{purpose:(result as {purpose?:string})?.purpose??req.purpose,capture:result,recordedAt:new Date().toISOString()});}
+        catch{return {capture:result,evidenceWarning:"Observation stopped, but the receipt could not be persisted. Preserve this result; do not replay recording to repair metadata."};}
+	}
+	if (!options.trusted || !options.idle || options.mode === "off")
+		throw new Error(
+			"New workflow work requires a trusted idle session with Analysis enabled",
+		);
+	if (command === "open_binary") {
+		const req = z
+			.object({ target: z.string().min(1).max(4096) })
+			.strict()
+			.parse(input);
+		return store.open(scope, req.target);
+	}
+	if (command === "analyze_function") {
+		const req = z
+			.object({
+				artifactId: Id,
+				engine: z.enum(["ghidra", "ida"]),
+				selector: z
+					.object({
+						symbol: z.string().min(1).max(4096).optional(),
+						address: z
+							.string()
+							.regex(/^0x[0-9a-fA-F]{1,16}$/)
+							.optional(),
+					})
+					.strict()
+					.refine(
+						(v) => !!v.symbol !== !!v.address,
+						"Choose exactly one function selector",
+					),
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().max(512).optional(),
+			})
+			.strict()
+			.parse(input);
+		const artifact = await store.verify(scope, req.artifactId);
+		const request = {
+			engine: req.engine,
+			operation: "decompile",
+			timeout_ms: 120000,
+			target: artifact.path,
+			function_selector: req.selector,
+		};
+		if (req.phase === "prepare")
+			return ports.invoke("prepare_analysis_task", { kind: "static", request });
+		if (!req.planId || !req.executionToken)
+			throw new Error("A separately approved one-use plan is required");
+		return ports.invoke("run_static_analysis", {
+			input: request,
+			planId: req.planId,
+			executionToken: req.executionToken,
+		});
+	}
+	throw new Error("Unknown workflow operation");
+}

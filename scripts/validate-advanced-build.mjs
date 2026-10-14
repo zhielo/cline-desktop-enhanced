@@ -1,6 +1,6 @@
 import { spawn, execFileSync } from "node:child_process";
 import { appendFileSync, createWriteStream } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +15,29 @@ export function engineCorpusArgs(corpus, root, platform = process.platform) {
   if (corpus === "advanced-analysis-worker.test.py")
     args.push("--engine-profile", platform === "win32" ? "windows-portable" : "full");
   return args;
+}
+
+export function validationScope(env = process.env) {
+  return { runId: env.GITHUB_RUN_ID ?? null, runAttempt: env.GITHUB_RUN_ATTEMPT ?? null, job: env.GITHUB_JOB ?? null };
+}
+
+export function coreValidationReceiptPath(root, value) {
+  if (typeof value !== "string" || !/^\.cline-validation\/[0-9]+-[0-9]+\/summary\.json$/.test(value))
+    throw new Error("Reuse requires an exact local consolidated validation receipt");
+  return path.join(root, value);
+}
+
+export function assertReusableCoreValidation(report, sourceCommit, expectedGates, scope) {
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit) || report?.schemaVersion !== 1 ||
+      report.status !== "passed" || report.sourceCommit !== sourceCommit ||
+      report.engineValidation !== "not-requested" ||
+      ["runId", "runAttempt", "job"].some(key => report.executionScope?.[key] !== scope[key]))
+    throw new Error("Consolidated receipt is failed, stale or from another execution scope");
+  const names = new Set(expectedGates);
+  const results = report.results;
+  if (names.size !== expectedGates.length || !Array.isArray(results) || results.length !== names.size ||
+      results.some(result => result.status !== "passed" || !names.delete(result.name)) || names.size !== 0)
+    throw new Error("Consolidated receipt does not prove every required core gate");
 }
 
 export function formatValidationHeartbeat(active, now = Date.now()) {
@@ -80,13 +103,18 @@ export async function runValidation(prerequisites, checks, parallel, run) {
 
 async function main() {
   const flags = process.argv.slice(2).filter(x => x !== "--");
-  if (flags.some(x => !["--engines"].includes(x))) throw new Error("Only --engines is supported");
+  if (flags.some(x => !["--engines", "--reuse-core"].includes(x)) ||
+      (flags.includes("--reuse-core") && !flags.includes("--engines")))
+    throw new Error("Only --engines and its receipt-verified --reuse-core option are supported");
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const output = path.join(root, ".cline-validation", `${Date.now()}-${process.pid}`);
   await mkdir(output, { recursive: true });
   const parallel = parseParallel(process.env.CLINE_VALIDATION_PARALLEL ?? "2");
   const desktop = path.join(root, "apps/examples/desktop-app");
   const pkg = JSON.parse(await readFile(path.join(desktop, "package.json"), "utf8"));
+  let sourceCommit = "unavailable";
+  try { sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(); } catch {}
+  const executionScope = validationScope();
   const job = (name, args, cwd = root) => ({ name, args, cwd, timeoutMs: 20 * 60 * 1000 });
   const prerequisites = [
     job("Check owned ARM64 fixture", ["scripts/generate-owned-arm64-fixture.mjs", "--check"]),
@@ -100,10 +128,10 @@ async function main() {
     job("Lint complete workspace", ["run", "lint"]),
     job("Test first-party static parser, evidence and supervised workers", ["x", "vitest", "run", "src/analysis/analysis.test.ts", "src/analysis/semantic.test.ts", "src/analysis/recovery.test.ts", "src/analysis/module-context.test.ts", "src/analysis/dotnet.test.ts", "src/analysis/il.test.ts", "src/analysis/managed-signature.test.ts", "src/analysis/scenario.test.ts", "src/analysis/managed-stack.test.ts", "src/analysis/electron-boundaries.test.ts", "src/analysis/managed-exceptions.test.ts", "src/analysis/unified-evidence.test.ts", "src/analysis/inspector.test.ts", "src/analysis/inspector-console.test.ts", "src/runtime/process-start-token.test.ts", "--config", "vitest.config.ts"], path.join(root,"sdk/packages/core")),
     job("Test real Hub singleton crash recovery", ["x", "vitest", "run", "src/hub/daemon/singleton.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
-    { ...job("Test native Node installed process harness", ["--experimental-strip-types", "--test", "scripts/installed-node-process.test.mjs", "scripts/e2e-dependency-install.test.mjs"]), executable: "node" },
+    { ...job("Test native Node installed process harness", ["--experimental-strip-types", "--test", "scripts/installed-node-process.test.mjs", "scripts/e2e-dependency-install.test.mjs", "scripts/wheelhouse-manifest.test.mjs"]), executable: "node" },
     job("Test native Bun SQLite memory startup", ["test", "sdk/packages/shared/scripts/sqlite-memory.bun.test.mjs"]),
     job("Test SQLite database path boundaries", ["x", "vitest", "run", "sdk/packages/shared/src/db/sqlite-db-paths.test.ts", "--config", "vitest.config.mts"]),
-    job("Test measured performance budget policy", ["test", "scripts/performance-budget.test.mjs"]),
+    job("Test measured performance budget policy", ["test", "scripts/performance-budget.test.mjs", "scripts/benchmark-command-execution.test.mjs"]),
     job("Test bounded acceptance diagnostics", ["test", "scripts/report-installed-acceptance.test.mjs"]),
     { ...job("Measure fixed owned command workload", ["scripts/benchmark-command-execution.mjs", "--out", path.join(output, "command-performance.json")]), executable: "node" },
     job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),
@@ -200,15 +228,30 @@ async function main() {
       "sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.test.ts",
       "--config", "vitest.config.mts", "--testTimeout=60000"]),
   ];
+  const coreGateNames = [...prerequisites, ...checks].map(step => step.name);
+  const engineChecks = [];
   if (flags.includes("--engines")) {
     const python = process.env.CLINE_RE_PYTHON;
     if (!python || !path.isAbsolute(python)) throw new Error("--engines requires an absolute trusted CLINE_RE_PYTHON");
     for (const corpus of ["server.test.py", "capture_support.test.py", "setup-controller.test.py"])
-      checks.push({ ...job(`Android controller corpus: ${corpus}`, [path.join(root, "workers/android-capture", corpus)]), executable: python });
+      engineChecks.push({ ...job(`Android controller corpus: ${corpus}`, [path.join(root, "workers/android-capture", corpus)]), executable: python });
     for (const corpus of ["advanced-analysis-worker.test.py", "advanced-ir.test.py", "advanced-crypto.test.py"]) {
       const args = engineCorpusArgs(corpus, root);
-      checks.push({ ...job(`Engine corpus: ${corpus}`, args), executable: python });
+      engineChecks.push({ ...job(`Engine corpus: ${corpus}`, args), executable: python });
     }
+  }
+  checks.push(...engineChecks);
+  let coreValidationReceipt = null;
+  if (flags.includes("--reuse-core")) {
+    coreValidationReceipt = process.env.CLINE_VALIDATION_CORE_RECEIPT;
+    const receipt = coreValidationReceiptPath(root, coreValidationReceipt);
+    const resolvedRoot = await realpath(path.join(root, ".cline-validation"));
+    const resolvedReceipt = await realpath(receipt);
+    if (!resolvedReceipt.startsWith(resolvedRoot + path.sep) || (await stat(resolvedReceipt)).size > 131072)
+      throw new Error("Consolidated receipt must be bounded and inside local validation evidence");
+    const report = JSON.parse(await readFile(resolvedReceipt, "utf8"));
+    assertReusableCoreValidation(report, sourceCommit, coreGateNames, executionScope);
+    console.log("[VERIFIED] Every core gate already passed for this commit, job and run attempt");
   }
   const active = new Map();
   const progressFile = path.join(output, "progress.jsonl");
@@ -258,21 +301,25 @@ async function main() {
       timer = setTimeout(() => { timedOut = true; terminate(child); finish(null); }, step.timeoutMs);
     });
   };
-  let sourceCommit = "unavailable";
-  try { sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(); } catch {}
   const started = new Date().toISOString();
   let report;
-  try { report = await runValidation(prerequisites, checks, parallel, run); }
+  try { report = await runValidation(coreValidationReceipt ? [] : prerequisites, coreValidationReceipt ? engineChecks : checks, parallel, run); }
   finally {
     clearInterval(heartbeat);
     process.removeListener("SIGINT", abort); process.removeListener("SIGTERM", abort);
   }
   await writeFile(path.join(output, "summary.json"), JSON.stringify({
-    schemaVersion: 1, started, finished: new Date().toISOString(), sourceCommit, parallel,
+    schemaVersion: 1, started, finished: new Date().toISOString(), sourceCommit, parallel, executionScope,
+    coreValidationReceipt,
     engineValidation: flags.includes("--engines") ? "requested-see-corpus-results" : "not-requested",
     engineProfile: flags.includes("--engines") ? (process.platform === "win32" ? "windows-portable" : "full") : "not-requested",
     windowsInstallerBuilt: false, ...report,
   }, null, 2) + "\n");
+  if (process.env.GITHUB_OUTPUT && report.status === "passed" && !flags.includes("--engines")) {
+    const receipt = path.relative(root, path.join(output, "summary.json")).split(path.sep).join("/");
+    coreValidationReceiptPath(root, receipt);
+    await writeFile(process.env.GITHUB_OUTPUT, `validation_receipt=${receipt}\n`, { flag: "a" });
+  }
   if (process.env.GITHUB_STEP_SUMMARY) {
     try { await writeFile(process.env.GITHUB_STEP_SUMMARY, formatValidationSummary(report, sourceCommit), {flag:"a"}); }
     catch { console.warn("CI display summary unavailable; use the retained regression artifact. No check was replayed."); }

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
+import { InvestigationWorkflow } from "./investigation-workflow";
 import { ActiveJavaScriptScenario } from "./active-javascript-scenario";
 import type { AnalysisMode } from "./analysis-mode-control";
 type Summary = {
@@ -280,6 +281,13 @@ export function FirstPartyAnalysisWorkspace({
 			aria-label="First-party Analysis Workspace"
 		>
 			<h3 className="font-semibold">First-party Analysis Workspace</h3>
+			<InvestigationWorkflow
+				key={`${sessionId}:${environmentId}`}
+				sessionId={sessionId}
+				environmentId={environmentId}
+				mode={status?.mode ?? "off"}
+				receiptIds={status?.receipts.map((r) => r.id) ?? []}
+			/>
 			<p className="text-xs text-muted-foreground">
 				Mode: {status?.mode ?? "unavailable"}. Static JS/TS/Electron syntax,
 				bounded cross-module/value/call relationships, managed PE metadata and

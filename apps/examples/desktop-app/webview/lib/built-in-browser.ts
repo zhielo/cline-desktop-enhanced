@@ -79,6 +79,35 @@ async function execute(request: BrowserRequest): Promise<unknown> {
 	const payload = request.payload ?? {};
 	const id = request.browserSessionId;
 	switch (request.operation) {
+		case "capture_start": {
+			const result = await nativeInvoke("built_in_browser_capture", {
+				sessionId: id,
+				action: "start",
+			});
+			try {
+				await cdp(id, "Network.enable", {
+					maxTotalBufferSize: 65536,
+					maxResourceBufferSize: 16384,
+					maxPostDataSize: 0,
+				});
+				await cdp(id, "Runtime.enable", {});
+				return result;
+			} catch (error) {
+				await nativeInvoke("built_in_browser_capture", {
+					sessionId: id,
+					action: "stop",
+				}).catch(() => undefined);
+				throw error;
+			}
+		}
+		case "capture_stop": {
+			const result = await nativeInvoke("built_in_browser_capture", {
+				sessionId: id,
+				action: "stop",
+			});
+			await cdp(id, "Network.disable", {}).catch(() => undefined);
+			return result;
+		}
 		case "start":
 			return nativeInvoke("built_in_browser_start", {
 				sessionId: id,
