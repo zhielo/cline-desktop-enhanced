@@ -98,8 +98,10 @@ jobs:
             # fallbacks); a miss just means a cold install, which is acceptable.
 
             # Cache Bun's global install cache - keyed on the authoritative root bun.lock.
+            # Restore separately: an unbounded post-job save has cancelled Windows
+            # jobs after their E2E tests passed. Cache publication is optional.
             - name: Cache Bun install cache
-              uses: actions/cache@v4
+              uses: actions/cache/restore@v4
               id: bun-cache
               with:
                   path: ~/.bun/install/cache
@@ -178,3 +180,12 @@ jobs:
                   name: playwright-recordings-${{ matrix.runner }}
                   path: |
                       apps/vscode/test-results/
+
+            - name: Save Bun install cache (bounded optimization)
+              if: success() && steps.bun-cache.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v4
+              timeout-minutes: 1
+              continue-on-error: true
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ steps.bun-cache.outputs.cache-primary-key }}

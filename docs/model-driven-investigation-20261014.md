@@ -38,3 +38,11 @@ Do not infer Windows installer acceptance from a local Linux test result. Do not
 - General runtime relocation or arbitrary indirect-call resolution.
 - Complete Electron/preload or .NET semantics.
 - Superiority over REA. A comparative run still needs pinned REA and app versions, identical authorized fixtures/models/budgets, ground-truth scoring, false-positive accounting, timings and reproducible raw evidence. No benchmark result is asserted by this patch.
+
+## Windows discovery-publication CI follow-up
+
+The Windows SDK rerun exposed `EPERM` while replacing `hub-discovery.json` during real-process crash recovery. Discovery publication now retries only Windows `EPERM`, `EACCES` and `EBUSY` from the same atomic rename: at most six attempts with 25/50/100/200/400 ms backoff (775 ms total delay, excluding filesystem operation time). The existing mutation lock remains held, and the unique temporary file has already been closed and synced.
+
+No incumbent record is unlinked or rewritten in place. Permanent errors still fail and clean only the writer's own temporary file; unrelated files and the previous complete record remain. Other platforms and unrelated error codes do not retry. Tests cover bounded retry behavior, complete-file preservation, caller cleanup, lock release and real-process crash recovery. This is not a daemon-launch, analysis, execution or approval retry. Fresh Windows CI is required to validate the new head; the earlier installer pass does not certify this follow-up. The earlier console-fixture failure passed on rerun but its root cause has not been established.
+
+The extension E2E job's Bun cache now uses a separate restore action and a success-only, cache-miss save step with a one-minute budget. Only this optional cache save tolerates failure; dependency installation, SDK build and both platform E2E test steps remain blocking. Exact keys are retained without broad restore fallbacks. This addresses observed post-test cache stalls without extending the job deadline or weakening test assertions.

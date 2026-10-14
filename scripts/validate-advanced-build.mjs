@@ -205,6 +205,8 @@ async function main() {
       "sdk/packages/core/src/extensions/tools/executors/targeted-native-evidence.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/ida-analysis-workspace.test.ts",
       "sdk/packages/core/src/hub/discovery/startup-lock.test.ts",
+      "sdk/packages/core/src/hub/discovery/publish-file.test.ts",
+      "sdk/packages/core/src/hub/discovery/index-publication.test.ts",
       "sdk/packages/core/src/hub/daemon/index.test.ts",
       "sdk/packages/core/src/extensions/tools/permission-profile.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/process-session-manager.test.ts",

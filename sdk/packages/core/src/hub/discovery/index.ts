@@ -1,6 +1,7 @@
+import { publishDiscoveryFile } from "./publish-file";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
 	type HubCompatibilityResult,
@@ -427,7 +428,7 @@ export async function writeHubDiscovery(
 			// On local filesystems with atomic same-directory rename semantics, this
 			// prevents readers from observing the old remove/write gap and preserves
 			// the previous complete record if publication fails.
-			await rename(temporaryPath, discoveryPath);
+			await publishDiscoveryFile(temporaryPath, discoveryPath);
 			// Persist the rename where directory fsync is supported. Windows and
 			// some virtual filesystems reject opening directories, so durability
 			// there remains best-effort while the replacement itself stays atomic.
