@@ -1,3 +1,4 @@
+import { createInvestigationTools } from "./investigation";
 /**
  * Default AgentTool Definitions
  *
@@ -1328,6 +1329,8 @@ export function createDefaultTools(
 	} = options;
 
 	const tools: AgentTool<never, unknown>[] = [];
+	if (enableReverseEngineering && executors.investigation)
+		tools.push(...createInvestigationTools(executors.investigation));
 
 	// Add read_files tool if enabled and executor provided
 	if (enableReadFiles && executors.readFile) {

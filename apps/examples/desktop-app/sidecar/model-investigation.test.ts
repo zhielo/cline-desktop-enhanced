@@ -1,0 +1,168 @@
+import { it, expect, vi } from "vitest";
+import {
+	runModelInvestigation,
+	type ModelInvestigationPorts,
+} from "./model-investigation";
+const id = "11111111-1111-4111-8111-111111111111";
+const req = { artifactId: id, engine: "ghidra", selector: { symbol: "owned" } };
+function ports(): ModelInvestigationPorts {
+	return {
+		invoke: vi.fn(async (_name, input) =>
+			input.phase === "prepare"
+				? { id, requestHash: "hash", requirements: ["inspect"] }
+				: { executionToken: "must-not-leak", result: "owned" },
+		),
+		review: vi.fn(async () => true),
+		approve: vi.fn(() => ({ executionToken: "private-one-use" })),
+		cancel: vi.fn(),
+		assertCurrent: vi.fn(),
+	};
+}
+it("independent human review precedes token issuance, consumption and redacted result", async () => {
+	const p = ports();
+	const result = await runModelInvestigation("analyze_function", req, p);
+	expect(p.review).toHaveBeenCalledWith(
+		expect.objectContaining({
+			independentAnalysisApproval: true,
+			plan: expect.objectContaining({ requestHash: "hash" }),
+		}),
+	);
+	expect(p.approve).toHaveBeenCalledTimes(1);
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		"analyze_function",
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	expect(result).not.toContain("must-not-leak");
+	expect(result).not.toContain("private-one-use");
+	expect(p.cancel).not.toHaveBeenCalled();
+});
+it.each([
+	"executionToken",
+	"confirmRecord",
+	"sessionId",
+	"workspace",
+	"mode",
+	"phase",
+])("rejects model supplied authority: %s", async (key) => {
+	const p = ports();
+	await expect(
+		runModelInvestigation("analyze_function", { ...req, [key]: "fake" }, p),
+	).rejects.toThrow();
+	expect(p.invoke).not.toHaveBeenCalled();
+});
+it("denial cancels plan and never issues a token", async () => {
+	const p = ports();
+	p.review = vi.fn(async () => false);
+	await expect(
+		runModelInvestigation("analyze_function", req, p),
+	).rejects.toThrow("denied");
+	expect(p.approve).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledTimes(1);
+	expect(p.cancel).toHaveBeenCalledWith(id);
+});
+it("mode change while reviewing invalidates approval", async () => {
+	const p = ports();
+	let changed = false;
+	p.assertCurrent = () => {
+		if (changed) throw new Error("mode changed");
+	};
+	p.review = async () => {
+		changed = true;
+		return true;
+	};
+	await expect(
+		runModelInvestigation("analyze_function", req, p),
+	).rejects.toThrow("mode changed");
+	expect(p.approve).not.toHaveBeenCalled();
+	expect(p.cancel).toHaveBeenCalledWith(id);
+});
+it("abort during execution cancels underlying plan, never retries", async () => {
+	const p = ports(),
+		controller = new AbortController();
+	p.signal = controller.signal;
+	p.invoke = vi.fn(async (_name, input) => {
+		if (input.phase === "prepare")
+			return { id, requestHash: "h", requirements: [] };
+		controller.abort();
+		throw new Error("aborted");
+	});
+	await expect(
+		runModelInvestigation("analyze_function", req, p),
+	).rejects.toThrow("aborted");
+	expect(p.cancel).toHaveBeenCalledWith(id);
+	expect(p.invoke).toHaveBeenCalledTimes(2);
+});
+it("recording cannot self-consent and start always requests human approval", async () => {
+	const p = ports();
+	p.review = vi.fn(async () => false);
+	await expect(
+		runModelInvestigation(
+			"capture_browser_scenario",
+			{ action: "start", browserSessionId: id, purpose: "owned" },
+			p,
+		),
+	).rejects.toThrow("consent");
+	expect(p.invoke).not.toHaveBeenCalled();
+	await expect(
+		runModelInvestigation(
+			"capture_browser_scenario",
+			{
+				action: "start",
+				browserSessionId: id,
+				purpose: "owned",
+				confirmRecord: true,
+			},
+			p,
+		),
+	).rejects.toThrow();
+});
+it("stop remains cleanup without a fresh start consent; list never starts recording", async () => {
+	const p = ports();
+	await runModelInvestigation(
+		"capture_browser_scenario",
+		{ action: "stop", browserSessionId: id, purpose: "cleanup" },
+		p,
+	);
+	expect(p.review).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledWith(
+		"capture_browser_scenario",
+		expect.objectContaining({ action: "stop", confirmRecord: true }),
+	);
+	p.invoke = vi.fn(async () => ({ browsers: [{ id }] }));
+	expect(
+		JSON.parse(
+			await runModelInvestigation(
+				"capture_browser_scenario",
+				{ action: "list" },
+				p,
+			),
+		),
+	).toEqual({ browsers: [{ id }] });
+	expect(p.invoke).toHaveBeenLastCalledWith("analysis_workflow_status", {});
+});
+
+it("a failed execution keeps its original failure when the host reports a terminal plan", async () => {
+	const p = ports();
+	p.invoke = vi.fn(async (_name, input) => {
+		if (input.phase === "prepare")
+			return { id, requestHash: "h", requirements: [] };
+		throw new Error("engine failed");
+	});
+	await expect(
+		runModelInvestigation("analyze_function", req, p),
+	).rejects.toThrow("engine failed");
+	expect(p.cancel).toHaveBeenCalledTimes(1);
+});
+it("surfaces unconfirmed cancellation rather than claiming cleanup succeeded", async () => {
+	const p = ports();
+	p.review = async () => false;
+	p.cancel = () => {
+		throw new Error("ledger unavailable");
+	};
+	await expect(
+		runModelInvestigation("analyze_function", req, p),
+	).rejects.toThrow("cancellation could not be confirmed");
+});

@@ -1195,3 +1195,10 @@ export { runAdvancedAnalysis } from "./extensions/tools/executors/advanced-analy
 export { ADVANCED_ANALYSIS_WORKER } from "./extensions/tools/executors/advanced-analysis-worker";
 
 export * from "./analysis/index";
+
+export {
+	InvestigationSchemas,
+	createInvestigationTools,
+	type InvestigationToolName,
+	type InvestigationExecutor,
+} from "./extensions/tools/investigation";

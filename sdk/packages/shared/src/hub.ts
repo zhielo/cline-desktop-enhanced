@@ -755,6 +755,7 @@ export interface HubCapabilityResolvedPayload {
 }
 
 export type HubToolExecutorName =
+	| "investigation"
 	| "readFile"
 	| "search"
 	| "bash"
@@ -766,6 +767,7 @@ export type HubToolExecutorName =
 	| "submit";
 
 export const HUB_TOOL_EXECUTOR_NAMES = [
+	"investigation",
 	"readFile",
 	"search",
 	"bash",

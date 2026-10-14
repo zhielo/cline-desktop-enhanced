@@ -78,6 +78,11 @@ const WORKSPACE_TOOLS = new Set([
 
 const NETWORK_TOOLS = new Set(["fetch_web_content", "web_search"]);
 const EXTERNAL_TOOLS = new Set([
+	"open_binary",
+	"analyze_function",
+	"trace_application_feature",
+	"capture_browser_scenario",
+	"get_evidence_bundle",
 	"android_device",
 	"live_debugger",
 	"reverse_engineer",
@@ -267,10 +272,17 @@ function evaluateTool(
 			);
 		}
 	}
-	if (toolName === "reverse_engineer" && !profile.allowFileWrites &&
-		typeof context.input === "object" && context.input !== null &&
-		(context.input as {operation?:unknown}).operation === "project_edit")
-		return blockedReason(profile.name,"native project candidate edits and pointer changes require a write-enabled profile");
+	if (
+		toolName === "reverse_engineer" &&
+		!profile.allowFileWrites &&
+		typeof context.input === "object" &&
+		context.input !== null &&
+		(context.input as { operation?: unknown }).operation === "project_edit"
+	)
+		return blockedReason(
+			profile.name,
+			"native project candidate edits and pointer changes require a write-enabled profile",
+		);
 	const explicitlyAllowed = profile.allowedToolNames.has(toolName);
 	if (!isKnownTool(toolName) && !isCoordinationTool(toolName)) {
 		if (explicitlyAllowed) {

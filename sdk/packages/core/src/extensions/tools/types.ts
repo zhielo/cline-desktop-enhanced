@@ -240,6 +240,8 @@ export type ComputerUseExecutor = (
  * Collection of all tool executors
  */
 export interface ToolExecutors {
+	/** Desktop-owned investigation workflow, absent in headless clients. */
+	investigation?: import("./investigation").InvestigationExecutor;
 	/** File reading implementation */
 	readFile?: FileReadExecutor;
 	/** Codebase search implementation */
@@ -280,6 +282,7 @@ export interface ToolExecutors {
  * Names of available default tools
  */
 export type DefaultToolName =
+	| import("./investigation").InvestigationToolName
 	| "read_files"
 	| "search_codebase"
 	| "reverse_engineer"

@@ -1,3 +1,5 @@
+import { runModelInvestigation } from "./model-investigation";
+import type { AgentToolContext, InvestigationToolName } from "@cline/core";
 import { WORKFLOW_COMMANDS, handleAnalysisWorkflow } from "./analysis-workflow";
 import { AnalysisWorkflowStore } from "./analysis-workflow-store";
 import { firstPartyStore, sessionTaskSnapshots } from "./first-party-analysis";
@@ -2787,11 +2789,78 @@ function workspaceShellProfile(profileValue: unknown): {
 // ---------------------------------------------------------------------------
 
 let workflowStore: AnalysisWorkflowStore | undefined;
+// Private identity, never constructible from RPC JSON/model input.
+const MODEL_INVESTIGATION = Symbol("host-model-investigation");
+type ModelGrant = {
+	key: typeof MODEL_INVESTIGATION;
+	sessionId: string;
+	workspace: string;
+	mode: string;
+};
+export async function executeModelInvestigation(
+	ctx: SidecarContext,
+	name: InvestigationToolName,
+	input: Record<string, unknown>,
+	context: AgentToolContext,
+	review: (details: Record<string, unknown>) => Promise<boolean>,
+): Promise<string> {
+	const id = context.sessionId;
+	if (!id || !context.toolCallId || !context.agentId)
+		throw new Error("Owning model tool context required");
+	const binding = await getCommandSessionBinding(ctx, id, { sessionId: id });
+	if (!binding || binding.kind !== "local")
+		throw new Error("Owning local model session required");
+	const saved = await binding.sessionManager.get(id);
+	const root = String(saved?.workspaceRoot || saved?.cwd || "");
+	if (!root) throw new Error("Owning workspace unavailable");
+	const mode = firstPartyStore().session(id)?.mode ?? "off";
+	const grant: ModelGrant = {
+		key: MODEL_INVESTIGATION,
+		sessionId: id,
+		workspace: root,
+		mode,
+	};
+	const assertCurrent = () => {
+		context.signal?.throwIfAborted();
+		if ((firstPartyStore().session(id)?.mode ?? "off") !== mode)
+			throw new Error("Analysis mode changed; request a new review");
+	};
+	return runModelInvestigation(name, input, {
+		signal: context.signal,
+		assertCurrent,
+		review,
+		invoke: (command, payload) =>
+			handleCommand(
+				ctx,
+				command,
+				{ sessionId: id, environmentId: "local", input: payload },
+				{ modelGrant: grant },
+			),
+		approve: (plan) => {
+			assertCurrent();
+			return desktopAnalysisTaskOrchestrator.approve(
+				plan.id,
+				plan.requirements,
+				plan.requestHash,
+			);
+		},
+		cancel: (planId) => {
+			const plan = desktopAnalysisTaskOrchestrator
+				.list(root)
+				.find((p) => p.id === planId);
+			if (
+				plan &&
+				["awaiting-approval", "approved", "running"].includes(plan.status)
+			)
+				desktopAnalysisTaskOrchestrator.cancel(planId);
+		},
+	});
+}
 export async function handleCommand(
 	ctx: SidecarContext,
 	command: string,
 	args?: Record<string, unknown>,
-	options?: { connection?: SidecarWebSocketClient },
+	options?: { connection?: SidecarWebSocketClient; modelGrant?: ModelGrant },
 ): Promise<unknown> {
 	const explicitEnvironment = requestedEnvironmentId(args);
 	if (explicitEnvironment) {
@@ -2828,8 +2897,20 @@ export async function handleCommand(
 		if (!saved) throw new Error("Owning session not found");
 		const live = ctx.liveSessions.get(id);
 		const root = String(saved.workspaceRoot || saved.cwd || "");
+		const grant = options?.modelGrant;
+		const model = grant?.key === MODEL_INVESTIGATION;
+		if (
+			model &&
+			(grant.sessionId !== id ||
+				grant.workspace !== root ||
+				grant.mode !== (firstPartyStore().session(id)?.mode ?? "off"))
+		)
+			throw new Error("Owning investigation context changed");
 		if (!root) throw new Error("Session workspace is unavailable");
 		if ((WORKFLOW_COMMANDS as readonly string[]).includes(command)) {
+			const analysisBinding = firstPartyStore().session(id);
+			if (analysisBinding && analysisBinding.workspace !== realpathSync(root))
+				throw new Error("Analysis workflow workspace identity changed");
 			const store = (workflowStore ??= new AnalysisWorkflowStore(
 				join(resolveClineDataDir(), "analysis-workspace", "workflow.sqlite"),
 			));
@@ -2838,7 +2919,8 @@ export async function handleCommand(
 				args?.input ?? {},
 				{ sessionId: id, workspace: root },
 				{
-					trusted: !!options?.connection?.data?.canApproveTools,
+					trusted: model || !!options?.connection?.data?.canApproveTools,
+					actor: model ? "model" : undefined,
 					idle: !(
 						live?.busy ||
 						live?.transitioningProvider ||
@@ -2857,13 +2939,17 @@ export async function handleCommand(
 						),
 					staticReceipt: (receiptId) => firstPartyStore().get(id, receiptId),
 					taskBundle: (taskId) => {
-						if (
-							!sessionTaskSnapshots(id, root).some((s) => s.taskId === taskId)
-						)
+						const snapshot = sessionTaskSnapshots(id, root).find(
+							(s) => s.taskId === taskId,
+						);
+						if (!snapshot)
 							throw new Error(
 								"Task evidence is not recorded in this owning session",
 							);
-						return desktopAnalysisTaskOrchestrator.evidenceBundle(taskId, root);
+						return {
+							...desktopAnalysisTaskOrchestrator.evidenceBundle(taskId, root),
+							providerSnapshot: snapshot,
+						};
 					},
 					browsers: () => ctx.browserManager?.list(id) ?? [],
 					capture: (input) => {

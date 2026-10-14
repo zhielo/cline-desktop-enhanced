@@ -85,7 +85,7 @@ export function targetedIdaScript(
 	selector: FunctionSelector,
 ) {
 	return `# Fixed single-function adapter; requires authorized IDA/Hex-Rays installation.
-import traceback, ida_auto, ida_funcs, ida_hexrays, ida_loader, idautils, idc
+import json, traceback, ida_auto, ida_funcs, ida_hexrays, ida_loader, ida_ida, ida_nalt, idautils, idc
 ${idaProgressPrelude(dirname(outputPath))}
 OUTPUT_PATH = ${JSON.stringify(outputPath)}
 SELECTOR = ${JSON.stringify(selector)}
@@ -114,6 +114,32 @@ def main():
     text=str(pseudocode)
     if len(text)>1000000: raise RuntimeError("Selected pseudocode output budget exceeded")
     with open(OUTPUT_PATH,"w",encoding="utf-8") as output: output.write("/* selected function @ 0x%x; not a semantic equivalence proof */\\n" % matches[0]+text)
+    class Calls(ida_hexrays.ctree_visitor_t):
+        def __init__(self):
+            ida_hexrays.ctree_visitor_t.__init__(self, ida_hexrays.CV_FAST)
+            self.items=[]
+            self.visited=0
+            self.truncated=False
+        def visit_expr(self, expr):
+            self.visited+=1
+            if self.visited>100000:
+                self.truncated=True
+                return 1
+            if expr.op!=ida_hexrays.cot_call: return 0
+            if len(self.items)>=128:
+                self.truncated=True
+                return 1
+            site=expr.ea
+            known_site=site!=idc.BADADDR
+            call={"fromAddressHex":hex(site if known_site else matches[0]),"siteResolution":"ctree-ea" if known_site else "function-entry-fallback","kind":"indirect","resolution":"unknown-expression-target"}
+            if expr.x.op==ida_hexrays.cot_obj and expr.x.obj_ea!=idc.BADADDR:
+                call.update({"kind":"direct","targetAddressHex":hex(expr.x.obj_ea),"resolution":"hex-rays-object-candidate"})
+            self.items.append(call)
+            return 0
+    calls=Calls()
+    calls.apply_to(pseudocode.body,None)
+    evidence={"schemaVersion":1,"addressHex":hex(matches[0]),"name":idc.get_func_name(matches[0])[:4096],"signature":(idc.get_type(matches[0]) or "")[:16384],"pseudocode":text,"architecture":ida_ida.inf_get_procname()[:256],"image":{"preferredBaseHex":hex(ida_nalt.get_imagebase()),"addressSpace":"ida-database-virtual"},"callees":calls.items,"relationsTruncated":calls.truncated,"coverage":"selected-function-decompiler-and-bounded-ctree-not-runtime"}
+    with open(OUTPUT_PATH+".native.json","w",encoding="utf-8") as output: json.dump(evidence,output,ensure_ascii=True)
     cline_phase("output-written")
     cline_phase("database-saving")
     if not ida_loader.save_database(idc.get_idb_path(), ida_loader.DBFL_COMP): raise RuntimeError("IDA database save failed")

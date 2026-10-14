@@ -1050,6 +1050,32 @@ it("uses a fixed analyze lifecycle, isolates fresh attempts and reuses IDA datab
 						path.join(attempt, "decompiled.c"),
 						sources.at(-1)!,
 					);
+				if (scriptFile.includes("decompile_selected")) {
+					const line = sources
+						.at(-1)!
+						.split("\n")
+						.find((l) => l.startsWith("SELECTOR = "))!;
+					const selector = JSON.parse(line.slice("SELECTOR = ".length));
+					await fs.writeFile(
+						path.join(attempt, "decompiled.c.native.json"),
+						JSON.stringify({
+							schemaVersion: 1,
+							addressHex: selector.address,
+							name: "owned-mock",
+							signature: "int owned(void)",
+							pseudocode: "return 7;",
+							architecture: "metapc",
+							image: {
+								preferredBaseHex: "0x400000",
+								addressSpace: "ida-database-virtual",
+							},
+							callees: [],
+							relationsTruncated: false,
+							coverage:
+								"selected-function-decompiler-and-bounded-ctree-not-runtime",
+						}),
+					);
+				}
 				if (env?.CLINE_IDA_PROGRESS_PATH)
 					await fs.writeFile(
 						env.CLINE_IDA_PROGRESS_PATH,
@@ -1102,6 +1128,11 @@ it("uses a fixed analyze lifecycle, isolates fresh attempts and reuses IDA datab
 			{} as never,
 		),
 	);
+	expect(first.evidence.selectedFunctions[0]).toMatchObject({
+		addressHex: "0x1000",
+		image: { addressSpace: "ida-database-virtual" },
+	});
+	expect(changed.evidence.selectedFunctions[0].addressHex).toBe("0x2000");
 	expect(first.reusedAnalysis).toBe(true);
 	expect(changed.reusedAnalysis).toBe(true);
 	expect(changed.args.some((value: string) => value.startsWith("-o"))).toBe(

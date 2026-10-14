@@ -52,7 +52,7 @@ export {
 	type DefaultExecutorsOptions,
 	type EditorExecutorOptions,
 	type FileReadExecutorOptions,
-  getProcessSessionRuntimeCapabilities,
+	getProcessSessionRuntimeCapabilities,
 	PATCH_MARKERS,
 	PatchActionType,
 	type PatchFileChange,
@@ -189,10 +189,8 @@ import type { CreateDefaultToolsOptions, ToolExecutors } from "./types";
 /**
  * Options for creating default tools with built-in executors
  */
-export interface CreateBuiltinToolsOptions extends Omit<
-  CreateDefaultToolsOptions,
-  "executors"
-> {
+export interface CreateBuiltinToolsOptions
+	extends Omit<CreateDefaultToolsOptions, "executors"> {
 	/**
 	 * Configuration for the built-in executors. `bash.shell` is used when the
 	 * top-level `shell` option is not set; the top-level option takes precedence.
@@ -269,3 +267,10 @@ export function createBuiltinTools(
 		executors,
 	});
 }
+
+export {
+	InvestigationSchemas,
+	createInvestigationTools,
+	type InvestigationToolName,
+	type InvestigationExecutor,
+} from "./investigation";

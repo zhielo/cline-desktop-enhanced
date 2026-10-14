@@ -10,6 +10,11 @@ import type { DefaultToolName } from "./types";
  * Constants for default tool names
  */
 export const DefaultToolNames = {
+	OPEN_BINARY: "open_binary",
+	ANALYZE_FUNCTION: "analyze_function",
+	TRACE_APPLICATION_FEATURE: "trace_application_feature",
+	CAPTURE_BROWSER_SCENARIO: "capture_browser_scenario",
+	GET_EVIDENCE_BUNDLE: "get_evidence_bundle",
 	READ_FILES: "read_files",
 	SEARCH_CODEBASE: "search_codebase",
 	REVERSE_ENGINEER: "reverse_engineer",
@@ -32,6 +37,11 @@ export const DefaultToolNames = {
  * Array of all default tool names
  */
 export const ALL_DEFAULT_TOOL_NAMES: DefaultToolName[] = [
+	DefaultToolNames.OPEN_BINARY,
+	DefaultToolNames.ANALYZE_FUNCTION,
+	DefaultToolNames.TRACE_APPLICATION_FEATURE,
+	DefaultToolNames.CAPTURE_BROWSER_SCENARIO,
+	DefaultToolNames.GET_EVIDENCE_BUNDLE,
 	DefaultToolNames.READ_FILES,
 	DefaultToolNames.SEARCH_CODEBASE,
 	DefaultToolNames.REVERSE_ENGINEER,

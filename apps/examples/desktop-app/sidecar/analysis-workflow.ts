@@ -1,3 +1,4 @@
+import { evidenceIndex, reconcileFeature } from "./investigation-report";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { redactSensitiveText } from "@cline/core";
@@ -51,6 +52,13 @@ export function buildEvidenceBundle(scope: WorkflowScope, records: unknown[]) {
 		sessionId: scope.sessionId,
 		exportedAt: new Date().toISOString(),
 		records: sanitizeEvidence(records),
+		report: sanitizeEvidence({
+			schemaVersion: 1,
+			evidenceIndex: evidenceIndex(records),
+			conclusion:
+				"Selected evidence only; no claim of complete behavior reconstruction or REA superiority.",
+			reviewBeforeSharing: true,
+		}),
 		limitations: [
 			"Selected records only; not a whole-database backup.",
 			"Redaction is best-effort; review before sharing. No settings, credential files, cookies or browser bodies are included.",
@@ -69,34 +77,15 @@ export function featureTrace(
 	feature: string,
 	receipt: unknown,
 	scenarios: unknown[],
+	tasks: unknown[] = [],
 ) {
-	const value = receipt as {
-		result?: { facts?: Array<{ kind: string; value: string; id?: string }> };
-	};
-	const facts = (value?.result?.facts ?? [])
-		.filter((f) => f.value?.toLowerCase().includes(feature.toLowerCase()))
-		.slice(0, 100);
-	return {
-		schemaVersion: 1,
-		feature,
-		status: facts.length || scenarios.length ? "partial" : "unresolved",
-		staticCandidates: facts.map((f) => ({
-			...f,
-			classification: "statically-inferred",
-		})),
-		scenarios,
-		limitations: [
-			"Feature-label matches are candidates, not observed causality.",
-			"Recorded browser actions/events do not prove a handler-to-IPC-to-native execution chain.",
-			"No target is launched, replayed or instrumented by this trace query.",
-		],
-	};
+	return reconcileFeature(feature, receipt, scenarios, tasks);
 }
 export async function handleAnalysisWorkflow(
 	command: string,
 	input: unknown,
 	scope: WorkflowScope,
-	options: { trusted: boolean; idle: boolean; mode: string },
+	options: { trusted: boolean; idle: boolean; mode: string; actor?: "model" },
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
@@ -132,8 +121,9 @@ export async function handleAnalysisWorkflow(
 	if (command === "trace_application_feature") {
 		const req = z
 			.object({
-				feature: z.string().min(1).max(160),
+				feature: z.string().trim().min(1).max(160),
 				receiptId: Id.optional(),
+				taskIds: z.array(Id).max(5).default([]),
 				scenarioIds: z.array(Id).max(5).default([]),
 			})
 			.strict()
@@ -142,6 +132,7 @@ export async function handleAnalysisWorkflow(
 			req.feature,
 			req.receiptId ? ports.staticReceipt(req.receiptId) : undefined,
 			req.scenarioIds.map((id) => store.get(scope, id, "scenario")),
+			req.taskIds.map(ports.taskBundle),
 		);
 	}
 	if (command === "capture_browser_scenario") {
@@ -158,16 +149,35 @@ export async function handleAnalysisWorkflow(
 			throw new Error(
 				"Trusted connection required for browser recording control",
 			);
-		if (req.action === "start" && (!options.idle || options.mode !== "runtime"))
+		if (
+			req.action === "start" &&
+			((!options.idle && options.actor !== "model") ||
+				options.mode !== "runtime")
+		)
 			throw new Error(
 				"Browser scenario capture requires an idle Runtime session and explicit recording approval",
 			);
 		const result = await ports.capture(req);
-		if(req.action!=="stop")return result;
-        try{return store.put(scope,"scenario",{purpose:(result as {purpose?:string})?.purpose??req.purpose,capture:result,recordedAt:new Date().toISOString()});}
-        catch{return {capture:result,evidenceWarning:"Observation stopped, but the receipt could not be persisted. Preserve this result; do not replay recording to repair metadata."};}
+		if (req.action !== "stop") return result;
+		try {
+			return store.put(scope, "scenario", {
+				purpose: (result as { purpose?: string })?.purpose ?? req.purpose,
+				capture: result,
+				recordedAt: new Date().toISOString(),
+			});
+		} catch {
+			return {
+				capture: result,
+				evidenceWarning:
+					"Observation stopped, but the receipt could not be persisted. Preserve this result; do not replay recording to repair metadata.",
+			};
+		}
 	}
-	if (!options.trusted || !options.idle || options.mode === "off")
+	if (
+		!options.trusted ||
+		(!options.idle && options.actor !== "model") ||
+		options.mode === "off"
+	)
 		throw new Error(
 			"New workflow work requires a trusted idle session with Analysis enabled",
 		);

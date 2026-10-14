@@ -104,7 +104,7 @@ const ANALYSIS_SCHEMA_VERSION = 2;
 const FORENSIC_REPORT_SCHEMA_VERSION = 1;
 const FORENSIC_REPORT_STATE = "cline-forensic-report-state.json";
 const GHIDRA_SCRIPT_VERSION = 4;
-const IDA_DECOMPILE_SCRIPT_VERSION = "ida-decompile-phase-deadline-v3";
+const IDA_DECOMPILE_SCRIPT_VERSION = "ida-selected-ctree-evidence-v4";
 const DISCOVERY_CACHE_TTL_MS = 5 * 60_000;
 const DISCOVERY_PROBE_TIMEOUT_MS = 5_000;
 const discoveryCache = new Map<
@@ -3857,11 +3857,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					artifactVerified;
 				const selectedNativeEvidence =
 					succeeded &&
-					engine === "ghidra" &&
+					["ghidra", "ida"].includes(engine) &&
 					input.operation === "decompile" &&
 					input.function_selector &&
 					!input.script_path
-						? await loadTargetedNativeEvidence(decompileOutput)
+						? await loadTargetedNativeEvidence(
+								decompileOutput,
+								engine === "ida" ? "ida" : "ghidra",
+							)
 						: undefined;
 				if (succeeded) {
 					if (engine === "ida" && !input.script_path)

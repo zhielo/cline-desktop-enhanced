@@ -41,6 +41,18 @@ export interface BuiltinToolAvailabilityContext {
 type RuntimeToolCatalogEntry = Omit<ToolCatalogEntry, "defaultEnabled">;
 
 const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
+	...[
+		"open_binary",
+		"analyze_function",
+		"trace_application_feature",
+		"capture_browser_scenario",
+		"get_evidence_bundle",
+	].map((id) => ({
+		id,
+		description: "Desktop-owned, session-scoped investigation workflow.",
+		headlessToolNames: [id],
+		unavailableClientTypes: ["cli", "vscode"] as readonly ToolClientType[],
+	})),
 	{
 		id: "web_search",
 		description:
@@ -179,6 +191,11 @@ const TOOL_NAME_TO_FLAG: Partial<
 		>
 	>
 > = {
+	open_binary: "enableReverseEngineering",
+	analyze_function: "enableReverseEngineering",
+	trace_application_feature: "enableReverseEngineering",
+	capture_browser_scenario: "enableReverseEngineering",
+	get_evidence_bundle: "enableReverseEngineering",
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
 	live_debugger: "enableLiveDebugger",

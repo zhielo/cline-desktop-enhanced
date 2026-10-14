@@ -152,3 +152,24 @@ test("native WebView options require exact acceptance opt-in and preserve normal
 });
 
 test("bundled runtime freezes its inventory after fixture subprocesses and cache cleanup",()=>{const script=load("scripts/package-analysis-runtime.ps1");expect(script.indexOf("scripts/write-analysis-runtime-manifest.ts")).toBeGreaterThan(script.indexOf("android-investigation-worker.test.py"));expect(script.lastIndexOf("Get-ChildItem $root")).toBeGreaterThan(script.indexOf("android-investigation-worker.test.py"));expect(script).toContain("-I -B -c");expect(script).not.toContain("SetEnvironmentVariable");});
+
+test("extension Bun cache saving is bounded without weakening E2E gates", () => {
+ const source = load(".github/workflows/ext-vscode-test-e2e.yml");
+ const restore = source.split("- name: Cache Bun install cache")[1].split("- name: Cache VS Code")[0];
+ expect(restore).toContain("uses: actions/cache/restore@v4");
+ expect(restore).not.toContain("uses: actions/cache@v4");
+ expect(restore).not.toContain("restore-keys:");
+ const save = source.split("- name: Save Bun install cache (bounded optimization)")[1];
+ expect(save).toContain("if: success() && steps.bun-cache.outputs.cache-hit != 'true'");
+ expect(save).toContain("uses: actions/cache/save@v4");
+ expect(save).toContain("timeout-minutes: 1");
+ expect(save).toContain("continue-on-error: true");
+ expect(save).toContain("key: ${{ steps.bun-cache.outputs.cache-primary-key }}");
+ expect(source.match(/continue-on-error:/g)).toHaveLength(1);
+ for (const label of ["Run E2E tests - Linux", "Run E2E tests - Non-Linux"]) {
+  const step = source.split(`- name: ${label}`)[1].split("\n            - ")[0];
+  expect(step).toContain("bun run test:e2e:optimal");
+  expect(step).not.toContain("continue-on-error");
+ }
+ expect(source).toContain("timeout-minutes: 20");
+});
