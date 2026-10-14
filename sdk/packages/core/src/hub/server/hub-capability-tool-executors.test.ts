@@ -391,3 +391,46 @@ describe("hub client runtime capabilities", () => {
 		);
 	});
 });
+
+it("forwards investigation name and strict input with owning tool context as separate arguments", async () => {
+	const request: ClientContributionRequest = vi.fn(async () => ({
+		result: "owned-evidence",
+	}));
+	const runtime = createHubClientContributionRuntime({
+		sessionId: "owned-session",
+		targetClientId: "desktop-client",
+		contributions: [
+			{
+				kind: "toolExecutor",
+				executor: "investigation",
+				capabilityName: "tool_executor.investigation",
+			},
+		],
+		requestCapability: request,
+	});
+	const result = await runtime.toolExecutors?.investigation?.(
+		"open_binary",
+		{ target: "owned.exe" },
+		{
+			sessionId: "owned-session",
+			agentId: "lead",
+			conversationId: "conversation",
+			iteration: 2,
+			toolCallId: "call",
+		},
+	);
+	expect(result).toBe("owned-evidence");
+	expect(request).toHaveBeenCalledWith(
+		"owned-session",
+		"tool_executor.investigation",
+		expect.objectContaining({
+			args: ["open_binary", { target: "owned.exe" }],
+			context: expect.objectContaining({
+				sessionId: "owned-session",
+				toolCallId: "call",
+			}),
+		}),
+		"desktop-client",
+		undefined,
+	);
+});

@@ -65,8 +65,8 @@ describe("permission profile guard", () => {
 		expect(await before("read-only", "read_files")).toBeUndefined();
 		expect(
 			(
-			await before("read-only", "run_commands", {
-				commands: ["git status", "rg TODO src"],
+				await before("read-only", "run_commands", {
+					commands: ["git status", "rg TODO src"],
 				})
 			)?.skip,
 		).toBe(true);
@@ -237,7 +237,31 @@ describe("restricted profiles fail closed for arbitrary execution", () => {
 	});
 });
 
+it.each([
+	"read-only",
+	"project-notion-bridge",
+] as const)("%s blocks native candidate writes and pointer rollback", async (profile) => {
+	for (const mode of ["preview", "candidate", "rollback"])
+		expect(
+			(
+				await before(profile, "reverse_engineer", {
+					operation: "project_edit",
+					project_edit: { mode },
+				})
+			)?.skip,
+		).toBe(true);
+});
 
-it.each(["read-only","project-notion-bridge"] as const)("%s blocks native candidate writes and pointer rollback",async profile=>{
- for(const mode of ["preview","candidate","rollback"])expect((await before(profile,"reverse_engineer",{operation:"project_edit",project_edit:{mode}}))?.skip).toBe(true);
+it("keeps investigation tools behind the external-tool permission profile", async () => {
+	for (const name of [
+		"open_binary",
+		"analyze_function",
+		"trace_application_feature",
+		"capture_browser_scenario",
+		"get_evidence_bundle",
+	]) {
+		expect(await before("read-only", name)).toMatchObject({ skip: true });
+		expect(await before("workspace", name)).toMatchObject({ skip: true });
+		expect(await before("full-access", name)).toBeUndefined();
+	}
 });

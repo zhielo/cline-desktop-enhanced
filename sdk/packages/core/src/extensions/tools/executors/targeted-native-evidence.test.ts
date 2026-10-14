@@ -38,3 +38,34 @@ it("requires bounded addresses and internally consistent target resolution", () 
 			TargetedNativeEvidenceSchema.parse({ ...fixture, callees }),
 		).toThrow();
 });
+
+it("IDA preserves unresolved ctree calls and distinguishes address spaces", async () => {
+	const { TargetedIdaEvidenceSchema, SelectedNativeEvidenceSchema } =
+		await import("./targeted-native-evidence");
+	const value = {
+		...fixture,
+		image: {
+			preferredBaseHex: "0x400000",
+			addressSpace: "ida-database-virtual",
+		},
+		callees: [
+			{
+				fromAddressHex: "0x1000",
+				siteResolution: "function-entry-fallback",
+				kind: "indirect",
+				resolution: "unknown-expression-target",
+			},
+		],
+		coverage: "selected-function-decompiler-and-bounded-ctree-not-runtime",
+	};
+	expect(SelectedNativeEvidenceSchema.parse(value)).toEqual(value);
+	expect(() =>
+		TargetedIdaEvidenceSchema.parse({
+			...value,
+			callees: [{ ...value.callees[0], targetAddressHex: "0x1234" }],
+		}),
+	).toThrow();
+	expect(() =>
+		TargetedIdaEvidenceSchema.parse({ ...value, image: fixture.image }),
+	).toThrow();
+});

@@ -188,6 +188,8 @@ async function main() {
       "--config", "apps/examples/desktop-app/vitest.config.mts"]),
     job("Test real Hub shutdown runtime identity", ["x", "vitest", "run", "src/hub/daemon/shutdown.e2e.test.ts", "--config", "vitest.e2e.config.ts"], path.join(root, "sdk/packages/core")),
     job("Run focused SDK safety tests", ["x", "vitest", "run",
+      "sdk/packages/core/src/extensions/tools/investigation.test.ts",
+      "sdk/packages/core/src/hub/server/hub-capability-tool-executors.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/command-evidence.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/bash.test.ts",
       "sdk/packages/core/src/extensions/tools/executors/bash.powershell.test.ts",

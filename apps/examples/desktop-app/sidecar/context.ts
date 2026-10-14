@@ -1361,6 +1361,34 @@ export function createSidecarRuntimeCapabilities(
 						browser: owner.browserManager.executor,
 						computerUse: owner.computerUseManager.executor,
 						repository: createRepositoryExecutor(() => ctx.localWorkspaceRoot),
+						investigation: async (name, input, context) => {
+							const { executeModelInvestigation } = await import("./commands");
+							return executeModelInvestigation(
+								ctx,
+								name,
+								input,
+								context,
+								async (details) => {
+									if (!context.sessionId || !context.toolCallId) return false;
+									const result = await requestSidecarToolApproval(
+										ctx,
+										{
+											sessionId: context.sessionId,
+											agentId: context.agentId,
+											conversationId:
+												context.conversationId ?? context.sessionId,
+											iteration: context.iteration,
+											toolCallId: context.toolCallId,
+											toolName: name,
+											input: details,
+											policy: { autoApprove: false },
+										},
+										{ signal: context.signal, timeoutMs: 120_000 },
+									);
+									return result.approved;
+								},
+							);
+						},
 					}
 				: {}),
 		},
@@ -1371,7 +1399,10 @@ export function createSidecarRuntimeCapabilities(
 function requestSidecarToolApproval(
 	ctx: SidecarContext,
 	request: ToolApprovalRequest,
+	control?: { signal?: AbortSignal; timeoutMs: number },
 ): Promise<ToolApprovalResult> {
+	if (control?.signal?.aborted)
+		return Promise.resolve({ approved: false, reason: "Tool cancelled" });
 	const owner = [...ctx.wsClients].find(
 		(client) => client.data?.canApproveTools === true,
 	);
@@ -1383,6 +1414,28 @@ function requestSidecarToolApproval(
 	}
 	return new Promise<ToolApprovalResult>((resolve) => {
 		const requestId = randomUUID();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let settled = false;
+		const abort = () =>
+			finish({ approved: false, reason: "Investigation review cancelled" });
+		const finish = (result: ToolApprovalResult) => {
+			if (settled) return;
+			settled = true;
+			if (timer) clearTimeout(timer);
+			control?.signal?.removeEventListener("abort", abort);
+			ctx.pendingApprovals.delete(requestId);
+			resolve(result);
+			if (control)
+				sendEventToClient(ctx, owner, "tool_approval_state", {
+					sessionId: request.sessionId,
+					items: [...ctx.pendingApprovals.values()]
+						.filter(
+							(p) =>
+								p.owner === owner && p.item.sessionId === request.sessionId,
+						)
+						.map((p) => p.item),
+				});
+		};
 		const pending: PendingToolApproval = {
 			item: {
 				requestId,
@@ -1396,9 +1449,21 @@ function requestSidecarToolApproval(
 				conversationId: request.conversationId,
 			},
 			owner,
-			resolve,
+			resolve: finish,
 		};
 		ctx.pendingApprovals.set(requestId, pending);
+		if (control) {
+			timer = setTimeout(
+				() =>
+					finish({ approved: false, reason: "Investigation review timed out" }),
+				control.timeoutMs,
+			);
+			control.signal?.addEventListener("abort", abort, { once: true });
+			if (control.signal?.aborted) {
+				abort();
+				return;
+			}
+		}
 		const sessionApprovals = Array.from(ctx.pendingApprovals.values())
 			.filter(
 				(approval) =>
