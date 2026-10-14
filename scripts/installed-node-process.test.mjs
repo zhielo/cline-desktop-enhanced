@@ -224,6 +224,17 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  const native=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/built_in_browser.rs",import.meta.url),"utf8");
  assert.match(native, /#\[tauri::command\]\s+pub async fn built_in_browser_start\(/);
  assert.ok(native.includes("safe_url(&url)?"));
+ assert.ok(native.includes("try_state::<crate::installed_webview_launch::AcceptanceWebviewState>()"));
+ assert.ok(native.includes(".additional_browser_args(&options.additional_browser_args)"));
+ assert.ok(native.includes(".data_directory(options.data_directory.clone())"));
+ const main=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/main.rs",import.meta.url),"utf8");
+ assert.ok(main.includes("builder.manage(installed_webview_launch::AcceptanceWebviewState(acceptance_options))"));
+ assert.ok(main.includes("window.additional_browser_args = Some(options.additional_browser_args.clone())"));
+ assert.ok(main.includes("window.data_directory = Some(options.data_directory.clone())"));
+ const installer=readFileSync(new URL("../apps/examples/desktop-app/scripts/windows-installer.test.ts",import.meta.url),"utf8");
+ assert.ok(!installer.includes('Bun.spawnSync([nsis, "/VERSION"])'));
+ assert.match(installer,/promisify\(execFile\)\(nsis, \["\/VERSION"\],[\s\S]*?timeout: 10_000/);
+ assert.ok(installer.includes("version.stdout.trim()"));
  assert.ok(native.includes("crate::browser_readiness::await_browser_ready("));
  assert.ok(native.indexOf("await_browser_ready(") < native.indexOf(".show()"));
  const readiness=readFileSync(new URL("../apps/examples/desktop-app/src-tauri/src/browser_readiness.rs",import.meta.url),"utf8");

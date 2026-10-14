@@ -1,14 +1,18 @@
 use std::path::PathBuf;
 
 // Match the pinned Wry default when overriding additional browser arguments.
-const WRY_DEFAULT_ARGS: &str =
-    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+const WRY_DEFAULT_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AcceptanceWebviewOptions {
     pub additional_browser_args: String,
     pub data_directory: PathBuf,
     pub port: u16,
 }
+
+/// The immutable validated fixture configuration shared by every native WebView.
+/// None keeps normal launches free of fixture debugging options.
+pub struct AcceptanceWebviewState(pub Option<AcceptanceWebviewOptions>);
 
 /// An explicit fixture-only opt-in, not a normal launch or IPC authentication bypass.
 pub fn acceptance_webview_options(
@@ -45,8 +49,7 @@ pub fn acceptance_webview_options(
 mod tests {
     use super::*;
 
-    const ARGS: &str =
-        "--remote-debugging-port=12345 --remote-debugging-address=127.0.0.1";
+    const ARGS: &str = "--remote-debugging-port=12345 --remote-debugging-address=127.0.0.1";
 
     #[test]
     fn normal_launch_does_not_apply_debugging_options() {
@@ -61,13 +64,14 @@ mod tests {
     #[test]
     fn opted_in_fixture_retains_defaults_and_exact_private_profile() {
         let profile = std::env::temp_dir().join("owned webview profile");
-        let options =
-            acceptance_webview_options(Some("1"), Some(ARGS), profile.to_str())
-                .unwrap()
-                .unwrap();
+        let options = acceptance_webview_options(Some("1"), Some(ARGS), profile.to_str())
+            .unwrap()
+            .unwrap();
         assert_eq!(options.port, 12345);
         assert_eq!(options.data_directory, profile);
-        assert!(options.additional_browser_args.starts_with(WRY_DEFAULT_ARGS));
+        assert!(options
+            .additional_browser_args
+            .starts_with(WRY_DEFAULT_ARGS));
         assert!(options.additional_browser_args.ends_with(ARGS));
     }
 
@@ -78,8 +82,7 @@ mod tests {
             "--remote-debugging-port=12345 --remote-debugging-address=127.0.0.1 --no-sandbox",
             "--remote-debugging-port=12345",
         ] {
-            assert!(acceptance_webview_options(Some("1"), Some(arguments), Some("owned"))
-                .is_err());
+            assert!(acceptance_webview_options(Some("1"), Some(arguments), Some("owned")).is_err());
         }
     }
 
@@ -87,11 +90,11 @@ mod tests {
     fn invalid_ports_are_rejected() {
         let profile = std::env::temp_dir();
         for port in ["0", "65536", "-1", "not-a-port"] {
-            let arguments = format!(
-                "--remote-debugging-port={port} --remote-debugging-address=127.0.0.1"
+            let arguments =
+                format!("--remote-debugging-port={port} --remote-debugging-address=127.0.0.1");
+            assert!(
+                acceptance_webview_options(Some("1"), Some(&arguments), profile.to_str()).is_err()
             );
-            assert!(acceptance_webview_options(Some("1"), Some(&arguments), profile.to_str())
-                .is_err());
         }
     }
 
@@ -100,5 +103,27 @@ mod tests {
         for profile in [None, Some(""), Some("relative/profile")] {
             assert!(acceptance_webview_options(Some("1"), Some(ARGS), profile).is_err());
         }
+    }
+
+    #[test]
+    fn shared_fixture_snapshot_retains_identical_environment_options() {
+        let profile = std::env::temp_dir().join("owned shared webview profile");
+        let options = acceptance_webview_options(Some("1"), Some(ARGS), profile.to_str())
+            .unwrap()
+            .unwrap();
+        let state = AcceptanceWebviewState(Some(options.clone()));
+        assert_eq!(state.0.as_ref().unwrap(), &options);
+        let mut copied = state.0.as_ref().unwrap().clone();
+        copied.additional_browser_args.push_str(" --different");
+        assert_eq!(state.0.as_ref().unwrap(), &options);
+        assert_ne!(copied, options);
+    }
+
+    #[test]
+    fn normal_launch_shared_state_has_no_debugging_configuration() {
+        let state = AcceptanceWebviewState(
+            acceptance_webview_options(None, Some(ARGS), Some("ignored")).unwrap(),
+        );
+        assert!(state.0.is_none());
     }
 }

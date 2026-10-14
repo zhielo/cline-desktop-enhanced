@@ -42,13 +42,27 @@ pub async fn built_in_browser_start(
         return Err("browser session already exists".to_string());
     }
     let target = safe_url(&url)?;
-    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target))
+    let builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(target))
         .title("Cline Built-in Browser")
         .inner_size(1240.0, 820.0)
         .min_inner_size(720.0, 480.0)
         .resizable(true)
-        .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about"))
-        .build()
+        .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about"));
+    #[cfg(windows)]
+    let builder = {
+        let state = app
+            .try_state::<crate::installed_webview_launch::AcceptanceWebviewState>()
+            .ok_or("Native browser launch configuration unavailable")?;
+        match &state.0 {
+            // WebView2 shares a browser process/profile. Its environment options
+            // must match the main WebView, including arguments appended by the SDK.
+            Some(options) => builder
+                .additional_browser_args(&options.additional_browser_args)
+                .data_directory(options.data_directory.clone()),
+            None => builder,
+        }
+    };
+    let window = builder.build()
         .map_err(|error| format!("failed creating built-in browser: {error}"))?;
     #[cfg(windows)]
     {

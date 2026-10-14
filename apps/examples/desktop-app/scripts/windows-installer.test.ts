@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, execFile, spawn, spawnSync } from "node:child_process";
 import {
 	copyFileSync,
 	existsSync,
@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 // No desktop/SDK build or dependency install needed. Exercise the actual hook
 // in an x86 NSIS installer against x64 executables, not a mocked process query.
@@ -151,8 +152,14 @@ describe.skipIf(!windows)("Windows installer process cleanup", () => {
 	beforeAll(async () => {
 		if (!existsSync(nsis))
 			throw new Error(`Set MAKENSIS_PATH: not found: ${nsis}`);
+		const version = await promisify(execFile)(nsis, ["/VERSION"], {
+			encoding: "utf8",
+			timeout: 10_000,
+			maxBuffer: 1024,
+			windowsHide: true,
+		});
 		expect(
-			Bun.spawnSync([nsis, "/VERSION"]).stdout.toString().trim(),
+			version.stdout.trim(),
 			`makensis is not the ${NSIS_VERSION} that the locked Tauri CLI bundles installers with`,
 		).toBe(NSIS_VERSION);
 		root = mkdtempSync(path.join(tmpdir(), "cline-installer-test-"));
