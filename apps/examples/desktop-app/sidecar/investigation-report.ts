@@ -150,6 +150,26 @@ export function reconcileFeature(
 		status: candidates.length || scenarios.length ? "partial" : "unresolved",
 		staticCandidates: candidates,
 		selectedNativeFunctions: tasks.flatMap(nativeSummary),
+		hybridObservations: [
+			...scenarios.map((s) => ({
+				kind: "browser-metadata",
+				id: object(s).id,
+				context: object(object(s).capture).hybrid,
+			})),
+			...tasks.map((t) => ({
+				kind: "runtime-task",
+				id: object(object(t).providerSnapshot).taskId,
+				context: object(object(object(t).providerSnapshot).result).hybrid,
+			})),
+		]
+			.filter((v) => v.context)
+			.map((v) => ({
+				...v,
+				classification: "runtime-observation-record",
+				questionStatus: "unresolved",
+				corroboration: "not-established",
+				note: "Selected receipt association is not proof that runtime answered the question or that code caused observed behavior.",
+			})),
 		scenarios,
 		stages,
 		unresolvedBoundaries: gaps,

@@ -117,3 +117,7 @@ it("reports selected native candidates with identity but no fabricated relocatio
 	});
 	expect(report.coverage.causalEdgesEstablished).toBe(0);
 });
+it("Hybrid pairings retain the question without fabricating corroboration",()=>{
+ const context={baselineKind:"receipt",baselineId:"receipt",evidenceHash:"a".repeat(64),question:"Which handler?",relation:"investigation-context-only"};
+ const r=reconcileFeature("handler",{},[{id:"scenario",capture:{hybrid:context}}]);expect(r.hybridObservations).toEqual([expect.objectContaining({context,questionStatus:"unresolved",corroboration:"not-established"})]);expect(r.coverage.causalEdgesEstablished).toBe(0);
+});

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { desktopClient } from "@/lib/desktop-client";
 import type { ChatSessionStatus } from "@/lib/chat-schema";
-export type AnalysisMode = "off" | "static" | "runtime";
+export type AnalysisMode = "off" | "static" | "runtime" | "hybrid";
 export function AnalysisModeControl({
 	sessionId,
 	environmentId,
@@ -51,9 +51,9 @@ export function AnalysisModeControl({
 	const change = async (value: AnalysisMode) => {
 		if (!idle || busy || !loaded) return;
 		if (
-			value === "runtime" &&
+			(value === "runtime" || value === "hybrid") &&
 			!window.confirm(
-				"Runtime mode does not grant execution permission. Existing target selection and per-action approvals remain required. Passive Inspector requires Debug approval; isolated JavaScript execution requires independent Execute approval and verified Windows isolation.",
+				"Runtime mode does not grant execution permission. Neither does Hybrid. Hybrid requires prior static evidence and an explicit runtime question.  Existing target selection and per-action approvals remain required. Passive Inspector requires Debug approval; isolated JavaScript execution requires independent Execute approval and verified Windows isolation.",
 			)
 		)
 			return;
@@ -92,6 +92,7 @@ export function AnalysisModeControl({
 				<option value="off">Off</option>
 				<option value="static">Static</option>
 				<option value="runtime">Runtime</option>
+				<option value="hybrid">Hybrid (static first)</option>
 			</select>
 			<button
 				type="button"

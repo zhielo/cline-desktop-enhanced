@@ -46,7 +46,25 @@ it("discards pre-enable/replay, post-window and invalid-coordinate reports", () 
 	const r = c.reconcile(scripts, hash);
 	expect(r.reports).toHaveLength(1);
 	expect(r.discarded).toBe(3);
+	expect(r.discardReasons).toEqual({
+		beforeWindow: 1,
+		futureTimestamp: 1,
+		invalidReport: 1,
+		unboundSource: 0,
+	});
 	expect(r.verifiedBehavior).toBe(false);
+});
+it("uses fractional receipt timestamps without widening the future guard", () => {
+	const c = new InspectorConsoleCollector();
+	c.start(100.25);
+	c.accept({ ...event(), timestamp: 100.2 }, 102.25);
+	c.accept({ ...event(), timestamp: 102.75 }, 102.25);
+	c.accept({ ...event(), timestamp: 103.25 }, 102.25);
+	const r = c.reconcile(scripts, hash);
+	expect(r.reports).toHaveLength(1);
+	expect(r.reports[0].receivedAt).toBe(102.25);
+	expect(r.discardReasons.beforeWindow).toBe(1);
+	expect(r.discardReasons.futureTimestamp).toBe(1);
 });
 it("keeps primitives bounded, exact string digests, opaque objects and no remote handles", () => {
 	const c = new InspectorConsoleCollector();

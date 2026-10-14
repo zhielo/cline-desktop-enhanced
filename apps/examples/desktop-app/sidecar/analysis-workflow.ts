@@ -1,10 +1,12 @@
+import { bindHybridObservation } from "./hybrid-analysis";
+import { HybridProposalSchema, runtimeAnalysisEnabled } from "@cline/core";
 import { evidenceIndex, reconcileFeature } from "./investigation-report";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { redactSensitiveText } from "@cline/core";
-import {
+import type {
 	AnalysisWorkflowStore,
-	type WorkflowScope,
+	WorkflowScope,
 } from "./analysis-workflow-store";
 const Id = z.string().uuid();
 export const WORKFLOW_COMMANDS = [
@@ -14,6 +16,7 @@ export const WORKFLOW_COMMANDS = [
 	"capture_browser_scenario",
 	"get_evidence_bundle",
 	"analysis_workflow_status",
+	"analysis_workflow_hybrid_prepare",
 ] as const;
 export interface WorkflowPorts {
 	invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -89,6 +92,22 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
+	if (command === "analysis_workflow_hybrid_prepare") {
+		if (
+			!options.trusted ||
+			options.mode !== "hybrid" ||
+			(!options.idle && options.actor !== "model")
+		)
+			throw new Error(
+				"Hybrid proposal requires a trusted enabled owning session",
+			);
+		return bindHybridObservation(input, scope, {
+			receipt: ports.staticReceipt,
+			task: (id) =>
+				(ports.taskBundle(id) as { providerSnapshot?: unknown })
+					?.providerSnapshot,
+		});
+	}
 	if (command === "analysis_workflow_status")
 		return {
 			workspace: scope.workspace,
@@ -142,6 +161,10 @@ export async function handleAnalysisWorkflow(
 				action: z.enum(["start", "stop"]),
 				confirmRecord: z.literal(true),
 				purpose: z.string().min(1).max(160),
+				hybridProposal: z
+					.unknown()
+					.transform((value) => HybridProposalSchema.parse(value))
+					.optional(),
 			})
 			.strict()
 			.parse(input);
@@ -152,12 +175,25 @@ export async function handleAnalysisWorkflow(
 		if (
 			req.action === "start" &&
 			((!options.idle && options.actor !== "model") ||
-				options.mode !== "runtime")
+				!runtimeAnalysisEnabled(options.mode))
 		)
 			throw new Error(
 				"Browser scenario capture requires an idle Runtime session and explicit recording approval",
 			);
-		const result = await ports.capture(req);
+		let hybrid: Awaited<ReturnType<typeof bindHybridObservation>> | undefined;
+		if (req.action === "start" && options.mode === "hybrid") {
+			hybrid = await bindHybridObservation(req.hybridProposal, scope, {
+				receipt: ports.staticReceipt,
+				task: (id) =>
+					(ports.taskBundle(id) as { providerSnapshot?: unknown })
+						?.providerSnapshot,
+			});
+		}
+		const { hybridProposal: _proposal, ...captureRequest } = req;
+		const result = await ports.capture({
+			...captureRequest,
+			...(hybrid ? { hybrid } : {}),
+		});
 		if (req.action !== "stop") return result;
 		try {
 			return store.put(scope, "scenario", {
@@ -186,7 +222,15 @@ export async function handleAnalysisWorkflow(
 			.object({ target: z.string().min(1).max(4096) })
 			.strict()
 			.parse(input);
-		return store.open(scope, req.target);
+		const artifact = await store.open(scope, req.target);
+		return options.mode === "hybrid"
+			? {
+					...artifact,
+					mode: "hybrid",
+					nextStep:
+						"Inspect statically using an available tool; an immutable handle alone is not a static analysis receipt. Propose runtime separately with human approval.",
+				}
+			: artifact;
 	}
 	if (command === "analyze_function") {
 		const req = z

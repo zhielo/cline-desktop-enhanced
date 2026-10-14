@@ -225,6 +225,9 @@ export async function main() {
   await writeFile(join(workspace,"owned-renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
   const analysisCurrent=join(workspace,"owned-analysis-current"), analysisPrevious=join(workspace,"owned-analysis-previous");
   await mkdir(analysisCurrent);await mkdir(analysisPrevious);
+  const hybridExpectedOutput="owned-hybrid\n";
+  const hybridFixtureTarget=join(analysisCurrent,"hybrid-owned.js");
+  await writeFile(hybridFixtureTarget,`process.stdout.write(${JSON.stringify(hybridExpectedOutput)});`);
   for(const [directory,route] of [[analysisCurrent,"/v2"],[analysisPrevious,"/v1"]]) {
     await writeFile(join(directory,"config.ts"),`export const config={host:"https://owned.invalid",route:${JSON.stringify(route)}};`);
     await writeFile(join(directory,"main.js"),`import {ipcMain} from "electron"; ipcMain.handle("owned:fixture", () => 42); import {config} from "./config"; function endpoint(h,r){return h+r;} fetch(endpoint(config.host,config.route));`);
@@ -703,6 +706,32 @@ ConvertTo-Json -InputObject @($rows) -Compress
 
     const changes=await rpc<{items:Array<{kind:string;value:string;change:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"comparison",filter:"resolved-endpoint"}});
     if(!changes.items.some(f=>f.change==="removed"&&f.value==="https://owned.invalid/v1")||!changes.items.some(f=>f.change==="added"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed endpoint finding comparison failed");
+    page.once("dialog",dialog=>dialog.accept());
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("hybrid");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="hybrid"&&!select.disabled;});
+    await page.reload();
+    await page.getByRole("button", {name:/Installer owned session/}).first().click();
+    const hybridStatus=await rpc<{mode:string;receipts:Array<{id:string}>}>(page,"first_party_analysis_status",analysisArgs);
+    if(hybridStatus.mode!=="hybrid"||!hybridStatus.receipts.some(r=>r.id===parsed.id))throw new Error("Installed Hybrid mode/evidence did not persist");
+    const hybridBasis=await rpc<{relation:string;evidenceHash:string}>(page,"analysis_workflow_hybrid_prepare",{...analysisArgs,input:{baselineKind:"receipt",baselineId:parsed.id,question:"Which owned browser event occurs?"}});
+    if(hybridBasis.relation!=="investigation-context-only"||!/^[a-f0-9]{64}$/.test(hybridBasis.evidenceHash))throw new Error("Installed Hybrid static preflight failed");
+    let missingBasisDenied=false;
+    try{await rpc(page,"analysis_workflow_hybrid_prepare",{...analysisArgs,input:{baselineKind:"receipt",baselineId:"11111111-1111-4111-8111-111111111111",question:"Missing basis must deny"}});}catch{missingBasisDenied=true;}
+    if(!missingBasisDenied)throw new Error("Installed Hybrid accepted missing static evidence");
+    stages.push("installed-hybrid-mode-persistence-static-preflight-passed");
+    const hybridExecutePlan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"first_party_analysis_execute_prepare",{
+      ...analysisArgs,
+      hybridProposal:{baselineKind:"receipt",baselineId:parsed.id,question:"Does this owned isolated fixture exit 0 and emit the expected bytes?"},
+      input:{operation:"js_isolated_execute",target:hybridFixtureTarget,timeoutMs:5000,scenario:{id:"installed-hybrid-owned",purpose:"Owned installed Hybrid process-interface assertion only",exitCode:0,stdoutSha256:createHash("sha256").update(hybridExpectedOutput).digest("hex")}},
+    });
+    if((hybridExecutePlan.request.hybrid as {relation?:string})?.relation!=="exact-artifact-hash")throw new Error("Installed Hybrid execution plan lacks exact static basis");
+    const hybridApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...analysisArgs,cwd:workspace,planId:hybridExecutePlan.id,requestHash:hybridExecutePlan.requestHash,requirements:hybridExecutePlan.requirements});
+    const hybridExecuted=await rpc<{result:{hybrid?:{evidenceHash:string};isolation:{verifiedBeforeResume:boolean};scenario:{outcome:string}}}>(page,"first_party_analysis_execute_run",{...analysisArgs,planId:hybridExecutePlan.id,executionToken:hybridApproval.executionToken,input:hybridExecutePlan.request,confirmExecution:true});
+    if(hybridExecuted.result.isolation.verifiedBeforeResume!==true||hybridExecuted.result.scenario.outcome!=="supported"||hybridExecuted.result.hybrid?.evidenceHash!==hybridBasis.evidenceHash)throw new Error("Installed Hybrid owned isolated execution failed scoped assertions");
+    const hybridBundle=await rpc<{payload:{records:unknown[]}}>(page,"get_evidence_bundle",{...analysisArgs,input:{receiptIds:[parsed.id],taskIds:[hybridExecutePlan.id]}});
+    if(hybridBundle.payload.records.length!==2)throw new Error("Installed Hybrid selected static/runtime export incomplete");
+    stages.push("installed-hybrid-owned-isolated-execution-and-export-passed");
+
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
     await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
     await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();

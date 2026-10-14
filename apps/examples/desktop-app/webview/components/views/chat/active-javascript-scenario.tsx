@@ -11,10 +11,18 @@ export function ActiveJavaScriptScenario({
 	sessionId,
 	environmentId,
 	enabled,
+	mode,
+	hybridProposal,
 }: {
 	sessionId: string;
 	environmentId: string;
 	enabled: boolean;
+	mode?: string;
+	hybridProposal?: {
+		baselineKind: "receipt" | "static-task";
+		baselineId: string;
+		question: string;
+	};
 }) {
 	const [allowExternal, setAllowExternal] = useState(false);
 	const [kind, setKind] = useState("execute"),
@@ -44,7 +52,15 @@ export function ActiveJavaScriptScenario({
 		return () => {
 			revision.current++;
 		};
-	}, [sessionId, environmentId, enabled]);
+	}, [
+		sessionId,
+		environmentId,
+		enabled,
+		mode,
+		hybridProposal?.baselineKind,
+		hybridProposal?.baselineId,
+		hybridProposal?.question,
+	]);
 	async function prepare() {
 		const r = ++revision.current;
 		setPlan(null);
@@ -57,6 +73,7 @@ export function ActiveJavaScriptScenario({
 						sessionId,
 						environmentId,
 						allowExternalTarget: allowExternal,
+						...(hybridProposal ? { hybridProposal } : {}),
 						input: {
 							operation: "native_module_observe",
 							target,
@@ -81,6 +98,7 @@ export function ActiveJavaScriptScenario({
 					sessionId,
 					environmentId,
 					allowExternalTarget: allowExternal,
+					...(hybridProposal ? { hybridProposal } : {}),
 					input: {
 						operation: "js_isolated_execute",
 						target,

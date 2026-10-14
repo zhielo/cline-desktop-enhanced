@@ -1,4 +1,6 @@
-import { mkdtemp, rm, realpath } from "node:fs/promises";
+import { mkdtemp, rm, realpath, mkdir, symlink } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -11,6 +13,111 @@ import {
 } from "./unified-evidence";
 import { digest } from "./contracts";
 const hash = "a".repeat(64);
+it("binds native-resolved workspace aliases without permitting another workspace or session", async () => {
+	const root = await mkdtemp(join(tmpdir(), "cline-unified-alias-"));
+	const owned = join(root, "owned-workspace");
+	const other = join(root, "other-workspace");
+	const alias = join(root, "owned-alias");
+	await mkdir(owned);
+	await mkdir(other);
+	await symlink(
+		owned,
+		alias,
+		process.platform === "win32" ? "junction" : "dir",
+	);
+	const store = new UnifiedEvidenceStore(join(root, "snapshots.sqlite"));
+	const result = { owned: true };
+	const plan = {
+		id: randomUUID(),
+		workspaceRoot: realpathSync.native(alias),
+		kind: "static",
+		operation: "owned",
+		status: "awaiting-approval",
+		requestHash: hash,
+	};
+	try {
+		store.bind("s", alias, plan);
+		expect(() => store.bind("other", alias, plan)).toThrow("immutable");
+		expect(() => store.bind("s", other, plan)).toThrow("workspace mismatch");
+		const completed = {
+			...plan,
+			status: "completed",
+			completedAt: new Date().toISOString(),
+			evidence: {
+				resultHash: digest(result),
+				requestHash: hash,
+				tool: "owned",
+			},
+		};
+		const snapshot = store.record("s", alias, completed, result);
+		expect(store.list("s", alias)).toEqual([snapshot]);
+		expect(() => store.record("other", alias, completed, result)).toThrow(
+			"owning session",
+		);
+		expect(() => store.record("s", other, completed, result)).toThrow(
+			"binding mismatch",
+		);
+	} finally {
+		store.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+it.skipIf(process.platform !== "win32")(
+	"binds real Windows 8.3 workspace paths to native task plans",
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), "cline-unified-short-path-"));
+		const store = new UnifiedEvidenceStore(join(root, "snapshots.sqlite"));
+		try {
+			// Pass cmd's program text verbatim: Node's default Windows argument
+			// escaping treats embedded quotes as literals. Avoid PowerShell/C#
+			// compilation entirely while retaining genuine 8.3 path assertions.
+			const expansion = spawnSync(
+				"cmd.exe",
+				["/d", "/c", `for %I in ("${root}") do @echo %~sI`],
+				{ encoding: "utf8", timeout: 10000, windowsVerbatimArguments: true },
+			);
+			if (expansion.error) throw expansion.error;
+			if (expansion.status !== 0)
+				throw new Error("Owned short-path expansion failed");
+			const short = expansion.stdout.trim();
+			expect(short).not.toContain('"');
+			const nativeRoot = realpathSync.native(root);
+			expect(short.toLowerCase()).not.toBe(nativeRoot.toLowerCase());
+			expect(realpathSync.native(short)).toBe(nativeRoot);
+			const result = { owned: true };
+			const plan = {
+				id: randomUUID(),
+				workspaceRoot: nativeRoot,
+				kind: "execution",
+				operation: "js_isolated_execute",
+				status: "awaiting-approval",
+				requestHash: hash,
+			};
+			store.bind("s", short, plan);
+			const snapshot = store.record(
+				"s",
+				short,
+				{
+					...plan,
+					status: "completed",
+					completedAt: new Date().toISOString(),
+					evidence: {
+						resultHash: digest(result),
+						requestHash: hash,
+						tool: "owned",
+					},
+				},
+				result,
+			);
+			expect(store.list("s", short)).toEqual([snapshot]);
+			expect(() => store.bind("other", short, plan)).toThrow("immutable");
+		} finally {
+			store.close();
+			await rm(root, { recursive: true, force: true });
+		}
+	},
+	30000,
+);
 it("retains approved completed task provenance, exact hash matches and explicit unknowns", async () => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), "cline-unified-"))),
 		store = new UnifiedEvidenceStore(join(root, "snapshots.sqlite"));

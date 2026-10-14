@@ -12,8 +12,10 @@ export type OpenArtifact = {
 	openedAt: string;
 };
 export async function confinedArtifact(workspace: string, target: string) {
-	const root = realpathSync(workspace),
-		file = realpathSync(resolve(root, target)),
+	// Match the task planner's native resolver, including Windows 8.3 aliases.
+	// Both sides must resolve before containment; lexical aliases are not roots.
+	const root = realpathSync.native(workspace),
+		file = realpathSync.native(resolve(root, target)),
 		rel = relative(root, file);
 	if (
 		!rel ||
@@ -36,7 +38,7 @@ export async function confinedArtifact(workspace: string, target: string) {
 	}
 	const after = await stat(file);
 	if (
-		realpathSync(resolve(root, target)) !== file ||
+		realpathSync.native(resolve(root, target)) !== file ||
 		after.ino !== before.ino ||
 		after.dev !== before.dev ||
 		size !== before.size ||

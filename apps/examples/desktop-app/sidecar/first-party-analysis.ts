@@ -1,4 +1,9 @@
 import {
+	bindHybridObservation,
+	recheckHybridObservation,
+} from "./hybrid-analysis";
+import { runtimeAnalysisEnabled } from "@cline/core";
+import {
 	bindNativeModuleObservation,
 	NativeModuleRequestSchema,
 	observeNativeModule,
@@ -225,9 +230,40 @@ export async function handleFirstPartyCommand(
 			"Analysis changes require a trusted desktop approval connection",
 		);
 
+	const hybridPorts = {
+		receipt: (id: string) => db.get(session.id, id),
+		task: (id: string) =>
+			taskStore()
+				.list(session.id, session.workspace)
+				.find((s) => s.taskId === id),
+	};
+	const hybridScope = { sessionId: session.id, workspace: session.workspace };
+	const bindHybrid = async (target: string) =>
+		bound?.mode === "hybrid"
+			? await bindHybridObservation(
+					args.hybridProposal,
+					hybridScope,
+					hybridPorts,
+					target,
+				)
+			: undefined;
+	const recheckHybrid = async (request: {
+		target: string;
+		hybrid?: unknown;
+	}) => {
+		if (bound?.mode === "hybrid")
+			await recheckHybridObservation(
+				request.hybrid,
+				hybridScope,
+				hybridPorts,
+				request.target,
+			);
+		else if (request.hybrid)
+			throw new Error("Hybrid mode changed; prepare a new plan");
+	};
 	if (command.startsWith("first_party_analysis_native_")) {
 		if (
-			bound?.mode !== "runtime" ||
+			!runtimeAnalysisEnabled(bound?.mode) ||
 			session.busy ||
 			inspectorSlots.has(session.id)
 		)
@@ -235,7 +271,9 @@ export async function handleFirstPartyCommand(
 				"Native memory observation requires an idle Runtime session and independent Debug approval",
 			);
 		if (command === "first_party_analysis_native_prepare") {
-			const request = await bindNativeModuleObservation(args.input);
+			const boundRequest = await bindNativeModuleObservation(args.input);
+			const hybrid = await bindHybrid(boundRequest.target);
+			const request = { ...boundRequest, ...(hybrid ? { hybrid } : {}) };
 			const plan = await desktopAnalysisTaskOrchestrator.prepare({
 				workspaceRoot: session.workspace,
 				kind: "debugger",
@@ -253,8 +291,9 @@ export async function handleFirstPartyCommand(
 				);
 			if (inspectorSlots.size >= 2)
 				throw new Error("Runtime observation slots occupied");
-			const request = NativeModuleRequestSchema.parse(args.input),
-				planId = String(args.planId ?? "");
+			const request = NativeModuleRequestSchema.parse(args.input);
+			await recheckHybrid(request);
+			const planId = String(args.planId ?? "");
 			inspectorSlots.set(session.id, planId);
 			let consumed = false;
 			try {
@@ -268,11 +307,15 @@ export async function handleFirstPartyCommand(
 				consumed = true;
 				if (!plan.targetIdentity?.sha256 || !plan.target)
 					throw new Error("Exact native artifact required");
-				const result = await observeNativeModule(
+				const observed = await observeNativeModule(
 					{ ...request, target: plan.target },
 					plan.targetIdentity.sha256,
 					desktopAnalysisTaskOrchestrator.signal(planId),
 				);
+				const result = {
+					...observed,
+					...(request.hybrid ? { hybrid: request.hybrid } : {}),
+				};
 				const completed = desktopAnalysisTaskOrchestrator.complete(
 					planId,
 					result,
@@ -303,7 +346,7 @@ export async function handleFirstPartyCommand(
 	}
 	if (command.startsWith("first_party_analysis_execute_")) {
 		if (
-			bound?.mode !== "runtime" ||
+			!runtimeAnalysisEnabled(bound?.mode) ||
 			session.busy ||
 			inspectorSlots.has(session.id)
 		)
@@ -311,7 +354,9 @@ export async function handleFirstPartyCommand(
 				"Active execution requires an idle Runtime-enabled session and independent Execute approval",
 			);
 		if (command === "first_party_analysis_execute_prepare") {
-			const request = await bindJavaScriptExecution(args.input);
+			const boundRequest = await bindJavaScriptExecution(args.input);
+			const hybrid = await bindHybrid(boundRequest.target);
+			const request = { ...boundRequest, ...(hybrid ? { hybrid } : {}) };
 			const plan = await desktopAnalysisTaskOrchestrator.prepare({
 				workspaceRoot: session.workspace,
 				kind: "execution",
@@ -328,8 +373,9 @@ export async function handleFirstPartyCommand(
 				throw new Error("Independent Execute confirmation required");
 			if (inspectorSlots.size >= 2)
 				throw new Error("Runtime execution slots occupied");
-			const request = JavaScriptExecutionSchema.parse(args.input),
-				planId = String(args.planId ?? "");
+			const request = JavaScriptExecutionSchema.parse(args.input);
+			await recheckHybrid(request);
+			const planId = String(args.planId ?? "");
 			inspectorSlots.set(session.id, planId);
 			let consumed = false;
 			try {
@@ -343,7 +389,7 @@ export async function handleFirstPartyCommand(
 				consumed = true;
 				if (!plan.targetIdentity?.sha256 || !plan.target)
 					throw new Error("Exact reviewed standalone file required");
-				const result = await runIsolatedJavaScript(
+				const observed = await runIsolatedJavaScript(
 					{ ...request, target: plan.target },
 					{
 						targetSha256: plan.targetIdentity.sha256,
@@ -351,6 +397,10 @@ export async function handleFirstPartyCommand(
 					},
 					desktopAnalysisTaskOrchestrator.signal(planId),
 				);
+				const result = {
+					...observed,
+					...(request.hybrid ? { hybrid: request.hybrid } : {}),
+				};
 				const completed = desktopAnalysisTaskOrchestrator.complete(
 					planId,
 					result,
@@ -381,7 +431,7 @@ export async function handleFirstPartyCommand(
 	}
 	if (command.startsWith("first_party_analysis_inspector_")) {
 		if (
-			bound?.mode !== "runtime" ||
+			!runtimeAnalysisEnabled(bound?.mode) ||
 			session.busy ||
 			inspectorSlots.has(session.id)
 		)
@@ -401,6 +451,7 @@ export async function handleFirstPartyCommand(
 				throw new Error("Inspector process birth identity unavailable");
 			const request = InspectorRequestSchema.parse({
 				...supplied,
+				hybrid: await bindHybrid(String(supplied.target ?? "")),
 				processToken: identity.token,
 			});
 			const plan = await desktopAnalysisTaskOrchestrator.prepare({
@@ -415,6 +466,7 @@ export async function handleFirstPartyCommand(
 		}
 		if (command === "first_party_analysis_inspector_run") {
 			const input = InspectorRequestSchema.parse(args.input);
+			await recheckHybrid(input);
 			const planId = String(args.planId ?? "");
 			if (inspectorSlots.size >= 2)
 				throw new Error(
@@ -435,11 +487,15 @@ export async function handleFirstPartyCommand(
 					throw new Error(
 						"Inspector requires an exact approved source file hash",
 					);
-				const result = await observeJavaScriptInspector(
+				const observed = await observeJavaScriptInspector(
 					{ ...input, target: plan.target },
 					desktopAnalysisTaskOrchestrator.signal(planId),
 					plan.targetIdentity.sha256,
 				);
+				const result = {
+					...observed,
+					...(input.hybrid ? { hybrid: input.hybrid } : {}),
+				};
 				const completed = desktopAnalysisTaskOrchestrator.complete(
 					planId,
 					result,

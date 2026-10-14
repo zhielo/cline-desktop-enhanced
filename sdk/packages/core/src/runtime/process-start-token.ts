@@ -62,7 +62,9 @@ export function resolveWindowsProcessStartCommand(
 			"-NoProfile",
 			"-NonInteractive",
 			"-Command",
-			`[Console]::Write((Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks.ToString([Globalization.CultureInfo]::InvariantCulture))`,
+			// Read the same exact OS birth time directly; avoid Get-Process
+			// cmdlet/module initialization on each bounded identity recheck.
+			`$p=[Diagnostics.Process]::GetProcessById(${pid});try{[Console]::Write($p.StartTime.ToUniversalTime().Ticks.ToString([Globalization.CultureInfo]::InvariantCulture))}finally{$p.Dispose()}`,
 		],
 	};
 }

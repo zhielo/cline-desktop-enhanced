@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 export const ANALYSIS_PROFILE = "cline-js-static/7";
-export const AnalysisModeSchema = z.enum(["off", "static", "runtime"]);
+export const AnalysisModeSchema = z.enum(["off", "static", "runtime", "hybrid"]);
 export type AnalysisMode = z.infer<typeof AnalysisModeSchema>;
 export const AnalysisInputSchema = z
 	.object({

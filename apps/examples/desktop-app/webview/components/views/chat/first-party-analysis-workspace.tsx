@@ -48,6 +48,11 @@ export function FirstPartyAnalysisWorkspace({
 		[inspectorPid, setInspectorPid] = useState(""),
 		[inspectorEndpoint, setInspectorEndpoint] = useState("");
 	const [captureConsole, setCaptureConsole] = useState(false);
+	const [hybridQuestion, setHybridQuestion] = useState("");
+	const [hybridTaskId, setHybridTaskId] = useState("");
+	const [hybridKind, setHybridKind] = useState<"receipt" | "static-task">(
+		"receipt",
+	);
 	const inspectorRevision = useRef(0);
 	const [inspectorPlan, setInspectorPlan] = useState<{
 		id: string;
@@ -136,6 +141,11 @@ export function FirstPartyAnalysisWorkspace({
 			disposed = true;
 		};
 	}, [selected, sessionId, environmentId, view, filter, offset]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Changes to the static basis/question/mode invalidate reviewed runtime authority.
+	useEffect(() => {
+		inspectorRevision.current++;
+		setInspectorPlan(null);
+	}, [selected, hybridQuestion, hybridKind, hybridTaskId, status?.mode]);
 	if (!sessionId || environmentId !== "local")
 		return <p>Open an existing local session to use first-party analysis.</p>;
 	const run = async () => {
@@ -201,6 +211,15 @@ export function FirstPartyAnalysisWorkspace({
 			}>("first_party_analysis_inspector_prepare", {
 				sessionId,
 				environmentId,
+				...(status?.mode === "hybrid"
+					? {
+							hybridProposal: {
+								baselineKind: hybridKind,
+								baselineId: hybridKind === "receipt" ? selected : hybridTaskId,
+								question: hybridQuestion,
+							},
+						}
+					: {}),
 				input: {
 					operation: "js_inspector_observe",
 					target: inspectorTarget,
@@ -390,7 +409,13 @@ export function FirstPartyAnalysisWorkspace({
 				</p>
 				<button
 					type="button"
-					disabled={running || status?.mode !== "runtime"}
+					disabled={
+						running ||
+						!(status?.mode === "runtime" || status?.mode === "hybrid") ||
+						(status?.mode === "hybrid" &&
+							(!hybridQuestion.trim() ||
+								!(hybridKind === "receipt" ? selected : hybridTaskId)))
+					}
 					className="rounded border p-2"
 					onClick={() => void prepareInspector()}
 				>
@@ -632,10 +657,71 @@ export function FirstPartyAnalysisWorkspace({
 					show retained engine output; absent components stay unknown.
 				</p>
 			</details>
+			{status?.mode === "hybrid" && (
+				<section className="space-y-2 rounded border p-3 text-xs">
+					<strong>
+						Hybrid: static first → propose → approve → observe → reconcile
+					</strong>
+					<p>
+						Select a completed static receipt for the exact current target and
+						name the question runtime should answer. This does not grant
+						Debug/Execute approval or automatically run a target.
+					</p>
+					<select
+						aria-label="Hybrid static basis kind"
+						className="rounded border bg-background p-2"
+						value={hybridKind}
+						onChange={(e) =>
+							setHybridKind(e.target.value as "receipt" | "static-task")
+						}
+					>
+						<option value="receipt">Selected parser receipt</option>
+						<option value="static-task">Completed native static task</option>
+					</select>
+					{hybridKind === "static-task" && (
+						<input
+							aria-label="Hybrid static task ID"
+							className="w-full rounded border bg-background p-2"
+							value={hybridTaskId}
+							maxLength={36}
+							onChange={(e) => setHybridTaskId(e.target.value)}
+							placeholder="Owning-session completed static task UUID"
+						/>
+					)}
+					<input
+						aria-label="Hybrid runtime question"
+						className="w-full rounded border bg-background p-2"
+						value={hybridQuestion}
+						maxLength={500}
+						onChange={(e) => {
+							setHybridQuestion(e.target.value);
+							setInspectorPlan(null);
+							inspectorRevision.current++;
+						}}
+						placeholder="What remains unknown after static inspection?"
+					/>
+				</section>
+			)}
 			<ActiveJavaScriptScenario
 				sessionId={sessionId}
 				environmentId={environmentId}
-				enabled={status?.mode === "runtime" && !running}
+				enabled={
+					(status?.mode === "runtime" || status?.mode === "hybrid") &&
+					!running &&
+					(status?.mode !== "hybrid" ||
+						(!!hybridQuestion.trim() &&
+							!!(hybridKind === "receipt" ? selected : hybridTaskId)))
+				}
+				mode={status?.mode}
+				hybridProposal={
+					status?.mode === "hybrid"
+						? {
+								baselineKind: hybridKind,
+								baselineId: hybridKind === "receipt" ? selected : hybridTaskId,
+								question: hybridQuestion,
+							}
+						: undefined
+				}
 			/>
 		</section>
 	);

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { z } from "zod";
+import { HybridContextSchema } from "@cline/core";
 import { probeProcessStartTokenAsync } from "@cline/core";
 import {
 	installedJavaScriptIsolationResources,
@@ -12,6 +13,10 @@ const Hex = z.string().regex(/^0x[a-f0-9]{1,16}$/i),
 export const NativeModuleRequestSchema = z
 	.object({
 		operation: z.literal("native_module_observe"),
+		hybrid: z
+			.unknown()
+			.transform((value) => HybridContextSchema.parse(value))
+			.optional(),
 		target: z.string().min(1).max(4096),
 		pid: z.number().int().positive(),
 		processToken: z.string().regex(/^win32:\d{15,20}$/),

@@ -227,7 +227,7 @@ it("captures only opt-in source-bound primitive console reports from a running o
 		expect(on.protocol).toBe("cline-js-inspector/2");
 		expect(
 			on.console!.reports.length,
-			`Owned console capture: discarded=${on.console!.discarded}; matchedScripts=${on.scripts.filter((script) => script.staticMatch).length}`,
+			`Owned console capture: discarded=${on.console!.discarded}; reasons=${JSON.stringify(on.console!.discardReasons)}; matchedScripts=${on.scripts.filter((script) => script.staticMatch).length}`,
 		).toBeGreaterThan(0);
 		expect(on.console!.reports[0]).toMatchObject({
 			sourceSha256: byteDigest(Buffer.from(text)),

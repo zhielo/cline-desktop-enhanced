@@ -18,30 +18,37 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	return { ...actual, realpath: vi.fn(actual.realpath) };
 });
-vi.mock("@cline/core", () => ({
-	AnalysisModeSchema: { parse: (v: unknown) => v },
-	FirstPartyAnalysisStore: class {
-		setMode = modes;
-		session = sessions;
-		summaries() {
-			return [];
-		}
-	},
-	runFirstPartyAnalysis: run,
-	queryFirstPartyEvidence: vi.fn(),
-	cancelFirstPartyAnalysis: vi.fn(),
-	recoverFirstPartyReservation: vi.fn(),
-	UnifiedEvidenceStore: class {
-		record = record;
-		bind() {}
-	},
-	InspectorRequestSchema: { parse: (v: unknown) => v },
-	observeJavaScriptInspector: observe,
-	probeProcessStartTokenAsync: vi.fn(),
-	unifiedEvidenceView: vi.fn(),
-	nativeDossiers: vi.fn(),
-	dossierDisagreements: vi.fn(),
-}));
+vi.mock("@cline/core", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@cline/core")>();
+	return {
+		HybridProposalSchema: actual.HybridProposalSchema,
+		HybridContextSchema: actual.HybridContextSchema,
+		runtimeAnalysisEnabled: actual.runtimeAnalysisEnabled,
+		digest: actual.digest,
+		AnalysisModeSchema: { parse: (v: unknown) => v },
+		FirstPartyAnalysisStore: class {
+			setMode = modes;
+			session = sessions;
+			summaries() {
+				return [];
+			}
+		},
+		runFirstPartyAnalysis: run,
+		queryFirstPartyEvidence: vi.fn(),
+		cancelFirstPartyAnalysis: vi.fn(),
+		recoverFirstPartyReservation: vi.fn(),
+		UnifiedEvidenceStore: class {
+			record = record;
+			bind() {}
+		},
+		InspectorRequestSchema: { parse: (v: unknown) => v },
+		observeJavaScriptInspector: observe,
+		probeProcessStartTokenAsync: vi.fn(),
+		unifiedEvidenceView: vi.fn(),
+		nativeDossiers: vi.fn(),
+		dossierDisagreements: vi.fn(),
+	};
+});
 vi.mock("./analysis-task-orchestrator", () => ({
 	desktopAnalysisTaskOrchestrator: {
 		consume,
@@ -86,8 +93,12 @@ it("reports readiness separately without certifying native or runtime capabiliti
 		installed: true,
 		staticFixture: { status: "not-tested" },
 	});
-	expect(firstPartyReadiness().runtimeCapture).toContain("Separately Execute-approved");
- expect(firstPartyReadiness().runtimeCapture).toContain("no unsandboxed fallback");
+	expect(firstPartyReadiness().runtimeCapture).toContain(
+		"Separately Execute-approved",
+	);
+	expect(firstPartyReadiness().runtimeCapture).toContain(
+		"no unsandboxed fallback",
+	);
 });
 
 let ownedRoot: string | undefined;
