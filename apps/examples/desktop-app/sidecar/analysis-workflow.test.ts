@@ -1,8 +1,9 @@
 import { it, expect, vi } from "vitest";
-import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, mkdir, symlink } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { AnalysisWorkflowStore } from "./analysis-workflow-store";
+import { AnalysisWorkflowStore, confinedArtifact } from "./analysis-workflow-store";
 import {
 	handleAnalysisWorkflow,
 	featureTrace,
@@ -27,6 +28,38 @@ it("immutable artifact handles reject mutations and cross-session reads", async 
 		);
 	} finally {
 		store.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+it("confines native plan paths through workspace aliases while rejecting escapes", async () => {
+	const root = await mkdtemp(join(tmpdir(), "workflow-alias-"));
+	const owned = join(root, "owned");
+	const alias = join(root, "owned-alias");
+	const outside = join(root, "outside");
+	await mkdir(owned);
+	await mkdir(outside);
+	await writeFile(join(owned, "owned.js"), "owned");
+	await writeFile(join(outside, "outside.js"), "outside");
+	await symlink(
+		owned,
+		alias,
+		process.platform === "win32" ? "junction" : "dir",
+	);
+	await symlink(
+		outside,
+		join(owned, "escape"),
+		process.platform === "win32" ? "junction" : "dir",
+	);
+	try {
+		const nativeFile = realpathSync.native(join(owned, "owned.js"));
+		expect((await confinedArtifact(alias, nativeFile)).path).toBe(nativeFile);
+		await expect(
+			confinedArtifact(alias, join(owned, "escape", "outside.js")),
+		).rejects.toThrow("confined");
+		await expect(
+			confinedArtifact(alias, join(outside, "outside.js")),
+		).rejects.toThrow("confined");
+	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
 });

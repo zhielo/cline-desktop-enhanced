@@ -82,7 +82,14 @@ describe("Windows invariant process identity", () => {
 		expect(seen).toHaveLength(1);
 		expect(command?.args).toContain("-NoProfile");
 		expect(command?.args.at(-1)).toContain("InvariantCulture");
-		expect(command?.args.at(-1)).toContain("Get-Process -Id 1234");
+		expect(command?.args.at(-1)).toContain(
+			"[Diagnostics.Process]::GetProcessById(1234)",
+		);
+		expect(command?.args.at(-1)).toContain(
+			".StartTime.ToUniversalTime().Ticks",
+		);
+		expect(command?.args.at(-1)).toContain("finally{$p.Dispose()}");
+		expect(command?.args.at(-1)).not.toContain("Get-Process");
 		const fallback = resolveWindowsProcessStartCommand(1234, env, (p) =>
 			p.endsWith("powershell.exe"),
 		);

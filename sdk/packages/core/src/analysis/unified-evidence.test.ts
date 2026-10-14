@@ -1,6 +1,6 @@
 import { mkdtemp, rm, realpath, mkdir, symlink } from "node:fs/promises";
 import { realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -68,33 +68,19 @@ it.skipIf(process.platform !== "win32")(
 		const root = await mkdtemp(join(tmpdir(), "cline-unified-short-path-"));
 		const store = new UnifiedEvidenceStore(join(root, "snapshots.sqlite"));
 		try {
-			// Avoid cmd /c FOR quoting: Node's Windows argument quoting can
-			// return quote characters as part of the path instead of a path.
-			const script = `
-Add-Type @'
-using System;
-using System.Text;
-using System.Runtime.InteropServices;
-public static class OwnedShortPath {
-  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-  public static extern uint GetShortPathNameW(string path, StringBuilder output, uint capacity);
-}
-'@
-$output = New-Object System.Text.StringBuilder 32768
-$length = [OwnedShortPath]::GetShortPathNameW('${root.replace(/'/g, "''")}', $output, 32768)
-if ($length -eq 0 -or $length -ge 32768) { throw 'Owned short-path resolution failed' }
-[Console]::Write($output.ToString())
-`;
-			const short = execFileSync(
-				"powershell.exe",
-				[
-					"-NoProfile",
-					"-NonInteractive",
-					"-EncodedCommand",
-					Buffer.from(script, "utf16le").toString("base64"),
-				],
-				{ encoding: "utf8", timeout: 10000 },
-			).trim();
+			// Pass cmd's program text verbatim: Node's default Windows argument
+			// escaping treats embedded quotes as literals. Avoid PowerShell/C#
+			// compilation entirely while retaining genuine 8.3 path assertions.
+			const expansion = spawnSync(
+				"cmd.exe",
+				["/d", "/c", `for %I in ("${root}") do @echo %~sI`],
+				{ encoding: "utf8", timeout: 10000, windowsVerbatimArguments: true },
+			);
+			if (expansion.error) throw expansion.error;
+			if (expansion.status !== 0)
+				throw new Error("Owned short-path expansion failed");
+			const short = expansion.stdout.trim();
+			expect(short).not.toContain('"');
 			const nativeRoot = realpathSync.native(root);
 			expect(short.toLowerCase()).not.toBe(nativeRoot.toLowerCase());
 			expect(realpathSync.native(short)).toBe(nativeRoot);
