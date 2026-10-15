@@ -4,12 +4,6 @@ export type PullRequestCheck = {
 	url?: string;
 };
 
-export type GitHubConnectionStatus = {
-	state: "connected" | "needs-auth" | "not-installed" | "not-github-repo" | "detached";
-	repository?: string;
-	branch?: string;
-};
-
 export type PullRequestStatus = {
 	repository: string;
 	branch: string;
