@@ -19,8 +19,12 @@ import {
 } from "@/components/ui/popover";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import {
+	connectComposioIntegration,
+	fetchComposioStatus,
+} from "@/lib/composio";
+import type { ComposioIntegrationSummary } from "@/lib/composio-types";
+import {
 	getMergeStatus,
-	type GitHubConnectionStatus,
 	type MergeStatus,
 	type PullRequestStatus,
 	summarizeChecks,
@@ -65,7 +69,7 @@ export function PullRequestBar({
 
 function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 	const [data, setData] = useState<PullRequestStatus | null>(null);
-	const [connection, setConnection] = useState<GitHubConnectionStatus | null>(null);
+	const [connection, setConnection] = useState<ComposioIntegrationSummary | null>(null);
 	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const refresh = useRef<() => void>(() => {});
@@ -97,23 +101,22 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 				);
 				const connectionResult = result
 					? null
-					: await desktopClient
-							.invoke<GitHubConnectionStatus>(
-								"get_github_connection_status",
-								{ cwd },
-							)
-							.catch(() => null);
+					: await fetchComposioStatus().catch(() => null);
+				const githubConnection =
+					connectionResult?.integrations.find(
+						(integration) => integration.toolkit === "github",
+					) ?? null;
 				if (!disposed) {
 					hasLoadedStatus.current = result !== null;
 					errorDismissed.current = false;
 					setData(result);
 					setConnection(
-						connectionResult?.state === "needs-auth" ||
-							connectionResult?.state === "not-installed"
-							? connectionResult
+						githubConnection?.status === "not_connected" ||
+							githubConnection?.status === "pending"
+							? githubConnection
 							: null,
 					);
-					if (result || connectionResult?.state === "connected")
+					if (result || githubConnection?.status === "connected")
 						setConnecting(false);
 					setError(null);
 				}
@@ -161,22 +164,24 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 		setConnecting(true);
 		setError(null);
 		try {
-			await desktopClient.invoke("github_connect", {
-				cwd,
-				confirmFullAccess: true,
-			});
+			const result = await connectComposioIntegration("github");
+			const next = result.status.integrations.find(
+				(integration) => integration.toolkit === "github",
+			);
+			setConnection(next ?? null);
+			if (next?.status === "connected") setConnecting(false);
 		} catch (cause) {
 			setConnecting(false);
 			setError(
 				cause instanceof Error
 					? cause.message
-					: "Could not start GitHub sign-in.",
+					: "Could not start GitHub connection.",
 			);
 		}
 	}
 
 	const showConnection =
-		connection?.state === "needs-auth" || connection?.state === "not-installed";
+		connection?.status === "not_connected" || connection?.status === "pending";
 	const pr = data?.pullRequest;
 	if (!error && !pr && !data?.createUrl && !showConnection) return null;
 	const ci = summarizeChecks(pr?.checks ?? []);
@@ -217,29 +222,20 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 					<Github className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 					<span className="font-medium">GitHub connection required</span>
 					<span className="min-w-0 flex-1 text-muted-foreground">
-						{connection.state === "not-installed"
-							? "Install GitHub CLI to control this repository."
-							: "Sign in with GitHub CLI to inspect and automate this repository."}
+						Connect GitHub to enable repository, issue, and pull request tools
+						for the agent.
 					</span>
-					{connection.state === "not-installed" ? (
-						<button
-							type="button"
-								className="shrink-0 font-medium hover:underline"
-							onClick={() => void open("https://cli.github.com/")}
-						>
-							Install GitHub CLI <ExternalLink className="inline size-3" />
-						</button>
-					) : (
-						<button
-							type="button"
-								aria-label="Connect GitHub"
-							disabled={connecting}
-								className="shrink-0 rounded-md bg-muted px-2 py-1 font-medium hover:bg-muted/80 disabled:opacity-50"
-							onClick={() => void connectGitHub()}
-						>
-							{connecting ? "Waiting for sign-in…" : "Connect GitHub"}
-						</button>
-					)}
+					<button
+						type="button"
+						aria-label="Connect GitHub"
+						disabled={connecting || connection.status === "pending"}
+						className="shrink-0 rounded-md bg-muted px-2 py-1 font-medium hover:bg-muted/80 disabled:opacity-50"
+						onClick={() => void connectGitHub()}
+					>
+						{connecting || connection.status === "pending"
+							? "Waiting for GitHub authorization…"
+							: "Connect GitHub"}
+					</button>
 				</div>
 			)}
 			<div className="flex min-w-0 flex-wrap items-center gap-2">
