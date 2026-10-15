@@ -1114,7 +1114,6 @@ export const RepositoryInputSchema = z.discriminatedUnion("action", [
 		set_upstream: z.boolean().optional().default(false),
 		confirm_remote: z.literal(true),
 	}),
-	z.object({ action: z.literal("github_status") }),
 ]);
 
 export type RepositoryInput = z.infer<typeof RepositoryInputSchema>;
