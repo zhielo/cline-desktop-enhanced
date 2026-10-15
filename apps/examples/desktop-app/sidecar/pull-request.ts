@@ -107,51 +107,6 @@ function isAuthenticationFailure(error: unknown): boolean {
 	return /HTTP 401|Bad credentials/i.test(stderr);
 }
 
-export type GitHubConnectionStatus = {
-	state: "connected" | "needs-auth" | "not-installed" | "not-github-repo" | "detached";
-	repository?: string;
-	branch?: string;
-};
-
-export function createGitHubConnectionStatusReader({
-	run = runCommand,
-}: {
-	run?: RunCommand;
-} = {}) {
-	return async function readGitHubConnectionStatus(
-		cwd: string,
-	): Promise<GitHubConnectionStatus> {
-		const branch = await run("git", ["branch", "--show-current"], cwd).catch(
-			() => "",
-		);
-		if (!branch) return { state: "detached" };
-		const remote = await run("git", ["remote", "get-url", "origin"], cwd).catch(
-			() => "",
-		);
-		const repository = githubRepository(remote);
-		if (!repository) return { state: "not-github-repo", branch };
-		try {
-			await run(
-				"gh",
-				["auth", "status", "--active", "--hostname", "github.com"],
-				cwd,
-			);
-			return { state: "connected", repository, branch };
-		} catch (error) {
-			const code = commandErrorCode(error);
-			if (code === "ENOENT") return { state: "not-installed", repository, branch };
-			if (code === 1 || code === 4 || isAuthenticationFailure(error)) {
-				return { state: "needs-auth", repository, branch };
-			}
-			throw new Error(
-				"Could not check GitHub connection. Check your local GitHub CLI installation.",
-			);
-		}
-	};
-}
-
-export const getGitHubConnectionStatus = createGitHubConnectionStatusReader();
-
 export function createPullRequestStatusReader({
 	run = runCommand,
 	now = Date.now,
