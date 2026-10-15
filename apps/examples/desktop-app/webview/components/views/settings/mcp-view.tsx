@@ -47,10 +47,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-	fetchGitHubInstallUrl,
-	openExternalUrl,
-} from "@/lib/desktop-client";
+import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import { fetchGitHubInstallUrl } from "@/lib/cline-integrations";
 import { cn } from "@/lib/utils";
 import {
