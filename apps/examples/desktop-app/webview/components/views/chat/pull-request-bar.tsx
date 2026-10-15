@@ -99,9 +99,7 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 					"get_pull_request_status",
 					{ cwd },
 				);
-				const connectionResult = result
-					? null
-					: await fetchComposioStatus().catch(() => null);
+				const connectionResult = await fetchComposioStatus().catch(() => null);
 				const githubConnection =
 					connectionResult?.integrations.find(
 						(integration) => integration.toolkit === "github",
@@ -151,6 +149,12 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 			document.removeEventListener("visibilitychange", onFocus);
 		};
 	}, [cwd]);
+
+	useEffect(() => {
+		if (!connecting) return;
+		const timer = window.setInterval(() => void refresh.current(), 4_000);
+		return () => window.clearInterval(timer);
+	}, [connecting]);
 
 	async function open(url: string) {
 		try {
