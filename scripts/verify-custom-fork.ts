@@ -1554,9 +1554,20 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "apps/examples/desktop-app/sidecar/pull-request.ts",
+		markers: [
+			"createGitHubConnectionStatusReader",
+			"getGitHubConnectionStatus",
+			"needs-auth",
+			"auth",
+		],
+	},
+	{
 		path: "docs/STRUCTURED_REPOSITORY_AND_DIAGNOSTICS.md",
 		markers: [
 			"Structured repository tool",
+			"get_github_connection_status",
+			"owner-scoped process session",
 			"Browser page diagnostics",
 			"Diagnostics center",
 			"does not create a GitHub Release",
