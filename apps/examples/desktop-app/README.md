@@ -30,17 +30,22 @@ browser, or expand CI to inspect individual checks and their logs. Status
 refreshes every 30 seconds while visible, when the app regains focus, and
 when you click refresh.
 
-This requires GitHub CLI (`gh`) installed and authenticated with `gh auth login`,
-and a GitHub.com `origin` remote (HTTPS or SSH). The row is hidden for the
-default branch, detached HEAD, and unsupported repositories. If the branch
-has no PR, **Create PR** opens GitHub's comparison form; push your commits
-before submitting the form. The app does not push commits or submit PRs itself.
+This requires GitHub CLI (`gh`) and a GitHub.com `origin` remote (HTTPS or SSH).
+For a GitHub-origin feature branch, the row reports the local connection state and
+**Connect GitHub** launches `gh auth login --web` in an owner-scoped process
+session. Finish the browser flow, then refresh the row. Credentials remain in
+GitHub CLI storage and are never sent as tool input or returned by the app.
 
-Missing or unauthenticated GitHub CLI also hides the row. Availability checks
-are shared across workspaces and cached for five minutes, so unavailable CLI
-installs do not spawn a failing process on every poll or window focus. After
-installing or signing into `gh`, the feature becomes available on the first
-refresh after the cache expires (or after restarting the desktop backend).
+The row is hidden for the default branch, detached HEAD, and unsupported
+repositories. If the branch has no PR, **Create PR** opens GitHub's comparison
+form; push your commits before submitting the form. The app does not push
+commits or submit PRs from this status row. Repository-tool writes and remote
+operations remain separately confirmation-gated.
+
+If GitHub CLI is not installed, the row links to the official CLI site. Missing
+or unauthenticated CLI availability checks are shared across workspaces and
+cached for five minutes, so unavailable installs do not spawn a failing process
+on every poll or window focus.
 Initial lookup failures stay hidden. Errors after a successful status load
 can be dismissed and remain dismissed through retries until a load succeeds.
 
