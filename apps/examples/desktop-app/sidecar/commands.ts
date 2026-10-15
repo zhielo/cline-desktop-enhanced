@@ -271,10 +271,7 @@ import {
 	sessionLogPath,
 	sharedSessionDataDir,
 } from "./paths";
-import {
-	getGitHubConnectionStatus,
-	getPullRequestStatus,
-} from "./pull-request";
+import { getPullRequestStatus } from "./pull-request";
 import { capturePullRequestEvent } from "./pull-request-telemetry";
 import { resolveDesktopRemoteHelper } from "./remote-helper";
 import { listSessionAgents } from "./session-data/agents";
@@ -4853,64 +4850,6 @@ export async function handleCommand(
 	}
 
 	// ── Git operations ─────────────────────────────────────────────────
-	if (command === "get_github_connection_status") {
-		const binding = getCommandRuntimeBinding(ctx, args);
-		if (binding.kind === "ssh") {
-			throw new Error("GitHub CLI connection is local-only in this build.");
-		}
-		const cwd = resolve(
-			typeof args?.cwd === "string" && args.cwd.trim()
-				? args.cwd.trim()
-				: binding.workspaceRoot,
-		);
-		return await getGitHubConnectionStatus(cwd);
-	}
-	if (command === "github_connect") {
-		const binding = getCommandRuntimeBinding(ctx, args);
-		if (binding.kind === "ssh") {
-			throw new Error("GitHub CLI connection is local-only in this build.");
-		}
-		if (args?.confirmFullAccess !== true) {
-			throw new Error(
-				"Connecting GitHub requires explicit Full Access confirmation.",
-			);
-		}
-		const cwd = resolve(
-			typeof args?.cwd === "string" && args.cwd.trim()
-				? args.cwd.trim()
-				: binding.workspaceRoot,
-		);
-		const status = await getGitHubConnectionStatus(cwd);
-		if (status.state === "connected") return status;
-		if (status.state === "not-installed") {
-			throw new Error(
-				"GitHub CLI (gh) is not installed. Install it from https://cli.github.com/ and retry.",
-			);
-		}
-		if (status.state !== "needs-auth") {
-			throw new Error(
-				"Connect GitHub requires a workspace with a GitHub.com origin and an active branch.",
-			);
-		}
-		await desktopWorkspaceProcessManager.initializeRecovery();
-		const session = await desktopWorkspaceProcessManager.start({
-			ownerSessionId: workspaceProcessOwner(cwd),
-			executable: process.platform === "win32" ? "gh.exe" : "gh",
-			args: [
-				"auth",
-				"login",
-				"--hostname",
-				"github.com",
-				"--web",
-				"--git-protocol",
-				"https",
-			],
-			cwd,
-			interactive: false,
-			timeoutMs: 10 * 60 * 1000,
-		});
-		return { ...session, label: "GitHub authentication" };
-	}
 	if (command === "capture_pull_request_event") {
 		capturePullRequestEvent(ctx.telemetry, args);
 		return null;
