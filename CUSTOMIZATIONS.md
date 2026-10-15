@@ -458,7 +458,7 @@ Primary files:
 
 ### Structured repository and diagnostics
 
-- The desktop now exposes explicit local GitHub connection state for GitHub-origin workspaces. Connect GitHub launches the fixed `gh auth login --web` flow in an owner-scoped process session; credentials stay in GitHub CLI storage, and repository mutations remain confirmation-gated.
+- The desktop exposes a native in-app GitHub connection through the signed-in Cline account and the built-in Composio GitHub connector. Connect GitHub starts the browser OAuth flow without requiring GitHub CLI; connected repositories, issues, pull requests, reviews, and related GitHub tools are loaded into new agent sessions, while local repository mutations remain permission-gated.
 
 - The desktop exposes a typed `repository` tool for bounded Git status, diff,
   log, branch, commit, fetch, fast-forward pull, non-force push, and GitHub CLI
