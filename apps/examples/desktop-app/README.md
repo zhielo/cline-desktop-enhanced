@@ -36,11 +36,12 @@ For a GitHub-origin feature branch, the row reports the local connection state a
 session. Finish the browser flow, then refresh the row. Credentials remain in
 GitHub CLI storage and are never sent as tool input or returned by the app.
 
-The row is hidden for the default branch, detached HEAD, and unsupported
-repositories. If the branch has no PR, **Create PR** opens GitHub's comparison
-form; push your commits before submitting the form. The app does not push
-commits or submit PRs from this status row. Repository-tool writes and remote
-operations remain separately confirmation-gated.
+Pull-request details remain hidden for the default branch, detached HEAD,
+and unsupported repositories, while the connection prompt can still help sign
+in on an active GitHub branch. If the branch has no PR, **Create PR** opens
+GitHub's comparison form; push your commits before submitting the form. The app
+does not push commits or submit PRs from this status row. Repository-tool writes
+and remote operations remain separately confirmation-gated.
 
 If GitHub CLI is not installed, the row links to the official CLI site. Missing
 or unauthenticated CLI availability checks are shared across workspaces and
