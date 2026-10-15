@@ -1549,25 +1549,37 @@ const requiredMarkers: Array<{
 			"confirm_remote=true",
 			"--ff-only",
 			"--set-upstream",
-			"GH_PROMPT_DISABLED",
-			"github_status",
 		],
 	},
 	{
-		path: "apps/examples/desktop-app/sidecar/pull-request.ts",
+		path: "apps/examples/desktop-app/webview/components/views/chat/pull-request-bar.tsx",
 		markers: [
-			"createGitHubConnectionStatusReader",
-			"getGitHubConnectionStatus",
-			"needs-auth",
-			"auth",
+			"fetchComposioStatus",
+			"connectComposioIntegration",
+			"repository, issue, and pull request tools",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/composio.ts",
+		markers: [
+			"composio_integrations",
+			"connectComposioIntegration",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/composio/composio-tools-extension.ts",
+		markers: [
+			"createComposioToolsExtension",
+			"executeComposioTool",
+			"/tools/",
 		],
 	},
 	{
 		path: "docs/STRUCTURED_REPOSITORY_AND_DIAGNOSTICS.md",
 		markers: [
 			"Structured repository tool",
-			"get_github_connection_status",
-			"owner-scoped process session",
+			"composio_integrations",
+			"repository, issue, pull request",
 			"Browser page diagnostics",
 			"Diagnostics center",
 			"does not create a GitHub Release",
