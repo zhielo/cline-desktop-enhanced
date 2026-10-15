@@ -58,6 +58,7 @@ import {
 } from "../marketplace-view";
 import { CommandBadge, PageFrame, PageHeader } from "../page-layout";
 import { subscribeToExtensionInventoryInvalidation } from "./extensions-view";
+import { GitHubIntegrationCard } from "./github-integration-card";
 
 type McpTransportType = "stdio" | "sse" | "streamableHttp";
 
@@ -886,6 +887,11 @@ export function McpServersContent({
 					</div>
 				</div>
 			)}
+
+			<GitHubIntegrationCard
+				isConnecting={isConnectingGitHub}
+				onConnect={() => void connectGitHub()}
+			/>
 
 			<div className="mb-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
 				<span>MCP settings path:</span>
