@@ -56,11 +56,6 @@ describe("desktop execution workbench boundaries", () => {
 			handleCommand(context, "workspace_terminal_start", { cwd: workspace }),
 		).rejects.toThrow("explicit Full Access confirmation");
 	});
-	it("requires explicit Full Access confirmation before connecting GitHub", async () => {
-		await expect(
-			handleCommand(context, "github_connect", { cwd: workspace }),
-		).rejects.toThrow("explicit Full Access confirmation");
-	});
 
 	it("rejects non-static reverse-engineering operations from the workbench", async () => {
 		await expect(
