@@ -1,6 +1,6 @@
 "use client";
 
-import { Switch } from "@cline/ui";
+import { GitHubIcon, Switch } from "@cline/ui";
 import {
 	ChevronRight,
 	Circle,
@@ -47,7 +47,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { desktopClient } from "@/lib/desktop-client";
+import {
+	fetchGitHubInstallUrl,
+	openExternalUrl,
+} from "@/lib/desktop-client";
+import { fetchGitHubInstallUrl } from "@/lib/cline-integrations";
 import { cn } from "@/lib/utils";
 import {
 	MarketplaceEntrySetupDetails,
@@ -240,6 +244,7 @@ export function McpServersContent({
 	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<McpServer | null>(null);
+	const [isConnectingGitHub, setIsConnectingGitHub] = useState(false);
 
 	const applyResponse = useCallback(
 		(response: McpServersResponse) => {
@@ -465,6 +470,21 @@ export function McpServersContent({
 				serverName,
 				error instanceof Error ? error.message : String(error),
 			);
+		}
+	};
+
+	const connectGitHub = async () => {
+		setIsConnectingGitHub(true);
+		setErrorMessage(null);
+		try {
+			const url = await fetchGitHubInstallUrl();
+			await openExternalUrl(url);
+		} catch (error) {
+			setErrorMessage(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setIsConnectingGitHub(false);
 		}
 	};
 
@@ -808,6 +828,16 @@ export function McpServersContent({
 				title="Configure an installed idalib-mcp server for persistent IDA analysis"
 			>
 				Configure IDA
+			</Button>
+			<Button
+				variant="outline"
+				size="sm"
+				onClick={() => void connectGitHub()}
+				disabled={isConnectingGitHub}
+				title="Connect GitHub through the Cline GitHub App"
+			>
+				<GitHubIcon className="h-4 w-4" />
+				{isConnectingGitHub ? "Opening GitHub..." : "Connect GitHub"}
 			</Button>
 			<Button
 				variant="outline"
