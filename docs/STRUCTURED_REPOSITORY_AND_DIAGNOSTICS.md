@@ -26,11 +26,11 @@ Remote and GitHub operations:
 - `fetch`
 - fast-forward-only `pull`
 - non-force `push`
-- `github_status` through the existing GitHub CLI credential store
-- `get_github_connection_status` reports whether the active GitHub-origin workspace is connected, needs sign-in, or needs the GitHub CLI installed.
-- The desktop Connect GitHub action launches the fixed `gh auth login --web` device flow in an owner-scoped process session. Credentials remain in GitHub CLI storage; the app never accepts or returns bearer tokens.
+- the native `composio_integrations` GitHub connector, which uses the signed-in Cline account's browser OAuth flow
+- connected GitHub tool schemas are persisted as non-secret metadata and registered into new agent sessions
+- the connector exposes GitHub repository, issue, pull request, review, comment, and related automation tools without GitHub CLI
 
-Every remote operation requires `confirm_remote: true`. Ref and remote names are validated and paths must remain relative to the active workspace. Commands use fixed argv execution with terminal prompting disabled. Tokens are never accepted as tool input or returned in output.
+Local `fetch`, fast-forward-only `pull`, and non-force `push` still require `confirm_remote: true`; ref, remote, and path validation remain unchanged. Connector credentials stay behind the Cline API connector proxy and are never accepted as tool input or returned in output.
 
 Permission profiles enforce three boundaries:
 
