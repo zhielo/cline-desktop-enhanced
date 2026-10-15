@@ -14,7 +14,10 @@ import {
 	describeObservedIdaJob,
 	formatIdaProgress,
 } from "./ida-job-diagnostics";
-it("uses one hour for the default IDA overall and unchanged-phase budgets", () => {\n\texpect(DEFAULT_IDA_TIMEOUT_MS).toBe(3_600_000);\n\texpect(DEFAULT_IDA_PHASE_TIMEOUT_MS).toBe(3_600_000);\n});\nafterEach(() => {
+it("uses one hour for the default IDA overall and unchanged-phase budgets", () => {
+	expect(DEFAULT_IDA_TIMEOUT_MS).toBe(3_600_000);
+	expect(DEFAULT_IDA_PHASE_TIMEOUT_MS).toBe(3_600_000);
+});\nafterEach(() => {
 	vi.unstubAllEnvs();
 	vi.useRealTimers();
 	run.mockReset();
