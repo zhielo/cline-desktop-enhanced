@@ -3,6 +3,7 @@
 import {
 	ChevronDown,
 	ExternalLink,
+	Github,
 	GitMerge,
 	GitPullRequest,
 	GitPullRequestClosed,
@@ -19,6 +20,7 @@ import {
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
 import {
 	getMergeStatus,
+	type GitHubConnectionStatus,
 	type MergeStatus,
 	type PullRequestStatus,
 	summarizeChecks,
@@ -63,6 +65,8 @@ export function PullRequestBar({
 
 function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 	const [data, setData] = useState<PullRequestStatus | null>(null);
+	const [connection, setConnection] = useState<GitHubConnectionStatus | null>(null);
+	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const refresh = useRef<() => void>(() => {});
 	const [loading, setLoading] = useState(false);
@@ -91,15 +95,33 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 					"get_pull_request_status",
 					{ cwd },
 				);
+				const connectionResult = result
+					? null
+					: await desktopClient
+							.invoke<GitHubConnectionStatus>(
+								"get_github_connection_status",
+								{ cwd },
+							)
+							.catch(() => null);
 				if (!disposed) {
 					hasLoadedStatus.current = result !== null;
 					errorDismissed.current = false;
 					setData(result);
+					setConnection(
+						connectionResult?.state === "needs-auth" ||
+							connectionResult?.state === "not-installed"
+							? connectionResult
+							: null,
+					);
+					if (result || connectionResult?.state === "connected")
+						setConnecting(false);
 					setError(null);
 				}
 			} catch (cause) {
 				if (!disposed) {
 					setData(null);
+					setConnection(null);
+					setConnecting(false);
 					if (hasLoadedStatus.current && !errorDismissed.current) {
 						setError(
 							cause instanceof Error
@@ -135,8 +157,28 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 		}
 	}
 
+	async function connectGitHub() {
+		setConnecting(true);
+		setError(null);
+		try {
+			await desktopClient.invoke("github_connect", {
+				cwd,
+				confirmFullAccess: true,
+			});
+		} catch (cause) {
+			setConnecting(false);
+			setError(
+				cause instanceof Error
+					? cause.message
+					: "Could not start GitHub sign-in.",
+			);
+		}
+	}
+
+	const showConnection =
+		connection?.state === "needs-auth" || connection?.state === "not-installed";
 	const pr = data?.pullRequest;
-	if (!error && !pr && !data?.createUrl) return null;
+	if (!error && !pr && !data?.createUrl && !showConnection) return null;
 	const ci = summarizeChecks(pr?.checks ?? []);
 	const Icon =
 		pr?.state === "MERGED"
@@ -168,6 +210,36 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 					>
 						<X className="size-3" />
 					</button>
+				</div>
+			)}
+			{showConnection && connection && (
+				<div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+					<Github className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+					<span className="font-medium">GitHub connection required</span>
+					<span className="min-w-0 flex-1 text-muted-foreground">
+						{connection.state === "not-installed"
+							? "Install GitHub CLI to control this repository."
+							: "Sign in with GitHub CLI to inspect and automate this repository."}
+					</span>
+					{connection.state === "not-installed" ? (
+						<button
+							type="button"
+								className="shrink-0 font-medium hover:underline"
+							onClick={() => void open("https://cli.github.com/")}
+						>
+							Install GitHub CLI <ExternalLink className="inline size-3" />
+						</button>
+					) : (
+						<button
+							type="button"
+								aria-label="Connect GitHub"
+							disabled={connecting}
+								className="shrink-0 rounded-md bg-muted px-2 py-1 font-medium hover:bg-muted/80 disabled:opacity-50"
+							onClick={() => void connectGitHub()}
+						>
+							{connecting ? "Waiting for sign-in…" : "Connect GitHub"}
+						</button>
+					)}
 				</div>
 			)}
 			<div className="flex min-w-0 flex-wrap items-center gap-2">
