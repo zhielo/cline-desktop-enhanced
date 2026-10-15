@@ -5,13 +5,24 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { PullRequestStatus } from "@/lib/pull-request";
 import { PullRequestBar } from "./pull-request-bar";
 
-const { invoke, openExternalUrl } = vi.hoisted(() => ({
+const {
+	invoke,
+	openExternalUrl,
+	fetchComposioStatus,
+	connectComposioIntegration,
+} = vi.hoisted(() => ({
 	invoke: vi.fn(),
 	openExternalUrl: vi.fn(),
+	fetchComposioStatus: vi.fn(),
+	connectComposioIntegration: vi.fn(),
 }));
 vi.mock("@/lib/desktop-client", () => ({
 	desktopClient: { invoke },
 	openExternalUrl,
+}));
+vi.mock("@/lib/composio", () => ({
+	fetchComposioStatus,
+	connectComposioIntegration,
 }));
 const data: PullRequestStatus = {
 	repository: "cline/cline",
@@ -43,6 +54,19 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	invoke.mockReset().mockResolvedValue(data);
 	openExternalUrl.mockReset().mockResolvedValue(undefined);
+	fetchComposioStatus.mockReset().mockResolvedValue({
+		configured: true,
+		integrations: [
+			{
+				toolkit: "github",
+				name: "GitHub",
+				description: "Work with GitHub",
+				recommended: true,
+				status: "connected",
+			},
+		],
+	});
+	connectComposioIntegration.mockReset();
 	container = document.createElement("div");
 	document.body.appendChild(container);
 	root = createRoot(container);
@@ -64,6 +88,40 @@ async function click(label: string) {
 			.click(),
 	);
 }
+
+it("offers native GitHub OAuth for repository, issue, and pull request tools", async () => {
+	invoke.mockResolvedValueOnce(null);
+	fetchComposioStatus.mockResolvedValueOnce({
+		configured: true,
+		integrations: [
+			{
+				toolkit: "github",
+				name: "GitHub",
+				description: "Work with GitHub",
+				recommended: true,
+				status: "not_connected",
+			},
+		],
+	});
+	connectComposioIntegration.mockResolvedValueOnce({
+		status: {
+			configured: true,
+			integrations: [
+				{
+					toolkit: "github",
+					name: "GitHub",
+					description: "Work with GitHub",
+					recommended: true,
+					status: "pending",
+				},
+			],
+		},
+	});
+	await render();
+	expect(container.textContent).toContain("GitHub connection required");
+	await click("Connect GitHub");
+	expect(connectComposioIntegration).toHaveBeenCalledWith("github");
+});
 
 it("opens the PR, shows conflicts and expands CI details", async () => {
 	await render();

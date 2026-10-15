@@ -344,7 +344,7 @@ function evaluateTool(
 				"repository writes are disabled; only status, diff, log, and branches are allowed.",
 			);
 		const writeActions = new Set(["create_branch", "switch_branch", "commit"]);
-		const networkActions = new Set(["fetch", "pull", "push", "github_status"]);
+		const networkActions = new Set(["fetch", "pull", "push"]);
 		if (
 			typeof action === "string" &&
 			writeActions.has(action) &&

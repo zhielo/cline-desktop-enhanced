@@ -6,12 +6,18 @@ import { expect, it, vi, afterEach } from "vitest";
 const run = vi.hoisted(() => vi.fn());
 vi.mock("./supervised-process", () => ({ runSupervised: run }));
 import {
+	DEFAULT_IDA_PHASE_TIMEOUT_MS,
+	DEFAULT_IDA_TIMEOUT_MS,
 	idaProgressPrelude,
 	listObservedIdaJobs,
 	runObservedIda,
 	describeObservedIdaJob,
 	formatIdaProgress,
 } from "./ida-job-diagnostics";
+it("uses one hour for the default IDA overall and unchanged-phase budgets", () => {
+	expect(DEFAULT_IDA_TIMEOUT_MS).toBe(3_600_000);
+	expect(DEFAULT_IDA_PHASE_TIMEOUT_MS).toBe(3_600_000);
+});
 afterEach(() => {
 	vi.unstubAllEnvs();
 	vi.useRealTimers();

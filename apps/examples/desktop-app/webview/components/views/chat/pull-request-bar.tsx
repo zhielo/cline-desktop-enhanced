@@ -3,6 +3,7 @@
 import {
 	ChevronDown,
 	ExternalLink,
+	Github,
 	GitMerge,
 	GitPullRequest,
 	GitPullRequestClosed,
@@ -17,6 +18,11 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
+import {
+	connectComposioIntegration,
+	fetchComposioStatus,
+} from "@/lib/composio";
+import type { ComposioIntegrationSummary } from "@/lib/composio-types";
 import {
 	getMergeStatus,
 	type MergeStatus,
@@ -63,6 +69,8 @@ export function PullRequestBar({
 
 function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 	const [data, setData] = useState<PullRequestStatus | null>(null);
+	const [connection, setConnection] = useState<ComposioIntegrationSummary | null>(null);
+	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const refresh = useRef<() => void>(() => {});
 	const [loading, setLoading] = useState(false);
@@ -91,15 +99,30 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 					"get_pull_request_status",
 					{ cwd },
 				);
+				const connectionResult = await fetchComposioStatus().catch(() => null);
+				const githubConnection =
+					connectionResult?.integrations.find(
+						(integration) => integration.toolkit === "github",
+					) ?? null;
 				if (!disposed) {
 					hasLoadedStatus.current = result !== null;
 					errorDismissed.current = false;
 					setData(result);
+					setConnection(
+						githubConnection?.status === "not_connected" ||
+							githubConnection?.status === "pending"
+							? githubConnection
+							: null,
+					);
+					if (result || githubConnection?.status === "connected")
+						setConnecting(false);
 					setError(null);
 				}
 			} catch (cause) {
 				if (!disposed) {
 					setData(null);
+					setConnection(null);
+					setConnecting(false);
 					if (hasLoadedStatus.current && !errorDismissed.current) {
 						setError(
 							cause instanceof Error
@@ -127,6 +150,12 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 		};
 	}, [cwd]);
 
+	useEffect(() => {
+		if (!connecting) return;
+		const timer = window.setInterval(() => void refresh.current(), 4_000);
+		return () => window.clearInterval(timer);
+	}, [connecting]);
+
 	async function open(url: string) {
 		try {
 			await openExternalUrl(url);
@@ -135,8 +164,30 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 		}
 	}
 
+	async function connectGitHub() {
+		setConnecting(true);
+		setError(null);
+		try {
+			const result = await connectComposioIntegration("github");
+			const next = result.status.integrations.find(
+				(integration) => integration.toolkit === "github",
+			);
+			setConnection(next ?? null);
+			if (next?.status === "connected") setConnecting(false);
+		} catch (cause) {
+			setConnecting(false);
+			setError(
+				cause instanceof Error
+					? cause.message
+					: "Could not start GitHub connection.",
+			);
+		}
+	}
+
+	const showConnection =
+		connection?.status === "not_connected" || connection?.status === "pending";
 	const pr = data?.pullRequest;
-	if (!error && !pr && !data?.createUrl) return null;
+	if (!error && !pr && !data?.createUrl && !showConnection) return null;
 	const ci = summarizeChecks(pr?.checks ?? []);
 	const Icon =
 		pr?.state === "MERGED"
@@ -167,6 +218,27 @@ function WorkspacePullRequestBar({ cwd }: { cwd: string }) {
 						}}
 					>
 						<X className="size-3" />
+					</button>
+				</div>
+			)}
+			{showConnection && connection && (
+				<div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
+					<Github className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+					<span className="font-medium">GitHub connection required</span>
+					<span className="min-w-0 flex-1 text-muted-foreground">
+						Connect GitHub to enable repository, issue, and pull request tools
+						for the agent.
+					</span>
+					<button
+						type="button"
+						aria-label="Connect GitHub"
+						disabled={connecting || connection.status === "pending"}
+						className="shrink-0 rounded-md bg-muted px-2 py-1 font-medium hover:bg-muted/80 disabled:opacity-50"
+						onClick={() => void connectGitHub()}
+					>
+						{connecting || connection.status === "pending"
+							? "Waiting for GitHub authorization…"
+							: "Connect GitHub"}
 					</button>
 				</div>
 			)}

@@ -458,6 +458,8 @@ Primary files:
 
 ### Structured repository and diagnostics
 
+- The desktop exposes a native in-app GitHub connection through the signed-in Cline account and the built-in Composio GitHub connector. Connect GitHub starts the browser OAuth flow without requiring GitHub CLI; connected repositories, issues, pull requests, reviews, and related GitHub tools are loaded into new agent sessions, while local repository mutations remain permission-gated.
+
 - The desktop exposes a typed `repository` tool for bounded Git status, diff,
   log, branch, commit, fetch, fast-forward pull, non-force push, and GitHub CLI
   status operations. Local writes and remote operations require separate
@@ -727,7 +729,7 @@ The installed crash-recovery journey now invokes the existing authoritative Hub 
 - Analysis settings link directly to Setup Center, distinguish core selection from full-pack availability, and show the packaged desktop version/commit and selected runtime. Missing Python packages never diagnose IDA. Readiness checks do not install or repair anything. Existing signed-worker, Android, license and idle-Hub restart approvals are preserved.
 - Setup Center saves the explicitly selected IDA folder when running a licensed test and supports separate fixed owned x86-64 and ARM64 fixtures. Receipts bind processor, fixture and selected executable SHA-256; replacing the executable at the same path invalidates readiness. No all-processor, target-compatibility or licensed-host CI claim is added.
 - Fixed one-shot and managed IDA scripts check the loaded processor's Hex-Rays plugin before costly auto-analysis; exact entry validation and full analysis remain intact. Selected one-shot scripts record decompilation-started explicitly.
-- One-shot IDA streams bounded host-observed PID/phase/elapsed/deadline summaries to its chat row, with a 30-second heartbeat. Default unchanged-phase budget is five minutes, capped by the original overall deadline; ida_phase_timeout_ms explicitly adjusts it. A phase deadline is a configured limit, not proof of a hung engine. Timeouts never publish success or automatically retry work.
+- One-shot IDA streams bounded host-observed PID/phase/elapsed/deadline summaries to its chat row, with a 30-second heartbeat. The default overall and unchanged-phase budgets are one hour, with ida_phase_timeout_ms still explicitly adjustable and capped by the overall deadline. A phase deadline is a configured limit, not proof of a hung engine. Timeouts never publish success or automatically retry work.
 - Cancellation drains for at most two seconds. Missing exit/EOF confirmation remains termination-unconfirmed and retains project ownership; no PID-only kill, automatic lease theft or cleanup is added. Optional live read-only job refresh is serialized and stops on view unmount. Archived host state remains clearly distinct from a fresh liveness check.
 - Deterministic ARM64 fixture checks, processor-bound receipt tests, deadline/cancellation tests, and non-command live progress UI regressions are blocking. See docs/IDA_READINESS_AND_PROGRESS.md for limits and recovery.
 

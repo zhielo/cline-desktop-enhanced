@@ -47,7 +47,7 @@ function output(value: unknown): string {
 }
 
 async function run(
-	file: "git" | "gh",
+	file: "git",
 	args: string[],
 	cwd: string,
 	context: AgentToolContext,
@@ -61,7 +61,6 @@ async function run(
 			signal: context.signal,
 			env: {
 				...process.env,
-				GH_PROMPT_DISABLED: "1",
 				GIT_TERMINAL_PROMPT: "0",
 			},
 		});
@@ -206,23 +205,7 @@ export function createRepositoryExecutor(
 					context,
 				);
 			}
-			case "github_status": {
-				const auth = await run(
-					"gh",
-					["auth", "status", "--active", "--hostname", "github.com"],
-					cwd,
-					context,
-				);
-				const pr = await run(
-					"gh",
-					["pr", "status", "--json", "currentBranch,createdBy,needsReview"],
-					cwd,
-					context,
-				).catch((error) =>
-					error instanceof Error ? error.message : String(error),
-				);
-				return output({ auth, pullRequests: pr });
-			}
+
 		}
 	};
 }

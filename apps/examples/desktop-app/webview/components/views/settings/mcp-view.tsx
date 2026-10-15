@@ -1,6 +1,6 @@
 "use client";
 
-import { Switch } from "@cline/ui";
+import { GitHubIcon, Switch } from "@cline/ui";
 import {
 	ChevronRight,
 	Circle,
@@ -47,7 +47,8 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { desktopClient } from "@/lib/desktop-client";
+import { desktopClient, openExternalUrl } from "@/lib/desktop-client";
+import { fetchGitHubInstallUrl } from "@/lib/cline-integrations";
 import { cn } from "@/lib/utils";
 import {
 	MarketplaceEntrySetupDetails,
@@ -57,6 +58,7 @@ import {
 } from "../marketplace-view";
 import { CommandBadge, PageFrame, PageHeader } from "../page-layout";
 import { subscribeToExtensionInventoryInvalidation } from "./extensions-view";
+import { GitHubIntegrationCard } from "./github-integration-card";
 
 type McpTransportType = "stdio" | "sse" | "streamableHttp";
 
@@ -240,6 +242,7 @@ export function McpServersContent({
 	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<McpServer | null>(null);
+	const [isConnectingGitHub, setIsConnectingGitHub] = useState(false);
 
 	const applyResponse = useCallback(
 		(response: McpServersResponse) => {
@@ -465,6 +468,21 @@ export function McpServersContent({
 				serverName,
 				error instanceof Error ? error.message : String(error),
 			);
+		}
+	};
+
+	const connectGitHub = async () => {
+		setIsConnectingGitHub(true);
+		setErrorMessage(null);
+		try {
+			const url = await fetchGitHubInstallUrl();
+			await openExternalUrl(url);
+		} catch (error) {
+			setErrorMessage(
+				error instanceof Error ? error.message : String(error),
+			);
+		} finally {
+			setIsConnectingGitHub(false);
 		}
 	};
 
@@ -812,6 +830,16 @@ export function McpServersContent({
 			<Button
 				variant="outline"
 				size="sm"
+				onClick={() => void connectGitHub()}
+				disabled={isConnectingGitHub}
+				title="Connect GitHub through the Cline GitHub App"
+			>
+				<GitHubIcon className="h-4 w-4" />
+				{isConnectingGitHub ? "Opening GitHub..." : "Connect GitHub"}
+			</Button>
+			<Button
+				variant="outline"
+				size="sm"
 				onClick={() => void connectNotion()}
 				disabled={
 					busyServerName === "Notion" || authorizingServerName === "Notion"
@@ -859,6 +887,11 @@ export function McpServersContent({
 					</div>
 				</div>
 			)}
+
+			<GitHubIntegrationCard
+				isConnecting={isConnectingGitHub}
+				onConnect={() => void connectGitHub()}
+			/>
 
 			<div className="mb-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
 				<span>MCP settings path:</span>

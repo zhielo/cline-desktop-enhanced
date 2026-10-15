@@ -927,7 +927,7 @@ export function createRepositoryTool(
 	return createTool<RepositoryInput, string>({
 		name: "repository",
 		description:
-			"Inspect and update the active Git repository with fixed-argument structured operations. Prefer status, diff, log, and branches before changes. Local branch and commit actions require confirm_write=true. Network operations never force-push and require confirm_remote=true. github_status uses the existing GitHub CLI credential store without exposing bearer tokens.",
+			"Inspect and update the active Git repository with fixed-argument structured operations. Prefer status, diff, log, and branches before changes. Local branch and commit actions require confirm_write=true. Network operations never force-push and require confirm_remote=true. GitHub repository, issue, and pull request API operations are provided by the native GitHub connector.",
 		inputSchema: zodToJsonSchema(RepositoryInputSchema),
 		timeoutMs: 70_000,
 		retryable: false,

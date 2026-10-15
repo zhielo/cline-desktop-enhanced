@@ -30,17 +30,22 @@ browser, or expand CI to inspect individual checks and their logs. Status
 refreshes every 30 seconds while visible, when the app regains focus, and
 when you click refresh.
 
-This requires GitHub CLI (`gh`) installed and authenticated with `gh auth login`,
-and a GitHub.com `origin` remote (HTTPS or SSH). The row is hidden for the
-default branch, detached HEAD, and unsupported repositories. If the branch
-has no PR, **Create PR** opens GitHub's comparison form; push your commits
-before submitting the form. The app does not push commits or submit PRs itself.
+This uses the app's native Cline account GitHub connector. Sign in to your Cline
+account, then click **Connect GitHub** in the PR bar or open Settings → Connectors
+and connect GitHub. The app opens the secure browser OAuth flow; GitHub CLI is not
+required and no token is copied into the desktop app.
 
-Missing or unauthenticated GitHub CLI also hides the row. Availability checks
-are shared across workspaces and cached for five minutes, so unavailable CLI
-installs do not spawn a failing process on every poll or window focus. After
-installing or signing into `gh`, the feature becomes available on the first
-refresh after the cache expires (or after restarting the desktop backend).
+After authorization, new agent sessions receive the connected GitHub tool set for
+repository, issue, pull request, review, comment, and related GitHub automation
+operations. The connector is account-scoped and can be revoked from the
+Connectors settings. Local workspace changes and Git operations remain separate
+and continue to use the app's existing permission gates.
+
+Pull-request details remain hidden for the default branch, detached HEAD, and
+unsupported repositories, while the connection prompt can still help authorize
+GitHub on an active workspace branch. If the branch has no PR, **Create PR** opens
+GitHub's comparison form; the app does not submit a PR from this status row.
+Repository-tool writes and remote operations remain separately permission-gated.
 Initial lookup failures stay hidden. Errors after a successful status load
 can be dismissed and remain dismissed through retries until a load succeeds.
 

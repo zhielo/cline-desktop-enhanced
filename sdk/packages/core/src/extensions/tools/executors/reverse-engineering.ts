@@ -37,6 +37,8 @@ import {
 	publishIdaDatabase,
 } from "./ida-analysis-workspace";
 import {
+	DEFAULT_IDA_PHASE_TIMEOUT_MS,
+	DEFAULT_IDA_TIMEOUT_MS,
 	formatIdaProgress,
 	idaProgressPrelude,
 	runObservedIda,
@@ -3327,11 +3329,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				input.acknowledge_external_output,
 			);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
-		const timeoutMs = input.timeout_ms ?? 900_000;
+		const timeoutMs = input.timeout_ms ?? DEFAULT_IDA_TIMEOUT_MS;
 		if (engine === "ida" && !gui)
 			context.emitUpdate?.({
 				stream: "stdout",
-				chunk: `[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs / 1000)}s, phase budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? 300000, timeoutMs) / 1000)}s. Missing Python packages do not diagnose IDA.\n`,
+				chunk: `[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs / 1000)}s, phase budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? DEFAULT_IDA_PHASE_TIMEOUT_MS, timeoutMs) / 1000)}s. Missing Python packages do not diagnose IDA.\n`,
 			});
 		const engineIdentity = await toolIdentity(engine, available[engine]);
 		const fingerprintFile = async (file: string | undefined) => {
