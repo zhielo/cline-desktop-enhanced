@@ -65,6 +65,23 @@ async function click(label: string) {
 	);
 }
 
+it("offers an explicit GitHub connection for unauthenticated repositories", async () => {
+	invoke
+		.mockResolvedValueOnce(null)
+		.mockResolvedValueOnce({
+			state: "needs-auth",
+			repository: "cline/cline",
+			branch: "feature",
+		});
+	await render();
+	expect(container.textContent).toContain("GitHub connection required");
+	await click("Connect GitHub");
+	expect(invoke).toHaveBeenCalledWith("github_connect", {
+		cwd: "/repo",
+		confirmFullAccess: true,
+	});
+});
+
 it("opens the PR, shows conflicts and expands CI details", async () => {
 	await render();
 	expect(container.textContent).toContain("Conflicts");
