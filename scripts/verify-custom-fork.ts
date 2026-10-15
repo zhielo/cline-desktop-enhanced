@@ -531,6 +531,7 @@ const requiredMarkers: Array<{
 			"runObservedIda",
 			"phase-deadline-exceeded",
 			"phaseTimeoutMs",
+			"DEFAULT_IDA_PHASE_TIMEOUT_MS",
 			"formatIdaProgress",
 			"termination-unconfirmed",
 			"No script phase observed",
@@ -1549,6 +1550,7 @@ const requiredMarkers: Array<{
 			"--ff-only",
 			"--set-upstream",
 			"GH_PROMPT_DISABLED",
+			"github_status",
 		],
 	},
 	{
