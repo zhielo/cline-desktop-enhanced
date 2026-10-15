@@ -17,7 +17,8 @@ import {
 it("uses one hour for the default IDA overall and unchanged-phase budgets", () => {
 	expect(DEFAULT_IDA_TIMEOUT_MS).toBe(3_600_000);
 	expect(DEFAULT_IDA_PHASE_TIMEOUT_MS).toBe(3_600_000);
-});\nafterEach(() => {
+});
+afterEach(() => {
 	vi.unstubAllEnvs();
 	vi.useRealTimers();
 	run.mockReset();
