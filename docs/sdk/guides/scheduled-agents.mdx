@@ -128,6 +128,28 @@ The scheduler enforces limits to prevent resource exhaustion:
 - If a previous execution is still running when the next trigger fires, the new execution is queued or skipped (configurable)
 - The hub monitors resource usage and can pause schedules if the system is under load
 
+## Durable Automatic Retries
+
+File-backed automations can opt into bounded retries in frontmatter:
+
+```markdown
+---
+workspaceRoot: /path/to/repo
+schedule: "0 */6 * * *"
+retry:
+  maxAttempts: 3
+  backoffSeconds: 30
+  maxBackoffSeconds: 300
+---
+Run the health check and report failures.
+```
+
+`maxAttempts` includes the initial execution and is limited to 10. A failed
+execution remains in run history. Its retry is a new durable queued run linked
+to the failed run, so process restarts do not lose the retry and operators can
+inspect every attempt. Delays use exponential backoff and respect the optional
+maximum. Cancellation does not trigger a retry.
+
 ## Routing Results
 
 Combine scheduled agents with [connectors](/cli/connectors) in CLI to route results to messaging platforms:

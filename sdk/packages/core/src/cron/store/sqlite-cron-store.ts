@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
 	type AutomationEventEnvelope,
+	type CronRetryPolicy,
 	type CronSpec,
 	type CronSpecExtensionKind,
 	type CronTriggerKind,
@@ -76,6 +77,7 @@ export interface CronSpecRecord {
 	modelId?: string;
 	maxIterations?: number;
 	timeoutSeconds?: number;
+	retryPolicy?: CronRetryPolicy;
 	maxParallel?: number;
 	tools?: string[];
 	notesDirectory?: string;
@@ -108,6 +110,8 @@ export interface CronRunRecord {
 	reportPath?: string;
 	error?: string;
 	attemptCount: number;
+	retryAttempt: number;
+	retryOfRunId?: string;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -195,6 +199,14 @@ function toInt(value: unknown): number | undefined {
 }
 
 function specToRecord(row: Record<string, unknown>): CronSpecRecord {
+	const storedMetadata = parseJsonRecord(asOptionalString(row.metadata_json));
+	const retryPolicy =
+		storedMetadata?.__clineRetryPolicy &&
+		typeof storedMetadata.__clineRetryPolicy === "object" &&
+		!Array.isArray(storedMetadata.__clineRetryPolicy)
+			? (storedMetadata.__clineRetryPolicy as CronRetryPolicy)
+			: undefined;
+	if (storedMetadata) delete storedMetadata.__clineRetryPolicy;
 	return {
 		specId: asString(row.spec_id),
 		externalId: asString(row.external_id),
@@ -222,6 +234,7 @@ function specToRecord(row: Record<string, unknown>): CronSpecRecord {
 		modelId: asOptionalString(row.model_id),
 		maxIterations: toInt(row.max_iterations),
 		timeoutSeconds: toInt(row.timeout_seconds),
+		retryPolicy,
 		maxParallel: toInt(row.max_parallel),
 		tools: parseJsonArray(asOptionalString(row.tools_json), {
 			preserveEmpty: true,
@@ -232,7 +245,10 @@ function specToRecord(row: Record<string, unknown>): CronSpecRecord {
 		}) as CronSpecExtensionKind[] | undefined,
 		source: asOptionalString(row.source),
 		tags: parseJsonArray(asOptionalString(row.tags_json)),
-		metadata: parseJsonRecord(asOptionalString(row.metadata_json)),
+		metadata:
+			storedMetadata && Object.keys(storedMetadata).length > 0
+				? storedMetadata
+				: undefined,
 		revision: Number(row.revision ?? 1),
 		lastMaterializedRunId: asOptionalString(row.last_materialized_run_id),
 		lastRunAt: asOptionalString(row.last_run_at),
@@ -260,6 +276,8 @@ function runToRecord(row: Record<string, unknown>): CronRunRecord {
 		reportPath: asOptionalString(row.report_path),
 		error: asOptionalString(row.error),
 		attemptCount: Number(row.attempt_count ?? 0),
+		retryAttempt: Number(row.retry_attempt ?? 0),
+		retryOfRunId: asOptionalString(row.retry_of_run_id),
 		createdAt: asString(row.created_at),
 		updatedAt: asString(row.updated_at),
 	};
@@ -293,6 +311,15 @@ function jsonOrNull(value: Record<string, unknown> | undefined): string | null {
 	return value ? JSON.stringify(value) : null;
 }
 
+function encodeMetadata(
+	metadata: Record<string, unknown> | undefined,
+	retryPolicy: CronRetryPolicy | undefined,
+): string | null {
+	const stored: Record<string, unknown> = { ...(metadata ?? {}) };
+	if (retryPolicy) stored.__clineRetryPolicy = retryPolicy;
+	return Object.keys(stored).length > 0 ? JSON.stringify(stored) : null;
+}
+
 const MEANINGFUL_FIELD_KEYS = [
 	"triggerKind",
 	"prompt",
@@ -303,6 +330,7 @@ const MEANINGFUL_FIELD_KEYS = [
 	"modelId",
 	"maxIterations",
 	"timeoutSeconds",
+	"retryPolicy",
 	"maxParallel",
 	"tools",
 	"notesDirectory",
@@ -595,6 +623,8 @@ export interface EnqueueRunInput {
 	triggerKind: CronRunTriggerKind;
 	scheduledFor?: string;
 	triggerEventId?: string;
+	retryAttempt?: number;
+	retryOfRunId?: string;
 }
 
 export interface InsertEventLogResult {
@@ -949,6 +979,7 @@ export class SqliteCronStore {
 			modelId: spec?.modelSelection?.modelId,
 			maxIterations: spec?.maxIterations,
 			timeoutSeconds: spec?.timeoutSeconds,
+			retryPolicy: spec?.retry,
 			maxParallel:
 				spec && "maxParallel" in spec
 					? (spec.maxParallel as number | undefined)
@@ -1046,7 +1077,7 @@ export class SqliteCronStore {
 				v.extensions ? JSON.stringify(v.extensions) : null,
 				(v.source as string | undefined) ?? null,
 				spec?.tags ? JSON.stringify(spec.tags) : null,
-				spec?.metadata ? JSON.stringify(spec.metadata) : null,
+				encodeMetadata(spec?.metadata, spec?.retry),
 				1,
 				now,
 				now,
@@ -1108,7 +1139,7 @@ export class SqliteCronStore {
 				v.extensions ? JSON.stringify(v.extensions) : null,
 				(v.source as string | undefined) ?? null,
 				spec?.tags ? JSON.stringify(spec.tags) : null,
-				spec?.metadata ? JSON.stringify(spec.metadata) : null,
+				encodeMetadata(spec?.metadata, spec?.retry),
 				revision,
 				now,
 				specId,
@@ -1296,8 +1327,8 @@ export class SqliteCronStore {
 		return count > 0 ? count : undefined;
 	}
 
-	/** Execute synchronous event acceptance and materialization as one atomic write. */
-	public eventTransaction<T>(work: () => T): T {
+	/** Execute synchronous queue/store work as one durable atomic write. */
+	public writeTransaction<T>(work: () => T): T {
 		this.db.exec("BEGIN IMMEDIATE;");
 		try {
 			const result = work();
@@ -1307,6 +1338,11 @@ export class SqliteCronStore {
 			this.db.exec("ROLLBACK;");
 			throw error;
 		}
+	}
+
+	/** Execute event acceptance and materialization as one atomic write. */
+	public eventTransaction<T>(work: () => T): T {
+		return this.writeTransaction(work);
 	}
 
 	public insertEventLog(
@@ -1562,8 +1598,8 @@ export class SqliteCronStore {
 				`INSERT INTO cron_runs (
 					run_id, spec_id, spec_revision, trigger_kind, status,
 					scheduled_for, trigger_event_id, attempt_count,
-					created_at, updated_at
-				) VALUES (?,?,?,?,?, ?,?,?, ?,?)`,
+					retry_attempt, retry_of_run_id, created_at, updated_at
+				) VALUES (?,?,?,?,?, ?,?,?, ?,?,?,?)`,
 			)
 			.run(
 				runId,
@@ -1574,6 +1610,8 @@ export class SqliteCronStore {
 				input.scheduledFor ?? null,
 				input.triggerEventId ?? null,
 				0,
+				input.retryAttempt ?? 0,
+				input.retryOfRunId ?? null,
 				now,
 				now,
 			);

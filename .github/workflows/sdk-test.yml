@@ -56,6 +56,7 @@ jobs:
 
             - name: Typecheck
               run: |
+                  bun -F @cline/shared build
                   bun run build:sdk
                   bun run -F @cline/cli build
                   bun run types
@@ -105,7 +106,9 @@ jobs:
 
             - name: Build SDK
               id: build_sdk_step
-              run: bun run build:sdk
+              run: |
+                  bun -F @cline/shared build
+                  bun run build:sdk
 
             - name: Build CLI
               id: build_cli_step
