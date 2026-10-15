@@ -37,6 +37,9 @@ type JobRecord = {
 	timeoutPhase?: string;
 	phaseDeadlineAt?: string;
 };
+export const DEFAULT_IDA_TIMEOUT_MS = 60 * 60 * 1000;
+export const DEFAULT_IDA_PHASE_TIMEOUT_MS = DEFAULT_IDA_TIMEOUT_MS;
+
 const jobs = new Map<string, JobRecord>();
 
 const SCRIPT_PHASES = [
@@ -148,7 +151,7 @@ export async function runObservedIda(
 		onProgress?: (job: ReturnType<typeof describeObservedIdaJob>) => void;
 	} = {},
 ) {
-	const phaseTimeoutMs = Math.min(options.phaseTimeoutMs ?? 300_000, timeoutMs);
+	const phaseTimeoutMs = Math.min(options.phaseTimeoutMs ?? DEFAULT_IDA_PHASE_TIMEOUT_MS, timeoutMs);
 	if (
 		!Number.isFinite(timeoutMs) ||
 		timeoutMs <= 0 ||
