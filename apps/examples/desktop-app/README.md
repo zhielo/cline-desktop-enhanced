@@ -30,23 +30,22 @@ browser, or expand CI to inspect individual checks and their logs. Status
 refreshes every 30 seconds while visible, when the app regains focus, and
 when you click refresh.
 
-This requires GitHub CLI (`gh`) and a GitHub.com `origin` remote (HTTPS or SSH).
-For a GitHub-origin feature branch, the row reports the local connection state and
-**Connect GitHub** launches `gh auth login --web` in an owner-scoped process
-session. Finish the browser flow, then refresh the row. Credentials remain in
-GitHub CLI storage and are never sent as tool input or returned by the app.
+This uses the app's native Cline account GitHub connector. Sign in to your Cline
+account, then click **Connect GitHub** in the PR bar or open Settings → Connectors
+and connect GitHub. The app opens the secure browser OAuth flow; GitHub CLI is not
+required and no token is copied into the desktop app.
 
-Pull-request details remain hidden for the default branch, detached HEAD,
-and unsupported repositories, while the connection prompt can still help sign
-in on an active GitHub branch. If the branch has no PR, **Create PR** opens
-GitHub's comparison form; push your commits before submitting the form. The app
-does not push commits or submit PRs from this status row. Repository-tool writes
-and remote operations remain separately confirmation-gated.
+After authorization, new agent sessions receive the connected GitHub tool set for
+repository, issue, pull request, review, comment, and related GitHub automation
+operations. The connector is account-scoped and can be revoked from the
+Connectors settings. Local workspace changes and Git operations remain separate
+and continue to use the app's existing permission gates.
 
-If GitHub CLI is not installed, the row links to the official CLI site. Missing
-or unauthenticated CLI availability checks are shared across workspaces and
-cached for five minutes, so unavailable installs do not spawn a failing process
-on every poll or window focus.
+Pull-request details remain hidden for the default branch, detached HEAD, and
+unsupported repositories, while the connection prompt can still help authorize
+GitHub on an active workspace branch. If the branch has no PR, **Create PR** opens
+GitHub's comparison form; the app does not submit a PR from this status row.
+Repository-tool writes and remote operations remain separately permission-gated.
 Initial lookup failures stay hidden. Errors after a successful status load
 can be dismissed and remain dismissed through retries until a load succeeds.
 
