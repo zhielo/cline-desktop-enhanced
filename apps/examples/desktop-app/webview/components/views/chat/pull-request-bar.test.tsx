@@ -54,6 +54,19 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	invoke.mockReset().mockResolvedValue(data);
 	openExternalUrl.mockReset().mockResolvedValue(undefined);
+	fetchComposioStatus.mockReset().mockResolvedValue({
+		configured: true,
+		integrations: [
+			{
+				toolkit: "github",
+				name: "GitHub",
+				description: "Work with GitHub",
+				recommended: true,
+				status: "connected",
+			},
+		],
+	});
+	connectComposioIntegration.mockReset();
 	container = document.createElement("div");
 	document.body.appendChild(container);
 	root = createRoot(container);
