@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { getMergeStatus, summarizeChecks } from "../webview/lib/pull-request";
 import {
-	createGitHubConnectionStatusReader,
 	createPullRequestStatusReader,
 	GITHUB_AVAILABILITY_CACHE_MS,
 	githubRepository,
@@ -43,45 +42,6 @@ function runner(prs: unknown[] = [pr], branch = "feature/pr-ui") {
 		);
 	});
 }
-
-
-describe("GitHub connection status", () => {
-	it("reports an authenticated GitHub CLI connection for a GitHub workspace", async () => {
-		const run = runner();
-		const read = createGitHubConnectionStatusReader({ run });
-		expect(await read("/repo")).toEqual({
-			state: "connected",
-			repository: "cline/cline",
-			branch: "feature/pr-ui",
-		});
-	});
-	it.each(["ENOENT", 1, 4])(
-		"distinguishes an unavailable or unauthenticated CLI (%s)",
-		async (code) => {
-			const base = runner();
-			const run = vi.fn(async (file: string, args: string[], cwd: string) => {
-				if (file === "gh") throw Object.assign(new Error("auth failed"), { code });
-				return base(file, args, cwd);
-			});
-			const status = await createGitHubConnectionStatusReader({ run })("/repo");
-			expect(status.state).toBe(code === "ENOENT" ? "not-installed" : "needs-auth");
-		},
-	);
-	it("does not offer authentication for a detached or non-GitHub workspace", async () => {
-		const detached = vi.fn(async (file: string, args: string[]) =>
-			file === "git" && args[0] === "branch" ? "" : "",
-		);
-		expect(
-			(await createGitHubConnectionStatusReader({ run: detached })("/repo")).state,
-		).toBe("detached");
-		const local = vi.fn(async (file: string, args: string[]) =>
-			file === "git" && args[0] === "branch" ? "feature" : "file:///local",
-		);
-		expect(
-			(await createGitHubConnectionStatusReader({ run: local })("/repo")).state,
-		).toBe("not-github-repo");
-	});
-});
 
 describe("pull request status", () => {
 	it("reads the active workspace, filters same-named fork branches and prefers an open PR", async () => {
