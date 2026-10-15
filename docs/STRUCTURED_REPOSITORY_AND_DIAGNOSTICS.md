@@ -27,6 +27,8 @@ Remote and GitHub operations:
 - fast-forward-only `pull`
 - non-force `push`
 - `github_status` through the existing GitHub CLI credential store
+- `get_github_connection_status` reports whether the active GitHub-origin workspace is connected, needs sign-in, or needs the GitHub CLI installed.
+- The desktop Connect GitHub action launches the fixed `gh auth login --web` device flow in an owner-scoped process session. Credentials remain in GitHub CLI storage; the app never accepts or returns bearer tokens.
 
 Every remote operation requires `confirm_remote: true`. Ref and remote names are validated and paths must remain relative to the active workspace. Commands use fixed argv execution with terminal prompting disabled. Tokens are never accepted as tool input or returned in output.
 
