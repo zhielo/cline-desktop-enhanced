@@ -47,7 +47,7 @@ function output(value: unknown): string {
 }
 
 async function run(
-	file: "git" | "gh",
+	file: "git",
 	args: string[],
 	cwd: string,
 	context: AgentToolContext,
@@ -61,7 +61,6 @@ async function run(
 			signal: context.signal,
 			env: {
 				...process.env,
-				GH_PROMPT_DISABLED: "1",
 				GIT_TERMINAL_PROMPT: "0",
 			},
 		});
