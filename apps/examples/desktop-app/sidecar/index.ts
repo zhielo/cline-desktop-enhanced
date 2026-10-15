@@ -22,7 +22,6 @@ import {
 import { prewarmWorkspaceMetadata } from "./chat-session";
 import { DESKTOP_CLIENT_CONTEXT } from "./client-context";
 import { configureConnectorCliLaunch } from "./connectors";
-import { ensureBundledGitHubMcpServer } from "./github-mcp";
 import {
 	broadcastEvent,
 	createSidecarContext,
@@ -75,12 +74,6 @@ async function main() {
 	const observability = createDesktopObservability();
 	activeObservability = observability;
 	const ctx = createSidecarContext(workspaceRoot, observability);
-	try {
-		const githubMcp = ensureBundledGitHubMcpServer();
-		observability.logger.log("Bundled GitHub MCP server", githubMcp);
-	} catch (error) {
-		observability.logger.error?.("Failed to configure bundled GitHub MCP server", { error });
-	}
 	observability.logger.log("Desktop sidecar starting", {
 		workspaceRoot,
 		pid: process.pid,
