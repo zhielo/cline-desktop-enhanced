@@ -118,6 +118,18 @@
                     "expand": "always"
                 }
             }
+        },
+        {
+            "includes": [
+                "apps/cli/**"
+            ],
+            "linter": {
+                "rules": {
+                    "a11y": {
+                        "noStaticElementInteractions": "off"
+                    }
+                }
+            }
         }
     ]
 }
