@@ -451,7 +451,9 @@ export class BinaryTriageService {
 					(id === "yara" &&
 						!JSON.stringify(body.data).includes("cline_owned_fixture"))
 				)
-					throw new Error("Owned fixture contract mismatch");
+					throw new Error(
+						`Owned ${id} fixture contract mismatch; version=${body.version.replace(/[^a-zA-Z0-9.+_-]/g, "").slice(0, 80)}; format=${body.format}; owned-marker=${JSON.stringify(body.data).includes(id === "yara" ? "cline_owned_fixture" : "CLINE_OWNED_TRIAGE_FIXTURE_V1")}`,
+					);
 				this.tested.set(id, { identity, testedAt: new Date().toISOString() });
 			}
 		} finally {
