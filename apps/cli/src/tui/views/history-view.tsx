@@ -1,4 +1,5 @@
 // @jsxImportSource @opentui/react
+// biome-ignore-all lint/a11y/noStaticElementInteractions: OpenTUI boxes are terminal controls, not DOM elements.
 
 import type { SessionHistoryRecord } from "@cline/core";
 import {
