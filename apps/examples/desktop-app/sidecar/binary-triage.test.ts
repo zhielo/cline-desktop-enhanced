@@ -7,6 +7,7 @@ import { AnalysisWorkflowStore } from "./analysis-workflow-store";
 import {
 	BinaryTriageService,
 	hashTriageFile,
+	matchesTriageVersion,
 	runTriageWorker,
 	triageReport,
 	verifyTriagePack,
@@ -45,6 +46,13 @@ async function pack() {
 	return root;
 }
 describe("fixed binary triage contracts", () => {
+	it("pins the official executable runtime version, including FLOSS build metadata", () => {
+		expect(matchesTriageVersion("floss", "v3.1.1-0-g3cd3ee6")).toBe(true);
+		expect(matchesTriageVersion("floss", "3.1.2")).toBe(false);
+		expect(matchesTriageVersion("floss", "v3.1.1-9-gunknown")).toBe(false);
+		expect(matchesTriageVersion("capa", "9.4.0")).toBe(true);
+		expect(matchesTriageVersion("yara", "4.5.4")).toBe(true);
+	});
 	it("rejects arbitrary commands, unknown options and unsafe selectors", () => {
 		const input = {
 			operation: "inspect_binary",

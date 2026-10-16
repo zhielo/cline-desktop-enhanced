@@ -10,7 +10,8 @@
       "archive": "radare2-6.2.4-w64.zip",
       "licenseUrl": "https://raw.githubusercontent.com/radareorg/radare2/6.2.4/COPYING.md",
       "licenseSha256": "c4154ac363318953bc18c8faf4b41dad3457ee51475d63e708db7b41570ffa79",
-      "executable": "radare2-6.2.4-w64/bin/radare2.exe"
+      "executable": "radare2-6.2.4-w64/bin/radare2.exe",
+      "runtimeVersion": "6.2.4"
     },
     {
       "id": "capa",
@@ -20,7 +21,8 @@
       "archive": "capa-v9.4.0-windows.zip",
       "licenseUrl": "https://raw.githubusercontent.com/mandiant/capa/v9.4.0/LICENSE.txt",
       "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-      "executable": "capa.exe"
+      "executable": "capa.exe",
+      "runtimeVersion": "9.4.0"
     },
     {
       "id": "floss",
@@ -30,7 +32,8 @@
       "archive": "floss-v3.1.1-windows.zip",
       "licenseUrl": "https://raw.githubusercontent.com/mandiant/flare-floss/v3.1.1/LICENSE.txt",
       "licenseSha256": "787008a875d16021fa995a81553a98e481b938ece1f2e8a1910daf8dffaf1300",
-      "executable": "floss.exe"
+      "executable": "floss.exe",
+      "runtimeVersion": "v3.1.1-0-g3cd3ee6"
     }
   ]
 }

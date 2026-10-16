@@ -47,6 +47,16 @@ const Result = z
 		coverage: z.string().max(1000),
 	})
 	.strict();
+export function matchesTriageVersion(engine: string, actual: string) {
+	const expected =
+		engine === "yara"
+			? "4.5.4"
+			: lock.tools.find((tool) => tool.id === engine)?.runtimeVersion;
+	return (
+		expected !== undefined &&
+		actual.replace(/^v/, "") === expected.replace(/^v/, "")
+	);
+}
 export async function hashTriageFile(file: string) {
 	const h = createHash("sha256");
 	for await (const b of createReadStream(file)) h.update(b);
@@ -376,7 +386,7 @@ export class BinaryTriageService {
 					version:
 						id === "yara"
 							? "4.5.4"
-							: lock.tools.find((t) => t.id === id)?.version,
+							: lock.tools.find((t) => t.id === id)?.runtimeVersion,
 					...(ready ? { testedAt: receipt.testedAt } : {}),
 				};
 			}),
@@ -438,12 +448,7 @@ export class BinaryTriageService {
 				if (
 					body.engine !== id ||
 					body.format !== "pe" ||
-					body.version.replace(/^v/, "") !==
-						(id === "yara"
-							? "4.5.4"
-							: lock.tools
-									.find((tool) => tool.id === id)
-									?.version.replace(/^v/, "")) ||
+					!matchesTriageVersion(id, body.version) ||
 					(id === "floss" &&
 						!JSON.stringify(body.data).includes(
 							"CLINE_OWNED_TRIAGE_FIXTURE_V1",

@@ -22,7 +22,7 @@ previous Analyze default is retained. A guide does not change permission or mode
 
 Windows x64 installers package pinned radare2 6.2.4, capa 9.4.0 and FLOSS 3.1.1.
 The verified core/full Python runtimes include r2pipe 2.0.0 and yara-python 4.5.4.
-Archives and upstream license files use reviewed SHA-256 pins in
+The official FLOSS v3.1.1 executable reports runtime `v3.1.1-0-g3cd3ee6`; release and exact runtime versions are pinned separately. Archives and upstream license files use reviewed SHA-256 pins in
 `scripts/binary-triage-tools.lock.json`. Native upstream source is available at
 those projects' corresponding tags; radare2 redistribution must preserve its
 LGPL obligations. Included upstream licenses are not a claim of complete

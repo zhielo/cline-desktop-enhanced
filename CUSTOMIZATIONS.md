@@ -782,3 +782,5 @@ The installer artifact also includes `DEPENDENCIES.cdx.json`, a CycloneDX 1.5 so
 Windows gates now provision Gitleaks 8.28.0 from its official upstream archive using pinned SHA-256, bounded download retries and an executable version check, rather than depending on the Chocolatey Gitleaks feed. The full-history secret scan still fails closed.
 
 Native triage acceptance has an independent fast Windows job in custom desktop validation. Packaging and owned-worker failures emit bounded, credential-free check annotations (engine/status, whitelisted phase/error type) without exposing raw child output. It does not replace the installer or installed-app acceptance gates.
+
+FLOSS release v3.1.1 reports embedded runtime version `v3.1.1-0-g3cd3ee6` in the verified official archive. The lock now records exact archive/release and runtime versions separately, with exact runtime-version regression checks; it does not broadly allow unknown build suffixes or skip provenance checks.
