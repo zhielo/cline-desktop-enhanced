@@ -736,6 +736,10 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
     await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
     await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();
+    const guide = page.getByRole("region", {name:"Guided investigation",exact:true});
+    await guide.waitFor({timeout:30000});
+    await guide.getByRole("button",{name:"Understand a JS / Electron application",exact:true}).click();
+    stages.push("installed-guided-entry-navigation-passed");
     await page.getByLabel("First-party Analysis Workspace",{exact:true}).waitFor();
     await page.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
     if(await page.getByRole("button",{name:"Inspect static sources",exact:true}).isEnabled())throw new Error("Off analysis must block new inspection");

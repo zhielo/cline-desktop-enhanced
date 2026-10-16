@@ -125,6 +125,7 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
 		markers: [
+			"installed-guided-entry-navigation-passed",
 			"owned-markdown-preview-wheel-keyboard-scroll-passed",
 			"artifact-preview-scroll",
 		],

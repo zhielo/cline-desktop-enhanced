@@ -79,3 +79,34 @@ it("remote guide does not request local readiness", async () => {
 		await act(async () => root.unmount());
 	}
 });
+
+it("navigates from the guide to existing application analysis without starting tools", async () => {
+	const host = document.createElement("div"),
+		root = createRoot(host),
+		navigate = vi.fn();
+	document.body.append(host);
+	try {
+		await act(async () =>
+			root.render(
+				<GuidedInvestigation
+					sessionId="owned"
+					environmentId="local"
+					onNavigate={navigate}
+				/>,
+			),
+		);
+		const button = Array.from(host.querySelectorAll("button")).find(
+			(b) => b.textContent === "Understand a JS / Electron application",
+		);
+		expect(button).toBeDefined();
+		await act(async () => button?.click());
+		expect(navigate).toHaveBeenCalledWith("first-party");
+		expect(
+			invoke.mock.calls.every(([name]) =>
+				["binary_triage_status", "binary_triage_history"].includes(name),
+			),
+		).toBe(true);
+	} finally {
+		await act(async () => root.unmount());
+	}
+});
