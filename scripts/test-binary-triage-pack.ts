@@ -1,6 +1,21 @@
 import { BinaryTriageService } from "../apps/examples/desktop-app/sidecar/binary-triage";
 
-const result = await new BinaryTriageService().test();
+let result: Awaited<ReturnType<BinaryTriageService["test"]>>;
+try {
+	result = await new BinaryTriageService().test();
+} catch (error) {
+	const message = (
+		error instanceof Error ? error.message : "Owned triage test failed"
+	)
+		.slice(0, 500)
+		.replaceAll("%", "%25")
+		.replaceAll("\r", "%0D")
+		.replaceAll("\n", "%0A");
+	console.error(
+		`::error title=Binary Triage Pack owned acceptance::${message}`,
+	);
+	throw error;
+}
 if (
 	result.capabilities.length !== 4 ||
 	result.capabilities.some((c) => c.state !== "ready")

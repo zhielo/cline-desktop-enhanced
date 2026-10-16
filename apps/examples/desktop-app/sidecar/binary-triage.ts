@@ -128,6 +128,7 @@ export type WorkerOutcome = {
 		| "timed-out"
 		| "termination-unconfirmed";
 	output?: unknown;
+	reason?: string;
 };
 /** Injectable for protocol tests; production always uses this fixed supervised process. */
 export function runTriageWorker(
@@ -241,7 +242,36 @@ export function runTriageWorker(
 				return;
 			}
 			if (code !== 0) {
-				finish({ status: "failed" });
+				let reason = "worker-exit";
+				try {
+					const diagnostic = z
+						.object({
+							errorType: z.enum([
+								"ValueError",
+								"FileNotFoundError",
+								"ModuleNotFoundError",
+								"ImportError",
+								"OSError",
+								"CalledProcessError",
+								"PermissionError",
+							]),
+							phase: z.enum([
+								"request",
+								"yara-import",
+								"yara-rules",
+								"r2-import",
+								"r2-open",
+								"r2-inspect",
+								"native-launch",
+								"native-result",
+							]),
+						})
+						.parse(JSON.parse(output.toString("utf8")));
+					reason = `${diagnostic.phase}:${diagnostic.errorType}`;
+				} catch {
+					/* Unknown child output is never exposed */
+				}
+				finish({ status: "failed", reason });
 				return;
 			}
 			try {
@@ -401,7 +431,9 @@ export class BinaryTriageService {
 				);
 				if (result.status === "termination-unconfirmed") confirmed = false;
 				if (result.status !== "completed")
-					throw new Error(`Owned ${id} fixture failed; not ready`);
+					throw new Error(
+						`Owned ${id} fixture failed; not ready (${result.status}; ${result.reason ?? "no diagnostic"})`,
+					);
 				const body = Result.parse(result.output);
 				if (
 					body.engine !== id ||

@@ -2,7 +2,10 @@
 export const BINARY_TRIAGE_WORKER = String.raw`
 import sys, json, os, hashlib, subprocess, importlib.metadata
 
+phase = "request"
+
 def main(req):
+    global phase
     op = req['operation']
     target = req['target']
     if os.path.getsize(target) > 64 * 1024 * 1024:
@@ -11,7 +14,9 @@ def main(req):
         head = f.read(4)
     fmt = 'pe' if head[:2] == b'MZ' else 'elf' if head == b'\x7fELF' else 'other'
     if op == 'scan_yara':
+        phase = "yara-import"
         import yara
+        phase = "yara-rules"
         rules = yara.compile(filepath=req['rules'], includes=False, error_on_warning=True)
         matches = rules.match(target, timeout=20)
         return {'engine': 'yara', 'version': yara.__version__, 'format': fmt,
@@ -20,9 +25,12 @@ def main(req):
     if fmt not in ('pe', 'elf'):
         raise ValueError('Unsupported target: native analysis accepts PE/ELF only')
     if op in ('inspect_binary', 'list_functions', 'get_function_disassembly', 'find_references'):
+        phase = "r2-import"
         import r2pipe
+        phase = "r2-open"
         r = r2pipe.open(target, flags=['-2', '-N', '-S', '-e', 'scr.color=0', '-e', 'cfg.plugins=false'], radare2home=os.path.dirname(req['executable']))
         try:
+            phase = "r2-inspect"
             version = str((r.cmdj('?Vj') or {}).get('version', 'unknown'))
             info = r.cmdj('ij')
             if not isinstance(info, dict) or not info.get('bin', {}).get('arch'):
@@ -55,6 +63,7 @@ def main(req):
     else:
         raise ValueError('Unsupported fixed operation')
     # Parent supervisor bounds lifetime/output and terminates the entire process tree.
+    phase = "native-launch"
     process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=sys.stderr)
     output = bytearray()
     try:
@@ -71,6 +80,7 @@ def main(req):
         if process.poll() is None:
             process.kill()
             process.wait()
+    phase = "native-result"
     data = json.loads(output)
     metadata = data.get('metadata' if engine == 'floss' else 'meta', {})
     if not metadata.get('version'):
@@ -91,6 +101,6 @@ try:
     print(encoded)
 except Exception as exc:
     # Never print raw subprocess arguments, target content, credentials or exception text.
-    print(json.dumps({'error': 'Analysis failed', 'errorType': type(exc).__name__}))
+    print(json.dumps({'error': 'Analysis failed', 'errorType': type(exc).__name__, 'phase': phase}))
     sys.exit(1)
 `;
