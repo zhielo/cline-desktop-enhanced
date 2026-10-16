@@ -67,6 +67,10 @@ import {
 	type SessionHistoryItem,
 	type SessionHistoryStatus,
 } from "@/lib/session-history";
+import {
+	clearPendingAnalysisMode,
+	readSessionReasoningPreference,
+} from "@/lib/session-preferences";
 import { eventEnvironmentId } from "@/lib/session-identity";
 import { readImportedHistorySummaryActivity } from "@/lib/session-import";
 import {
@@ -2693,6 +2697,8 @@ export function useChatSession(environmentId: string) {
 				permissionProfile?: ChatSessionConfig["permissionProfile"];
 				/** Bridge sessions always keep native tool confirmations enabled. */
 				autoApproveTools?: boolean;
+				/** Apply a pending fresh-session Analysis mode before its first send. */
+				analysisMode?: "off" | "static" | "runtime" | "hybrid";
 			},
 		): Promise<boolean> => {
 			if (isCloudSessionExpired) return false;
@@ -2726,6 +2732,10 @@ export function useChatSession(environmentId: string) {
 				return false;
 			}
 			let parsed = validation.parsed;
+			const applyAnalysisModeOnStart =
+				!activeSessionId &&
+				parsed.executionTarget === "local" &&
+				options?.analysisMode !== undefined;
 			const hasEarlierPromptSubmission = activePromptSubmissionsRef.current > 0;
 			activePromptSubmissionsRef.current += 1;
 			let promptSubmissionFinished = false;
@@ -2974,6 +2984,16 @@ export function useChatSession(environmentId: string) {
 							sessionStartPromiseRef.current = null;
 						}
 					}
+				}
+				if (applyAnalysisModeOnStart && options?.analysisMode) {
+					if (options.analysisMode !== "off") {
+						await desktopClient.invoke("first_party_analysis_mode", {
+							sessionId: activeSessionId,
+							environmentId,
+							mode: options.analysisMode,
+						});
+					}
+					clearPendingAnalysisMode();
 				}
 				if (optimisticUserMessageId) {
 					const cloudOptimistic = cloudOptimisticStatesRef.current.get(
@@ -3835,6 +3855,14 @@ export function useChatSession(environmentId: string) {
 				);
 			}
 			const requestId = hydrationRequestIdRef.current + 1;
+			const sessionReasoning = readSessionReasoningPreference(
+				session.metadata,
+				session.sessionId,
+			);
+			const reasoningConfig = sessionReasoning ?? {
+				thinking: undefined,
+				reasoningEffort: undefined,
+			};
 			const hydrationStartedAt = Date.now();
 			hydrationRequestIdRef.current = requestId;
 			setIsCloudSessionExpired(
@@ -3859,6 +3887,8 @@ export function useChatSession(environmentId: string) {
 						: undefined,
 				provider: session.provider || prev.provider,
 				model: session.model || prev.model,
+				thinking: reasoningConfig.thinking,
+				reasoningEffort: reasoningConfig.reasoningEffort,
 				workspaceRoot: session.workspaceRoot || prev.workspaceRoot,
 				cwd: session.workspaceRoot || session.cwd || prev.cwd,
 			}));
@@ -3999,6 +4029,8 @@ export function useChatSession(environmentId: string) {
 							: undefined),
 					provider: attached?.provider || session.provider || prev.provider,
 					model: attached?.model || session.model || prev.model,
+					thinking: reasoningConfig.thinking,
+					reasoningEffort: reasoningConfig.reasoningEffort,
 					workspaceRoot:
 						attached?.workspaceRoot ||
 						session.workspaceRoot ||

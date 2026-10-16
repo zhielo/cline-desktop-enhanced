@@ -1,3 +1,4 @@
+// biome-ignore-all lint/a11y/noStaticElementInteractions: OpenTUI boxes are terminal controls, not DOM elements.
 import { useMemo, useState } from "react";
 import { useTheme } from "../hooks/use-theme";
 

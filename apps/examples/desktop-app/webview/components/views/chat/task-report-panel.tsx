@@ -10,6 +10,7 @@ import {
 	Clock3,
 	Copy,
 	FileCheck2,
+	GitBranch,
 	ListChecks,
 	Loader2,
 	SkipForward,
@@ -26,6 +27,7 @@ import {
 	type TaskReportStepStatus,
 } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
+import { TaskGraphView } from "./task-graph-view";
 
 function statusIcon(status: TaskReportStepStatus) {
 	switch (status) {
@@ -139,9 +141,15 @@ export function TaskReportPanel({
 	const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
 		"idle",
 	);
+	const [view, setView] = useState<"list" | "graph">(
+		report.mode === "activity" ? "graph" : "list",
+	);
 	useEffect(() => {
 		setExpanded(!complete);
 	}, [complete]);
+	useEffect(() => {
+		setView(report.mode === "activity" ? "graph" : "list");
+	}, [report.mode]);
 
 	const activeStep = useMemo(
 		() =>
@@ -292,7 +300,40 @@ export function TaskReportPanel({
 			{expanded ? (
 				<div className="border-border/60 border-t">
 					<div className="max-h-[min(56vh,32rem)] overflow-y-auto px-3.5 py-3.5">
-						<div className="mb-2 flex justify-end">
+						<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+							<fieldset
+								aria-label="Task report view"
+								className="inline-flex items-center rounded-lg border border-border/70 p-0.5"
+							>
+								<button
+									aria-pressed={view === "list"}
+									className={cn(
+										"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+										view === "list"
+											? "bg-muted text-foreground"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setView("list")}
+									type="button"
+								>
+									<ListChecks className="size-3.5" />
+									List
+								</button>
+								<button
+									aria-pressed={view === "graph"}
+									className={cn(
+										"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+										view === "graph"
+											? "bg-muted text-foreground"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setView("graph")}
+									type="button"
+								>
+									<GitBranch className="size-3.5" />
+									Graph
+								</button>
+							</fieldset>
 							<button
 								className={cn(
 									"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
@@ -313,55 +354,58 @@ export function TaskReportPanel({
 										: "Copy report"}
 							</button>
 						</div>
-						{activeStep ? (
-							<div className="mb-3 rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent px-3 py-2.5">
-								<div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-400">
-									<span className="relative flex size-2">
-										<span className="absolute inline-flex size-full animate-ping rounded-full bg-blue-500 opacity-60" />
-										<span className="relative inline-flex size-2 rounded-full bg-blue-500" />
-									</span>
-									Working now
-								</div>
-								<p className="mt-1.5 text-sm font-medium leading-5">
-									{activeStep.label}
-								</p>
-								{latestActivity?.detail ? (
-									<p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-										{latestActivity.detail}
+						{view === "graph" ? <TaskGraphView report={report} /> : null}
+						{view === "list" ? (
+							<>
+								{activeStep ? (
+									<div className="mb-3 rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent px-3 py-2.5">
+										<div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-400">
+											<span className="relative flex size-2">
+												<span className="absolute inline-flex size-full animate-ping rounded-full bg-blue-500 opacity-60" />
+												<span className="relative inline-flex size-2 rounded-full bg-blue-500" />
+											</span>
+											Working now
+										</div>
+										<p className="mt-1.5 text-sm font-medium leading-5">
+											{activeStep.label}
+										</p>
+										{latestActivity?.detail ? (
+											<p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+												{latestActivity.detail}
+											</p>
+										) : null}
+									</div>
+								) : null}
+
+								{report.repair && repairLabel ? (
+									<div
+										className={cn(
+											"mb-3 rounded-xl border px-3 py-2.5",
+											report.repair.state === "blocked"
+												? "border-destructive/35 bg-destructive/10"
+												: "border-amber-500/30 bg-amber-500/10",
+										)}
+									>
+										<div className="flex items-center gap-2 text-xs font-semibold">
+											{report.repair.state === "repairing" ||
+											report.repair.state === "verifying" ? (
+												<Loader2 className="size-3.5 animate-spin" />
+											) : (
+												<Wrench className="size-3.5" />
+											)}
+											{repairLabel}
+										</div>
+										<p className="mt-1 text-xs text-muted-foreground">
+											Failed step: {report.repair.failedStepLabel}
+										</p>
+									</div>
+								) : null}
+
+								{report.explanation ? (
+									<p className="mb-3 text-xs leading-5 text-muted-foreground">
+										{report.explanation}
 									</p>
 								) : null}
-							</div>
-						) : null}
-
-						{report.repair && repairLabel ? (
-							<div
-								className={cn(
-									"mb-3 rounded-xl border px-3 py-2.5",
-									report.repair.state === "blocked"
-										? "border-destructive/35 bg-destructive/10"
-										: "border-amber-500/30 bg-amber-500/10",
-								)}
-							>
-								<div className="flex items-center gap-2 text-xs font-semibold">
-									{report.repair.state === "repairing" ||
-									report.repair.state === "verifying" ? (
-										<Loader2 className="size-3.5 animate-spin" />
-									) : (
-										<Wrench className="size-3.5" />
-									)}
-									{repairLabel}
-								</div>
-								<p className="mt-1 text-xs text-muted-foreground">
-									Failed step: {report.repair.failedStepLabel}
-								</p>
-							</div>
-						) : null}
-
-						{report.explanation ? (
-							<p className="mb-3 text-xs leading-5 text-muted-foreground">
-								{report.explanation}
-							</p>
-						) : null}
 
 						{report.steps.length > 0 ? (
 							<ol aria-label="Task steps" className="relative space-y-0.5">
@@ -467,6 +511,8 @@ export function TaskReportPanel({
 									))}
 								</ul>
 							</div>
+						) : null}
+							</>
 						) : null}
 					</div>
 				</div>

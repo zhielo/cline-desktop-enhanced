@@ -8,6 +8,12 @@ export type SessionHistoryStatus =
 	| "idle";
 
 export type SessionMetadata = {
+	chatPreferences?: {
+		reasoning?: {
+			thinking?: boolean;
+			reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+		};
+	};
 	title?: string;
 	/**
 	 * Pinned sessions. Stored in session metadata rather than desktop-local
