@@ -1,3 +1,4 @@
+import {downloadPinnedAndroidAsset} from "./pinned-android-download.mjs";
 /** CI-only provisioning. No installed operation downloads software or accepts target build scripts. */
 import {createHash} from "node:crypto";
 import {readFile,writeFile,mkdir,rm,readdir,copyFile,chmod} from "node:fs/promises";
@@ -9,16 +10,7 @@ const lock=JSON.parse(await readFile(path.join(repo,"scripts/android-toolchain.l
 const root=path.join(repo,"apps/examples/desktop-app/src-tauri/resources/android-toolchain");
 const temporary=path.join(process.env.RUNNER_TEMP||"/tmp","cline-android-toolchain");
 await rm(root,{recursive:true,force:true});await mkdir(root,{recursive:true});await mkdir(temporary,{recursive:true});
-async function download(url,digest,name){
- const file=path.join(temporary,name);let bytes;
- try{bytes=await readFile(file);}catch{}
- if(!bytes||createHash("sha256").update(bytes).digest("hex")!==digest){
-  const response=await fetch(url,{signal:AbortSignal.timeout(180000)});if(!response.ok)throw new Error(`Download failed: ${name} (${response.status})`);
-  bytes=Buffer.from(await response.arrayBuffer());await writeFile(file,bytes);
- }
- if(createHash("sha256").update(bytes).digest("hex")!==digest)throw new Error(`Pinned digest mismatch: ${name}`);
- return file;
-}
+const download=(url,digest,name)=>downloadPinnedAndroidAsset(url,digest,name,temporary);
 async function extract(zip,destination){
  await mkdir(destination,{recursive:true});
  if(process.platform==="win32") execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-Command",`Expand-Archive -LiteralPath '${zip.replaceAll("'","''")}' -DestinationPath '${destination.replaceAll("'","''")}' -Force`],{stdio:"inherit",timeout:180000});

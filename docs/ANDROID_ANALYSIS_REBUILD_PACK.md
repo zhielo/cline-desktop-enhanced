@@ -47,3 +47,5 @@ DEX validation accepts bounded classic DEX 035–040 headers with verified diges
 Repeated inventory hashing uses bounded explicit reads and closes each file handle on success or failure; it does not cache away per-command integrity checks.
 
 Native zipalign/aapt2/dexdump run fixed commands over private bounded snapshots with ASCII relative filenames; target paths never become a native working directory. Outputs are copied exclusively back into caller staging and validated before publication. Unconfirmed child termination retains scratch.
+
+CI-only pinned downloads use four bounded attempts for transient network/404/408/429/5xx failures. SHA-256 mismatch is never retried or accepted; no installed-runtime download is introduced.

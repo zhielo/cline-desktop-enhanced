@@ -44,6 +44,8 @@ jobs:
       - name: Package and test Unicode owned Android fixtures
         shell: pwsh
         run: |
+          & node --test scripts/pinned-android-download.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Android download regression tests failed" }
           & node scripts/package-android-toolchain.mjs
           if ($LASTEXITCODE -ne 0) { throw "Android preflight packaging failed" }
           $env:CLINE_ANDROID_TOOLCHAIN_ROOT = Join-Path $PWD "apps/examples/desktop-app/src-tauri/resources/android-toolchain"
@@ -186,6 +188,8 @@ jobs:
         timeout-minutes: 15
         shell: pwsh
         run: |
+          & node --test scripts/pinned-android-download.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Android download regression tests failed" }
           & node scripts/package-android-toolchain.mjs
           if ($LASTEXITCODE -ne 0) { throw "Android toolchain packaging failed" }
           $env:CLINE_ANDROID_TOOLCHAIN_ROOT = Join-Path $PWD "apps/examples/desktop-app/src-tauri/resources/android-toolchain"
