@@ -24,10 +24,10 @@ const writes = new Set([
 	"sign_apk",
 ]);
 export function AndroidToolchainWorkspace({
-	environmentId,
+	environmentId = "local",
 	onPrepare,
 }: {
-	environmentId: string;
+	environmentId?: string;
 	onPrepare: (request: Record<string, unknown>) => unknown;
 }) {
 	const prefix = useId(),

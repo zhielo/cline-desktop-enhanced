@@ -8,7 +8,7 @@ import {
 	verifyAndroidToolchain,
 	androidChildEnvironment,
 } from "./android-toolchain";
-import { runSupervised } from "./supervised-process";
+import { runSupervised as runBaseSupervised } from "./supervised-process";
 
 export async function testAndroidToolchain(signal?: AbortSignal) {
 	const pack = await verifyAndroidToolchain();
@@ -21,6 +21,11 @@ export async function testAndroidToolchain(signal?: AbortSignal) {
 	);
 	const checks: Record<string, string> = {};
 	let preserve = false;
+	async function runSupervised(...args: Parameters<typeof runBaseSupervised>) {
+		const result = await runBaseSupervised(...args);
+		preserve ||= result.outputDrainTimedOut === true;
+		return result;
+	}
 	async function call(input: Record<string, unknown>) {
 		const result = JSON.parse(
 			await execute(
@@ -147,7 +152,15 @@ export async function testAndroidToolchain(signal?: AbortSignal) {
 				{ signal } as never,
 			),
 		);
-		if (rejected.validated !== false) throw new Error("Invalid AAB accepted");
+		if (
+			rejected.validated !== false ||
+			typeof rejected.exitCode !== "number" ||
+			rejected.exitCode === 0 ||
+			rejected.timedOut ||
+			rejected.cancelled ||
+			rejected.outputDrainTimedOut
+		)
+			throw new Error("Invalid AAB rejection was not established");
 		checks.bundletool += "; invalid-AAB-rejection-passed";
 
 		const splits = path.join(root, "owned.apks");
