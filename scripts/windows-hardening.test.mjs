@@ -175,3 +175,16 @@ test("extension Bun cache saving is bounded without weakening E2E gates", () => 
 });
 
 test("installed Hybrid exercises static prerequisites and separately approved isolated execution",()=>{const source=load("apps/vscode/scripts/desktop-installed-acceptance.ts");expect(source).toContain("installed-hybrid-mode-persistence-static-preflight-passed");expect(source).toContain("installed-hybrid-owned-isolated-execution-and-export-passed");expect(source).toContain("first_party_analysis_execute_prepare");expect(source).toContain('"approve_analysis_task"');expect(source).toContain("confirmExecution:true");expect(source).toContain('relation!=="exact-artifact-hash"');expect(source).toContain("verifiedBeforeResume!==true");expect(source).toContain("missingBasisDenied");});
+
+test("both Windows gates use checksum-verified upstream Gitleaks", () => {
+  const source = load("scripts/install-pinned-gitleaks.ps1");
+  expect(source).toContain("SHA256");
+  expect(source).toContain("da6458e8864af553807de1c46a7a8eac0880bd6b99ba56288e87e86a45af884f");
+  expect(source).toContain("$attempt -le 3");
+  expect(source).toContain("version self-check failed");
+  for (const file of [".github/workflows/build-custom-windows-installer.yml", ".github/workflows/custom-desktop-validation.yml"]) {
+    expect(load(file)).toContain("scripts/install-pinned-gitleaks.ps1");
+    expect(load(file)).toContain("fetch-depth: 0");
+    expect(load(file)).toContain("gitleaks git --redact");
+  }
+});

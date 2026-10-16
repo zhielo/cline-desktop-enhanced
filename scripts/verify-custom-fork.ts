@@ -4,6 +4,46 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path: "apps/examples/desktop-app/sidecar/binary-triage-worker.ts", markers: ["r2pipe.open([target]", "one literal path"]},
+ {path: "scripts/test-embedded-binary-triage.ps1", markers: ["76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0", "python313._pth", "test-binary-triage-pack.ts", "cline triage pack with spaces"]},
+ {path: "apps/examples/desktop-app/webview/components/views/settings/binary-triage-readiness.tsx", markers: ["ownedTriageDiagnostic", "no operation is automatically retried"]},
+	{
+		path: "scripts/install-pinned-gitleaks.ps1",
+		markers: ["SHA256", "version self-check failed", "$attempt -le 3"],
+	},
+	{
+		path: "scripts/write-dependency-inventory.ts",
+		markers: [
+			"CycloneDX",
+			"not complete installed distribution",
+			"bun-lock-sha256",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/binary-triage.ts",
+		markers: [
+			"verifyTriagePack",
+			"termination-unconfirmed",
+			"no automatic replay",
+			"targetSha256",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/guided-investigation.tsx",
+		markers: [
+			"Start with a question",
+			"binary_triage_run",
+			"Export selected evidence report",
+		],
+	},
+	{
+		path: "scripts/package-binary-triage.ps1",
+		markers: [
+			"SHA256",
+			"test-binary-triage-pack.ts",
+			"License digest mismatch",
+		],
+	},
 	{
 		path: "sdk/packages/core/src/analysis/recovery.ts",
 		markers: ["ownershipBinding", "originalInstanceGone", "recovery blocked"],
@@ -88,6 +128,7 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
 		markers: [
+			"installed-guided-entry-navigation-passed",
 			"owned-markdown-preview-wheel-keyboard-scroll-passed",
 			"artifact-preview-scroll",
 		],
@@ -1561,18 +1602,11 @@ const requiredMarkers: Array<{
 	},
 	{
 		path: "apps/examples/desktop-app/webview/lib/composio.ts",
-		markers: [
-			"composio_integrations",
-			"connectComposioIntegration",
-		],
+		markers: ["composio_integrations", "connectComposioIntegration"],
 	},
 	{
 		path: "sdk/packages/core/src/extensions/composio/composio-tools-extension.ts",
-		markers: [
-			"createComposioToolsExtension",
-			"executeComposioTool",
-			"/tools/",
-		],
+		markers: ["createComposioToolsExtension", "executeComposioTool", "/tools/"],
 	},
 	{
 		path: "docs/STRUCTURED_REPOSITORY_AND_DIAGNOSTICS.md",

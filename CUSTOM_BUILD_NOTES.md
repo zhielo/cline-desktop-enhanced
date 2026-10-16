@@ -73,13 +73,16 @@ installed Bun dependencies, so a full monorepo build was not performed here.
 
 The GitHub Actions workflow at
 `.github/workflows/build-custom-windows-installer.yml` validates and builds an
-unsigned private Windows x64 NSIS installer on PRs to main, main/feature/fix
+unsigned private Windows x64 NSIS installer on PRs to main, main
 pushes, manual runs and matching version tags. It never publishes a release
 or receives signing certificate secrets. Tagged runs remain private artifacts.
 
 Verified installer artifacts require installed-sidecar smoke and installed
 WebView2 acceptance, including configured Python owned-fixture readiness.
-Failure evidence is separate. The CI Python environment is not bundled into
-the installer: run the explicit opt-in setup script and check Settings →
-Analysis environment on the actual desktop computer. See
+Failure evidence is separate. The installer bundles integrity-checked core/full/angr analysis runtimes. Use
+Settings → Setup Center for explicit readiness tests, runtime activation and
+repair. Licensed engines, authorized devices and isolated runtime workers remain
+separate requirements. The optional-use Binary Triage Pack adds radare2/r2pipe,
+YARA, capa and FLOSS static extraction; see
+`docs/BINARY_TRIAGE_AND_GUIDED_INVESTIGATION.md`. See
 `docs/ANALYSIS_RUNTIME_HARDENING.md` for setup, IDA receipts and merge gates.

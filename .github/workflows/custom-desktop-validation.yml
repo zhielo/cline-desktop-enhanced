@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       - name: Read supported Bun version
 
@@ -44,12 +46,11 @@ jobs:
       - name: Setup validation tools
         shell: pwsh
         run: |
-          choco install gitleaks --version=$env:GITLEAKS_VERSION --no-progress -y
-          if ($LASTEXITCODE -ne 0) { throw 'Gitleaks installation failed' }
+          & scripts/install-pinned-gitleaks.ps1 -Version $env:GITLEAKS_VERSION
           $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
           $url = "https://github.com/tauri-apps/binary-releases/releases/download/nsis-$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
           Invoke-WebRequest $url -OutFile $zip
-          if ((Get-FileHash $zip -Algorithm SHA1).Hash -ne 'EF7FF767E5CBD9EDD22ADD3A32C9B8F4500BB10D') {
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne 'C7D27F780DDB6CFFB4730138CD1591E841F4B7EDB155856901CDF5F214394FA1') {
             throw 'NSIS distribution checksum mismatch'
           }
           Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
@@ -119,3 +120,37 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
+
+  binary-triage:
+    name: Windows Binary Triage owned engines
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Read supported Bun version
+        id: toolchain
+        shell: bash
+        run: echo "version=$(node "$GITHUB_WORKSPACE/scripts/read-bun-version.mjs")" >> "$GITHUB_OUTPUT"
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ steps.toolchain.outputs.version }}
+      - name: Install dependencies and build SDK
+        run: bun install --frozen-lockfile && bun run build:sdk
+      - name: Prepare isolated triage bindings
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'cline-triage-bindings'
+          py -3.13 -m venv $root
+          if ($LASTEXITCODE -ne 0) { throw 'Triage Python creation failed' }
+          $python = Join-Path $root 'Scripts/python.exe'
+          & $python -m pip install r2pipe==2.0.0 yara-python==4.5.4
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned triage binding installation failed' }
+          "CLINE_RE_PYTHON=$python" >> $env:GITHUB_ENV
+      - name: Test pinned native triage engines
+        shell: pwsh
+        run: ./scripts/package-binary-triage.ps1
+      - name: Test triage with shipped-style isolated embedded Python
+        shell: pwsh
+        run: ./scripts/test-embedded-binary-triage.ps1 -EnginePython $env:CLINE_RE_PYTHON

@@ -56,9 +56,17 @@ export class AnalysisWorkflowStore {
 		if (!this.db) {
 			mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
 			this.db = loadSqliteDb(this.file);
-			const version=Number(this.db.prepare("PRAGMA user_version").get()?.user_version??0);
-            if(version>1){this.db.close?.();this.db=undefined;throw new Error("Unsupported workflow database version; existing data preserved");}
-            this.db.exec(
+			const version = Number(
+				this.db.prepare("PRAGMA user_version").get()?.user_version ?? 0,
+			);
+			if (version > 1) {
+				this.db.close?.();
+				this.db = undefined;
+				throw new Error(
+					"Unsupported workflow database version; existing data preserved",
+				);
+			}
+			this.db.exec(
 				"PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA user_version=1; CREATE TABLE IF NOT EXISTS workflow_items(id TEXT PRIMARY KEY,session TEXT NOT NULL,workspace TEXT NOT NULL,kind TEXT NOT NULL,body TEXT NOT NULL); CREATE INDEX IF NOT EXISTS workflow_scope ON workflow_items(session,workspace);",
 			);
 		}
@@ -69,7 +77,7 @@ export class AnalysisWorkflowStore {
 	}
 	put(
 		scope: WorkflowScope,
-		kind: "artifact" | "scenario",
+		kind: "artifact" | "scenario" | "triage",
 		body: Record<string, unknown>,
 	) {
 		const [session, workspace] = this.scope(scope);
@@ -92,7 +100,11 @@ export class AnalysisWorkflowStore {
 			.run(item.id, session, workspace, kind, JSON.stringify(item));
 		return item;
 	}
-	get(scope: WorkflowScope, id: string, kind: "artifact" | "scenario") {
+	get(
+		scope: WorkflowScope,
+		id: string,
+		kind: "artifact" | "scenario" | "triage",
+	) {
 		const [session, workspace] = this.scope(scope);
 		const row = this.database()
 			.prepare(
@@ -103,7 +115,7 @@ export class AnalysisWorkflowStore {
 			throw new Error("Workflow item is unavailable in this session/workspace");
 		return JSON.parse(String(row.body)) as Record<string, unknown>;
 	}
-	list(scope: WorkflowScope, kind: "artifact" | "scenario") {
+	list(scope: WorkflowScope, kind: "artifact" | "scenario" | "triage") {
 		const [session, workspace] = this.scope(scope);
 		return this.database()
 			.prepare(
@@ -111,6 +123,26 @@ export class AnalysisWorkflowStore {
 			)
 			.all(session, workspace, kind)
 			.map((r) => JSON.parse(String(r.body)));
+	}
+	completeTriage(
+		scope: WorkflowScope,
+		id: string,
+		body: Record<string, unknown>,
+	) {
+		const current = this.get(scope, id, "triage");
+		if (current.status !== "running")
+			throw new Error("Terminal triage receipt is immutable");
+		const next = { ...current, ...body, id };
+		const encoded = JSON.stringify(next);
+		if (Buffer.byteLength(encoded) > 2 * 1024 * 1024)
+			throw new Error("Triage receipt byte budget");
+		const [session, workspace] = this.scope(scope);
+		this.database()
+			.prepare(
+				"UPDATE workflow_items SET body=? WHERE id=? AND session=? AND workspace=? AND kind='triage' AND body=?",
+			)
+			.run(encoded, id, session, workspace, JSON.stringify(current));
+		return this.get(scope, id, "triage");
 	}
 	async open(scope: WorkflowScope, target: string) {
 		return this.put(scope, "artifact", {
