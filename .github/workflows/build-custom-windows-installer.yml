@@ -244,6 +244,16 @@ jobs:
         shell: pwsh
         run: ./scripts/package-binary-triage.ps1
 
+      - name: Package and round-trip-test pinned Android Analysis Pack
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          & node scripts/package-android-toolchain.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Android toolchain packaging failed" }
+          $env:CLINE_ANDROID_TOOLCHAIN_ROOT = Join-Path $PWD "apps/examples/desktop-app/src-tauri/resources/android-toolchain"
+          & bun scripts/test-android-toolchain.ts
+          if ($LASTEXITCODE -ne 0) { throw "Android owned round-trip acceptance failed" }
+
       - name: Package official Android connectivity tools
         shell: pwsh
         run: ./scripts/package-android-platform-tools.ps1
@@ -504,7 +514,7 @@ jobs:
           "CLINE_TEST_INSTALLED_SIDECAR=$($sidecarExe.FullName)" >> $env:GITHUB_ENV
 
       - name: Installed WebView acceptance journey
-        timeout-minutes: 10
+        timeout-minutes: 20
         id: ui_acceptance
         shell: pwsh
         working-directory: apps/examples/desktop-app

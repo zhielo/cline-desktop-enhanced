@@ -738,6 +738,22 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();
     const guide = page.getByRole("region", {name:"Guided investigation",exact:true});
     await guide.waitFor({timeout:30000});
+    const androidBefore=await rpc<{state:string}>(page,"setup_center_android_status",{environmentId:"local"});
+    if(androidBefore.state!=="installed-not-tested")throw new Error("Installed Android pack did not start honestly untested");
+    await guide.getByRole("button",{name:"Analyze / rebuild an owned Android app",exact:true}).click();
+    const androidPanel=page.getByRole("region",{name:"Android Analysis and Rebuild Pack",exact:true});
+    await androidPanel.waitFor({timeout:30000});
+    page.once("dialog",async dialog=>{if(dialog.message().includes("fixed owned Android"))await dialog.accept();else await dialog.dismiss();});
+    await androidPanel.getByRole("button",{name:"Test owned Android fixtures",exact:true}).click();
+    await page.waitForFunction(()=>{const panel=document.querySelector('[aria-label="Android Analysis and Rebuild Pack"]');return !!panel?.querySelector('[role="alert"]')||panel?.textContent?.includes("Pack status: ready");},undefined,{timeout:600000});
+    if(await androidPanel.getByRole("alert").count())throw new Error("Installed Android fixture acceptance failed; no readiness claimed");
+    const androidAfter=await rpc<{state:string;receipt:unknown}>(page,"setup_center_android_status",{environmentId:"local"});
+    if(androidAfter.state!=="ready")throw new Error("Installed Android pack fixture did not pass");
+    await writeFile(join(evidence,"android-toolchain-readiness.json"),JSON.stringify(androidAfter,null,2));
+    stages.push("installed-android-owned-resource-multidex-smali-jadx-signature-and-native-tools-passed");
+    await page.getByRole("button",{name:"Start here",exact:true}).click();
+
+
     await guide.getByRole("button",{name:"Understand a JS / Electron application",exact:true}).click();
     stages.push("installed-guided-entry-navigation-passed");
     await page.getByLabel("First-party Analysis Workspace",{exact:true}).waitFor();

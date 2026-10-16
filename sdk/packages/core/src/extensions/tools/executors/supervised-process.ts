@@ -27,6 +27,7 @@ function spawnPortable(
 	args: string[],
 	gui = false,
 	environmentOverrides?: Record<string, string>,
+	replaceEnvironment = false,
 ): ChildProcess {
 	const isBatch = process.platform === "win32" && /\.(bat|cmd)$/i.test(command);
 	const [executable, executableArgs] = isBatch
@@ -37,7 +38,13 @@ function spawnPortable(
 		stdio: gui ? "ignore" : ["ignore", "pipe", "pipe"],
 		windowsHide: !gui,
 		windowsVerbatimArguments: false,
-		...(environmentOverrides ? { env: { ...process.env, ...environmentOverrides } } : {}),
+		...(environmentOverrides
+			? {
+					env: replaceEnvironment
+						? environmentOverrides
+						: { ...process.env, ...environmentOverrides },
+				}
+			: {}),
 	});
 }
 
@@ -99,6 +106,7 @@ export async function runSupervised(
 	signal?: AbortSignal,
 	onSpawn?: (pid: number | null) => void,
 	environmentOverrides?: Record<string, string>,
+	replaceEnvironment = false,
 ) {
 	return new Promise<{
 		exitCode: number | null;
@@ -121,7 +129,13 @@ export async function runSupervised(
 			});
 			return;
 		}
-		const child = spawnPortable(command, args, false, environmentOverrides);
+		const child = spawnPortable(
+			command,
+			args,
+			false,
+			environmentOverrides,
+			replaceEnvironment,
+		);
 		let stdout = "";
 		let stderr = "";
 		let timedOut = false;
@@ -215,10 +229,15 @@ export async function runSupervised(
 		});
 		// close fires only after stdio has drained; exit can precede the final chunks.
 		child.once("close", (exitCode) => finish({ exitCode }));
-		try { onSpawn?.(child.pid ?? null); }
-		catch (error) {
+		try {
+			onSpawn?.(child.pid ?? null);
+		} catch (error) {
 			killProcessTree(child);
-			finish({ exitCode: null, error: error instanceof Error ? error : new Error("Process observer failed") });
+			finish({
+				exitCode: null,
+				error:
+					error instanceof Error ? error : new Error("Process observer failed"),
+			});
 		}
 	});
 }

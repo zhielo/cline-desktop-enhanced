@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "profile": "cline-android-toolchain/1",
+  "versions": {
+    "java": "21.0.12.1+1",
+    "apktool": "3.0.3",
+    "smali": "3.0.10",
+    "baksmali": "3.0.10",
+    "jadx": "1.5.6",
+    "bundletool": "1.18.3",
+    "buildTools": "36.0.0"
+  },
+  "assets": [
+    {
+      "id": "smali-3.0.10",
+      "url": "https://dl.google.com/android/maven2/com/android/tools/smali/smali/3.0.10/smali-3.0.10.jar",
+      "sha256": "b54c34f7a1b769b1e637f8a26909c68f399c273f3e5cde3e308e91107c135305",
+      "file": "smali/lib/smali-3.0.10.jar",
+      "kind": "file"
+    },
+    {
+      "id": "smali-dexlib2-3.0.10",
+      "url": "https://dl.google.com/android/maven2/com/android/tools/smali/smali-dexlib2/3.0.10/smali-dexlib2-3.0.10.jar",
+      "sha256": "688dee6a46962a4dd1774b64be926534b0b6504bfd5d5c9f89c0f5af284f50c1",
+      "file": "smali/lib/smali-dexlib2-3.0.10.jar",
+      "kind": "file"
+    },
+    {
+      "id": "jsr305-3.0.2",
+      "url": "https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar",
+      "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7",
+      "file": "smali/lib/jsr305-3.0.2.jar",
+      "kind": "file"
+    },
+    {
+      "id": "guava-31.1-android",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/guava/31.1-android/guava-31.1-android.jar",
+      "sha256": "32ac2ed709d96d278b5d2e3e5cea178fa4939939c525fb647532f013308db309",
+      "file": "smali/lib/guava-31.1-android.jar",
+      "kind": "file"
+    },
+    {
+      "id": "failureaccess-1.0.1",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar",
+      "sha256": "a171ee4c734dd2da837e4b16be9df4661afab72a41adaf31eb84dfdaf936ca26",
+      "file": "smali/lib/failureaccess-1.0.1.jar",
+      "kind": "file"
+    },
+    {
+      "id": "listenablefuture-9999.0-empty-to-avoid-conflict-with-guava",
+      "url": "https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar",
+      "sha256": "b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99",
+      "file": "smali/lib/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar",
+      "kind": "file"
+    },
+    {
+      "id": "antlr-3.5.2",
+      "url": "https://repo.maven.apache.org/maven2/org/antlr/antlr/3.5.2/antlr-3.5.2.jar",
+      "sha256": "5ac36c2acfb0a0f3d37dafe20b5b570f2643e2d000c648d44503c2738be643df",
+      "file": "smali/lib/antlr-3.5.2.jar",
+      "kind": "file"
+    },
+    {
+      "id": "smali-util-3.0.10",
+      "url": "https://dl.google.com/android/maven2/com/android/tools/smali/smali-util/3.0.10/smali-util-3.0.10.jar",
+      "sha256": "cc2ef8349765644e4b15371f2c9f77d69b5412a094a38fe5fd992a124b7322fe",
+      "file": "smali/lib/smali-util-3.0.10.jar",
+      "kind": "file"
+    },
+    {
+      "id": "jcommander-1.85",
+      "url": "https://repo.maven.apache.org/maven2/org/jcommander/jcommander/1.85/jcommander-1.85.jar",
+      "sha256": "fa7552d2831a2b20778d86851d093edca68fbc0a77f792b6223110e4fae67a70",
+      "file": "smali/lib/jcommander-1.85.jar",
+      "kind": "file"
+    },
+    {
+      "id": "antlr-runtime-3.5.2",
+      "url": "https://repo.maven.apache.org/maven2/org/antlr/antlr-runtime/3.5.2/antlr-runtime-3.5.2.jar",
+      "sha256": "ce3fc8ecb10f39e9a3cddcbb2ce350d272d9cd3d0b1e18e6fe73c3b9389c8734",
+      "file": "smali/lib/antlr-runtime-3.5.2.jar",
+      "kind": "file"
+    },
+    {
+      "id": "stringtemplate-3.2.1",
+      "url": "https://repo.maven.apache.org/maven2/org/antlr/stringtemplate/3.2.1/stringtemplate-3.2.1.jar",
+      "sha256": "f66ce72e965e5301cb0f020e54d2ba6ad76feb91b3cbfc30dbbf00c06a6df6d7",
+      "file": "smali/lib/stringtemplate-3.2.1.jar",
+      "kind": "file"
+    },
+    {
+      "id": "antlr-2.7.7",
+      "url": "https://repo.maven.apache.org/maven2/antlr/antlr/2.7.7/antlr-2.7.7.jar",
+      "sha256": "88fbda4b912596b9f56e8e12e580cc954bacfb51776ecfddd3e18fc1cf56dc4c",
+      "file": "smali/lib/antlr-2.7.7.jar",
+      "kind": "file"
+    },
+    {
+      "id": "smali-baksmali-3.0.10",
+      "url": "https://dl.google.com/android/maven2/com/android/tools/smali/smali-baksmali/3.0.10/smali-baksmali-3.0.10.jar",
+      "sha256": "7d6578dfe5c44f1984b64268e91834432b0942d49e08186a501039dd92b58213",
+      "file": "smali/lib/smali-baksmali-3.0.10.jar",
+      "kind": "file"
+    },
+    {
+      "id": "apktool",
+      "url": "https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar",
+      "sha256": "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423",
+      "file": "apktool.jar",
+      "kind": "file"
+    },
+    {
+      "id": "bundletool",
+      "url": "https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar",
+      "sha256": "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29",
+      "file": "bundletool.jar",
+      "kind": "file"
+    },
+    {
+      "id": "jadx",
+      "url": "https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip",
+      "sha256": "545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974",
+      "file": "jadx",
+      "kind": "zip"
+    },
+    {
+      "id": "jre",
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip",
+      "sha256": "d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636",
+      "file": "jre",
+      "kind": "zip"
+    },
+    {
+      "id": "build-tools",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_windows.zip",
+      "sha256": "aa1095cb14d83e483818a748a2c06faaeb8e601561b06a356a119a1b2ca280d3",
+      "file": "build-tools",
+      "kind": "zip"
+    },
+    {
+      "id": "ST4-4.0.8",
+      "url": "https://repo.maven.apache.org/maven2/org/antlr/ST4/4.0.8/ST4-4.0.8.jar",
+      "sha256": "58caabc40c9f74b0b5993fd868e0f64a50c0759094e6a251aaafad98edfc7a3b",
+      "file": "smali/lib/ST4-4.0.8.jar",
+      "kind": "file"
+    }
+  ],
+  "linuxJava": {
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+    "sha256": "2413149700df0f7d440500a84a8f764c535f21e5a5e87d38328b64eec2c5b500"
+  },
+  "notices": [
+    {
+      "id": "apktool",
+      "url": "https://raw.githubusercontent.com/iBotPeaches/Apktool/v3.0.3/LICENSE.md",
+      "sha256": "c49c53fdc79e1143a1892eb7333b595eecdbe40623e72be325267db28cb72114"
+    },
+    {
+      "id": "smali",
+      "url": "https://raw.githubusercontent.com/google/smali/3.0.6/LICENSE",
+      "sha256": "2719d59154fd1be9d265f89a63a6f13131a1308642c4c49ea21938eb7932b130"
+    },
+    {
+      "id": "jadx",
+      "url": "https://raw.githubusercontent.com/skylot/jadx/v1.5.6/LICENSE",
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    {
+      "id": "jadx-NOTICE",
+      "url": "https://raw.githubusercontent.com/skylot/jadx/v1.5.6/NOTICE",
+      "sha256": "3f34304fa0b9da79fae989cca556d22bd3d08786d6ba171f529a00bfc880e365"
+    },
+    {
+      "id": "bundletool",
+      "url": "https://raw.githubusercontent.com/google/bundletool/1.18.3/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ]
+}

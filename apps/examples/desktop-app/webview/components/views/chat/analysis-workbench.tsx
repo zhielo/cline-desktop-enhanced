@@ -1,4 +1,5 @@
 "use client";
+import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
 import { GuidedInvestigation } from "./guided-investigation";
 
 import {
@@ -30,6 +31,7 @@ import { ExecutionWorkspace } from "./execution-workspace";
 import {FirstPartyAnalysisWorkspace} from "./first-party-analysis-workspace";
 
 type WorkbenchMode =
+ | "android"
  | "guide"
  | "first-party"
 	| "execution"
@@ -103,6 +105,7 @@ const modes: Array<{
 	label: string;
 }> = [
 	{ id: "guide", icon: FileSearch, label: "Start here" },
+ {id:"android",icon:Binary,label:"Android tools"},
 	{ id: "execution", icon: Terminal, label: "Execution lab" },
 	{ id: "incidents", icon: Bug, label: "APK incidents" },
 	{ id: "investigation", icon: ListChecks, label: "Investigation" },
@@ -511,6 +514,7 @@ export function AnalysisWorkbench({
 						/>
 					)}
 					{mode === "guide" && <GuidedInvestigation key={`${sessionId}:${environmentId}`} sessionId={sessionId} environmentId={environmentId} onNavigate={setMode} />}
+					{mode === "android" && <AndroidToolchainWorkspace key={environmentId} environmentId={environmentId} onPrepare={request=>prepare("static",request)}/>}
 					{mode === "first-party" && <FirstPartyAnalysisWorkspace key={sessionId} sessionId={sessionId} environmentId={environmentId}/>}
 					{mode === "execution" && (
 						<ExecutionWorkspace cwd={cwd ?? ""} environmentId={environmentId} />

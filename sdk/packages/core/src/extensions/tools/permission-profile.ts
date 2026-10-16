@@ -277,11 +277,17 @@ function evaluateTool(
 		!profile.allowFileWrites &&
 		typeof context.input === "object" &&
 		context.input !== null &&
-		(context.input as { operation?: unknown }).operation === "project_edit"
+		[
+			"project_edit",
+			"assemble_smali",
+			"rebuild_apk",
+			"align_apk",
+			"sign_apk",
+		].includes(String((context.input as { operation?: unknown }).operation))
 	)
 		return blockedReason(
 			profile.name,
-			"native project candidate edits and pointer changes require a write-enabled profile",
+			"native project edits and Android artifact construction/signing require a write-enabled profile",
 		);
 	const explicitlyAllowed = profile.allowedToolNames.has(toolName);
 	if (!isKnownTool(toolName) && !isCoordinationTool(toolName)) {
