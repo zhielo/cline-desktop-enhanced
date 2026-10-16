@@ -462,7 +462,9 @@ export function WelcomeScreen({
 						)}
 						key="persistent-composer"
 					>
-						{active ? composer : <SessionContent>{composer}</SessionContent>}
+						<SessionContent className={active ? "max-w-none" : undefined}>
+							{composer}
+						</SessionContent>
 					</div>
 
 					{active && AGENDA_UI_ENABLED ? (

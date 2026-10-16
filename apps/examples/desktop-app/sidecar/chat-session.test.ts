@@ -2811,3 +2811,13 @@ describe("queue steering routing", () => {
 		}
 	});
 });
+
+
+it("clears stale live effort on serialized Auto, but preserves omitted reasoning on partial updates", () => {
+ const previous = { provider: "cline", model: "test", thinking: true, reasoningEffort: "xhigh", thinkingBudgetTokens: 4096 };
+ const auto = mergeSessionConfig(previous, JSON.parse(JSON.stringify({ thinking: true, reasoningEffort: undefined })));
+ expect(auto.reasoningEffort).toBeUndefined();
+ expect(buildSessionConnectionUpdate(auto)).toMatchObject({ thinking: true, reasoningEffort: null, thinkingBudgetTokens: null });
+ expect(shouldUpdateSessionConnection(previous, auto)).toBe(true);
+ expect(mergeSessionConfig(previous, { model: "other" }).reasoningEffort).toBe("xhigh");
+});

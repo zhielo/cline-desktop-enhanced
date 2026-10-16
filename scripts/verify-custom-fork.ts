@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/webview/lib/session-reasoning.ts", markers:["cline.reasoning.v1:","writeSessionReasoning","readDraftReasoning","normalizeProviderId"]},
+ {path:"apps/examples/desktop-app/webview/hooks/use-chat-session.ts", markers:["hydrationPendingRef","updateReasoning","boundConfig.analysisMode","readSessionReasoning"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx", markers:["onDraftModeChange","Runtime mode does not grant execution permission"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts", markers:["installed-fresh-draft-analysis-visible-before-first-task"]},
+
  {path:"scripts/pinned-android-download.mjs",markers:["Pinned digest mismatch","attempt <= 4","404, 408, 429"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource","ClineAndroidLauncher","PROCESSOR_ARCHITEW6432","Explicit reads avoid Bun/Windows","handle.close()","runBundledAndroidNative","constants.COPYFILE_EXCL"]},
  {path:"scripts/package-android-toolchain.mjs",markers:["downloadPinnedAndroidAsset","tools.lock.json","ClineAndroidLauncher.java"]},

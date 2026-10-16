@@ -513,7 +513,7 @@ export function AnalysisWorkbench({
 							onPrepare={(request) => prepare("static", request)}
 						/>
 					)}
-					{mode === "guide" && <GuidedInvestigation key={`${sessionId}:${environmentId}`} sessionId={sessionId} environmentId={environmentId} onNavigate={setMode} />}
+					{mode === "guide" && <GuidedInvestigation key={environmentId} sessionId={sessionId} environmentId={environmentId} onNavigate={setMode} />}
 					{mode === "android" && <AndroidToolchainWorkspace key={environmentId} environmentId={environmentId} onPrepare={request=>prepare("static",request)}/>}
 					{mode === "first-party" && <FirstPartyAnalysisWorkspace key={sessionId} sessionId={sessionId} environmentId={environmentId}/>}
 					{mode === "execution" && (

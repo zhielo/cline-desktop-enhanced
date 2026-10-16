@@ -382,3 +382,16 @@ it("Hybrid selection is explicit and does not auto-run inspection or execution",
  expect(confirm).toHaveBeenCalledWith(expect.stringContaining("prior static evidence"));expect(el.querySelector("select")?.value).toBe("hybrid");
  expect(invoke.mock.calls.map(c=>c[0]).every(c=>["first_party_analysis_status","first_party_analysis_mode"].includes(c))).toBe(true);
 });
+
+it("offers draft Analysis before any session without invoking tools or granting permissions", async () => {
+ const change = vi.fn();
+ await act(async () => root.render(<AnalysisModeControl environmentId="local" draftMode="off" onDraftModeChange={change} />));
+ expect(el.querySelector("select")?.disabled).toBe(false);
+ await act(async () => { const select = el.querySelector("select")!; select.value = "static"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+ expect(change).toHaveBeenCalledWith("static");
+ expect(invoke).not.toHaveBeenCalled();
+ vi.spyOn(window, "confirm").mockReturnValue(false);
+ await act(async () => { const select = el.querySelector("select")!; select.value = "hybrid"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+ expect(change).toHaveBeenCalledTimes(1);
+ expect(invoke).not.toHaveBeenCalled();
+});
