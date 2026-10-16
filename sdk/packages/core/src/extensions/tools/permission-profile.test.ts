@@ -265,3 +265,14 @@ it("keeps investigation tools behind the external-tool permission profile", asyn
 		expect(await before("full-access", name)).toBeUndefined();
 	}
 });
+
+it.each([
+	"assemble_smali",
+	"rebuild_apk",
+	"align_apk",
+	"sign_apk",
+])("read-only denies Android output operation %s", async (operation) => {
+	expect(
+		await before("read-only", "reverse_engineer", { operation }),
+	).toBeDefined();
+});

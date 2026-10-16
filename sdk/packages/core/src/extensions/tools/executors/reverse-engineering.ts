@@ -1,3 +1,9 @@
+import {
+	bundledAndroidTool,
+	bundledAndroidTools,
+	runAndroidTool,
+	androidCommandIdentity,
+} from "./android-toolchain";
 import { loadTargetedNativeEvidence } from "./targeted-native-evidence";
 import {
 	runFirstPartyAnalysis,
@@ -63,7 +69,7 @@ import { scanSmali } from "./smali-search";
 import {
 	commandAvailable,
 	launchDetachedGui,
-	runSupervised,
+	runSupervised as runBaseSupervised,
 } from "./supervised-process";
 import {
 	type FunctionSelector,
@@ -72,6 +78,26 @@ import {
 } from "./targeted-decompiler-scripts";
 
 import { readWindowsRegistryValue } from "./windows-tool-environment";
+
+const runSupervised: typeof runBaseSupervised = (
+	command,
+	args,
+	timeout,
+	signal,
+	onSpawn,
+	environment,
+) => {
+	if (onSpawn || environment)
+		return runBaseSupervised(
+			command,
+			args,
+			timeout,
+			signal,
+			onSpawn,
+			environment,
+		);
+	return runAndroidTool(command, args, timeout, signal);
+};
 
 const managedEnginePool = new ManagedEnginePool();
 
@@ -98,6 +124,7 @@ type AndroidReUtilities = {
 	adb?: string;
 	aapt2?: string;
 	dexdump?: string;
+	bundletool?: string;
 };
 type SupplementalToolInventory = Record<string, string | undefined>;
 
@@ -417,6 +444,10 @@ async function discover(
 	engine: Engine,
 	gui = false,
 ): Promise<string | undefined> {
+	if (engine === "jadx" && !gui) {
+		const bundled = await bundledAndroidTool("jadx");
+		if (bundled) return bundled;
+	}
 	const candidates = (await executableCandidates(engine)).filter((candidate) =>
 		gui
 			? !candidate.toLowerCase().includes("headless") &&
@@ -615,6 +646,7 @@ async function discoverAndroidStudio(): Promise<{
 }
 
 async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
+	const bundled = await bundledAndroidTools();
 	const win = process.platform === "win32";
 	const suffix = win ? ".bat" : "";
 	const executableSuffix = win ? ".exe" : "";
@@ -654,6 +686,7 @@ async function discoverAndroidUtilities(): Promise<AndroidReUtilities> {
 		adb,
 		aapt2,
 		dexdump,
+		...bundled,
 	};
 }
 
@@ -705,10 +738,15 @@ async function sha256(filePath: string): Promise<string> {
 
 async function sha256Directory(directory: string): Promise<string> {
 	const hash = createHash("sha256");
-	const visit = async (current: string) => {
+	let files = 0,
+		bytes = 0;
+	const visit = async (current: string, depth = 0) => {
+		if (depth > 48) throw new Error("Android directory depth budget exceeded");
 		const entries = await fs.readdir(current, { withFileTypes: true });
 		entries.sort((left, right) => left.name.localeCompare(right.name));
 		for (const entry of entries) {
+			if (++files > 25000)
+				throw new Error("Android directory entry budget exceeded");
 			const absolute = path.join(current, entry.name);
 			const relative = path.relative(directory, absolute).replace(/\\/g, "/");
 			if (entry.isSymbolicLink()) {
@@ -718,8 +756,11 @@ async function sha256Directory(directory: string): Promise<string> {
 			}
 			if (entry.isDirectory()) {
 				hash.update(`D\0${relative}\0`);
-				await visit(absolute);
+				await visit(absolute, depth + 1);
 			} else if (entry.isFile()) {
+				bytes += (await fs.stat(absolute)).size;
+				if (bytes > 512 * 1024 * 1024)
+					throw new Error("Android directory byte budget exceeded");
 				hash.update(`F\0${relative}\0`);
 				await new Promise<void>((resolve, reject) => {
 					const stream = createReadStream(absolute);
@@ -2442,6 +2483,50 @@ function chooseAuto(
 				: undefined;
 }
 
+function processSucceeded(result: {
+	exitCode: number | null;
+	timedOut: boolean;
+	cancelled: boolean;
+	outputDrainTimedOut?: boolean;
+}) {
+	return (
+		result.exitCode === 0 &&
+		!result.timedOut &&
+		!result.cancelled &&
+		!result.outputDrainTimedOut
+	);
+}
+async function validateDexOutput(file: string) {
+	const stat = await fs.lstat(file);
+	if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 512 * 1024 * 1024)
+		throw new Error("Assembled DEX exceeds bounded regular-file validation");
+	const bytes = await fs.readFile(file);
+	if (
+		bytes.length < 112 ||
+		bytes.length > 512 * 1024 * 1024 ||
+		!/^dex\n0(?:3[5-9]|40)\0$/.test(bytes.subarray(0, 8).toString("binary")) ||
+		bytes.readUInt32LE(32) !== bytes.length ||
+		bytes.readUInt32LE(36) !== 112 ||
+		bytes.readUInt32LE(40) !== 0x12345678
+	)
+		throw new Error("Assembled DEX failed bounded header validation");
+	if (
+		!createHash("sha1")
+			.update(bytes.subarray(32))
+			.digest()
+			.equals(bytes.subarray(12, 32))
+	)
+		throw new Error("Assembled DEX SHA1 mismatch");
+	let a = 1,
+		b = 0;
+	for (const value of bytes.subarray(12)) {
+		a = (a + value) % 65521;
+		b = (b + a) % 65521;
+	}
+	if (((b << 16) | a) >>> 0 !== bytes.readUInt32LE(8))
+		throw new Error("Assembled DEX Adler32 mismatch");
+}
+
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
@@ -2789,6 +2874,195 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			? await sha256Directory(target)
 			: await sha256(target);
 		const zip = stat.isFile() ? await isZip(target) : false;
+
+		if (input.operation === "validate_android_container") {
+			const extension = path.extname(target).toLowerCase();
+			if (!zip) throw new Error("Android container must be a ZIP archive");
+			const archive = await inspectZip(target);
+			if (
+				archive.findings.unsafePaths ||
+				archive.findings.symlinks ||
+				archive.findings.duplicates
+			)
+				throw new Error("Unsafe Android container entries");
+			if (extension === ".aab") {
+				const command = (await getAndroidUtilities()).bundletool;
+				if (!command) throw new Error("Pinned Bundletool pack unavailable");
+				const result = await runSupervised(
+					command,
+					["validate", `--bundle=${target}`],
+					input.timeout_ms ?? 120000,
+					context.signal,
+				);
+				return JSON.stringify({
+					operation: input.operation,
+					target,
+					sha256: hash,
+					format: "aab",
+					validated: processSucceeded(result),
+					...result,
+					coverage:
+						"Bundle structure validation only; no APK creation, signing, install or execution",
+				});
+			}
+			if (![".apk", ".apks", ".apkm", ".xapk"].includes(extension))
+				throw new Error("Choose APK, AAB, APKS, APKM or XAPK");
+			const splits = archive.parsed
+				.filter((e) => e.name.toLowerCase().endsWith(".apk"))
+				.map((e) => e.name)
+				.slice(0, 200);
+			return JSON.stringify({
+				operation: input.operation,
+				target,
+				sha256: hash,
+				format: extension.slice(1),
+				status: "inspected-not-runtime-validated",
+				apkMembers: splits,
+				apkMembersTruncated: splits.length >= 200,
+				coverage:
+					"Container inventory only. Explicitly select base/split artifacts; split compatibility and installation are not inferred.",
+			});
+		}
+		if (input.operation === "align_apk" || input.operation === "sign_apk") {
+			if (!zip || path.extname(target).toLowerCase() !== ".apk")
+				throw new Error("Ordinary APK required");
+			if (
+				!input.output_file ||
+				!path.isAbsolute(input.output_file) ||
+				path.extname(input.output_file).toLowerCase() !== ".apk"
+			)
+				throw new Error("New absolute .apk output_file required");
+			const outputFile = path.resolve(input.output_file);
+			await enforceOutputPath(outputFile, input.acknowledge_external_output);
+			if (await exists(outputFile))
+				throw new Error(
+					"Output already exists; original artifacts are immutable",
+				);
+			const tools = await getAndroidUtilities();
+			const signing = input.operation === "sign_apk";
+			const command = signing ? tools.apksigner : tools.zipalign;
+			if (!command) throw new Error("Required Android Build Tool unavailable");
+			await fs.mkdir(path.dirname(outputFile), {
+				recursive: true,
+				mode: 0o700,
+			});
+			const stage = await fs.mkdtemp(
+					path.join(path.dirname(outputFile), ".cline-apk-"),
+				),
+				snapshot = path.join(stage, "input.apk"),
+				temporary = path.join(stage, "output.apk");
+			let terminationUnconfirmed = false;
+			try {
+				await fs.copyFile(target, snapshot);
+				if (
+					(await sha256(snapshot)) !== hash ||
+					(await sha256(target)) !== hash
+				)
+					throw new Error("APK input changed");
+				const secrets: Record<string, string> = {};
+				let args: string[];
+				if (signing) {
+					if (input.confirm_test_signing !== true)
+						throw new Error(
+							"Separate explicit local test-key signing acknowledgement required",
+						);
+					const keystore = process.env.CLINE_ANDROID_TEST_KEYSTORE,
+						alias = process.env.CLINE_ANDROID_TEST_KEY_ALIAS,
+						storePass = process.env.CLINE_ANDROID_TEST_STORE_PASSWORD,
+						keyPass = process.env.CLINE_ANDROID_TEST_KEY_PASSWORD;
+					if (
+						!keystore ||
+						!path.isAbsolute(keystore) ||
+						!alias ||
+						!storePass ||
+						!keyPass
+					)
+						throw new Error(
+							"Host-configured authorized test key required; never pass signing secrets as tool arguments",
+						);
+					if (
+						!(await fs.lstat(keystore)).isFile() ||
+						(await fs.lstat(keystore)).isSymbolicLink()
+					)
+						throw new Error("Invalid host test keystore");
+					secrets.CLINE_SIGN_STORE_PASS = storePass;
+					secrets.CLINE_SIGN_KEY_PASS = keyPass;
+					args = [
+						"sign",
+						"--ks",
+						keystore,
+						"--ks-key-alias",
+						alias,
+						"--ks-pass",
+						"env:CLINE_SIGN_STORE_PASS",
+						"--key-pass",
+						"env:CLINE_SIGN_KEY_PASS",
+						"--out",
+						temporary,
+						snapshot,
+					];
+				} else args = ["-P", "16", "4", snapshot, temporary];
+				// Host signing uses only the verified pack, never a PATH-substituted signer.
+				if (signing && command !== (await bundledAndroidTool("apksigner")))
+					throw new Error("Signing requires the verified bundled signer");
+				const result = await runAndroidTool(
+					command,
+					args,
+					input.timeout_ms ?? 120000,
+					context.signal,
+					secrets,
+				);
+				terminationUnconfirmed = result.outputDrainTimedOut === true;
+				if (!processSucceeded(result))
+					return JSON.stringify({
+						operation: input.operation,
+						target,
+						sha256: hash,
+						succeeded: false,
+						exitCode: result.exitCode,
+						cancelled: result.cancelled,
+						timedOut: result.timedOut,
+						coverage: signing
+							? "Signing failed; private signer diagnostics omitted"
+							: "Alignment failed",
+					});
+				const check = signing
+					? await runSupervised(
+							command,
+							["verify", "--verbose", "--print-certs", temporary],
+							input.timeout_ms ?? 120000,
+							context.signal,
+						)
+					: await runSupervised(
+							command,
+							["-c", "-P", "16", "4", temporary],
+							input.timeout_ms ?? 120000,
+							context.signal,
+						);
+				terminationUnconfirmed ||= check.outputDrainTimedOut === true;
+				if (!processSucceeded(check))
+					throw new Error("APK output verification failed; nothing published");
+				await fs.link(temporary, outputFile);
+				return JSON.stringify({
+					operation: input.operation,
+					target,
+					sha256: hash,
+					outputFile,
+					outputSha256: await sha256(outputFile),
+					succeeded: true,
+					verified: true,
+					certificateEvidence: signing
+						? check.stdout.slice(0, 16000)
+						: undefined,
+					coverage: signing
+						? "Authorized local test certificate only; original signature not preserved; no install or launch"
+						: "16 KiB page alignment verified; signing remains separate",
+				});
+			} finally {
+				if (!terminationUnconfirmed)
+					await fs.rm(stage, { recursive: true, force: true });
+			}
+		}
 		if (input.operation === "scan_strings") {
 			return JSON.stringify(
 				{
@@ -3072,9 +3346,15 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 		if (input.operation === "disassemble_smali") {
 			const androidUtilities = await getAndroidUtilities();
 			const extension = path.extname(target).toLowerCase();
-			const apkContainer = [".apk", ".aab", ".apkm", ".xapk"].includes(
-				extension,
-			);
+			if ([".aab", ".apkm", ".xapk", ".apks"].includes(extension))
+				throw new Error(
+					"Split/bundle containers are not ordinary APKs. Use validate_android_container, then explicitly select/extract an authorized base or split APK; no automatic merge or signing.",
+				);
+			if (![".apk", ".dex"].includes(extension))
+				throw new Error(
+					"disassemble_smali supports ordinary APK or standalone DEX only",
+				);
+			const apkContainer = extension === ".apk";
 			const command = apkContainer
 				? androidUtilities.apktool
 				: androidUtilities.baksmali;
@@ -3085,9 +3365,19 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						: "baksmali was not found. Install its launcher and add it to PATH.",
 				);
 			}
+			const commandIdentity = await androidCommandIdentity(command, {
+				operation: input.operation,
+				api: input.smali_api_level ?? null,
+			});
 			const outputDir = path.resolve(
 				input.output_directory ??
-					path.join(analysisCacheRoot(), hash, "smali", "decoded"),
+					path.join(
+						analysisCacheRoot(),
+						hash,
+						"smali",
+						commandIdentity,
+						"decoded",
+					),
 			);
 			const outputScope = await enforceOutputPath(
 				outputDir,
@@ -3101,7 +3391,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					if (
 						input.reuse_analysis !== false &&
 						existingManifest?.sha256 === hash &&
-						existingManifest?.operation === "disassemble_smali"
+						existingManifest?.operation === "disassemble_smali" &&
+						existingManifest?.commandIdentity === commandIdentity &&
+						existingManifest?.outputSha256 ===
+							(await sha256Directory(outputDir))
 					) {
 						const artifacts = await listGeneratedArtifacts(outputDir);
 						return JSON.stringify(
@@ -3121,7 +3414,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							2,
 						);
 					}
-					if (input.output_directory && (await exists(outputDir))) {
+					if (await exists(outputDir)) {
 						throw new Error(
 							"output_directory already exists; choose a new directory or reuse the existing cached analysis",
 						);
@@ -3132,7 +3425,15 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					});
 					await fs.rm(outputDir, { recursive: true, force: true });
 					const args = apkContainer
-						? ["d", "-f", "-o", outputDir, target]
+						? [
+								"d",
+								"-f",
+								"-p",
+								`${outputDir}.framework`,
+								"-o",
+								outputDir,
+								target,
+							]
 						: [
 								"disassemble",
 								target,
@@ -3148,7 +3449,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						input.timeout_ms ?? 900_000,
 						context.signal,
 					);
+					const sourceUnchanged = (await sha256(target)) === hash;
 					const succeeded =
+						sourceUnchanged &&
 						result.exitCode === 0 &&
 						!result.timedOut &&
 						!result.cancelled &&
@@ -3156,7 +3459,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					if (succeeded) {
 						await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 						await writeJsonFile(smaliManifestPath, {
-							schemaVersion: 1,
+							schemaVersion: 2,
+							commandIdentity,
+							outputSha256: await sha256Directory(outputDir),
 							sha256: hash,
 							target,
 							operation: input.operation,
@@ -3164,10 +3469,15 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							outputScope,
 							updatedAt: new Date().toISOString(),
 						});
-					} else {
+					} else if (!result.outputDrainTimedOut) {
 						await fs.rm(outputDir, { recursive: true, force: true });
 						await fs.rm(smaliManifestPath, { force: true });
 					}
+					if (!result.outputDrainTimedOut)
+						await fs.rm(`${outputDir}.framework`, {
+							recursive: true,
+							force: true,
+						});
 					const artifacts = succeeded
 						? await listGeneratedArtifacts(outputDir)
 						: [];
@@ -3181,6 +3491,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							command,
 							args,
 							reusedAnalysis: false,
+							succeeded,
+							sourceUnchanged,
 							artifacts,
 							artifactsTruncated: artifacts.length >= 200,
 							durationMs: Date.now() - started,
@@ -3230,19 +3542,44 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				recursive: true,
 				mode: 0o700,
 			});
+			if (await exists(outputFile))
+				throw new Error(
+					"output_file already exists; choose a new immutable artifact path",
+				);
+			const snapshot = await fs.mkdtemp(
+				path.join(os.tmpdir(), "cline-android-build-"),
+			);
+			const source = path.join(snapshot, "source");
+			await fs.cp(target, source, { recursive: true, dereference: false });
+			if (
+				(await sha256Directory(source)) !== hash ||
+				(await sha256Directory(target)) !== hash
+			) {
+				await fs.rm(snapshot, { recursive: true, force: true });
+				throw new Error("Android build input changed during snapshot");
+			}
 			const temporaryOutput = `${outputFile}.${process.pid}.${Date.now()}.tmp${expectedExtension}`;
+			let terminationUnconfirmed = false;
 			const args =
 				input.operation === "assemble_smali"
 					? [
 							"assemble",
-							target,
+							source,
 							"-o",
 							temporaryOutput,
 							...(input.smali_api_level
 								? ["--api", String(input.smali_api_level)]
 								: []),
 						]
-					: ["b", "-f", target, "-o", temporaryOutput];
+					: [
+							"b",
+							"-f",
+							"-p",
+							path.join(snapshot, "framework"),
+							source,
+							"-o",
+							temporaryOutput,
+						];
 			return withAnalysisLock(
 				target,
 				async () => {
@@ -3252,6 +3589,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						input.timeout_ms ?? 900_000,
 						context.signal,
 					);
+					terminationUnconfirmed = result.outputDrainTimedOut === true;
 					const succeeded =
 						result.exitCode === 0 &&
 						!result.timedOut &&
@@ -3259,10 +3597,31 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						!result.outputDrainTimedOut &&
 						(await exists(temporaryOutput));
 					if (succeeded) {
-						await fs.rm(outputFile, { force: true });
-						await fs.rename(temporaryOutput, outputFile);
+						try {
+							if (expectedExtension === ".apk") {
+								const archive = await inspectZip(temporaryOutput);
+								if (
+									!archive.parsed.some(
+										(e) => e.name === "AndroidManifest.xml",
+									) ||
+									archive.findings.unsafePaths ||
+									archive.findings.symlinks ||
+									archive.findings.duplicates
+								)
+									throw new Error(
+										"Rebuilt APK failed bounded structural validation",
+									);
+							} else await validateDexOutput(temporaryOutput);
+							await fs.link(temporaryOutput, outputFile);
+						} finally {
+							await fs.rm(temporaryOutput, { force: true });
+							await fs.rm(snapshot, { recursive: true, force: true });
+						}
 					} else {
-						await fs.rm(temporaryOutput, { force: true });
+						if (!terminationUnconfirmed) {
+							await fs.rm(temporaryOutput, { force: true });
+							await fs.rm(snapshot, { recursive: true, force: true });
+						}
 					}
 					return JSON.stringify(
 						{
@@ -3276,13 +3635,26 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							durationMs: Date.now() - started,
 							...result,
 							succeeded,
+							outputSha256: succeeded ? await sha256(outputFile) : undefined,
+							outputValidation: succeeded
+								? "bounded-structure-checked; not ART/runtime compatibility"
+								: undefined,
+							signingStatus:
+								expectedExtension === ".apk"
+									? "new-unsigned-artifact; original-signature-not-preserved"
+									: undefined,
 						},
 						null,
 						2,
 					);
 				},
 				context.signal,
-			);
+			).finally(async () => {
+				if (!terminationUnconfirmed) {
+					await fs.rm(snapshot, { recursive: true, force: true });
+					await fs.rm(temporaryOutput, { force: true });
+				}
+			});
 		}
 		await ensureToolEnvironment();
 		const [ghidra, ida, jadx] = await Promise.all([
@@ -3377,6 +3749,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				JSON.stringify({
 					options: analysisOptionsHash(engine, input),
 					engineFingerprint,
+					androidToolchainIdentity:
+						engine === "jadx"
+							? await androidCommandIdentity(command, {
+									engine,
+									input: input.jadx_single_class ?? null,
+								})
+							: null,
 					scriptFingerprint,
 					configFingerprint,
 				}),
@@ -3763,7 +4142,15 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					if (input.jadx_threads)
 						args.push("--threads-count", String(input.jadx_threads));
 					if (input.jadx_single_class)
-						args.push("--single-class", input.jadx_single_class);
+						args.push(
+							"--single-class",
+							input.jadx_single_class,
+							"--single-class-output",
+							path.join(
+								outputDir,
+								`selected-class.${input.jadx_output_format === "json" ? "json" : "java"}`,
+							),
+						);
 					if (input.jadx_deobfuscate) args.push("--deobf");
 					if (input.jadx_call_graph)
 						args.push("--call-graph", input.jadx_call_graph);
@@ -3798,7 +4185,12 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						2,
 					);
 				}
-				const decompileOutput = path.join(outputDir, "decompiled.c");
+				const decompileOutput = path.join(
+					outputDir,
+					engine === "jadx"
+						? `selected-class.${input.jadx_output_format === "json" ? "json" : "java"}`
+						: "decompiled.c",
+				);
 				if (input.operation === "decompile") {
 					await Promise.all([
 						fs.rm(decompileOutput, { force: true }),
