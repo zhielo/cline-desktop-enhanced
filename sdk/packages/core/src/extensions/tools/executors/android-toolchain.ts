@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import * as os from "node:os";
 import { constants } from "node:fs";
 import { runSupervised } from "./supervised-process";
 
@@ -220,6 +221,103 @@ export function androidChildEnvironment(
 	// No JAVA_TOOL_OPTIONS, JDK_JAVA_OPTIONS, CLASSPATH, credentials or target project configuration.
 	return { ...env, ...extra };
 }
+async function runBundledAndroidNative(
+	tool: AndroidTool,
+	command: string,
+	args: string[],
+	timeout: number,
+	signal: AbortSignal | undefined,
+	environment: Record<string, string>,
+) {
+	let inputIndex: number, outputIndex: number | undefined;
+	if (
+		tool === "zipalign" &&
+		args.length === 5 &&
+		args.slice(0, 3).join(" ") === "-P 16 4"
+	) {
+		inputIndex = 3;
+		outputIndex = 4;
+	} else if (
+		tool === "zipalign" &&
+		args.length === 5 &&
+		args.slice(0, 4).join(" ") === "-c -P 16 4"
+	)
+		inputIndex = 4;
+	else if (
+		tool === "aapt2" &&
+		args.length === 6 &&
+		args.slice(0, 4).join(" ") === "convert --output-format proto -o"
+	) {
+		outputIndex = 4;
+		inputIndex = 5;
+	} else if (
+		tool === "aapt2" &&
+		args.length === 3 &&
+		args[0] === "dump" &&
+		args[1] === "badging"
+	)
+		inputIndex = 2;
+	else if (tool === "dexdump" && args.length === 1) inputIndex = 0;
+	else throw new Error("Unsupported bundled Android native invocation");
+	const input = args[inputIndex],
+		output = outputIndex === undefined ? undefined : args[outputIndex];
+	if (!path.isAbsolute(input) || (output && !path.isAbsolute(output)))
+		throw new Error("Absolute native artifact paths required");
+	const info = await fs.lstat(input);
+	if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024 * 1024)
+		throw new Error("Invalid native Android input");
+	const stage = await fs.mkdtemp(
+		path.join(os.tmpdir(), "cline-android-native-"),
+	);
+	let preserve = false;
+	const inputName = tool === "dexdump" ? "input.dex" : "input.apk";
+	try {
+		// Native Android tools use narrow fopen paths on Windows. Only ASCII relative
+		// filenames reach them; the OS receives the private Unicode-capable cwd separately.
+		await fs.copyFile(input, path.join(stage, inputName));
+		if (
+			(await digestFile(input)) !==
+			(await digestFile(path.join(stage, inputName)))
+		)
+			throw new Error("Native Android input changed");
+		const argv = [...args];
+		argv[inputIndex] = inputName;
+		if (outputIndex !== undefined) argv[outputIndex] = "output.apk";
+		const result = await runSupervised(
+			command,
+			argv,
+			timeout,
+			signal,
+			undefined,
+			environment,
+			true,
+			stage,
+		);
+		preserve = result.outputDrainTimedOut === true;
+		if (
+			output &&
+			result.exitCode === 0 &&
+			!result.timedOut &&
+			!result.cancelled &&
+			!preserve
+		) {
+			const generated = path.join(stage, "output.apk"),
+				stat = await fs.lstat(generated);
+			if (
+				!stat.isFile() ||
+				stat.isSymbolicLink() ||
+				stat.size === 0 ||
+				stat.size > 512 * 1024 * 1024
+			)
+				throw new Error("Invalid native Android output");
+			await fs.copyFile(generated, output, constants.COPYFILE_EXCL);
+		}
+		return result;
+	} finally {
+		if (!preserve) await fs.rm(stage, { recursive: true, force: true });
+	}
+}
+
 export async function runAndroidTool(
 	command: string,
 	args: string[],
@@ -237,6 +335,15 @@ export async function runAndroidTool(
 	let executable = command,
 		argv = args;
 	const javaTool = command.endsWith(".jar") || tool === "keytool";
+	if (!javaTool)
+		return runBundledAndroidNative(
+			tool,
+			command,
+			args,
+			timeout,
+			signal,
+			androidChildEnvironment(extraEnvironment),
+		);
 	if (javaTool) {
 		executable = pack.java;
 		const classpath = [

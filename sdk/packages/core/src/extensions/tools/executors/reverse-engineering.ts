@@ -3022,6 +3022,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						exitCode: result.exitCode,
 						cancelled: result.cancelled,
 						timedOut: result.timedOut,
+						...(signing ? {} : { stdout: result.stdout.slice(0, 16000), stderr: result.stderr.slice(0, 16000) }),
 						coverage: signing
 							? "Signing failed; private signer diagnostics omitted"
 							: "Alignment failed",

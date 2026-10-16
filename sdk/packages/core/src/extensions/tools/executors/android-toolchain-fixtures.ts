@@ -34,7 +34,11 @@ export async function testAndroidToolchain(signal?: AbortSignal) {
 					: "jre/bin/keytool",
 			);
 		const result =
-			jar || keytool
+			jar ||
+			keytool ||
+			["aapt2", "zipalign", "dexdump"].some(
+				(tool) => command === path.join(pack.root, `build-tools/${tool}.exe`),
+			)
 				? await runAndroidTool(
 						jar ? argv[1] : command,
 						jar ? argv.slice(2) : argv,

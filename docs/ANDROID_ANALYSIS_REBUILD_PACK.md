@@ -45,3 +45,5 @@ Frida/Objection/ADB runtime work remains a separate authorized isolated device w
 DEX validation accepts bounded classic DEX 035–040 headers with verified digests. Newer container/header formats (including DEX 041) fail closed; requested API levels are not silently downgraded. Decode caches also require unchanged source bytes after execution and an unchanged decoded tree before reuse.
 
 Repeated inventory hashing uses bounded explicit reads and closes each file handle on success or failure; it does not cache away per-command integrity checks.
+
+Native zipalign/aapt2/dexdump run fixed commands over private bounded snapshots with ASCII relative filenames; target paths never become a native working directory. Outputs are copied exclusively back into caller staging and validated before publication. Unconfirmed child termination retains scratch.
