@@ -1,4 +1,5 @@
 // @jsxImportSource @opentui/react
+// biome-ignore-all lint/a11y/noStaticElementInteractions: OpenTUI boxes are terminal controls, not DOM elements.
 import { useTerminalDimensions } from "@opentui/react";
 import type { ChoiceContext } from "@opentui-ui/dialog";
 import { useDialogKeyboard } from "@opentui-ui/dialog/react";

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/a11y/noStaticElementInteractions: OpenTUI boxes are terminal controls, not DOM elements.
 import type { AgentMode } from "@cline/core";
 import { useTerminalDimensions } from "@opentui/react";
 import {
