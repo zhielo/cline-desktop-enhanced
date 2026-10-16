@@ -7,6 +7,7 @@ import {
 	appendCappedCommandOutput,
 	MAX_LIVE_COMMAND_OUTPUT_CHARS,
 } from "@/lib/command-output";
+import { readSessionReasoning, writeSessionReasoning } from "@/lib/session-reasoning";
 import { MODEL_SELECTION_STORAGE_KEY } from "@/lib/model-selection";
 import { startsNewThread } from "@/lib/work-in-selection";
 import { writeWorkspaceSelectionToWindow } from "@/lib/workspace-paths";
@@ -7428,4 +7429,103 @@ describe("cloud snapshot replay", () => {
 		});
 		expect(users.map((m) => m.id)).toEqual(["canonical-first", secondId]);
 	});
+});
+
+
+describe("reasoning ownership and pre-task Analysis", () => {
+ const history = (sessionId: string) => ({ sessionId, environmentId: "local", status: "completed" as const, provider: "cline", model: "test-model", cwd: "/workspace/cline", workspaceRoot: "/workspace/cline", startedAt: "2026-10-16T00:00:00Z" });
+ function runtime() {
+  invokeMock.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+   if (command === "get_process_context") return { cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+   if (command === "read_session_messages") return [];
+   if (command === "chat_session_command") {
+    const request = args?.request as { action: string; sessionId?: string; config?: { sessionId?: string } };
+    if (request.action === "start") return { sessionId: request.config?.sessionId ?? "fresh", cwd: "/workspace/cline", workspaceRoot: "/workspace/cline" };
+    if (request.action === "attach") return { sessionId: request.sessionId, status: "completed", thinking: true, reasoningEffort: "low" };
+    return { ok: true };
+   }
+   return {};
+  });
+ }
+ it("restores each chat independently and survives remount without overwriting its selection", async () => {
+  runtime();
+  for (const [id, effort] of [["a", "medium"], ["b", "high"], ["c", "xhigh"]] as const) {
+   await act(async () => current.hydrateSession(history(id)));
+   await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: effort }));
+  }
+  for (const [id, effort] of [["a", "medium"], ["c", "xhigh"], ["b", "high"]]) {
+   await act(async () => current.hydrateSession(history(id)));
+   expect(current.config.reasoningEffort).toBe(effort);
+  }
+  await act(async () => root.unmount());
+  root = createRoot(container);
+  await act(async () => root.render(<HookHarness />));
+  await act(async () => current.hydrateSession(history("c")));
+  expect(current.config.reasoningEffort).toBe("xhigh");
+  await act(async () => current.sendPrompt("Check my selection"));
+  const sends = invokeMock.mock.calls.filter(([cmd, args]) => cmd === "chat_session_command" && args?.request?.action === "send");
+  expect(sends.at(-1)?.[1]?.request?.config?.reasoningEffort).toBe("xhigh");
+ });
+ it("blocks sends and edits until attach completes, including an immediate stale callback", async () => {
+  const attached = deferred<unknown>();
+  invokeMock.mockImplementation(async (cmd: string) => cmd === "chat_session_command" ? attached.promise : []);
+  let hydration!: Promise<void>;
+  await act(async () => {
+   hydration = current.hydrateSession(history("slow"));
+   expect(await current.sendPrompt("must not run")).toBe(false);
+   current.updateReasoning({ thinking: true, reasoningEffort: "low" });
+  });
+  expect(current.isHydratingSession).toBe(true);
+  expect(readSessionReasoning("local", "slow")).toBeUndefined();
+  await act(async () => { attached.resolve({ thinking: true, reasoningEffort: "high" }); await hydration; });
+  expect(current.config.reasoningEffort).toBe("high");
+  expect(current.isHydratingSession).toBe(false);
+ });
+ it("ignores late attach responses from the previous chat", async () => {
+  const old = deferred<unknown>();
+  writeSessionReasoning("local", "destination", { thinking: true, reasoningEffort: "xhigh" });
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+   if (cmd !== "chat_session_command") return [];
+   return (args?.request as { sessionId?: string })?.sessionId === "old" ? old.promise : { thinking: true, reasoningEffort: "low" };
+  });
+  let hydration!: Promise<void>;
+  await act(async () => { hydration = current.hydrateSession(history("old")); await Promise.resolve(); });
+  await act(async () => current.hydrateSession(history("destination")));
+  await act(async () => { old.resolve({ thinking: true, reasoningEffort: "low" }); await hydration; });
+  expect(current.sessionId).toBe("destination");
+  expect(current.config.reasoningEffort).toBe("xhigh");
+ });
+ it("keeps draft defaults separate from existing chats and clears effort on Auto", async () => {
+  runtime();
+  await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: "medium" }));
+  await act(async () => current.hydrateSession(history("existing")));
+  await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: "xhigh" }));
+  await act(async () => current.reset());
+  expect(current.config.reasoningEffort).toBe("medium");
+  await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: undefined }));
+  expect(current.config.reasoningEffort).toBeUndefined();
+  expect(readSessionReasoning("local", "existing")?.reasoningEffort).toBe("xhigh");
+ });
+ it("applies the selected draft Analysis mode before dispatching the first prompt without changing permissions", async () => {
+  runtime();
+  await act(async () => current.setConfig(prev => ({ ...prev, analysisMode: "static", permissionProfile: "read-only", autoApproveTools: false })));
+  await act(async () => current.sendPrompt("Analyze this workspace"));
+  const calls = invokeMock.mock.calls;
+  const modeIndex = calls.findIndex(([cmd]) => cmd === "first_party_analysis_mode");
+  const sendIndex = calls.findIndex(([cmd, args]) => cmd === "chat_session_command" && args?.request?.action === "send");
+  expect(modeIndex).toBeGreaterThan(-1);
+  expect(sendIndex).toBeGreaterThan(modeIndex);
+  expect(calls[modeIndex]?.[1]).toMatchObject({ environmentId: "local", mode: "static" });
+  expect(calls[sendIndex]?.[1]?.request?.config).toMatchObject({ permissionProfile: "read-only", autoApproveTools: false });
+ });
+ it("fails closed when selected Analysis mode cannot be applied", async () => {
+  runtime(); const normal = invokeMock.getMockImplementation()!;
+  invokeMock.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+   if (cmd === "first_party_analysis_mode") throw new Error("Mode configuration denied");
+   return normal(cmd, args);
+  });
+  await act(async () => current.setConfig(prev => ({ ...prev, analysisMode: "static" })));
+  await act(async () => { expect(await current.sendPrompt("must not execute")).toBe(false); });
+  expect(invokeMock.mock.calls.some(([cmd, args]) => cmd === "chat_session_command" && args?.request?.action === "send")).toBe(false);
+ });
 });

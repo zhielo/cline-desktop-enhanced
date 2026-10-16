@@ -829,6 +829,13 @@ export function mergeSessionConfig(
 		readAliasedString(updates, "provider", "providerId") ??
 		readAliasedString(currentConfig, "provider", "providerId");
 	const previous = { ...currentConfig };
+ // Explicit Auto/None must clear the previous effort after JSON omits undefined.
+ // A partial update with no thinking field still preserves runtime settings.
+ if (typeof updates.thinking === "boolean" && !Object.hasOwn(updates, "reasoningEffort")) {
+  delete previous.reasoningEffort;
+  delete previous.thinkingBudgetTokens;
+ }
+
 	if (hasProviderChanged(currentConfig, updates)) {
 		for (const key of [
 			"apiKey",
@@ -1258,6 +1265,8 @@ async function handleAttach(
 		sessionId,
 		environmentId: binding.environmentId,
 		status: session.status,
+        thinking: typeof baseAttachedConfig.thinking === "boolean" ? baseAttachedConfig.thinking : undefined,
+        reasoningEffort: readReasoningEffort(baseAttachedConfig.reasoningEffort),
 		provider: session.provider,
 		model: session.model,
 		cwd: session.cwd,

@@ -601,6 +601,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-sidecar-isolated-hub-bootstrapped");
     let page = await launch();
     stages.push("installed-webview-rendered");
+    // Fresh composer: choosing a mode configures only the unsent draft. No model
+    // call, target execution, software install or permission expansion is needed.
+    const freshAnalysis = page.getByLabel("Session Analysis mode", { exact: true });
+    await freshAnalysis.waitFor({ state: "visible", timeout: 30_000 });
+    if ((await freshAnalysis.inputValue()) !== "off") throw new Error("Fresh draft Analysis must start Off");
+    await freshAnalysis.selectOption("static");
+    if ((await freshAnalysis.inputValue()) !== "static") throw new Error("Pre-task Analysis selection did not stick");
+    const analysisToggle = page.getByRole("button", { name: "Toggle Analysis workspace", exact: true });
+    await analysisToggle.click();
+    await page.getByRole("region", { name: "Pre-task Analysis workspace", exact: true }).waitFor();
+    await analysisToggle.click();
+    await freshAnalysis.selectOption("off");
+    stages.push("installed-fresh-draft-analysis-visible-before-first-task");
+
     // Exercise the installed app's actual event receivers against our own blank
     // WebView. Never attach to user browsers or execute a supplied target.
     const captureBrowserId=randomUUID();

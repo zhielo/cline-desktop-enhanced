@@ -1495,7 +1495,7 @@ describe("ChatInputBar", () => {
 		expect(leftControls?.parentElement).toBe(rightControls?.parentElement);
 	});
 
-	it("selects High from the supported model thinking menu", async () => {
+	it.each(["High", "Auto"])("selects %s explicitly without writing Low on model discovery", async (choice) => {
 		loadProviderModelCatalogMock.mockResolvedValue({
 			providers: [],
 			enabledProviderIds: ["cline"],
@@ -1542,10 +1542,10 @@ describe("ChatInputBar", () => {
 						promptDraft={{ version: 0, value: "" }}
 						promptsInQueue={[]}
 						provider="cline"
-						reasoningEffort="low"
+						reasoningEffort={choice === "Auto" ? "high" : undefined}
 						status="idle"
 						summary={{ toolCalls: 0, tokensIn: 0, tokensOut: 0 }}
-						thinking
+						thinking={undefined}
 					/>
 				</WorkspaceProvider>,
 			);
@@ -1557,6 +1557,8 @@ describe("ChatInputBar", () => {
 			expect(element?.disabled).toBe(false);
 			return element as HTMLButtonElement;
 		});
+		expect(onReasoningChange).not.toHaveBeenCalled();
+        expect(trigger.textContent).toContain(choice === "Auto" ? "High" : "Auto");
 		await act(async () => {
 			trigger.dispatchEvent(
 				new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
@@ -1566,7 +1568,7 @@ describe("ChatInputBar", () => {
 		const highOption = await vi.waitFor(() => {
 			const element = [
 				...document.querySelectorAll<HTMLElement>('[role="option"]'),
-			].find((option) => option.textContent?.includes("High"));
+			].find((option) => option.textContent?.trim() === choice);
 			expect(element).toBeDefined();
 			return element as HTMLElement;
 		});
@@ -1579,7 +1581,7 @@ describe("ChatInputBar", () => {
 
 		expect(onReasoningChange).toHaveBeenCalledWith({
 			thinking: true,
-			reasoningEffort: "high",
+			reasoningEffort: choice === "High" ? "high" : undefined,
 		});
 	});
 
