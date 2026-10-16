@@ -163,17 +163,18 @@ const CLINE_ONLY_PROVIDER_IDS = ["cline"];
 type ReasoningEffort = NonNullable<ChatSessionConfig["reasoningEffort"]>;
 type ReasoningEffortOption = {
 	label: string;
-	value: "none" | ReasoningEffort;
+	value: "auto" | "none" | ReasoningEffort;
 };
 
 const DEFAULT_REASONING_EFFORT: ReasoningEffortOption = {
-	label: "Low",
-	value: "low",
+	label: "Auto",
+	value: "auto",
 };
 
 const EFFORT_LEVELS: ReasoningEffortOption[] = [
 	{ label: "None", value: "none" },
 	DEFAULT_REASONING_EFFORT,
+	{ label: "Low", value: "low" },
 	{ label: "Medium", value: "medium" },
 	{ label: "High", value: "high" },
 	{ label: "Extra", value: "xhigh" },
@@ -218,7 +219,10 @@ function buildReasoningConfig(
 	if (option.value === "none") {
 		return { thinking: false, reasoningEffort: undefined };
 	}
-	return { thinking: true, reasoningEffort: option.value };
+	return {
+		thinking: true,
+		reasoningEffort: option.value === "auto" ? undefined : option.value,
+	};
 }
 
 function hasReasoningCapability(
@@ -977,16 +981,6 @@ function ChatInputBarImpl({
 		[modelSupportsReasoning, onReasoningChange],
 	);
 
-	useEffect(() => {
-		if (
-			modelSupportsReasoning === true &&
-			thinking === undefined &&
-			reasoningEffort === undefined
-		) {
-			onReasoningChange(buildReasoningConfig(DEFAULT_REASONING_EFFORT));
-		}
-	}, [modelSupportsReasoning, onReasoningChange, reasoningEffort, thinking]);
-
 	// Focus the composer on mount/variant change and when text is injected
 	// from outside (quick actions, queue undo). Deliberately NOT on every
 	// keystroke: refocusing an already-focused textarea per keypress causes
@@ -1712,9 +1706,15 @@ function ChatInputBarImpl({
 						/>
 					</div>
 					<Select
-						disabled={cloudSettingsLocked || modelSupportsReasoning !== true}
+						disabled={
+							readOnly ||
+							status === "starting" ||
+							status === "stopping" ||
+							cloudSettingsLocked ||
+							modelSupportsReasoning !== true
+						}
 						onValueChange={handleEffortChange}
-						value={EFFORT_LEVELS[effortIndex]?.value ?? "low"}
+						value={EFFORT_LEVELS[effortIndex]?.value ?? "auto"}
 					>
 						<SelectTrigger
 							aria-label="Thinking level"
@@ -1724,7 +1724,7 @@ function ChatInputBarImpl({
 								cloudSettingsLocked
 									? "Thinking level is fixed when a cloud session starts"
 									: modelSupportsReasoning === false
-										? "The selected model does not report reasoning support"
+										? "The selected model does not report reasoning support. Your saved selection is retained; choose a supported model to use it."
 										: undefined
 							}
 						>

@@ -17,6 +17,7 @@ export const ChatSessionConfigSchema = z.object({
 	rules: z.string().optional(),
 	maxIterations: z.number().int().positive().optional(),
 	apiTimeoutMs: z.number().int().positive().optional(),
+	analysisMode: z.enum(["off", "static", "runtime", "hybrid"]).optional(),
 	thinking: z.boolean().optional(),
 	reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
 	enableTools: z.boolean(),

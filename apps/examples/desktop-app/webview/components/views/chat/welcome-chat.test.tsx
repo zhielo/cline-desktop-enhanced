@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { AgendaTaskRecord } from "@cline/shared";
-import { act, type ComponentProps, type ReactNode } from "react";
+import { act, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceProvider } from "@/contexts/workspace-context";
@@ -479,3 +479,18 @@ function agendaTask(
 		...overrides,
 	};
 }
+
+it("keeps pre-task Analysis configuration mounted when the first task leaves welcome", async () => {
+ let mounts = 0;
+ function DraftAnalysis() {
+  const [target, setTarget] = useState("owned.apk");
+  useEffect(() => { mounts += 1; }, []);
+  return <button type="button" onClick={() => setTarget("selected.apk")}>{target}</button>;
+ }
+ const props = { workspaceRoot: "/projects/test", workspaces: ["/projects/test"], composer: <DraftAnalysis /> };
+ await renderWelcomeScreen({ ...props, active: true });
+ await clickButton("owned.apk");
+ await renderWelcomeScreen({ ...props, active: false });
+ expect(container.textContent).toContain("selected.apk");
+ expect(mounts).toBe(1);
+});

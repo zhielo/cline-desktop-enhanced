@@ -35,6 +35,9 @@ import {
 	SidebarRail,
 	SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { readDraftReasoning } from "@/lib/session-reasoning";
+import { AnalysisModeControl } from "@/components/views/chat/analysis-mode-control";
+import { AnalysisWorkbench } from "@/components/views/chat/analysis-workbench";
 import { ChatInputBar } from "@/components/views/chat/chat-input-bar";
 import { ChatMessages } from "@/components/views/chat/chat-messages";
 import { EnvironmentSelector } from "@/components/views/chat/environment-selector";
@@ -1214,6 +1217,7 @@ function ChatThreadPane({
 		pendingToolApprovals,
 		pendingAskQuestions,
 		setConfig,
+		updateReasoning,
 		setWorkspacePath,
 		sendPrompt,
 		steerPromptInQueue,
@@ -1228,7 +1232,8 @@ function ChatThreadPane({
 		reset,
 		abort,
 		hydrateSession,
-	} = useChatSession(environmentId);
+	} = useChatSession(environmentId, threadId);
+	const [analysisPanelOpen, setAnalysisPanelOpen] = useState(false);
 	useEffect(() => {
 		if (!notionFunctionTitle || sessionId) {
 			return;
@@ -2063,25 +2068,7 @@ function ChatThreadPane({
 		],
 	);
 
-	const handleReasoningChange = useCallback(
-		(next: Pick<ChatSessionConfig, "thinking" | "reasoningEffort">) => {
-			setConfig((prev) => {
-				if (
-					prev.thinking === next.thinking &&
-					prev.reasoningEffort === next.reasoningEffort
-				) {
-					return prev;
-				}
-				return {
-					...prev,
-					thinking: next.thinking,
-					reasoningEffort:
-						next.thinking === false ? undefined : next.reasoningEffort,
-				};
-			});
-		},
-		[setConfig],
-	);
+	const handleReasoningChange = updateReasoning;
 	const handlePermissionProfileChange = useCallback(
 		async (
 			nextProfile: NonNullable<ChatSessionConfig["permissionProfile"]>,
@@ -2395,9 +2382,22 @@ function ChatThreadPane({
 	const handleModelChange = useCallback(
 		(nextModel: string) =>
 			setConfig((prev) =>
-				prev.model === nextModel ? prev : { ...prev, model: nextModel },
+				prev.model === nextModel
+					? prev
+					: {
+							...prev,
+							model: nextModel,
+							...(!sessionId
+								? readDraftReasoning(
+										environmentId,
+										threadId,
+										prev.provider,
+										nextModel,
+									)
+								: {}),
+						},
 			),
-		[setConfig],
+		[setConfig, sessionId, environmentId, threadId],
 	);
 	const handleProviderChange = useCallback(
 		(nextProvider: string) =>
@@ -2410,10 +2410,18 @@ function ChatThreadPane({
 				return {
 					...prev,
 					provider: nextProvider,
+					...(!sessionId
+						? readDraftReasoning(
+								environmentId,
+								threadId,
+								nextProvider,
+								prev.model,
+							)
+						: {}),
 					apiKey: nextApiKey,
 				};
 			}),
-		[providerCredentials, setConfig],
+		[providerCredentials, setConfig, sessionId, environmentId, threadId],
 	);
 	const handleSendPrompt = useCallback(
 		(prompt: string) => void handleSend(prompt),
@@ -2632,10 +2640,52 @@ function ChatThreadPane({
 					</span>
 				</div>
 			) : null}
+			{environmentId === "local" && !isCloudSession ? (
+				<div className="mx-4 mb-2 flex flex-wrap items-center gap-2">
+					{!sessionId && !isHydratingSession ? (
+						<AnalysisModeControl
+							environmentId={environmentId}
+							status={status}
+							draftMode={config.analysisMode ?? "off"}
+							onDraftModeChange={(analysisMode) =>
+								setConfig((prev) => ({ ...prev, analysisMode }))
+							}
+							onOpen={() => setAnalysisPanelOpen(true)}
+						/>
+					) : null}
+					<button
+						type="button"
+						className="rounded border border-border px-2 py-1 text-xs"
+						aria-label="Toggle Analysis workspace"
+						aria-expanded={analysisPanelOpen}
+						onClick={() => setAnalysisPanelOpen((open) => !open)}
+					>
+						Analysis workspace
+					</button>
+					{!sessionId ? (
+						<span className="text-xs text-muted-foreground">
+							Applies before your first task. Permissions and approvals stay
+							unchanged.
+						</span>
+					) : null}
+				</div>
+			) : null}
+			{analysisPanelOpen && environmentId === "local" && !isCloudSession ? (
+				<section
+					aria-label="Pre-task Analysis workspace"
+					className="mx-4 mb-2 max-h-[45vh] overflow-auto rounded border border-border"
+				>
+					<AnalysisWorkbench
+						environmentId={environmentId}
+						sessionId={sessionId ?? undefined}
+						cwd={config.cwd ?? config.workspaceRoot}
+					/>
+				</section>
+			) : null}
 			<ChatInputBar
 				recoverySessionId={sessionId ?? undefined}
 				recoveryWorkspace={config.workspaceRoot ?? config.cwd ?? ""}
-				readOnly={isCloudSessionExpired}
+				readOnly={isCloudSessionExpired || isHydratingSession}
 				attachments={attachmentList}
 				environmentId={environmentId}
 				hasRunningAgents={agentActivity.running > 0}

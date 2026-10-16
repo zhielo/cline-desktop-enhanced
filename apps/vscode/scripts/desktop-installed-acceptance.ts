@@ -601,6 +601,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-sidecar-isolated-hub-bootstrapped");
     let page = await launch();
     stages.push("installed-webview-rendered");
+    // Fresh composer: choosing a mode configures only the unsent draft. No model
+    // call, target execution, software install or permission expansion is needed.
+    const freshAnalysis = page.getByLabel("Draft Analysis mode", { exact: true });
+    await freshAnalysis.waitFor({ state: "visible", timeout: 30_000 });
+    if ((await freshAnalysis.inputValue()) !== "off") throw new Error("Fresh draft Analysis must start Off");
+    await freshAnalysis.selectOption("static");
+    if ((await freshAnalysis.inputValue()) !== "static") throw new Error("Pre-task Analysis selection did not stick");
+    const analysisToggle = page.getByRole("button", { name: "Toggle Analysis workspace", exact: true });
+    await analysisToggle.click();
+    await page.getByRole("region", { name: "Pre-task Analysis workspace", exact: true }).waitFor();
+    await analysisToggle.click();
+    await freshAnalysis.selectOption("off");
+    stages.push("installed-fresh-draft-analysis-visible-before-first-task");
+
     // Exercise the installed app's actual event receivers against our own blank
     // WebView. Never attach to user browsers or execute a supplied target.
     const captureBrowserId=randomUUID();
@@ -668,7 +682,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const beforeAnalysis=await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs);
     if(beforeAnalysis.mode!=="off")throw new Error("New session analysis must default Off");
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("static");
-    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="static"&&!select.disabled;});
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('select[aria-label="Session Analysis mode"]');return select?.value==="static"&&!select.disabled;});
     const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"owned-analysis-current",compareTarget:"owned-analysis-previous"}});
     if(!["completed","partial"].includes(parsed.status))throw new Error("Installed static parser failed");
     const allEvidence=async(view:string,filter?:string)=>{
@@ -709,7 +723,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(!changes.items.some(f=>f.change==="removed"&&f.value==="https://owned.invalid/v1")||!changes.items.some(f=>f.change==="added"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed endpoint finding comparison failed");
     page.once("dialog",dialog=>dialog.accept());
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("hybrid");
-    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="hybrid"&&!select.disabled;});
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('select[aria-label="Session Analysis mode"]');return select?.value==="hybrid"&&!select.disabled;});
     await page.reload();
     await page.getByRole("button", {name:/Installer owned session/}).first().click();
     const hybridStatus=await rpc<{mode:string;receipts:Array<{id:string}>}>(page,"first_party_analysis_status",analysisArgs);
@@ -734,7 +748,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-hybrid-owned-isolated-execution-and-export-passed");
 
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
-    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('select[aria-label="Session Analysis mode"]');return select?.value==="off"&&!select.disabled;});
     await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();
     const guide = page.getByRole("region", {name:"Guided investigation",exact:true});
     await guide.waitFor({timeout:30000});

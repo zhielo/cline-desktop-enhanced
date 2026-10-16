@@ -1,5 +1,14 @@
 "use client";
 
+import {
+	AUTO_REASONING,
+	parseReasoning,
+	readSessionReasoning,
+	readDraftReasoning,
+	writeSessionReasoning,
+	writeDraftReasoning,
+	type ReasoningSelection,
+} from "@/lib/session-reasoning";
 import { formatDisplayUserInput } from "@cline/shared/browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -555,7 +564,7 @@ function dispatchCoreLog(chunk: string): void {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useChatSession(environmentId: string) {
+export function useChatSession(environmentId: string, draftKey = "default") {
 	const subscribeToEnvironment = useCallback(
 		(name: string, listener: (payload: unknown) => void) =>
 			desktopClient.subscribe(name, (payload) => {
@@ -567,9 +576,18 @@ export function useChatSession(environmentId: string) {
 	const [status, setStatus] = useState<ChatSessionStatus>("idle");
 	const [isHydratingSession, setIsHydratingSession] = useState(false);
 	const [isCloudSessionExpired, setIsCloudSessionExpired] = useState(false);
-	const [config, setConfig] = useState<ChatSessionConfig>(() =>
-		getInitialChatConfig(environmentId),
-	);
+	const [config, setConfig] = useState<ChatSessionConfig>(() => {
+		const initial = getInitialChatConfig(environmentId);
+		return {
+			...initial,
+			...readDraftReasoning(
+				environmentId,
+				draftKey,
+				initial.provider,
+				initial.model,
+			),
+		};
+	});
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [rawTranscript, setRawTranscript] = useState("");
 	const [error, setError] = useState<string | null>(null);
@@ -640,6 +658,7 @@ export function useChatSession(environmentId: string) {
 		null,
 	);
 	const hydrationRequestIdRef = useRef(0);
+	const hydrationPendingRef = useRef(false);
 	const workspaceSelectionRequestRef = useRef(0);
 	const sessionStartPromiseRef = useRef<Promise<string> | null>(null);
 	const forkSessionPromiseRef = useRef<{
@@ -2572,6 +2591,7 @@ export function useChatSession(environmentId: string) {
 			options: { preserveStatus?: boolean; initialPrompt?: string } = {},
 		): Promise<string> => {
 			hydrationRequestIdRef.current += 1;
+			hydrationPendingRef.current = false;
 			setIsHydratingSession(false);
 			const boundConfig = { ...validatedConfig, environmentId };
 			const payload = await postSession({
@@ -2605,6 +2625,22 @@ export function useChatSession(environmentId: string) {
 			if (!workspaceRoot || !cwd) {
 				throw new Error("Missing resolved workspace from server");
 			}
+			if (
+				environmentId === "local" &&
+				boundConfig.executionTarget !== "cloud" &&
+				boundConfig.analysisMode !== undefined
+			) {
+				await desktopClient.invoke("first_party_analysis_mode", {
+					sessionId: id,
+					environmentId,
+					mode: boundConfig.analysisMode,
+				});
+			}
+			writeSessionReasoning(
+				environmentId,
+				id,
+				parseReasoning(boundConfig) ?? AUTO_REASONING,
+			);
 			setSessionId(id);
 			setIsCloudSessionExpired(false);
 			// Mark idle — not running — so the first sendPrompt is not queued.
@@ -2695,7 +2731,12 @@ export function useChatSession(environmentId: string) {
 				autoApproveTools?: boolean;
 			},
 		): Promise<boolean> => {
-			if (isCloudSessionExpired) return false;
+			if (
+				isCloudSessionExpired ||
+				isHydratingSession ||
+				hydrationPendingRef.current
+			)
+				return false;
 			const trimmed = prompt.trim();
 			if (!trimmed && attachedFiles.length === 0) return true;
 
@@ -3565,6 +3606,7 @@ export function useChatSession(environmentId: string) {
 			environmentId,
 			hydratedHistorySessionId,
 			isCloudSessionExpired,
+			isHydratingSession,
 			materializeToolMessagesFromResult,
 			refreshSessionDiffSummary,
 			reportSessionStartFailure,
@@ -3752,8 +3794,35 @@ export function useChatSession(environmentId: string) {
 		[environmentId],
 	);
 
+	const updateReasoning = useCallback(
+		(next: ReasoningSelection) => {
+			if (isHydratingSession || hydrationPendingRef.current) return;
+			const value = parseReasoning(next);
+			if (!value) return;
+			const id = activeSessionIdRef.current;
+			if (id) writeSessionReasoning(environmentId, id, value);
+			else
+				writeDraftReasoning(
+					environmentId,
+					draftKey,
+					config.provider,
+					config.model,
+					value,
+				);
+			setConfig((prev) => ({ ...prev, ...value }));
+		},
+		[
+			isHydratingSession,
+			environmentId,
+			draftKey,
+			config.provider,
+			config.model,
+		],
+	);
+
 	const reset = useCallback(async () => {
 		hydrationRequestIdRef.current += 1;
+		hydrationPendingRef.current = false;
 		const activeSessionId = sessionId;
 		setSessionId(null);
 		setStatus("idle");
@@ -3780,6 +3849,13 @@ export function useChatSession(environmentId: string) {
 			return {
 				...prev,
 				sessionId: undefined,
+				...readDraftReasoning(
+					environmentId,
+					draftKey,
+					initial.provider,
+					initial.model,
+				),
+				analysisMode: undefined,
 				provider: initial.provider,
 				model: initial.model,
 				apiKey:
@@ -3816,6 +3892,7 @@ export function useChatSession(environmentId: string) {
 	}, [
 		sessionId,
 		environmentId,
+		draftKey,
 		clearAbortFallbackTimeout,
 		discardPendingStream,
 		postSession,
@@ -3837,6 +3914,7 @@ export function useChatSession(environmentId: string) {
 			const requestId = hydrationRequestIdRef.current + 1;
 			const hydrationStartedAt = Date.now();
 			hydrationRequestIdRef.current = requestId;
+			hydrationPendingRef.current = true;
 			setIsCloudSessionExpired(
 				session.origin === "cloud" && session.status === "expired",
 			);
@@ -3851,6 +3929,9 @@ export function useChatSession(environmentId: string) {
 				...prev,
 				environmentId,
 				sessionId: session.sessionId,
+				...(readSessionReasoning(environmentId, session.sessionId) ??
+					AUTO_REASONING),
+				analysisMode: undefined,
 				executionTarget: session.origin === "cloud" ? "cloud" : "local",
 				repoUrl: session.origin === "cloud" ? session.repoUrl : undefined,
 				branch:
@@ -3940,13 +4021,14 @@ export function useChatSession(environmentId: string) {
 				if (historyMessages.length > 0) {
 					void refreshPromptsInQueue(session.sessionId);
 					applyHydratedMessages(historyMessages, session.status);
-					setIsHydratingSession(false);
 				}
 
 				const attached = await desktopClient
 					.invoke<{
 						sessionId?: string;
 						status?: string;
+						thinking?: boolean;
+						reasoningEffort?: ChatSessionConfig["reasoningEffort"];
 						provider?: string;
 						model?: string;
 						cwd?: string;
@@ -3986,6 +4068,16 @@ export function useChatSession(environmentId: string) {
 						`Session ${session.sessionId} attached to environment ${attached.environmentId}, not ${environmentId}.`,
 					);
 				}
+				const restoredReasoning =
+					readSessionReasoning(environmentId, session.sessionId) ??
+					parseReasoning(attached) ??
+					AUTO_REASONING;
+				if (attached)
+					writeSessionReasoning(
+						environmentId,
+						session.sessionId,
+						restoredReasoning,
+					);
 				setConfig((prev) => ({
 					...prev,
 					environmentId,
@@ -3997,6 +4089,7 @@ export function useChatSession(environmentId: string) {
 						(session.origin === "cloud"
 							? getSessionMetadataGitBranch(session.metadata)
 							: undefined),
+					...restoredReasoning,
 					provider: attached?.provider || session.provider || prev.provider,
 					model: attached?.model || session.model || prev.model,
 					workspaceRoot:
@@ -4076,6 +4169,7 @@ export function useChatSession(environmentId: string) {
 				);
 			} finally {
 				if (hydrationRequestIdRef.current === requestId) {
+					hydrationPendingRef.current = false;
 					setIsHydratingSession(false);
 				}
 			}
@@ -4323,6 +4417,7 @@ export function useChatSession(environmentId: string) {
 		pendingToolApprovals,
 		pendingAskQuestions,
 		setConfig,
+		updateReasoning,
 		setWorkspacePath,
 		start,
 		hydrateSession,
