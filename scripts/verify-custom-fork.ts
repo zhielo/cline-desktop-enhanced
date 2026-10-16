@@ -5,6 +5,10 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "scripts/install-pinned-gitleaks.ps1",
+		markers: ["SHA256", "version self-check failed", "$attempt -le 3"],
+	},
+	{
 		path: "scripts/write-dependency-inventory.ts",
 		markers: [
 			"CycloneDX",

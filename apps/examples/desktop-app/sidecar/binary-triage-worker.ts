@@ -25,6 +25,8 @@ def main(req):
         try:
             version = str((r.cmdj('?Vj') or {}).get('version', 'unknown'))
             info = r.cmdj('ij')
+            if not isinstance(info, dict) or not info.get('bin', {}).get('arch'):
+                raise ValueError('Native structure unavailable')
             if op == 'inspect_binary':
                 data = {'info': info, 'imports': r.cmdj('iij'), 'exports': r.cmdj('iEj')}
             else:
@@ -70,6 +72,11 @@ def main(req):
             process.kill()
             process.wait()
     data = json.loads(output)
+    metadata = data.get('metadata' if engine == 'floss' else 'meta', {})
+    if not metadata.get('version'):
+        raise ValueError('Engine provenance unavailable')
+    if engine == 'capa' and (metadata.get('flavor') != 'static' or not metadata.get('analysis', {}).get('arch')):
+        raise ValueError('Static capability coverage unavailable')
     return {'engine': engine, 'version': str(data.get('metadata' if engine == 'floss' else 'meta', {}).get('version', 'unknown')), 'format': fmt, 'category': 'derived', 'data': data,
             'coverage': 'Static supported-format evidence only; packed/obfuscated inputs may be incomplete. No target execution or FLOSS decoding is enabled.'}
 

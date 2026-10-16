@@ -169,6 +169,8 @@ export function runTriageWorker(
 			stdio: ["pipe", "pipe", "pipe"],
 		});
 		let drain: ReturnType<typeof setTimeout> | undefined;
+		let childClosed = false,
+			treeConfirmed = false;
 		const finish = (value: WorkerOutcome) => {
 			if (finished) return;
 			finished = true;
@@ -191,10 +193,20 @@ export function runTriageWorker(
 						["/pid", String(child.pid), "/T", "/F"],
 						{ windowsHide: true, stdio: "ignore" },
 					);
-					killer.on("error", () => {});
+					killer.on("error", () =>
+						finish({ status: "termination-unconfirmed" }),
+					);
+					killer.on("close", (code) => {
+						treeConfirmed = code === 0;
+						if (childClosed)
+							finish({
+								status: treeConfirmed ? status : "termination-unconfirmed",
+							});
+					});
 				} else {
 					try {
 						process.kill(-child.pid, "SIGKILL");
+						treeConfirmed = true;
 					} catch {
 						/* exit confirmation remains authoritative */
 					}
@@ -224,7 +236,8 @@ export function runTriageWorker(
 		child.on("error", () => finish({ status: "failed" }));
 		child.on("close", (code) => {
 			if (status !== "completed") {
-				finish({ status });
+				childClosed = true;
+				if (treeConfirmed) finish({ status });
 				return;
 			}
 			if (code !== 0) {

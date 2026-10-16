@@ -46,8 +46,7 @@ jobs:
       - name: Setup validation tools
         shell: pwsh
         run: |
-          choco install gitleaks --version=$env:GITLEAKS_VERSION --no-progress -y
-          if ($LASTEXITCODE -ne 0) { throw 'Gitleaks installation failed' }
+          & scripts/install-pinned-gitleaks.ps1 -Version $env:GITLEAKS_VERSION
           $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
           $url = "https://github.com/tauri-apps/binary-releases/releases/download/nsis-$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
           Invoke-WebRequest $url -OutFile $zip

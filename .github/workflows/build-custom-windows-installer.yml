@@ -103,7 +103,7 @@ jobs:
           & pwsh -NoProfile -File scripts/install-pinned-windows-tool.test.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Pinned tool retry fixtures failed' }
           & scripts/install-pinned-windows-tool.ps1 -Package upx -Version $env:UPX_VERSION
-          & scripts/install-pinned-windows-tool.ps1 -Package gitleaks -Version $env:GITLEAKS_VERSION
+          & scripts/install-pinned-gitleaks.ps1 -Version $env:GITLEAKS_VERSION
           $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
           $nsisUrl = "https://github.com/tauri-apps/binary-releases/releases/download/nsis-$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
           Invoke-WebRequest $nsisUrl -OutFile $zip
