@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { desktopClient } from "@/lib/desktop-client";
 import type { ChatSessionStatus } from "@/lib/chat-schema";
 export type AnalysisMode = "off" | "static" | "runtime" | "hybrid";
@@ -18,6 +18,7 @@ export function AnalysisModeControl({
 	draftMode?: AnalysisMode;
 	onDraftModeChange?: (mode: AnalysisMode) => void;
 }) {
+	const controlId = useId();
 	const [mode, setMode] = useState<AnalysisMode>("off"),
 		[busy, setBusy] = useState(false),
 		[error, setError] = useState("");
@@ -89,10 +90,10 @@ export function AnalysisModeControl({
 				"Session-specific parser mode. Does not override existing permissions or disable other tools."
 			}
 		>
-			<label htmlFor="session-analysis-mode">Analysis</label>
+			<label htmlFor={controlId}>Analysis</label>
 			<select
-				id="session-analysis-mode"
-				aria-label="Session Analysis mode"
+				id={controlId}
+				aria-label={sessionId ? "Session Analysis mode" : "Draft Analysis mode"}
 				className="rounded border border-border bg-background p-1"
 				value={sessionId ? mode : draftMode}
 				disabled={!idle || busy || (Boolean(sessionId) && !loaded)}
@@ -105,7 +106,11 @@ export function AnalysisModeControl({
 			</select>
 			<button
 				type="button"
-				aria-label="Open Analysis Workspace"
+				aria-label={
+					sessionId
+						? "Open Analysis Workspace"
+						: "Open draft Analysis workspace"
+				}
 				className="rounded p-1 hover:bg-secondary"
 				onClick={onOpen}
 			>

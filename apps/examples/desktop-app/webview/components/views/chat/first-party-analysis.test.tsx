@@ -395,3 +395,15 @@ it("offers draft Analysis before any session without invoking tools or granting 
  expect(change).toHaveBeenCalledTimes(1);
  expect(invoke).not.toHaveBeenCalled();
 });
+
+it("gives mounted draft and session controls distinct accessible identities", async () => {
+ await act(async () => root.render(<><AnalysisModeControl sessionId="s" environmentId="local" status="completed" /><AnalysisModeControl environmentId="local" onDraftModeChange={vi.fn()} /></>));
+ const session = el.querySelector('select[aria-label="Session Analysis mode"]')!;
+ const draft = el.querySelector('select[aria-label="Draft Analysis mode"]')!;
+ expect(session).not.toBeNull(); expect(draft).not.toBeNull();
+ expect(session.id).not.toBe(draft.id);
+ expect(el.querySelectorAll('button[aria-label="Open Analysis Workspace"]')).toHaveLength(1);
+ expect(el.querySelectorAll('button[aria-label="Open draft Analysis workspace"]')).toHaveLength(1);
+ expect([...el.querySelectorAll("select")].filter(control => control.id === session.id)).toHaveLength(1);
+ expect([...el.querySelectorAll("select")].filter(control => control.id === draft.id)).toHaveLength(1);
+});

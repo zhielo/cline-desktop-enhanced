@@ -43,6 +43,7 @@ it("rejects corrupted records and never persists credentials", () => {
 	for (const value of [
 		null,
 		{ thinking: "true" },
+		{ thinking: true, reasoningEffort: ["high"] },
 		{ thinking: true, reasoningEffort: "extreme" },
 	])
 		expect(parseReasoning(value)).toBeUndefined();
@@ -54,4 +55,11 @@ it("rejects corrupted records and never persists credentials", () => {
 	expect(JSON.stringify(window.localStorage)).not.toContain("never-store");
 	window.localStorage.setItem(window.localStorage.key(0)!, "{broken");
 	expect(readSessionReasoning("local", "a")).toBeUndefined();
+});
+
+it("normalizes legacy effort-only runtime settings", () => {
+	expect(parseReasoning({ reasoningEffort: "high" })).toEqual({
+		thinking: true,
+		reasoningEffort: "high",
+	});
 });

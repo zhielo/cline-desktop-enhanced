@@ -13,17 +13,23 @@ const PREFIX = "cline.reasoning.v1:";
 export function parseReasoning(value: unknown): ReasoningSelection | undefined {
 	if (!value || typeof value !== "object") return;
 	const v = value as Record<string, unknown>;
-	if (typeof v.thinking !== "boolean") return;
+	if (
+		typeof v.thinking !== "boolean" &&
+		!(v.thinking === undefined && typeof v.reasoningEffort === "string")
+	)
+		return;
 	if (
 		v.reasoningEffort !== undefined &&
-		!["low", "medium", "high", "xhigh"].includes(String(v.reasoningEffort))
+		(typeof v.reasoningEffort !== "string" ||
+			!["low", "medium", "high", "xhigh"].includes(v.reasoningEffort))
 	)
 		return;
 	return {
-		thinking: v.thinking,
-		reasoningEffort: v.thinking
-			? (v.reasoningEffort as ReasoningSelection["reasoningEffort"])
-			: undefined,
+		thinking: v.thinking !== false,
+		reasoningEffort:
+			v.thinking !== false
+				? (v.reasoningEffort as ReasoningSelection["reasoningEffort"])
+				: undefined,
 	};
 }
 function key(

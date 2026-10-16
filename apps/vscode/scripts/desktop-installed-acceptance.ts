@@ -603,7 +603,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-webview-rendered");
     // Fresh composer: choosing a mode configures only the unsent draft. No model
     // call, target execution, software install or permission expansion is needed.
-    const freshAnalysis = page.getByLabel("Session Analysis mode", { exact: true });
+    const freshAnalysis = page.getByLabel("Draft Analysis mode", { exact: true });
     await freshAnalysis.waitFor({ state: "visible", timeout: 30_000 });
     if ((await freshAnalysis.inputValue()) !== "off") throw new Error("Fresh draft Analysis must start Off");
     await freshAnalysis.selectOption("static");
