@@ -790,3 +790,20 @@ Installed acceptance explicitly enters the new Start here guide and navigates to
 Installed triage acceptance now observes either the readiness test's terminal success or bounded host-owned engine/phase/error tokens, without raw exception output or automatic replay. Its observation budget covers the existing four sequential 90-second worker limits; worker deadlines and all four Ready assertions remain unchanged. An independent Windows check repeats all four actual fixtures with checksum-pinned CPython 3.13.12 embedded isolation matching the shipped runtime, not only the build venv.
 
 The radare2 adapter passes r2pipe 2.0.0 a one-element target list. Its plain-string overload splits at spaces and reinterprets remaining filename segments as extra file arguments; the literal list preserves installed Program Files and workspace filenames without quoting or shell parsing. The real embedded-Python four-engine gate uses a copied digest-verified pack under a path containing spaces.
+
+## Pinned Android Analysis & Rebuild Pack
+
+- The private Windows installer provisions checksum-pinned Java, Apktool, maintained Google Smali/Baksmali, JADX, Bundletool and official Build Tools with upstream notices. Direct fixed Java arguments avoid batch expansion; verified inventories reject missing/changed/untracked/linked resources. No installed investigation downloads dependencies or executes an app.
+- Android tools is an additive guided workbench; each step prepares an exact approved request. AAB validation and split-container inventory remain distinct from ordinary APK decoding. Existing coding, providers, Python/native analysis and device incident workflows are preserved.
+- Decode reuse binds input, engine/runtime/API and decoded-tree hashes. Rebuilds use bounded private snapshots, validate bounded output structure and atomically publish new no-overwrite artifacts. Original app signatures are not preserved. Separate alignment/signing/verification never installs or launches; signing uses only a host-configured authorized test key with child-only secret references and omitted private diagnostics.
+- Explicit readiness executes owned resource/multidex/Smali/JADX/signature fixtures, not mere version inventory. Windows native acceptance is mandatory before installer production and installed WebView acceptance exercises the installed pack. No valid-AAB, full Dalvik/ART, custom OEM framework, production key-management or real-device compatibility claim. See `docs/ANDROID_ANALYSIS_REBUILD_PACK.md`.
+
+- Android Java tools use a fixed-entry ASCII/Base64 argument bridge compiled during packaging, with a relative classpath and verified-pack working directory. This preserves Unicode paths across the Windows Java ANSI launcher boundary without changing host locale or passing through a shell. Owned Unicode fixtures remain mandatory.
+
+- Preserve only non-secret Windows processor architecture/count fields in Android child environments, since Apktool uses them to distinguish 64-bit native tools. Bundled native helpers use private ASCII-filename snapshots, never the target workspace as a working directory.
+
+- Android inventory hashing uses bounded explicit reads with deterministic handle closure (including read errors), avoiding Bun/Windows stream descriptor accumulation during repeated per-command integrity checks. Full integrity verification remains mandatory.
+
+- Fixed bundled native Android commands stage bounded artifact copies behind ASCII relative filenames in a private working directory, preserving Unicode input/output paths despite Windows narrow-CRT tools. Only supported fixed argument shapes are accepted; outputs never overwrite and scratch remains when child termination is unconfirmed. Owned native fixture calls use the same runner.
+
+- CI Android provisioning retries transient HTTP/network download failures at most four times with bounded backoff. Exact cached/new SHA-256 remains mandatory; checksum mismatches fail immediately. Offline download regressions block both Windows packaging paths; installed operations still never download dependencies.

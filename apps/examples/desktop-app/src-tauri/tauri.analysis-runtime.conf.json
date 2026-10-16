@@ -9,7 +9,8 @@
       "resources/analysis-runtime-full/**/*",
       "resources/analysis-runtime-angr/**/*",
       "resources/android-platform-tools/**/*",
-      "resources/binary-triage/**/*"
+      "resources/binary-triage/**/*",
+      "resources/android-toolchain/**/*"
     ]
   }
 }

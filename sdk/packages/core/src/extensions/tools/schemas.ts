@@ -261,8 +261,22 @@ export const ReverseEngineeringInputSchema = z.object({
 		.strict()
 		.optional(),
 	engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
-	javascript_options: z.object({ compareTarget: z.string().min(1).max(4096).optional() }).strict().optional(),
-	evidence_query: z.object({receiptId:z.string().uuid(),view:z.enum(["artifacts","findings","graph","comparison","verification"]).optional(),offset:z.number().int().min(0).max(10000).optional(),limit:z.number().int().min(1).max(50).optional(),filter:z.string().max(200).optional()}).strict().optional(),
+	javascript_options: z
+		.object({ compareTarget: z.string().min(1).max(4096).optional() })
+		.strict()
+		.optional(),
+	evidence_query: z
+		.object({
+			receiptId: z.string().uuid(),
+			view: z
+				.enum(["artifacts", "findings", "graph", "comparison", "verification"])
+				.optional(),
+			offset: z.number().int().min(0).max(10000).optional(),
+			limit: z.number().int().min(1).max(50).optional(),
+			filter: z.string().max(200).optional(),
+		})
+		.strict()
+		.optional(),
 	operation: z.enum([
 		"javascript_analysis",
 		"analysis_evidence",
@@ -273,6 +287,9 @@ export const ReverseEngineeringInputSchema = z.object({
 		"apk_security_report",
 		"compare_apks",
 		"verify_apk_signature",
+		"validate_android_container",
+		"align_apk",
+		"sign_apk",
 		"scan_strings",
 		"extract",
 		"analyze",
@@ -299,6 +316,12 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional()
 		.describe(
 			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
+		),
+	confirm_test_signing: z
+		.boolean()
+		.optional()
+		.describe(
+			"Separate acknowledgement: sign a new APK using only a host-configured authorized test key; never supply passwords",
 		),
 	project_edit: NativeProjectEditSchema.optional(),
 	managed_worker: z

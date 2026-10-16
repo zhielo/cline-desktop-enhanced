@@ -166,7 +166,7 @@ function permissionFor(
 			? "Inspect"
 			: "Execute";
 	if (kind === "static")
-		return operation === "project_edit" ? "Modify" : "Inspect";
+		return operation === "sign_apk" ? "Publish" : ["project_edit","assemble_smali","rebuild_apk","align_apk"].includes(operation) ? "Modify" : "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
 	if (["launch", "continue", "step"].includes(operation)) return "Execute";
 	return "Debug";
@@ -179,6 +179,7 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
+ if(kind==="static"&&["assemble_smali","rebuild_apk","align_apk","sign_apk"].includes(operation)){requirements.add("authorized-android-artifact-modification");requirements.add("new-output-no-overwrite");if(operation==="sign_apk"){requirements.add("host-configured-test-key");requirements.add("original-signature-not-preserved");}}
 	if (operation === "js_isolated_execute") {
 		requirements.add("independent-execute-approval");
 		requirements.add("authorized-target-execution");

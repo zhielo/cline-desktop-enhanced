@@ -729,7 +729,7 @@ if [ "$command" = "d" ]; then
   mkdir -p "$output/smali/com/example"
   printf '.class public Lcom/example/Main;\\n' > "$output/smali/com/example/Main.smali"
 else
-  printf 'rebuilt-apk' > "$output"
+  printf 'UEsDBBQAAAAAAEB3UF32fjkjDQAAAA0AAAATAAAAQW5kcm9pZE1hbmlmZXN0LnhtbG93bmVkIGZpeHR1cmVQSwECFAMUAAAAAABAd1Bd9n45Iw0AAAANAAAAEwAAAAAAAAAAAAAAgAEAAAAAQW5kcm9pZE1hbmlmZXN0LnhtbFBLBQYAAAAAAQABAEEAAAA+AAAAAAA=' | base64 -d > "$output"
 fi`,
 		);
 		await executable(
@@ -740,7 +740,7 @@ output=""
 while [ "$#" -gt 0 ]; do
   if [ "$1" = "-o" ]; then output="$2"; shift 2; else shift; fi
 done
-printf 'dex-output' > "$output"`,
+printf 'ZGV4CjAzNQAwDBI9pfx76o+p/6pSJDVAyAJgZlEbn85wAAAAcAAAAHhWNBIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==' | base64 -d > "$output"`,
 		);
 		process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
 		const apk = path.join(directory, "sample.apk");
@@ -792,9 +792,61 @@ printf 'dex-output' > "$output"`,
 		expect(disassembled.exitCode).toBe(0);
 		expect(disassembled.artifacts[0].path).toContain("Main.smali");
 		expect(rebuiltResult.succeeded).toBe(true);
-		expect(await fs.readFile(rebuilt, "utf8")).toBe("rebuilt-apk");
+		expect(await fs.readFile(rebuilt)).toEqual(
+			Buffer.from(
+				"UEsDBBQAAAAAAEB3UF32fjkjDQAAAA0AAAATAAAAQW5kcm9pZE1hbmlmZXN0LnhtbG93bmVkIGZpeHR1cmVQSwECFAMUAAAAAABAd1Bd9n45Iw0AAAANAAAAEwAAAAAAAAAAAAAAgAEAAAAAQW5kcm9pZE1hbmlmZXN0LnhtbFBLBQYAAAAAAQABAEEAAAA+AAAAAAA=",
+				"base64",
+			),
+		);
 		expect(assembledResult.succeeded).toBe(true);
-		expect(await fs.readFile(assembledDex, "utf8")).toBe("dex-output");
+		expect(await fs.readFile(assembledDex)).toEqual(
+			Buffer.from(
+				"ZGV4CjAzNQAwDBI9pfx76o+p/6pSJDVAyAJgZlEbn85wAAAAcAAAAHhWNBIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+				"base64",
+			),
+		);
+		// Protocol mocks check safety boundaries, not real engine compatibility.
+		await expect(
+			execute(
+				{
+					engine: "auto",
+					operation: "rebuild_apk",
+					target: decoded,
+					output_file: rebuilt,
+				},
+				{} as never,
+			),
+		).rejects.toThrow("already exists");
+		await expect(
+			execute(
+				{
+					engine: "auto",
+					operation: "disassemble_smali",
+					target: apk,
+					output_directory: decoded,
+				},
+				{} as never,
+			),
+		).rejects.toThrow("already exists");
+		const splits = path.join(directory, "owned.apks");
+		await fs.writeFile(splits, await fs.readFile(rebuilt));
+		await expect(
+			execute(
+				{ engine: "auto", operation: "disassemble_smali", target: splits },
+				{} as never,
+			),
+		).rejects.toThrow("Split/bundle");
+		await expect(
+			execute(
+				{
+					engine: "auto",
+					operation: "sign_apk",
+					target: rebuilt,
+					output_file: rebuilt,
+				},
+				{} as never,
+			),
+		).rejects.toThrow("already exists");
 		expect(await fs.stat(`${decoded}.cline-analysis.json`)).toBeTruthy();
 		await expect(
 			fs.stat(path.join(decoded, "cline-analysis.json")),
@@ -886,7 +938,7 @@ done`,
 			bin,
 			"jadx",
 			`while [ "$#" -gt 0 ]; do
- if [ "$1" = "-d" ]; then mkdir -p "$2"; printf '/* mock class */' > "$2/decompiled.c"; fi
+ if [ "$1" = "-d" ]; then mkdir -p "$2"; printf '/* mock class */' > "$2/selected-class.java"; fi
  shift
 done`,
 		);

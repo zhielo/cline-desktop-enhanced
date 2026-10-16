@@ -33,7 +33,7 @@ export function GuidedInvestigation({
 	sessionId?: string;
 	environmentId: string;
 	onNavigate: (
-		mode: "first-party" | "incidents" | "investigation" | "evidence",
+		mode: "android" | "first-party" | "incidents" | "investigation" | "evidence",
 	) => void;
 }) {
 	const prefix = useId(),
@@ -145,7 +145,10 @@ export function GuidedInvestigation({
 				<Button variant="outline" onClick={() => onNavigate("first-party")}>
 					Understand a JS / Electron application
 				</Button>
-				<Button variant="outline" onClick={() => onNavigate("incidents")}>
+				<Button variant="outline" onClick={() => onNavigate("android")}>
+ Analyze / rebuild an owned Android app
+ </Button>
+ <Button variant="outline" onClick={() => onNavigate("incidents")}>
 					Investigate an APK / native issue
 				</Button>
 				<Button variant="outline" onClick={() => onNavigate("investigation")}>

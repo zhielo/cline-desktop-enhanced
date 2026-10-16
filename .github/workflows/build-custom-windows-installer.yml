@@ -24,6 +24,34 @@ env:
   NSIS_VERSION: "3.11"
 
 jobs:
+  android-toolchain-preflight:
+    name: Windows Android toolchain owned fixtures
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Read supported Bun version
+        id: toolchain
+        shell: bash
+        run: echo "version=$(node scripts/read-bun-version.mjs)" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ steps.toolchain.outputs.version }}
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Build SDK
+        run: bun run build:sdk
+      - name: Package and test Unicode owned Android fixtures
+        shell: pwsh
+        run: |
+          & node --test scripts/pinned-android-download.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Android download regression tests failed" }
+          & node scripts/package-android-toolchain.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Android preflight packaging failed" }
+          $env:CLINE_ANDROID_TOOLCHAIN_ROOT = Join-Path $PWD "apps/examples/desktop-app/src-tauri/resources/android-toolchain"
+          & bun scripts/test-android-toolchain.ts
+          if ($LASTEXITCODE -ne 0) { throw "Android preflight owned fixtures failed" }
+
   build-windows-installer:
     name: Validate and build Windows x64 setup.exe
     runs-on: windows-latest
@@ -155,6 +183,18 @@ jobs:
         env:
           CLINE_VALIDATION_PARALLEL: "1"
         run: bun run validate:advanced
+
+      - name: Package and round-trip-test pinned Android Analysis Pack
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          & node --test scripts/pinned-android-download.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Android download regression tests failed" }
+          & node scripts/package-android-toolchain.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Android toolchain packaging failed" }
+          $env:CLINE_ANDROID_TOOLCHAIN_ROOT = Join-Path $PWD "apps/examples/desktop-app/src-tauri/resources/android-toolchain"
+          & bun scripts/test-android-toolchain.ts
+          if ($LASTEXITCODE -ne 0) { throw "Android owned round-trip acceptance failed" }
 
       - name: Restore exact Windows engine wheel cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -504,7 +544,7 @@ jobs:
           "CLINE_TEST_INSTALLED_SIDECAR=$($sidecarExe.FullName)" >> $env:GITHUB_ENV
 
       - name: Installed WebView acceptance journey
-        timeout-minutes: 10
+        timeout-minutes: 20
         id: ui_acceptance
         shell: pwsh
         working-directory: apps/examples/desktop-app

@@ -533,6 +533,10 @@ fn spawn_desktop_backend_process(context: &AppContext) -> Result<Child, String> 
     #[cfg(windows)]
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
+            let android = parent.join("resources").join("android-toolchain");
+            if android.join("tools.lock.json").is_file() {
+                command.env("CLINE_ANDROID_TOOLCHAIN_ROOT", android);
+            }
             let runtime = parent.join("resources").join("analysis-runtime");
             if runtime.join("runtime-manifest.json").is_file() {
                 command.env("CLINE_BUNDLED_ANALYSIS_ROOT", runtime);

@@ -1,3 +1,4 @@
+import {androidToolchainStatus,testOwnedAndroidToolchain} from "./android-toolchain-readiness";
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
@@ -4491,6 +4492,7 @@ export async function handleCommand(
 	if (command.startsWith("setup_center_")) {
 		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
 			throw new Error("Setup Center is local-only");
+		if(command === "setup_center_android_status")return await androidToolchainStatus();
 		if (command === "setup_center_status")
 			return {
 				...(await getSetupCenterStatus()),
@@ -4510,6 +4512,7 @@ export async function handleCommand(
 			throw new Error("Setup changes require a trusted desktop connection");
 		if (args?.confirmed !== true)
 			throw new Error("Explicit Setup Center confirmation required");
+		if(command === "setup_center_android_test"){assertSetupIdle();return await testOwnedAndroidToolchain();}
 		if (command === "setup_center_apply_backend") {
 			assertSetupIdle();
 			const result = await upgradeManagedHub({
@@ -6185,6 +6188,7 @@ export async function handleCommand(
 					"analyze",
 					"decompile",
 					"disassemble_smali",
+ "read_smali_method", "search_smali", "assemble_smali", "rebuild_apk", "align_apk", "sign_apk", "validate_android_container",
 				].includes(operation)
 			) {
 				throw new Error(
@@ -6193,7 +6197,13 @@ export async function handleCommand(
 			}
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
-		const planId = String(args?.planId ?? "").trim();
+  if(["assemble_smali","rebuild_apk","align_apk","sign_apk"].includes(input.operation)){
+   if(!options?.connection?.data?.canApproveTools)throw new Error("Android construction/signing requires the trusted desktop connection");
+   const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id);
+   const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"read-only";
+   if(!live||live.busy||live.transitioningProvider||profile!=="full-access")throw new Error("Android construction/signing requires an idle Full Access owning session; restricted profiles are not widened");
+  }
+  const planId = String(args?.planId ?? "").trim();
 		const executionToken = String(args?.executionToken ?? "").trim();
 		await desktopAnalysisTaskOrchestrator.consume({
 			planId,
@@ -6216,8 +6226,7 @@ export async function handleCommand(
 		try {
 			const parsed = JSON.parse(result);
 			if (
-				input.operation === "advanced_analysis" &&
-				["blocked", "failed", "cancelled"].includes(parsed?.result?.status)
+				(input.operation === "advanced_analysis" && ["blocked", "failed", "cancelled"].includes(parsed?.result?.status)) || parsed?.succeeded === false || parsed?.verified === false || parsed?.validated === false || (typeof parsed?.exitCode === "number" && parsed.exitCode !== 0) || parsed?.timedOut === true || parsed?.cancelled === true || parsed?.outputDrainTimedOut === true
 			) {
 				const plan = desktopAnalysisTaskOrchestrator.fail(
 					planId,

@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"scripts/pinned-android-download.mjs",markers:["Pinned digest mismatch","attempt <= 4","404, 408, 429"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource","ClineAndroidLauncher","PROCESSOR_ARCHITEW6432","Explicit reads avoid Bun/Windows","handle.close()","runBundledAndroidNative","constants.COPYFILE_EXCL"]},
+ {path:"scripts/package-android-toolchain.mjs",markers:["downloadPinnedAndroidAsset","tools.lock.json","ClineAndroidLauncher.java"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/android-toolchain-workspace.tsx",markers:["Prepare exact Android step for review","confirm_test_signing","No automatic install"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["test-android-toolchain.ts","package-android-toolchain.mjs"]},
  {path: "apps/examples/desktop-app/sidecar/binary-triage-worker.ts", markers: ["r2pipe.open([target]", "one literal path"]},
  {path: "scripts/test-embedded-binary-triage.ps1", markers: ["76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0", "python313._pth", "test-binary-triage-pack.ts", "cline triage pack with spaces"]},
  {path: "apps/examples/desktop-app/webview/components/views/settings/binary-triage-readiness.tsx", markers: ["ownedTriageDiagnostic", "no operation is automatically retried"]},
