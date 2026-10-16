@@ -4,8 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource"]},
- {path:"scripts/package-android-toolchain.mjs",markers:["Pinned digest mismatch","tools.lock.json"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource","ClineAndroidLauncher"]},
+ {path:"scripts/package-android-toolchain.mjs",markers:["Pinned digest mismatch","tools.lock.json","ClineAndroidLauncher.java"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/android-toolchain-workspace.tsx",markers:["Prepare exact Android step for review","confirm_test_signing","No automatic install"]},
  {path:".github/workflows/build-custom-windows-installer.yml",markers:["test-android-toolchain.ts","package-android-toolchain.mjs"]},
  {path: "apps/examples/desktop-app/sidecar/binary-triage-worker.ts", markers: ["r2pipe.open([target]", "one literal path"]},

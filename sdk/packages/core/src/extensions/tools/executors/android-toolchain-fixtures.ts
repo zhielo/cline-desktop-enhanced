@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { randomBytes } from "node:crypto";
 import {
 	verifyAndroidToolchain,
+	runAndroidTool,
 	androidChildEnvironment,
 } from "./android-toolchain";
 import { runSupervised as runBaseSupervised } from "./supervised-process";
@@ -22,7 +23,26 @@ export async function testAndroidToolchain(signal?: AbortSignal) {
 	const checks: Record<string, string> = {};
 	let preserve = false;
 	async function runSupervised(...args: Parameters<typeof runBaseSupervised>) {
-		const result = await runBaseSupervised(...args);
+		const [command, argv, timeout, childSignal, , environment] = args;
+		const jar = command === pack.java && argv[0] === "-jar";
+		const keytool =
+			command ===
+			path.join(
+				pack.root,
+				process.platform === "win32"
+					? "jre/bin/keytool.exe"
+					: "jre/bin/keytool",
+			);
+		const result =
+			jar || keytool
+				? await runAndroidTool(
+						jar ? argv[1] : command,
+						jar ? argv.slice(2) : argv,
+						timeout,
+						childSignal,
+						environment,
+					)
+				: await runBaseSupervised(...args);
 		preserve ||= result.outputDrainTimedOut === true;
 		return result;
 	}

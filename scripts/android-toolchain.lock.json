@@ -175,5 +175,11 @@
       "url": "https://raw.githubusercontent.com/google/bundletool/1.18.3/LICENSE",
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     }
-  ]
+  ],
+  "buildCompiler": {
+    "version": "Eclipse ECJ 3.43.0",
+    "url": "https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.43.0/ecj-3.43.0.jar",
+    "sha256": "c786468c65e906498e7e36ece4e0d04c6d3dd34c9a61b34a3a5b512801911a82",
+    "scope": "CI packaging only; not shipped"
+  }
 }

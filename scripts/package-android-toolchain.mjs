@@ -46,6 +46,11 @@ for(const asset of lock.assets){
 }
 for(const notice of lock.notices){const file=await download(notice.url,notice.sha256,notice.id+"-LICENSE.txt");await mkdir(path.join(root,"notices"),{recursive:true});await copyFile(file,path.join(root,"notices",notice.id+"-LICENSE.txt"));}
 await copyFile(path.join(repo,"scripts/android-toolchain.lock.json"),path.join(root,"tools.lock.json"));
+const launcher=path.join(root,"launcher");await mkdir(launcher,{recursive:true});
+await copyFile(path.join(repo,"scripts/android-launcher/ClineAndroidLauncher.java"),path.join(launcher,"ClineAndroidLauncher.java"));
+// Compilation is CI-only. Installed operations need only the pinned JRE.
+const compiler=await download(lock.buildCompiler.url,lock.buildCompiler.sha256,"ecj.jar");
+execFileSync(path.join(root,"jre/bin",process.platform==="win32"?"java.exe":"java"),["-jar",compiler,"-17","-encoding","UTF-8","-d",launcher,path.join(launcher,"ClineAndroidLauncher.java")],{stdio:"inherit",timeout:60000});
 const files={};async function inventory(dir){for(const item of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){const file=path.join(dir,item.name);if(item.isSymbolicLink()){const {realpath}=await import("node:fs/promises");const actual=await realpath(file);if(!actual.startsWith(root+path.sep))throw new Error("Archive link escaped pack");const bytes=await readFile(actual);await rm(file);await writeFile(file,bytes);files[path.relative(root,file).split(path.sep).join("/")]=createHash("sha256").update(bytes).digest("hex");continue;}if(item.isDirectory())await inventory(file);else files[path.relative(root,file).split(path.sep).join("/")]=createHash("sha256").update(await readFile(file)).digest("hex");}}
 await inventory(root);await writeFile(path.join(root,"manifest.json"),JSON.stringify({schemaVersion:1,profile:lock.profile,files},null,2)+"\n");
 console.log("Pinned Android toolchain packaged; owned round-trip acceptance must pass separately.");

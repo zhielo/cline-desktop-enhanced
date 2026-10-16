@@ -28,6 +28,7 @@ function spawnPortable(
 	gui = false,
 	environmentOverrides?: Record<string, string>,
 	replaceEnvironment = false,
+	workingDirectory?: string,
 ): ChildProcess {
 	const isBatch = process.platform === "win32" && /\.(bat|cmd)$/i.test(command);
 	const [executable, executableArgs] = isBatch
@@ -38,6 +39,7 @@ function spawnPortable(
 		stdio: gui ? "ignore" : ["ignore", "pipe", "pipe"],
 		windowsHide: !gui,
 		windowsVerbatimArguments: false,
+		...(workingDirectory ? { cwd: workingDirectory } : {}),
 		...(environmentOverrides
 			? {
 					env: replaceEnvironment
@@ -107,6 +109,7 @@ export async function runSupervised(
 	onSpawn?: (pid: number | null) => void,
 	environmentOverrides?: Record<string, string>,
 	replaceEnvironment = false,
+	workingDirectory?: string,
 ) {
 	return new Promise<{
 		exitCode: number | null;
@@ -135,6 +138,7 @@ export async function runSupervised(
 			false,
 			environmentOverrides,
 			replaceEnvironment,
+			workingDirectory,
 		);
 		let stdout = "";
 		let stderr = "";

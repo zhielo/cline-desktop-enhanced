@@ -25,6 +25,8 @@ async function pack() {
 	for (const name of [
 		process.platform === "win32" ? "jre/bin/java.exe" : "jre/bin/java",
 		"tools.lock.json",
+		"launcher/ClineAndroidLauncher.class",
+		process.platform === "win32" ? "jre/bin/keytool.exe" : "jre/bin/keytool",
 		"apktool.jar",
 		"smali/lib/smali-3.0.10.jar",
 		"smali/lib/smali-baksmali-3.0.10.jar",
@@ -77,21 +79,28 @@ it("uses literal Java argument arrays with no shell or injected Java environment
 	vi.stubEnv("JDK_JAVA_OPTIONS", "untrusted");
 	vi.stubEnv("CLASSPATH", "untrusted");
 	vi.stubEnv("CLINE_ANDROID_TEST_STORE_PASSWORD", "private");
-	const run = vi
-		.spyOn(processTools, "runSupervised")
-		.mockResolvedValue({
-			exitCode: 0,
-			stdout: "",
-			stderr: "",
-			timedOut: false,
-			cancelled: false,
-		});
+	const run = vi.spyOn(processTools, "runSupervised").mockResolvedValue({
+		exitCode: 0,
+		stdout: "",
+		stderr: "",
+		timedOut: false,
+		cancelled: false,
+	});
 	await runAndroidTool(
 		path.join(root, "smali/lib/smali-3.0.10.jar"),
 		["assemble", "C:/space & literal/输入"],
 		1000,
 	);
-	expect(run.mock.calls[0][1]).toContain("C:/space & literal/输入");
+	expect(run.mock.calls[0][1]).toContain(
+		`u:${Buffer.from("C:/space & literal/输入", "utf8").toString("base64")}`,
+	);
+	expect(
+		run.mock.calls[0][1].every((arg) =>
+			Array.from(arg).every((char) => char.charCodeAt(0) <= 127),
+		),
+	).toBe(true);
+	expect(run.mock.calls[0][7]).toBe(root);
+	expect(run.mock.calls[0][1]).toContain("ClineAndroidLauncher");
 	expect(run.mock.calls[0][0]).toContain("jre");
 	expect(run.mock.calls[0][6]).toBe(true);
 	expect(run.mock.calls[0][5]).not.toHaveProperty("JAVA_TOOL_OPTIONS");

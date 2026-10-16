@@ -16,6 +16,7 @@ export const ANDROID_TOOLS = [
 	"zipalign",
 	"aapt2",
 	"dexdump",
+	"keytool",
 ] as const;
 export type AndroidTool = (typeof ANDROID_TOOLS)[number];
 const entry: Record<AndroidTool, string> = {
@@ -28,6 +29,8 @@ const entry: Record<AndroidTool, string> = {
 	zipalign: "build-tools/zipalign.exe",
 	aapt2: "build-tools/aapt2.exe",
 	dexdump: "build-tools/dexdump.exe",
+	keytool:
+		process.platform === "win32" ? "jre/bin/keytool.exe" : "jre/bin/keytool",
 };
 export function androidToolchainRoot(): string | undefined {
 	return (
@@ -126,7 +129,12 @@ export async function verifyAndroidToolchain(root = androidToolchainRoot()) {
 	}
 	const java =
 		process.platform === "win32" ? "jre/bin/java.exe" : "jre/bin/java";
-	for (const file of [java, "tools.lock.json", ...Object.values(entry)])
+	for (const file of [
+		java,
+		"tools.lock.json",
+		"launcher/ClineAndroidLauncher.class",
+		...Object.values(entry),
+	])
 		if (!manifest.files[file])
 			throw new Error(`Missing Android pack entry: ${file}`);
 	return {
@@ -211,21 +219,33 @@ export async function runAndroidTool(
 	const pack = await verifyAndroidToolchain(root);
 	let executable = command,
 		argv = args;
-	if (command.endsWith(".jar")) {
+	const javaTool = command.endsWith(".jar") || tool === "keytool";
+	if (javaTool) {
 		executable = pack.java;
-		const base = ["-Xmx768m", "-Djava.awt.headless=true"];
-		argv =
-			tool === "smali" || tool === "baksmali"
-				? [
-						...base,
-						"-cp",
-						path.join(pack.root, "smali/lib/*"),
-						`com.android.tools.smali.${tool}.Main`,
-						...args,
-					]
-				: tool === "jadx"
-					? [...base, "-cp", command, "jadx.cli.JadxCLI", ...args]
-					: [...base, "-jar", command, ...args];
+		const classpath = [
+			"launcher",
+			...(tool === "keytool"
+				? []
+				: [
+						tool === "smali" || tool === "baksmali"
+							? "smali/lib/*"
+							: entry[tool],
+					]),
+		].join(path.delimiter);
+		argv = [
+			"-Xmx768m",
+			"-Djava.awt.headless=true",
+			...(tool === "keytool"
+				? ["--add-exports=java.base/sun.security.tools.keytool=ALL-UNNAMED"]
+				: []),
+			"-cp",
+			classpath,
+			"ClineAndroidLauncher",
+			tool,
+			...args.map((arg) => `u:${Buffer.from(arg, "utf8").toString("base64")}`),
+		];
+		if (argv.join(" ").length > 28000)
+			throw new Error("Android encoded argument budget exceeded");
 	}
 	return runSupervised(
 		executable,
@@ -235,6 +255,7 @@ export async function runAndroidTool(
 		undefined,
 		androidChildEnvironment(extraEnvironment),
 		true,
+		javaTool ? pack.root : undefined,
 	);
 }
 export async function androidCommandIdentity(
