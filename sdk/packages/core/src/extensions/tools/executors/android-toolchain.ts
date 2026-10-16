@@ -51,8 +51,22 @@ export async function digestFile(file: string): Promise<string> {
 		if (!info.isFile() || info.size > 512 * 1024 * 1024)
 			throw new Error("Android file budget exceeded");
 		const hash = createHash("sha256");
-		for await (const chunk of handle.createReadStream({ autoClose: false }))
-			hash.update(chunk);
+		// Explicit reads avoid Bun/Windows stream descriptor retention across repeated pack checks.
+		const buffer = Buffer.allocUnsafe(64 * 1024);
+		let position = 0;
+		while (true) {
+			const { bytesRead } = await handle.read(
+				buffer,
+				0,
+				buffer.length,
+				position,
+			);
+			if (!bytesRead) break;
+			position += bytesRead;
+			if (position > 512 * 1024 * 1024)
+				throw new Error("Android file budget exceeded");
+			hash.update(buffer.subarray(0, bytesRead));
+		}
 		return hash.digest("hex");
 	} finally {
 		await handle.close();

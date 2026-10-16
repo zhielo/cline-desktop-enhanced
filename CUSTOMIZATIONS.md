@@ -801,3 +801,5 @@ The radare2 adapter passes r2pipe 2.0.0 a one-element target list. Its plain-str
 - Android Java tools use a fixed-entry ASCII/Base64 argument bridge compiled during packaging, with a relative classpath and verified-pack working directory. This preserves Unicode paths across the Windows Java ANSI launcher boundary without changing host locale or passing through a shell. Owned Unicode fixtures remain mandatory.
 
 - Preserve only non-secret Windows processor architecture/count fields in Android child environments, since Apktool uses them to distinguish 64-bit native tools. Bundled native helpers also run from the verified pack directory, never from the target workspace.
+
+- Android inventory hashing uses bounded explicit reads with deterministic handle closure (including read errors), avoiding Bun/Windows stream descriptor accumulation during repeated per-command integrity checks. Full integrity verification remains mandatory.

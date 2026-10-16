@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import {
+	digestFile,
 	androidChildEnvironment,
 	androidCommandIdentity,
 	bundledAndroidTool,
@@ -11,6 +12,10 @@ import {
 	verifyAndroidToolchain,
 } from "./android-toolchain";
 import * as processTools from "./supervised-process";
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:fs/promises")>();
+	return { ...actual, open: vi.fn(actual.open) };
+});
 const directories: string[] = [];
 afterEach(async () => {
 	vi.restoreAllMocks();
@@ -118,4 +123,23 @@ it("binds cache identities to tool bytes and exact API options", async () => {
 	expect(await androidCommandIdentity(command, { api: 28 })).not.toBe(
 		await androidCommandIdentity(command, { api: 34 }),
 	);
+});
+
+it("hashes multi-chunk files repeatedly without retaining stream descriptors", async () => {
+	const root = await pack(),
+		file = path.join(root, "hash-input.bin");
+	const content = Buffer.alloc(150001, 0x5a);
+	await fs.writeFile(file, content);
+	const expected = createHash("sha256").update(content).digest("hex");
+	for (let i = 0; i < 1100; i++) expect(await digestFile(file)).toBe(expected);
+}, 30000);
+it("closes the digest handle when a read fails", async () => {
+	const close = vi.fn().mockResolvedValue(undefined);
+	vi.spyOn(fs, "open").mockResolvedValue({
+		stat: vi.fn().mockResolvedValue({ isFile: () => true, size: 1 }),
+		read: vi.fn().mockRejectedValue(new Error("owned read failure")),
+		close,
+	} as unknown as Awaited<ReturnType<typeof fs.open>>);
+	await expect(digestFile("owned")).rejects.toThrow("owned read failure");
+	expect(close).toHaveBeenCalledTimes(1);
 });
