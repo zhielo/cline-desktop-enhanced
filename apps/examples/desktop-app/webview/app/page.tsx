@@ -37,6 +37,10 @@ import {
 } from "@/components/ui/sidebar";
 import { ChatInputBar } from "@/components/views/chat/chat-input-bar";
 import { ChatMessages } from "@/components/views/chat/chat-messages";
+import {
+	AnalysisModeControl,
+	type AnalysisMode,
+} from "@/components/views/chat/analysis-mode-control";
 import { EnvironmentSelector } from "@/components/views/chat/environment-selector";
 import { RemoteDirectoryPicker } from "@/components/views/chat/remote-directory-picker";
 import { WelcomeScreen } from "@/components/views/chat/welcome-chat";
@@ -116,6 +120,10 @@ import {
 	type SessionHistoryItem,
 	type SessionMetadata,
 } from "@/lib/session-history";
+import {
+	reasoningPreferenceMetadata,
+	writeSessionReasoningPreference,
+} from "@/lib/session-preferences";
 import { eventEnvironmentId, sessionKey } from "@/lib/session-identity";
 import { readImportedFromTool } from "@/lib/session-import";
 import { resolveSessionHeaderStatus } from "@/lib/session-status";
@@ -1249,6 +1257,46 @@ function ChatThreadPane({
 			};
 		});
 	}, [notionFunctionTitle, sessionId, setConfig]);
+	useEffect(() => {
+		if (
+			!sessionId ||
+			isHydratingSession ||
+			(config.thinking === undefined && config.reasoningEffort === undefined)
+		) {
+			return;
+		}
+		const preference = {
+			thinking: config.thinking !== false,
+			...(config.reasoningEffort
+				? { reasoningEffort: config.reasoningEffort }
+				: {}),
+		};
+		const persistenceKey = `${sessionId}:${JSON.stringify(preference)}`;
+		if (persistedReasoningPreferenceRef.current === persistenceKey) {
+			return;
+		}
+		persistedReasoningPreferenceRef.current = persistenceKey;
+		writeSessionReasoningPreference(sessionId, preference);
+		void desktopClient
+			.invoke<SessionMetadata>("update_chat_session_metadata", {
+				sessionId,
+				environmentId,
+				metadata: reasoningPreferenceMetadata(preference),
+			})
+			.then((metadata) => {
+				onUpdateSessionMetadata?.(sessionId, metadata);
+			})
+			.catch(() => {
+				// The per-session browser fallback still restores this preference.
+			});
+	}, [
+		config.reasoningEffort,
+		config.thinking,
+		environmentId,
+		isHydratingSession,
+		onUpdateSessionMetadata,
+		sessionId,
+	]);
 
 	// Bind the runtime session to the thread so deleting it elsewhere (e.g.
 	// the sidebar) can close this pane even when it was not opened from history.
@@ -1280,6 +1328,8 @@ function ChatThreadPane({
 	const [workspaceInitialTab, setWorkspaceInitialTab] = useState<
 		"changes" | "analysis"
 	>("changes");
+	const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("off");
+	const persistedReasoningPreferenceRef = useRef<string | undefined>(undefined);
 	const [deletingSession, setDeletingSession] = useState(false);
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 	const [renamingSession, setRenamingSession] = useState(false);
@@ -2011,6 +2061,7 @@ function ChatThreadPane({
 			}
 			const promptTaken = await sendPrompt(trimmed, toSend, {
 				inNewWorktree: workIn === "worktree" && isNewThread,
+				analysisMode,
 				...(routeToProjectNotionBridge
 					? {
 							permissionProfile: "project-notion-bridge" as const,
@@ -2042,6 +2093,7 @@ function ChatThreadPane({
 			}
 		},
 		[
+			analysisMode,
 			config.repoUrl,
 			config.permissionProfile,
 			handleAttachFiles,
@@ -2613,6 +2665,19 @@ function ChatThreadPane({
 
 	const composer = (
 		<>
+			{!sessionId && environmentId === LOCAL_WORKSPACE_ENVIRONMENT_ID ? (
+				<div className="mx-4 mb-2 flex items-center justify-between rounded-lg border border-border/70 bg-background/80 px-3 py-2">
+					<div className="text-xs text-muted-foreground">
+						<span className="font-medium text-foreground">Analysis</span>
+						<span className="ml-2">Choose the mode before starting this session.</span>
+					</div>
+					<AnalysisModeControl
+						environmentId={environmentId}
+						onModeChange={setAnalysisMode}
+						status={status}
+					/>
+				</div>
+			) : null}
 			{notionFunctionTitle ? (
 				<div className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
 					<span className="font-medium text-foreground">

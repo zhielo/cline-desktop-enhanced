@@ -4,7 +4,7 @@ This file is the durable customization ledger for this repository. The source on
 
 ## First-party Analysis Workspace (no REA dependency)
 
-- Existing local sessions gain a session-specific Analysis Off/Static/Runtime control. Off is the default; mode changes require a trusted desktop connection and idle chat. The control gates the new static parser, not existing tools, and never overrides permission profiles or approves runtime actions.
+- Fresh local sessions expose the Analysis Off/Static/Runtime/Hybrid selector before the first command. A selected pre-session mode is applied immediately after session creation and before the first prompt is dispatched. Existing local sessions retain a session-specific mode; mode changes require a trusted desktop connection and idle chat. The control gates the new static parser, not existing tools, and never overrides permission profiles or approves runtime actions.
 - `reverse_engineer` gains `javascript_analysis` and paginated `analysis_evidence` operations. Static inspection requires an enabled exact owning session/workspace. Evidence can still be read in Off. No target module is imported, evaluated, transpiled or executed. Runtime selection adds no JavaScript Inspector implementation.
 - TypeScript 5.9.3 is pinned and bundled into a fixed parser-child branch in the existing compiled sidecar. No REA process, separate Node install, Python pack or target-provided script is required. Worker environment excludes credentials; target .env/bunfig are not used as child host configuration.
 - Inventory supports confined directories, JS/TS/JSX/TSX, package metadata and bounded ASAR payloads. Links/unpacked ASAR sources, malformed/oversized files and excluded directories produce explicit partial coverage. Static findings include literal module/native-addon references, function/call syntax, unshadowed Electron IPC/preload candidates and literal global-fetch candidates. Profile `cline-js-static/2` additionally performs bounded lexical symbol resolution, immutable scalar/template/concatenation reduction and simple pure-return argument substitution, with configuration→request and local-call support edges. Mutable/imported/side-effecting/recursive values remain unresolved. Basic Source Map v3 declarations and embedded source hashes are read as untrusted labels, never fetched or executed. This is not full program data flow or universal deobfuscation.
@@ -213,6 +213,8 @@ Primary files:
 - Polished sticky AI task report with progress, repair, verification, and execution states.
 - Typed task lifecycle events persisted in chat metadata.
 - Stable step IDs map tool evidence and durations to their exact plan steps.
+- Live command activity now has a graph view built from the same step/evidence projection. Explicit parent-step relationships render as dependency edges; activity-only command turns fall back to chronological evidence edges. The graph is observational and does not authorize, replay, cancel, or change command execution.
+- Reasoning effort selections (None/Low/Medium/High/Extra) persist per chat session in session metadata with a browser-storage fallback, so switching sessions restores that session's selection instead of applying the composer Low default.
 - Structured step kinds take priority; text-label heuristics remain only as compatibility fallback behavior.
 - One active step is enforced, failed or malformed plan updates are ignored, and an older turn's plan is not reused for a new request.
 - Copyable task reports for issue reports and debugging.
@@ -223,7 +225,11 @@ Primary files:
 - `apps/examples/desktop-app/sidecar/chat-session.ts`
 - `apps/examples/desktop-app/webview/lib/chat-schema.ts`
 - `apps/examples/desktop-app/webview/lib/task-report.ts`
+- `apps/examples/desktop-app/webview/lib/task-graph.ts`
+- `apps/examples/desktop-app/webview/components/views/chat/task-graph-view.tsx`
 - `apps/examples/desktop-app/webview/components/views/chat/task-report-panel.tsx`
+- `apps/examples/desktop-app/webview/lib/session-preferences.ts`
+- `apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx`
 
 ### Codex-style chat, artifacts, and permissions
 

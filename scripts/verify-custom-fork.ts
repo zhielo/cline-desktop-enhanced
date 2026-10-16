@@ -39,6 +39,16 @@ const requiredMarkers: Array<{
 			"Session Analysis mode",
 			"Runtime mode does not grant",
 			"first_party_analysis_mode",
+			"new-session-analysis-mode",
+			"Choose Analysis before starting a new task",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/session-preferences.ts",
+		markers: [
+			"SESSION_REASONING_STORAGE_KEY",
+			"readSessionReasoningPreference",
+			"PENDING_ANALYSIS_MODE_KEY",
 		],
 	},
 	{
@@ -1699,8 +1709,16 @@ const requiredMarkers: Array<{
 		markers: ["formatTaskReportText", "plan.updated", "taskStepId"],
 	},
 	{
+		path: "apps/examples/desktop-app/webview/lib/task-graph.ts",
+		markers: ["buildTaskGraph", "Explicit parent relationships", "in_progress"],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/task-graph-view.tsx",
+		markers: ["Task execution graph", "Execution graph", "task-graph-arrow"],
+	},
+	{
 		path: "apps/examples/desktop-app/webview/components/views/chat/task-report-panel.tsx",
-		markers: ["AI task report", "Copy report", "evidenceByStep"],
+		markers: ["AI task report", "Copy report", "evidenceByStep", "TaskGraphView"],
 	},
 	{
 		path: "apps/examples/desktop-app/sidecar/desktop-settings.ts",
