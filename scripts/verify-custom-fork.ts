@@ -4,7 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource","ClineAndroidLauncher"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource","ClineAndroidLauncher","PROCESSOR_ARCHITEW6432"]},
  {path:"scripts/package-android-toolchain.mjs",markers:["Pinned digest mismatch","tools.lock.json","ClineAndroidLauncher.java"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/android-toolchain-workspace.tsx",markers:["Prepare exact Android step for review","confirm_test_signing","No automatic install"]},
  {path:".github/workflows/build-custom-windows-installer.yml",markers:["test-android-toolchain.ts","package-android-toolchain.mjs"]},

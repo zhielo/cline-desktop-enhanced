@@ -180,6 +180,9 @@ export function androidChildEnvironment(
 ): Record<string, string> {
 	const env: Record<string, string> = {};
 	for (const key of [
+		"PROCESSOR_ARCHITECTURE",
+		"PROCESSOR_ARCHITEW6432",
+		"NUMBER_OF_PROCESSORS",
 		"SystemRoot",
 		"WINDIR",
 		"TEMP",
@@ -255,7 +258,7 @@ export async function runAndroidTool(
 		undefined,
 		androidChildEnvironment(extraEnvironment),
 		true,
-		javaTool ? pack.root : undefined,
+		pack.root,
 	);
 }
 export async function androidCommandIdentity(

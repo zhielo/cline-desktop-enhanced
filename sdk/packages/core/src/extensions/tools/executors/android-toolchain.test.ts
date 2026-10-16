@@ -75,6 +75,8 @@ it("rejects traversal manifest entries and symlinks", async () => {
 });
 it("uses literal Java argument arrays with no shell or injected Java environment", async () => {
 	const root = await pack();
+	vi.stubEnv("PROCESSOR_ARCHITECTURE", "AMD64");
+	vi.stubEnv("PROCESSOR_ARCHITEW6432", "AMD64");
 	vi.stubEnv("JAVA_TOOL_OPTIONS", "-javaagent:untrusted.jar");
 	vi.stubEnv("JDK_JAVA_OPTIONS", "untrusted");
 	vi.stubEnv("CLASSPATH", "untrusted");
@@ -104,6 +106,8 @@ it("uses literal Java argument arrays with no shell or injected Java environment
 	expect(run.mock.calls[0][0]).toContain("jre");
 	expect(run.mock.calls[0][6]).toBe(true);
 	expect(run.mock.calls[0][5]).not.toHaveProperty("JAVA_TOOL_OPTIONS");
+	expect(androidChildEnvironment().PROCESSOR_ARCHITECTURE).toBe("AMD64");
+	expect(androidChildEnvironment().PROCESSOR_ARCHITEW6432).toBe("AMD64");
 	expect(androidChildEnvironment()).not.toHaveProperty(
 		"CLINE_ANDROID_TEST_STORE_PASSWORD",
 	);
