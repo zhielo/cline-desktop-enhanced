@@ -30,13 +30,16 @@ it("reads status only on open and installs only after explicit notice acceptance
 	const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
 	try {
 		await act(async () => root.render(<SetupCenter />));
-		expect(calls).toHaveBeenCalledTimes(1);
-		expect(calls.mock.calls[0][0]).toBe("setup_center_status");
+		expect(calls).toHaveBeenCalledTimes(2);
+		expect(calls.mock.calls.map(([command]) => command).sort()).toEqual([
+			"binary_triage_status",
+			"setup_center_status",
+		]);
 		const button = [...element.querySelectorAll("button")].find(
 			(b) => b.textContent === "Install all supported components",
 		)!;
 		await act(async () => button.click());
-		expect(calls).toHaveBeenCalledTimes(1);
+		expect(calls).toHaveBeenCalledTimes(2);
 		confirm.mockReturnValue(true);
 		await act(async () => button.click());
 		expect(confirm.mock.calls.at(-1)?.[0]).toContain("reviewed and accept");
@@ -176,7 +179,11 @@ it("reattaches a running job after navigation and polls read-only without replay
 		expect(element.textContent).toContain("Ready");
 		expect(
 			calls.mock.calls.every(([command]) =>
-				["setup_center_status", "setup_center_job_status"].includes(command),
+				[
+					"setup_center_status",
+					"setup_center_job_status",
+					"binary_triage_status",
+				].includes(command),
 			),
 		).toBe(true);
 	} finally {

@@ -1,55 +1,3 @@
-import { runModelInvestigation } from "./model-investigation";
-import type { AgentToolContext, InvestigationToolName } from "@cline/core";
-import { WORKFLOW_COMMANDS, handleAnalysisWorkflow } from "./analysis-workflow";
-import { AnalysisWorkflowStore } from "./analysis-workflow-store";
-import { firstPartyStore, sessionTaskSnapshots } from "./first-party-analysis";
-import { analysisParserNotices } from "./analysis-parser-notices";
-import {
-	handleFirstPartyCommand,
-	bindFirstPartyTaskEvidence,
-	recordFirstPartyTaskEvidence,
-	firstPartyReadiness,
-	testFirstPartyFixture,
-} from "./first-party-analysis";
-import { assertSetupIdle, getSetupJob, startSetupJob } from "./setup-jobs";
-import {
-	getSetupCenterStatus,
-	readSetupPreferences,
-	platformToolsNotices,
-	saveSetupPreferences,
-	detectInstalledTools,
-	installFullCapabilityPack,
-	testFullCapabilityPack,
-	rollbackToCorePack,
-	listSetupDevices,
-	testSetupDevice,
-	testLicensedIda,
-	testSetupWorker,
-} from "./setup-center";
-import {
-	getProjectOutputLocation,
-	ensureProjectOutputDirectories,
-} from "./project-output";
-import { getAnalysisEnvironment } from "./analysis-environment";
-import { queryRuntimeJni } from "./runtime-jni-evidence";
-import { ExecutionControlService } from "./execution-control-service";
-import { planEvidenceAnalysis } from "./execution-analysis-planner";
-import { importAndroidDebugEvidence } from "./android-debug-evidence";
-import { reviewPatchArtifacts } from "./execution-patch-lab";
-import { ApkIncidentService } from "./apk-incident-service";
-import { incidentReadiness } from "./incident-readiness";
-import {
-	inspectArtifactEvidence,
-	previewArchiveMember,
-} from "./incident-artifacts";
-import { resolveClineDataDir } from "@cline/shared/storage";
-import { InvestigationStore } from "./analysis-investigation-store";
-import {
-	AndroidCaptureInput,
-	bindAndroidCapture,
-	runAndroidCapture,
-} from "./android-runtime-client";
-import { saveAnalysisDocument } from "./analysis-document-store";
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
@@ -77,8 +25,10 @@ import {
 } from "node:path";
 import { isDeepStrictEqual, promisify } from "node:util";
 import type {
+	AgentToolContext,
 	ClineAccountActionRequest,
 	CoreSettingsSnapshot,
+	InvestigationToolName,
 	ProviderCapability,
 	ProviderClient,
 	ProviderConfig,
@@ -88,16 +38,15 @@ import type {
 	SaveProviderSettingsActionRequest,
 } from "@cline/core";
 import {
+	AndroidDeviceInputSchema,
 	addLocalProvider,
 	ClineAccountService,
 	type ClineAccountUser,
 	clearAccountTelemetryIdentity,
+	createAndroidDeviceExecutor,
 	createConfiguredStreamingTranscriptionSession,
 	createLiveDebuggerExecutor,
-	createAndroidDeviceExecutor,
-	AndroidDeviceInputSchema,
 	createReverseEngineeringExecutor,
-	listObservedIdaJobs,
 	createUserInstructionConfigService,
 	ensureCustomProvidersLoaded,
 	executeClineAccountAction,
@@ -111,13 +60,14 @@ import {
 	LiveDebuggerInputSchema,
 	listHookConfigFiles,
 	listLocalProviders,
+	listObservedIdaJobs,
 	normalizeOAuthProvider,
 	ProcessSessionManager,
-	probeProcessStartTokenAsync,
 	ProviderSettingsManager,
 	parseMcpServerRegistration,
 	persistClineAccountTelemetryIdentity,
 	probeMcpServerConnection,
+	probeProcessStartTokenAsync,
 	RemoteEnvironmentService,
 	ReverseEngineeringInputSchema,
 	readCommandLatencyBaseline,
@@ -155,16 +105,41 @@ import {
 	readHubScheduleMode,
 } from "@cline/shared";
 import { readFileSyncStrippingUtf8Bom } from "@cline/shared/node";
-import { resolveClineDir } from "@cline/shared/storage";
+import { resolveClineDataDir, resolveClineDir } from "@cline/shared/storage";
 import packageJson from "../package.json";
 import { CLINE_ACCOUNT_NOT_AUTHENTICATED_RESULT } from "../webview/lib/cline-account-state";
 import { MAX_RECORDED_AUDIO_BYTES } from "../webview/lib/voice-input-limits";
+import { saveAnalysisDocument } from "./analysis-document-store";
+import { getAnalysisEnvironment } from "./analysis-environment";
+import { InvestigationStore } from "./analysis-investigation-store";
+import { analysisParserNotices } from "./analysis-parser-notices";
+import {
+	bindRuntimeAnalysisRequest,
+	probeAnalysisSandbox,
+	RuntimeAnalysisInputSchema,
+	submitAnalysisSandbox,
+} from "./analysis-sandbox-client";
+import {
+	type AnalysisTaskKind,
+	desktopAnalysisTaskOrchestrator,
+} from "./analysis-task-orchestrator";
+import { handleAnalysisWorkflow, WORKFLOW_COMMANDS } from "./analysis-workflow";
+import { AnalysisWorkflowStore } from "./analysis-workflow-store";
+import { importAndroidDebugEvidence } from "./android-debug-evidence";
+import {
+	AndroidCaptureInput,
+	bindAndroidCapture,
+	runAndroidCapture,
+} from "./android-runtime-client";
+import { ApkIncidentService } from "./apk-incident-service";
 import {
 	appendAttachmentUpload,
 	beginAttachmentUpload,
 	discardAttachmentUploads,
 	finishAttachmentUpload,
 } from "./attachment-uploads";
+import { BinaryTriageService, triageReport } from "./binary-triage";
+import { repairBundledAnalysisRuntime } from "./bundled-analysis-runtime";
 import { resolveDesktopTelemetryUser } from "./client-context";
 import { resolveFreshClineAuthToken } from "./cline-auth";
 import {
@@ -185,16 +160,6 @@ import {
 	parseComposioToolkitSlug,
 } from "./composio";
 import { readComputerUseMetrics } from "./computer-use-metrics";
-import {
-	probeAnalysisSandbox,
-	RuntimeAnalysisInputSchema,
-	bindRuntimeAnalysisRequest,
-	submitAnalysisSandbox,
-} from "./analysis-sandbox-client";
-import {
-	type AnalysisTaskKind,
-	desktopAnalysisTaskOrchestrator,
-} from "./analysis-task-orchestrator";
 import {
 	connectorChannelsPayload,
 	startConnectorChannel,
@@ -220,21 +185,36 @@ import {
 	setCustomAiInstructions,
 } from "./desktop-settings";
 import {
+	EngineeringControlPlane,
+	evaluateExecutionPolicy,
+	routeEngineeringModel,
+	scoreReviewRisk,
+} from "./engineering-control-plane";
+import { buildEngineeringGitReview } from "./engineering-git-review";
+import { EngineeringWorktreeManager } from "./engineering-worktree-manager";
+import { planEvidenceAnalysis } from "./execution-analysis-planner";
+import { ExecutionControlService } from "./execution-control-service";
+import { reviewPatchArtifacts } from "./execution-patch-lab";
+import {
 	identifyDesktopFeatureFlagsAccount,
 	isCloudAgentsAvailable,
 	isCloudAgentsEnabled,
 	refreshDesktopFeatureFlags,
 } from "./feature-flags";
 import {
-	EngineeringControlPlane,
-	evaluateExecutionPolicy,
-	routeEngineeringModel,
-	scoreReviewRisk,
-} from "./engineering-control-plane";
-import { optimizationStatus, setResourceProfile } from "./optimization-status";
-import { repairBundledAnalysisRuntime } from "./bundled-analysis-runtime";
-import { buildEngineeringGitReview } from "./engineering-git-review";
-import { EngineeringWorktreeManager } from "./engineering-worktree-manager";
+	bindFirstPartyTaskEvidence,
+	firstPartyReadiness,
+	firstPartyStore,
+	handleFirstPartyCommand,
+	recordFirstPartyTaskEvidence,
+	sessionTaskSnapshots,
+	testFirstPartyFixture,
+} from "./first-party-analysis";
+import {
+	inspectArtifactEvidence,
+	previewArchiveMember,
+} from "./incident-artifacts";
+import { incidentReadiness } from "./incident-readiness";
 import { clearLegacyProviderCredentials } from "./legacy-provider-credentials";
 import {
 	installMarketplaceEntryForDesktopCommand,
@@ -253,6 +233,7 @@ import {
 	runCancellableMcpOAuthAuthorization,
 	shouldRestoreEnabledStateAfterOAuthCancellation,
 } from "./mcp-oauth";
+import { runModelInvestigation } from "./model-investigation";
 import { prepareNotionAgentBridgePackage } from "./notion-agent-bridge";
 import {
 	applyNotionAgentPatch,
@@ -263,6 +244,7 @@ import {
 	cancelProviderOAuthLogin,
 	runCancellableProviderOAuthLogin,
 } from "./oauth-login";
+import { optimizationStatus, setResourceProfile } from "./optimization-status";
 import {
 	findArtifactUnderDir,
 	readSessionManifest,
@@ -271,9 +253,14 @@ import {
 	sessionLogPath,
 	sharedSessionDataDir,
 } from "./paths";
+import {
+	ensureProjectOutputDirectories,
+	getProjectOutputLocation,
+} from "./project-output";
 import { getPullRequestStatus } from "./pull-request";
 import { capturePullRequestEvent } from "./pull-request-telemetry";
 import { resolveDesktopRemoteHelper } from "./remote-helper";
+import { queryRuntimeJni } from "./runtime-jni-evidence";
 import { listSessionAgents } from "./session-data/agents";
 import { readSessionHooks } from "./session-data/artifacts";
 import {
@@ -286,6 +273,21 @@ import {
 } from "./session-data/discovery";
 import { readSessionMessages } from "./session-data/messages";
 import { searchWorkspaceFiles } from "./session-data/search";
+import {
+	detectInstalledTools,
+	getSetupCenterStatus,
+	installFullCapabilityPack,
+	listSetupDevices,
+	platformToolsNotices,
+	readSetupPreferences,
+	rollbackToCorePack,
+	saveSetupPreferences,
+	testFullCapabilityPack,
+	testLicensedIda,
+	testSetupDevice,
+	testSetupWorker,
+} from "./setup-center";
+import { assertSetupIdle, getSetupJob, startSetupJob } from "./setup-jobs";
 import type {
 	ChatSessionCommandRequest,
 	JsonRecord,
@@ -2826,7 +2828,7 @@ export async function executeModelInvestigation(
 			throw new Error("Analysis mode changed; request a new review");
 	};
 	return runModelInvestigation(name, input, {
-        mode,
+		mode,
 		signal: context.signal,
 		assertCurrent,
 		review,
@@ -2857,6 +2859,8 @@ export async function executeModelInvestigation(
 		},
 	});
 }
+const binaryTriage = new BinaryTriageService();
+
 export async function handleCommand(
 	ctx: SidecarContext,
 	command: string,
@@ -2869,6 +2873,71 @@ export async function handleCommand(
 	} else if (typeof args?.sessionId === "string" && args.sessionId.trim()) {
 		const binding = await findSessionRuntimeBinding(ctx, args.sessionId.trim());
 		if (binding) ctx = getEnvironmentContext(ctx, binding.environmentId);
+	}
+
+	if (command.startsWith("binary_triage_")) {
+		if (getCommandRuntimeBinding(ctx, args).kind !== "local")
+			throw new Error("Binary triage is local-only");
+		if (command === "binary_triage_status") return binaryTriage.status();
+		if (!options?.connection?.data?.canApproveTools)
+			throw new Error(
+				"Binary triage requires the trusted desktop connection; no model command bypass",
+			);
+		if (command === "binary_triage_test") {
+			if (args?.confirmed !== true)
+				throw new Error("Explicit owned-fixture confirmation required");
+			return binaryTriage.test();
+		}
+		const id = String(args?.sessionId ?? "").trim();
+		const binding = id
+			? await getCommandSessionBinding(ctx, id, args)
+			: undefined;
+		if (!binding || binding.kind !== "local")
+			throw new Error("Owning local session required");
+		const saved = await binding.sessionManager.get(id),
+			live = ctx.liveSessions.get(id);
+		const root = String(saved?.workspaceRoot || saved?.cwd || "");
+		if (!root) throw new Error("Owning session workspace unavailable");
+		const scope = { sessionId: id, workspace: root };
+		const store = (workflowStore ??= new AnalysisWorkflowStore(
+			join(resolveClineDataDir(), "analysis-workspace", "workflow.sqlite"),
+		));
+		if (command === "binary_triage_history") return store.list(scope, "triage");
+		if (command === "binary_triage_report")
+			return triageReport(store.get(scope, String(args?.id ?? ""), "triage"));
+		if (command === "binary_triage_cancel")
+			return binaryTriage.cancel(id, String(args?.requestId ?? ""));
+		if (command !== "binary_triage_run")
+			throw new Error("Unknown binary triage command");
+		const profile =
+			live?.config.permissionProfile ??
+			live?.config.permission_profile ??
+			readGlobalSettings().permissionProfile ??
+			"full-access";
+		if (!live || profile !== "full-access")
+			throw new Error(
+				"Attach an idle Full Access local session; restricted profiles are not widened",
+			);
+		if (
+			live.busy ||
+			live.transitioningProvider ||
+			["running", "starting", "stopping"].includes(String(saved?.status))
+		)
+			throw new Error("Wait for the owning session to become idle");
+		if ((firstPartyStore().session(id)?.mode ?? "off") === "off")
+			throw new Error("Enable Static or Hybrid Analysis before triage");
+		if (firstPartyStore().session(id)?.workspace !== realpathSync(root))
+			throw new Error(
+				"Analysis workspace identity changed; reselect Analysis mode",
+			);
+		if (args?.confirmed !== true)
+			throw new Error("Explicit static triage confirmation required");
+		return binaryTriage.run(
+			scope,
+			args?.input,
+			store,
+			String(args?.requestId ?? ""),
+		);
 	}
 
 	if (

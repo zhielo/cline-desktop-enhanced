@@ -4,3 +4,5 @@ z3-solver==5.1.0.0
 androguard==4.1.4
 miasm==0.1.5
 cryptography==50.0.2
+r2pipe==2.0.0
+yara-python==4.5.4

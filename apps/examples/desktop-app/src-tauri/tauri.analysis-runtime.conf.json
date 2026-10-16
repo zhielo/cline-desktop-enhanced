@@ -1,14 +1,15 @@
 {
-	"bundle": {
-		"resources": [
-			"icons/app/*.png",
-			"icons/app/macos/*.png",
-			"bin/remote-helpers/*",
-            "bin/javascript-isolation/*",
+  "bundle": {
+    "resources": [
+      "icons/app/*.png",
+      "icons/app/macos/*.png",
+      "bin/remote-helpers/*",
+      "bin/javascript-isolation/*",
       "resources/analysis-runtime/**/*",
       "resources/analysis-runtime-full/**/*",
       "resources/analysis-runtime-angr/**/*",
-      "resources/android-platform-tools/**/*"
-		]
-	}
+      "resources/android-platform-tools/**/*",
+      "resources/binary-triage/**/*"
+    ]
+  }
 }

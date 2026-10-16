@@ -1,4 +1,5 @@
 "use client";
+import { BinaryTriageReadiness } from "./binary-triage-readiness";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { desktopClient } from "@/lib/desktop-client";
@@ -286,6 +287,7 @@ export function SetupCenter() {
 			/>
 			<div className="space-y-6 p-6">
 				<BackendConnectionStatus />
+                <BinaryTriageReadiness />
 				<p className="text-xs">
 					Installed does not mean verified. Ready requires an owned-fixture
 					execution receipt; stale or not-tested components need an explicit

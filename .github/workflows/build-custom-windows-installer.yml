@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
 
       - name: Read supported Bun version
 
@@ -105,8 +107,8 @@ jobs:
           $zip = Join-Path $env:RUNNER_TEMP 'nsis.zip'
           $nsisUrl = "https://github.com/tauri-apps/binary-releases/releases/download/nsis-$env:NSIS_VERSION/nsis-$env:NSIS_VERSION.zip"
           Invoke-WebRequest $nsisUrl -OutFile $zip
-          $expected = 'EF7FF767E5CBD9EDD22ADD3A32C9B8F4500BB10D'
-          $actual = (Get-FileHash $zip -Algorithm SHA1).Hash
+          $expected = 'C7D27F780DDB6CFFB4730138CD1591E841F4B7EDB155856901CDF5F214394FA1'
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash
           if ($actual -ne $expected) { throw "NSIS checksum mismatch: $actual" }
           Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
           "MAKENSIS_PATH=$env:RUNNER_TEMP/nsis-$env:NSIS_VERSION/makensis.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -236,6 +238,11 @@ jobs:
             ./scripts/package-analysis-runtime.ps1 -EnginePython $python -Pack $pack
             if ($LASTEXITCODE -ne 0) { throw "Full pack execution/packaging failed: $pack" }
           }
+
+      - name: Package and execution-test Binary Triage Pack
+        timeout-minutes: 15
+        shell: pwsh
+        run: ./scripts/package-binary-triage.ps1
 
       - name: Package official Android connectivity tools
         shell: pwsh
@@ -532,6 +539,13 @@ jobs:
         run: |
           "Smoke test: ${{ steps.smoke.outcome }}; Installed UI: ${{ steps.ui_acceptance.outcome }}" |
             Out-File 'dist/custom-installer/BUILD-INFO.txt' -Encoding utf8 -Append
+
+      - name: Write dependency source inventory
+        if: ${{ steps.installer.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          bun scripts/write-dependency-inventory.ts apps/examples/desktop-app/dist/custom-installer/DEPENDENCIES.cdx.json
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency source inventory generation failed' }
 
       - name: Upload verified setup.exe
         if: ${{ steps.installer.outcome == 'success' && steps.smoke.outcome == 'success' && steps.ui_acceptance.outcome == 'success' }}
