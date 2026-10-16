@@ -151,3 +151,6 @@ jobs:
       - name: Test pinned native triage engines
         shell: pwsh
         run: ./scripts/package-binary-triage.ps1
+      - name: Test triage with shipped-style isolated embedded Python
+        shell: pwsh
+        run: ./scripts/test-embedded-binary-triage.ps1 -EnginePython $env:CLINE_RE_PYTHON

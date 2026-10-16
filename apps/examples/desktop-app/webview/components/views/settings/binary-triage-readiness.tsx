@@ -17,6 +17,19 @@ const labels: Record<string, string> = {
 	unsupported: "Unsupported",
 	"integrity-failed": "Integrity failed",
 };
+// Only host-owned diagnostic tokens are exposed; never arbitrary transport text.
+export function ownedTriageDiagnostic(error: unknown): string {
+ const message = error instanceof Error ? error.message : "";
+ const match = message.match(/Owned (radare2|yara|capa|floss) fixture failed; not ready \((completed|failed|timed-out|cancelled|termination-unconfirmed); ((?:request|yara-import|yara-rules|r2-import|r2-open|r2-inspect|native-launch|native-result):(?:ValueError|FileNotFoundError|ModuleNotFoundError|ImportError|OSError|CalledProcessError|PermissionError)|worker-exit|no diagnostic)\)/);
+ if (match) return match[0];
+ const fixed = [
+  "Binary triage requires the trusted desktop connection; no model command bypass",
+  "Verified analysis Python runtime required; use Setup Center",
+  "Wait for active triage jobs before readiness testing",
+  "Explicit owned-fixture confirmation required",
+ ];
+ return fixed.find(value => message.includes(value)) ?? "No bounded engine diagnostic was returned";
+}
 export function BinaryTriageReadiness() {
 	const [capabilities, setCapabilities] = useState<Capability[]>([]),
 		[busy, setBusy] = useState(false),
@@ -56,9 +69,9 @@ export function BinaryTriageReadiness() {
 				{ timeoutMs: 420000 },
 			);
 			await refresh();
-		} catch {
+		} catch (cause) {
 			setError(
-				"Fixture testing did not establish full readiness. Refresh status; no operation is automatically retried.",
+				`Fixture testing did not establish full readiness. ${ownedTriageDiagnostic(cause)}. Refresh status; no operation is automatically retried.`,
 			);
 			await refresh().catch(() => {});
 		} finally {

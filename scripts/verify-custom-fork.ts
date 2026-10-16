@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path: "scripts/test-embedded-binary-triage.ps1", markers: ["76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0", "python313._pth", "test-binary-triage-pack.ts"]},
+ {path: "apps/examples/desktop-app/webview/components/views/settings/binary-triage-readiness.tsx", markers: ["ownedTriageDiagnostic", "no operation is automatically retried"]},
 	{
 		path: "scripts/install-pinned-gitleaks.ps1",
 		markers: ["SHA256", "version self-check failed", "$attempt -le 3"],

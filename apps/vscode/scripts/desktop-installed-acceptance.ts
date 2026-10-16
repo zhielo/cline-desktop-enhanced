@@ -843,7 +843,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if (triageBefore.capabilities.length !== 4 || triageBefore.capabilities.some(c=>c.state!=="installed-not-tested")) throw new Error("Installed triage pack must start installed but untested");
     page.once("dialog", async dialog => { if(dialog.message().includes("fixed project-owned PE fixtures")) await dialog.accept(); else await dialog.dismiss(); });
     await triagePanel.getByRole("button",{name:"Test triage fixtures",exact:true}).click();
-    await triagePanel.getByText("Owned fixture passed for this pack/interpreter; target compatibility remains separate",{exact:true}).first().waitFor({timeout:120000});
+    // Four sequential workers each have a 90-second budget; observe the existing
+    // UI terminal result (success OR bounded error), never replay the test.
+    await page.waitForFunction(() => {
+      const panel = document.querySelector('[aria-label="Binary Triage Pack readiness"]');
+      return !!panel?.querySelector('[role="alert"]') ||
+        panel?.textContent?.includes("Owned fixture passed for this pack/interpreter; target compatibility remains separate") &&
+        !panel?.textContent?.includes("Testing owned fixtures…");
+    }, undefined, { timeout: 425000 });
+    const triageError = await triagePanel.getByRole("alert").textContent({timeout:1000}).catch(()=>null);
+    if (triageError) {
+      await writeFile(join(evidence,"binary-triage-readiness-error.json"),JSON.stringify({message:triageError.slice(0,1000)},null,2));
+      throw new Error(`Installed triage owned acceptance: ${triageError.slice(0,1000)}`);
+    }
     const triageAfter=await rpc<{capabilities:Array<{id:string;state:string}>}>(page,"binary_triage_status",{environmentId:"local"});
     if(triageAfter.capabilities.length!==4||triageAfter.capabilities.some(c=>c.state!=="ready")) throw new Error("Installed triage engine fixture did not pass");
     await writeFile(join(evidence,"binary-triage-readiness.json"),JSON.stringify(triageAfter,null,2));

@@ -124,7 +124,7 @@ async function main() {
     job("Build CLI workspace quality prerequisite", ["run", "-F", "@cline/cli", "build"]),
   ];
   const checks = [
-    job("Test Binary Triage Pack and guided investigation", ["x", "vitest", "run", "sidecar/binary-triage.test.ts", "webview/components/views/chat/guided-investigation.test.tsx", "--config", "vitest.config.mts"], desktop),
+    job("Test Binary Triage Pack and guided investigation", ["x", "vitest", "run", "sidecar/binary-triage.test.ts", "webview/components/views/settings/binary-triage-readiness.test.tsx", "webview/components/views/chat/guided-investigation.test.tsx", "--config", "vitest.config.mts"], desktop),
     job("Type-check complete workspace including tests and smoke declarations", ["run", "types"]),
     job("Lint complete workspace", ["run", "lint"]),
     job("Test first-party static parser, evidence and supervised workers", ["x", "vitest", "run", "src/analysis/analysis.test.ts", "src/analysis/semantic.test.ts", "src/analysis/recovery.test.ts", "src/analysis/module-context.test.ts", "src/analysis/dotnet.test.ts", "src/analysis/il.test.ts", "src/analysis/managed-signature.test.ts", "src/analysis/scenario.test.ts", "src/analysis/managed-stack.test.ts", "src/analysis/electron-boundaries.test.ts", "src/analysis/managed-exceptions.test.ts", "src/analysis/unified-evidence.test.ts", "src/analysis/inspector.test.ts", "src/analysis/inspector-console.test.ts", "src/runtime/process-start-token.test.ts", "--config", "vitest.config.ts"], path.join(root,"sdk/packages/core")),

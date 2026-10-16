@@ -786,3 +786,5 @@ Native triage acceptance has an independent fast Windows job in custom desktop v
 FLOSS release v3.1.1 reports embedded runtime version `v3.1.1-0-g3cd3ee6` in the verified official archive. The lock now records exact archive/release and runtime versions separately, with exact runtime-version regression checks; it does not broadly allow unknown build suffixes or skip provenance checks.
 
 Installed acceptance explicitly enters the new Start here guide and navigates to App analysis before checking saved receipts and Off-mode behavior. Those existing assertions remain intact; new guide navigation is also covered by a no-execution UI regression.
+
+Installed triage acceptance now observes either the readiness test's terminal success or bounded host-owned engine/phase/error tokens, without raw exception output or automatic replay. Its observation budget covers the existing four sequential 90-second worker limits; worker deadlines and all four Ready assertions remain unchanged. An independent Windows check repeats all four actual fixtures with checksum-pinned CPython 3.13.12 embedded isolation matching the shipped runtime, not only the build venv.
