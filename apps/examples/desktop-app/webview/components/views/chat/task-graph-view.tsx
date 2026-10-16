@@ -179,7 +179,6 @@ export function TaskGraphView({ report }: { report: SessionTaskReport }) {
 							<g
 								aria-label={nodeTitle(node)}
 								key={node.id}
-								role="group"
 								transform={`translate(${position.x}, ${position.y})`}
 							>
 								<title>{nodeTitle(node)}</title>

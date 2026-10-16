@@ -149,7 +149,7 @@ export function TaskReportPanel({
 	}, [complete]);
 	useEffect(() => {
 		setView(report.mode === "activity" ? "graph" : "list");
-	}, [report.mode, report.sourceMessageId]);
+	}, [report.mode]);
 
 	const activeStep = useMemo(
 		() =>
@@ -301,7 +301,7 @@ export function TaskReportPanel({
 				<div className="border-border/60 border-t">
 					<div className="max-h-[min(56vh,32rem)] overflow-y-auto px-3.5 py-3.5">
 						<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-							<div
+							<fieldset
 								aria-label="Task report view"
 								className="inline-flex items-center rounded-lg border border-border/70 p-0.5"
 							>
@@ -333,7 +333,7 @@ export function TaskReportPanel({
 									<GitBranch className="size-3.5" />
 									Graph
 								</button>
-							</div>
+							</fieldset>
 							<button
 								className={cn(
 									"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
