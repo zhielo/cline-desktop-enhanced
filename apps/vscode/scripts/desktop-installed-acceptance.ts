@@ -666,8 +666,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const analysisArgs={sessionId:session.sessionId,environmentId:"local"};
     const beforeAnalysis=await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs);
     if(beforeAnalysis.mode!=="off")throw new Error("New session analysis must default Off");
-    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("static");
-    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="static"&&!select.disabled;});
+    await page.locator("#session-analysis-mode-installer-ui-owned-session").selectOption("static");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode-installer-ui-owned-session');return select?.value==="static"&&!select.disabled;});
     const parsed=await rpc<{id:string;status:string}>(page,"first_party_analysis_run",{...analysisArgs,input:{target:"owned-analysis-current",compareTarget:"owned-analysis-previous"}});
     if(!["completed","partial"].includes(parsed.status))throw new Error("Installed static parser failed");
     const allEvidence=async(view:string,filter?:string)=>{
@@ -707,8 +707,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const changes=await rpc<{items:Array<{kind:string;value:string;change:string}>}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:parsed.id,view:"comparison",filter:"resolved-endpoint"}});
     if(!changes.items.some(f=>f.change==="removed"&&f.value==="https://owned.invalid/v1")||!changes.items.some(f=>f.change==="added"&&f.value==="https://owned.invalid/v2"))throw new Error("Installed endpoint finding comparison failed");
     page.once("dialog",dialog=>dialog.accept());
-    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("hybrid");
-    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="hybrid"&&!select.disabled;});
+    await page.locator("#session-analysis-mode-installer-ui-owned-session").selectOption("hybrid");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode-installer-ui-owned-session');return select?.value==="hybrid"&&!select.disabled;});
     await page.reload();
     await page.getByRole("button", {name:/Installer owned session/}).first().click();
     const hybridStatus=await rpc<{mode:string;receipts:Array<{id:string}>}>(page,"first_party_analysis_status",analysisArgs);
@@ -732,8 +732,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(hybridBundle.payload.records.length!==2)throw new Error("Installed Hybrid selected static/runtime export incomplete");
     stages.push("installed-hybrid-owned-isolated-execution-and-export-passed");
 
-    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
-    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode');return select?.value==="off"&&!select.disabled;});
+    await page.locator("#session-analysis-mode-installer-ui-owned-session").selectOption("off");
+    await page.waitForFunction(()=>{const select=document.querySelector<HTMLSelectElement>('#session-analysis-mode-installer-ui-owned-session');return select?.value==="off"&&!select.disabled;});
     await page.getByRole("button",{name:"Open Analysis Workspace",exact:true}).click();
     await page.getByLabel("First-party Analysis Workspace",{exact:true}).waitFor();
     await page.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
