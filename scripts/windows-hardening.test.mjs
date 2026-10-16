@@ -188,3 +188,12 @@ test("both Windows gates use checksum-verified upstream Gitleaks", () => {
     expect(load(file)).toContain("gitleaks git --redact");
   }
 });
+
+
+test("installed Analysis waits use the active accessible identity, not obsolete shared IDs", () => {
+ const source = load("apps/vscode/scripts/desktop-installed-acceptance.ts");
+ expect(source).not.toContain("#session-analysis-mode");
+ expect(source.match(/querySelector<HTMLSelectElement>\('select\[aria-label="Session Analysis mode"\]'\)/g)).toHaveLength(3);
+ for (const mode of ["static", "hybrid", "off"]) expect(source).toContain(`select?.value==="${mode}"&&!select.disabled`);
+ expect(source).toContain('getByLabel("Draft Analysis mode", { exact: true })');
+});
