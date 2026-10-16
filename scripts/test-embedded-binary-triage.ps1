@@ -14,6 +14,10 @@ New-Item -ItemType Directory -Path (Join-Path $root 'Lib/site-packages') -Force 
 Copy-Item -Path (Join-Path $site '*') -Destination (Join-Path $root 'Lib/site-packages') -Recurse -Force
 @('python313.zip', '.', 'Lib/site-packages', 'import site') | Set-Content (Join-Path $root 'python313._pth') -Encoding ascii
 $env:CLINE_RE_PYTHON = Join-Path $root 'python.exe'
-$env:CLINE_BINARY_TRIAGE_ROOT = Join-Path $PSScriptRoot '../apps/examples/desktop-app/src-tauri/resources/binary-triage'
+# Match installed resource paths with spaces, not just the checkout's simple path.
+$source = Join-Path $PSScriptRoot '../apps/examples/desktop-app/src-tauri/resources/binary-triage'
+$pack = Join-Path $env:RUNNER_TEMP 'cline triage pack with spaces'
+Copy-Item -LiteralPath $source -Destination $pack -Recurse -Force
+$env:CLINE_BINARY_TRIAGE_ROOT = $pack
 & bun scripts/test-binary-triage-pack.ts
 if ($LASTEXITCODE -ne 0) { throw 'Embedded triage execution failed; no installer readiness claimed' }

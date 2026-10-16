@@ -28,7 +28,9 @@ def main(req):
         phase = "r2-import"
         import r2pipe
         phase = "r2-open"
-        r = r2pipe.open(target, flags=['-2', '-N', '-S', '-e', 'scr.color=0', '-e', 'cfg.plugins=false'], radare2home=os.path.dirname(req['executable']))
+        # r2pipe 2.0.0 splits string targets at spaces as extra file args.
+        # Its list form preserves exactly one literal path, including Program Files.
+        r = r2pipe.open([target], flags=['-2', '-N', '-S', '-e', 'scr.color=0', '-e', 'cfg.plugins=false'], radare2home=os.path.dirname(req['executable']))
         try:
             phase = "r2-inspect"
             version = str((r.cmdj('?Vj') or {}).get('version', 'unknown'))

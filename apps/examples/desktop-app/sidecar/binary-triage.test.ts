@@ -13,6 +13,7 @@ import {
 	verifyTriagePack,
 } from "./binary-triage";
 import { TriageRequest, triageEngine } from "./binary-triage-contracts";
+import { BINARY_TRIAGE_WORKER } from "./binary-triage-worker";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -46,6 +47,10 @@ async function pack() {
 	return root;
 }
 describe("fixed binary triage contracts", () => {
+ it("passes one literal target to the pinned r2pipe path API", () => {
+  expect(BINARY_TRIAGE_WORKER).toContain("r2pipe.open([target], flags=");
+  expect(BINARY_TRIAGE_WORKER).not.toContain("r2pipe.open(target,");
+ });
 	it("pins the official executable runtime version, including FLOSS build metadata", () => {
 		expect(matchesTriageVersion("floss", "v3.1.1-0-g3cd3ee6")).toBe(true);
 		expect(matchesTriageVersion("floss", "3.1.2")).toBe(false);
