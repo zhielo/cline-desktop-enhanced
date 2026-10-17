@@ -1,13 +1,8 @@
 import { ResultSchema } from "../../../analysis/contracts";
 import { EvidenceTraceSchema } from "../advanced-candidates-schema";
 import { EvidenceGraphSchema } from "./analysis-evidence-graph";
-/** Traverses declared evidence relationships only; never infers whole-program semantics. */
-export function traceEvidence(
-	document: unknown,
-	options: unknown,
-	dataFlowOnly: boolean,
-) {
-	const q = EvidenceTraceSchema.parse(options);
+/** Parses reports as untrusted declared evidence, never observed execution. */
+export function declaredEvidence(document: unknown) {
 	let nodes: {
 		id: string;
 		label: string;
@@ -66,6 +61,16 @@ export function traceEvidence(
 	for (const e of edges)
 		if (!lookup.has(e.source) || !lookup.has(e.target))
 			throw new Error("Dangling evidence edge");
+	return { nodes, edges, lookup, sourceCoverage };
+}
+/** Traverses declared evidence relationships only; never infers whole-program semantics. */
+export function traceEvidence(
+	document: unknown,
+	options: unknown,
+	dataFlowOnly: boolean,
+) {
+	const q = EvidenceTraceSchema.parse(options);
+	const { edges, lookup, sourceCoverage } = declaredEvidence(document);
 	if (!lookup.has(q.start_id) || (q.end_id && !lookup.has(q.end_id)))
 		throw new Error("Unknown evidence trace endpoint");
 	const outgoing = new Map<string, typeof edges>();

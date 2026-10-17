@@ -531,3 +531,11 @@ it.each(["build_apk", "recompile_smali", "validate_smali_project", "patch_smali_
  expect(plan.requirements).toContain("new-output-no-overwrite");
  expect(() => orchestrator.approve(plan.id, [], plan.requestHash)).toThrow();
 });
+
+it.each(["audit_candidate_batch","trace_source_sink"])("keeps %s read-only and still requires one-use exact approval",async operation=>{
+ const root=workspace(),target=join(root,"owned.json");writeFileSync(target,"{}");
+ const orchestrator=new AnalysisTaskOrchestrator();
+ const plan=await orchestrator.prepare({workspaceRoot:root,kind:"static",request:{operation,target}});
+ expect(plan.permission).toBe("Inspect");expect(plan.status).toBe("awaiting-approval");
+ expect(plan.requirements).not.toContain("authorized-candidate-artifact-modification");
+});

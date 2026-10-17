@@ -74,6 +74,16 @@ function template(command: string) {
 			max_nodes: 100,
 			max_edges: 200,
 		};
+	if (command === "trace_source_sink")
+		base.source_sink = {
+			source_ids: [""],
+			sink_ids: [""],
+			stop_ids: [],
+			relation: "data-flow",
+			max_depth: 6,
+			max_states: 1000,
+			max_edge_visits: 4000,
+		};
 	if (command === "decompile_dotnet_method")
 		base.managed_method = { method_token: "0x06000001" };
 	if (command === "read_jvm_method")

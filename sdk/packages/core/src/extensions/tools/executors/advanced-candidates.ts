@@ -186,16 +186,24 @@ export type CandidateRequest = {
 	output_file?: string;
 	candidate?: unknown;
 };
-export async function advancedCandidate(
+/** Computes an exact candidate without publishing it. Existing-output mode is private to read-only audit. */
+async function prepareCandidate(
 	input: CandidateRequest,
 	signal?: AbortSignal,
+	auditExistingOutput = false,
 ) {
 	const c = CandidateSchema.parse(input.candidate),
 		target = input.target,
 		output = input.output_file;
 	if (!target || !output || !path.isAbsolute(target))
 		throw new Error("Explicit absolute source and new output_file required");
-	await assertNewCandidate(target, output);
+	if (auditExistingOutput) {
+		if (
+			!path.isAbsolute(output) ||
+			path.resolve(target) === path.resolve(output)
+		)
+			throw new Error("Choose a distinct absolute candidate output_file");
+	} else await assertNewCandidate(target, output);
 	const source = await readCandidateFile(target, 16 * 1024 * 1024, signal);
 	if (candidateHash(source) !== c.expected_sha256)
 		throw new Error("Candidate source SHA256 mismatch");
@@ -205,35 +213,63 @@ export async function advancedCandidate(
 		.replace(/^patch_/, "");
 	const kind = rawKind === "binary_patch" ? "binary" : rawKind;
 	if (
-		[c.byte_patch, c.literal, c.managed, c.jvm].filter((x) => x !== undefined)
-			.length !== 1
+		[
+			c.byte_patch,
+			c.byte_patches,
+			c.literal,
+			c.literals,
+			c.managed,
+			c.jvm,
+		].filter((x) => x !== undefined).length !== 1
 	)
 		throw new Error("Exactly one candidate edit recipe required");
 	let bytes = Buffer.from(source);
 	let detail: unknown;
 	if (["binary_patch", "binary"].includes(kind)) {
-		if (!c.byte_patch) throw new Error("byte_patch required");
-		const { offset, expected_hex, replacement_hex } = c.byte_patch,
-			expected = Buffer.from(expected_hex, "hex"),
-			next = Buffer.from(replacement_hex, "hex");
-		if (
-			expected.length !== next.length ||
-			offset + expected.length > source.length ||
-			!source.subarray(offset, offset + expected.length).equals(expected)
-		)
-			throw new Error(
-				"Exact existing bytes and equal-length replacement required",
-			);
-		if (expected.equals(next)) throw new Error("No-op byte patch");
-		next.copy(bytes, offset);
-		detail = {
-			offset,
-			before: expected.toString("hex"),
-			after: next.toString("hex"),
-		};
+		const edits = c.byte_patch ? [c.byte_patch] : c.byte_patches;
+		if (!edits) throw new Error("byte_patch or byte_patches required");
+		const ordered = [...edits].sort((a, b) => a.offset - b.offset);
+		let previousEnd = -1;
+		let totalBytes = 0;
+		for (const edit of ordered) {
+			const { offset, expected_hex, replacement_hex } = edit;
+			const expected = Buffer.from(expected_hex, "hex"),
+				next = Buffer.from(replacement_hex, "hex");
+			totalBytes += expected.length;
+			if (offset < previousEnd || totalBytes > 65536)
+				throw new Error(
+					"Overlapping binary edits or aggregate 65536-byte budget exceeded",
+				);
+			if (
+				expected.length !== next.length ||
+				offset + expected.length > source.length ||
+				!source.subarray(offset, offset + expected.length).equals(expected)
+			)
+				throw new Error(
+					"Exact existing bytes and equal-length replacement required",
+				);
+			if (expected.equals(next)) throw new Error("No-op byte patch");
+			next.copy(bytes, offset);
+			previousEnd = offset + expected.length;
+		}
+		// Preserve the v1 fingerprint for legacy single-edit recipes.
+		detail = c.byte_patch
+			? {
+					offset: c.byte_patch.offset,
+					before: c.byte_patch.expected_hex.toLowerCase(),
+					after: c.byte_patch.replacement_hex.toLowerCase(),
+				}
+			: {
+					edits: ordered.map((e) => ({
+						offset: e.offset,
+						before: e.expected_hex.toLowerCase(),
+						after: e.replacement_hex.toLowerCase(),
+					})),
+				};
 	} else if (kind === "ast_transform") {
+		const edits = c.literal ? [c.literal] : c.literals;
 		if (
-			!c.literal ||
+			!edits ||
 			path.extname(target).toLowerCase() !==
 				path.extname(output).toLowerCase() ||
 			source.length > 1024 * 1024
@@ -241,8 +277,25 @@ export async function advancedCandidate(
 			throw new Error(
 				"AST recipe requires matching JS/TS extension and <=1 MiB source",
 			);
-		bytes = Buffer.from(transformLiteral(source, target, c.literal));
-		detail = c.literal;
+		const ordered = [...edits].sort((a, b) => a.start - b.start);
+		let previousEnd = -1,
+			totalChars = 0;
+		for (const edit of ordered) {
+			totalChars += edit.expected.length + edit.replacement.length;
+			if (edit.start < previousEnd || totalChars > 65536)
+				throw new Error(
+					"Overlapping AST edits or aggregate 65536-character budget exceeded",
+				);
+			// Validate every original selection against the same unmodified source.
+			transformLiteral(source, target, edit);
+			previousEnd = edit.start + edit.expected.length;
+		}
+		// Descending offsets preserve all original UTF-16 positions, including length-changing edits.
+		for (const edit of [...ordered].reverse())
+			bytes = Buffer.from(transformLiteral(bytes, target, edit));
+		if (bytes.length > 1024 * 1024)
+			throw new Error("Transformed source exceeds 1 MiB budget");
+		detail = c.literal ?? { edits: ordered };
 	} else if (kind === "dotnet_constant") {
 		if (!c.managed) throw new Error("managed constant recipe required");
 		const m = selectedManagedMethod(source, {
@@ -335,15 +388,60 @@ export async function advancedCandidate(
 			"Filesystem checks are not an OS sandbox; an adversarial concurrent filesystem mutator is outside this guarantee.",
 		],
 	};
+	return {
+		result,
+		bytes,
+		target,
+		output,
+		sourceHash: c.expected_sha256,
+		approvedPreview: c.preview_sha256,
+	};
+}
+export async function auditAdvancedCandidate(
+	input: CandidateRequest,
+	signal?: AbortSignal,
+) {
+	const prepared = await prepareCandidate(input, signal, true);
+	// This path only reads: it cannot publish or accept a preview as authorization.
+	let actual: Buffer;
+	try {
+		actual = await readCandidateFile(prepared.output, 16 * 1024 * 1024, signal);
+	} catch (error) {
+		signal?.throwIfAborted();
+		if ((error as NodeJS.ErrnoException).code === "ENOENT")
+			return {
+				status: "missing" as const,
+				expectedOutputSha256: prepared.result.outputHash,
+				sourcePreserved: true,
+			};
+		throw error;
+	}
+	const actualOutputSha256 = candidateHash(actual);
+	return {
+		status:
+			actualOutputSha256 === prepared.result.outputHash
+				? ("verified" as const)
+				: ("mismatch" as const),
+		expectedOutputSha256: prepared.result.outputHash,
+		actualOutputSha256,
+		sourcePreserved: true,
+	};
+}
+export async function advancedCandidate(
+	input: CandidateRequest,
+	signal?: AbortSignal,
+) {
+	const { result, bytes, target, output, sourceHash, approvedPreview } =
+		await prepareCandidate(input, signal);
 	if (input.operation.startsWith("preview_")) return result;
-	if (c.preview_sha256 !== previewSha256)
+	if (approvedPreview !== result.previewSha256)
 		throw new Error(
 			"Apply requires matching preview_sha256 binding source, output and exact edit",
 		);
 	const publication = await publishCandidate(
 		target,
 		output,
-		c.expected_sha256,
+		sourceHash,
 		bytes,
 		signal,
 	);

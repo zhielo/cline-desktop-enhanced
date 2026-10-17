@@ -127,3 +127,68 @@ it("returns truthful partial publications on cancellation between stages", async
 	expect(existsSync(join(root, "a.candidate.bin"))).toBe(true);
 	await expect(stat(join(root, "b.candidate.bin"))).rejects.toThrow();
 });
+
+it("audits existing exact outputs without replaying or requiring a publication preview", async () => {
+	await manifest();
+	let audit = await candidateBatch({
+		operation: "audit_candidate_batch",
+		target,
+	});
+	expect(audit.remainingStageIds).toEqual(["a", "b"]);
+	expect(audit.published).toBe(false);
+	const p = await candidateBatch({
+		operation: "preview_candidate_batch",
+		target,
+	});
+	await candidateBatch({
+		operation: "apply_candidate_batch",
+		target,
+		batch_preview_sha256: p.batchPreviewSha256,
+	});
+	const before = (await stat(join(root, "a.candidate.bin"))).mtimeMs;
+	audit = await candidateBatch({ operation: "audit_candidate_batch", target });
+	expect(audit.status).toBe("completed");
+	expect(audit.verifiedStageIds).toEqual(["a", "b"]);
+	expect(audit.results?.[0]).toMatchObject({
+		status: "verified",
+		sourcePreserved: true,
+	});
+	expect((await stat(join(root, "a.candidate.bin"))).mtimeMs).toBe(before);
+});
+it("blocks recovery recommendations on changed outputs or originals", async () => {
+	await manifest();
+	await writeFile(join(root, "a.candidate.bin"), "mismatch");
+	let audit = await candidateBatch({
+		operation: "audit_candidate_batch",
+		target,
+	});
+	expect(audit.recoveryBlocked).toBe(true);
+	expect(audit.remainingStageIds).toEqual([]);
+	expect(audit.results?.[0].status).toBe("mismatch");
+	await rm(join(root, "a.candidate.bin"));
+	await writeFile(join(root, "a.bin"), "changed");
+	audit = await candidateBatch({ operation: "audit_candidate_batch", target });
+	expect(audit.results?.[0]).toMatchObject({
+		status: "unverified",
+		sourcePreserved: null,
+	});
+	expect(audit.recoveryBlocked).toBe(true);
+});
+it("audits a partial batch and proposes only missing stage IDs without writing", async () => {
+	await manifest();
+	await writeFile(join(root, "a.candidate.bin"), Buffer.from([0, 2]));
+	const audit = await candidateBatch({
+		operation: "audit_candidate_batch",
+		target,
+	});
+	expect(audit.verifiedStageIds).toEqual(["a"]);
+	expect(audit.remainingStageIds).toEqual(["b"]);
+	expect(audit.recoveryBlocked).toBe(false);
+	expect(existsSync(join(root, "b.candidate.bin"))).toBe(false);
+});
+it("does not interpret arbitrary command names as candidate apply", async () => {
+	await manifest();
+	await expect(
+		candidateBatch({ operation: "replay_everything", target }),
+	).rejects.toThrow("Unknown");
+});

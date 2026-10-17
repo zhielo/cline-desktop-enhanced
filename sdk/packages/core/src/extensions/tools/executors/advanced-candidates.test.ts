@@ -348,3 +348,166 @@ it("concurrent publication never overwrites the winning candidate", async () => 
 	expect(await readFile(output)).toEqual(Buffer.from([0, 255, 2, 3]));
 	expect(await readFile(target)).toEqual(Buffer.from([0, 1, 2, 3]));
 });
+
+it("previews and publishes disjoint multi-byte edits bound to one candidate", async () => {
+	const candidate = {
+		expected_sha256: byteRecipe.expected_sha256,
+		byte_patches: [
+			{ offset: 3, expected_hex: "03", replacement_hex: "FF" },
+			{ offset: 0, expected_hex: "00", replacement_hex: "aa" },
+		],
+	};
+	const p = await advancedCandidate(request("preview_binary_patch", candidate));
+	await advancedCandidate(
+		request("patch_binary", { ...candidate, preview_sha256: p.previewSha256 }),
+	);
+	expect(await readFile(output)).toEqual(Buffer.from([0xaa, 1, 2, 0xff]));
+	expect(await readFile(target)).toEqual(Buffer.from([0, 1, 2, 3]));
+});
+it("rejects overlapping or mixed single/multiple byte recipes without publication", async () => {
+	for (const candidate of [
+		{ ...byteRecipe, byte_patches: [byteRecipe.byte_patch] },
+		{
+			expected_sha256: byteRecipe.expected_sha256,
+			byte_patches: [byteRecipe.byte_patch, byteRecipe.byte_patch],
+		},
+		{ expected_sha256: byteRecipe.expected_sha256, byte_patches: [] },
+	]) {
+		await expect(
+			advancedCandidate(request("preview_binary_patch", candidate)),
+		).rejects.toThrow();
+	}
+	await expect(stat(output)).rejects.toThrow();
+});
+it("applies multi-literal changes at original UTF-16 offsets despite changed lengths and Unicode", async () => {
+	target = join(root, "owned.ts");
+	output = join(root, "candidate.ts");
+	const source = '\ufeffconst emoji = "😀"; const a = 10; const b = false;';
+	await writeFile(target, source);
+	const candidate = {
+		expected_sha256: candidateHash(Buffer.from(source)),
+		literals: [
+			{
+				start: source.indexOf("false"),
+				expected: "false",
+				replacement: "true",
+			},
+			{ start: source.indexOf("10"), expected: "10", replacement: "12345" },
+		],
+	};
+	const p = await advancedCandidate(
+		request("preview_ast_transform", candidate),
+	);
+	await advancedCandidate(
+		request("apply_ast_transform", {
+			...candidate,
+			preview_sha256: p.previewSha256,
+		}),
+	);
+	expect(await readFile(output, "utf8")).toBe(
+		source.replace("10", "12345").replace("false", "true"),
+	);
+	expect(await readFile(target, "utf8")).toBe(source);
+});
+it("rejects overlapping AST ranges, syntax injection and stale multi-edit previews", async () => {
+	target = join(root, "owned.ts");
+	output = join(root, "candidate.ts");
+	const source = "const a = -1; const b = 2;";
+	await writeFile(target, source);
+	const first = {
+		start: source.indexOf("-1"),
+		expected: "-1",
+		replacement: "3",
+	};
+	const candidate = {
+		expected_sha256: candidateHash(Buffer.from(source)),
+		literals: [
+			first,
+			{ start: source.indexOf("2"), expected: "2", replacement: "4" },
+		],
+	};
+	await expect(
+		advancedCandidate(
+			request("preview_ast_transform", {
+				...candidate,
+				literals: [first, first],
+			}),
+		),
+	).rejects.toThrow("Overlapping");
+	await expect(
+		advancedCandidate(
+			request("preview_ast_transform", {
+				...candidate,
+				literals: [{ ...first, replacement: "run()" }],
+			}),
+		),
+	).rejects.toThrow("primitive");
+	const p = await advancedCandidate(
+		request("preview_ast_transform", candidate),
+	);
+	await expect(
+		advancedCandidate(
+			request("apply_ast_transform", {
+				...candidate,
+				literals: [first],
+				preview_sha256: p.previewSha256,
+			}),
+		),
+	).rejects.toThrow("preview_sha256");
+	await expect(stat(output)).rejects.toThrow();
+});
+it("enforces aggregate multi-edit byte budgets and 32-edit cardinality", async () => {
+	const bytes = Buffer.alloc(65538);
+	await writeFile(target, bytes);
+	const edit = {
+		offset: 0,
+		expected_hex: "00".repeat(32769),
+		replacement_hex: "ff".repeat(32769),
+	};
+	await expect(
+		advancedCandidate(
+			request("preview_binary_patch", {
+				expected_sha256: candidateHash(bytes),
+				byte_patches: [edit, { ...edit, offset: 32769 }],
+			}),
+		),
+	).rejects.toThrow("aggregate");
+	await expect(
+		advancedCandidate(
+			request("preview_binary_patch", {
+				expected_sha256: candidateHash(bytes),
+				byte_patches: Array.from({ length: 33 }, (_, offset) => ({
+					offset,
+					expected_hex: "00",
+					replacement_hex: "ff",
+				})),
+			}),
+		),
+	).rejects.toThrow();
+});
+it("enforces aggregate multi-literal character budget", async () => {
+	target = join(root, "owned.ts");
+	output = join(root, "candidate.ts");
+	const literal = JSON.stringify("x".repeat(40000)),
+		source = `const a = ${literal}; const b = ${literal};`;
+	await writeFile(target, source);
+	await expect(
+		advancedCandidate(
+			request("preview_ast_transform", {
+				expected_sha256: candidateHash(Buffer.from(source)),
+				literals: [
+					{
+						start: source.indexOf(literal),
+						expected: literal,
+						replacement: '"a"',
+					},
+					{
+						start: source.lastIndexOf(literal),
+						expected: literal,
+						replacement: '"b"',
+					},
+				],
+			}),
+		),
+	).rejects.toThrow("aggregate");
+});
