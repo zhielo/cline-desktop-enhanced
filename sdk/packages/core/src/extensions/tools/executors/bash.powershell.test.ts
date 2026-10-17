@@ -165,16 +165,24 @@ for (const outer of shells) {
 					}
 				});
 
-				it("does not join outer statements or flags across newline boundaries", async () => {
-					for (const newline of ["\n", "\r", "\r\n"]) {
-						const output = await executor(
-							`${inner.name} -NoProfile -Command${newline}"Write-Output 42"`,
-							process.cwd(),
-							ctx,
-						);
-						expect(output).toContain("Write-Output 42");
-						expect(output).toContain("[stderr]");
-					}
+				// Keep each real-shell launch inside its own test budget. Combining all
+				// newline variants and the outer-statement control accumulates startup
+				// latency on Windows while hiding which boundary failed.
+				it.each([
+					"\n",
+					"\r",
+					"\r\n",
+				])("does not join flags across newline boundary %j", async (newline) => {
+					const output = await executor(
+						`${inner.name} -NoProfile -Command${newline}"Write-Output 42"`,
+						process.cwd(),
+						ctx,
+					);
+					expect(output).toContain("Write-Output 42");
+					expect(output).toContain("[stderr]");
+				});
+
+				it("preserves the boundary between inner and outer statements", async () => {
 					const output = await executor(
 						`${inner.name} -NoProfile -Command "Write-Output 'inner'"; Write-Output 'outer'`,
 						process.cwd(),
