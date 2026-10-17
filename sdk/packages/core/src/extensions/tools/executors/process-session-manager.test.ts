@@ -582,7 +582,9 @@ describe("ProcessSessionManager", () => {
 			const started = await manager.start({
 				ownerSessionId: OWNER,
 				executable: process.execPath,
-				args: ["-e", "setTimeout(() => {}, 1000)"],
+				// Stay alive until the explicit kill below. Windows identity probes
+				// and loaded CI runners can outlast a one-second fixture lifetime.
+				args: ["-e", "setInterval(() => {}, 1000)"],
 				cwd: process.cwd(),
 			});
 			expect(() => manager.close(OWNER, started.processId)).toThrow(

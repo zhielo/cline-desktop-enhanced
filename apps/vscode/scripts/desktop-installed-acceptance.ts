@@ -62,10 +62,10 @@ export function startAcceptanceProcess(
   return { child, exited, closed, diagnostics, startedAt };
 }
 
-/** Terminate the owned native tree before closing CDP. Browser.close() can
- * terminate WebView processes, racing taskkill /T's enumeration. Still attempt
- * disconnect after a failed stop and preserve both failures; never retry a kill
- * or turn an unconfirmed termination into successful acceptance. */
+/** Keep native process-tree termination authoritative and independent of CDP
+ * teardown: a disconnected transport is not proof of native process exit.
+ * Still attempt disconnect after a failed stop and preserve both failures;
+ * never retry a kill or accept an unconfirmed termination. */
 export async function stopOwnedApplication(
   terminate: () => Promise<void>,
   disconnect: () => Promise<void>,
