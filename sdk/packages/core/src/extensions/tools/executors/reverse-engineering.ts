@@ -1,3 +1,4 @@
+import { planRuntimeObservation } from "./runtime-observation-plan";
 import { verifyCandidate, validateDexBytes } from "./candidate-verification";
 import { sha256Directory } from "./android-project-files";
 import { androidProjectCandidate } from "./android-project-candidate";
@@ -2485,6 +2486,8 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+ if (input.runtime_observation_plan && input.operation !== "plan_runtime_observation") throw new Error("runtime_observation_plan is only accepted by plan_runtime_observation");
+ if (input.operation === "plan_runtime_observation") return JSON.stringify(await planRuntimeObservation(input, context.signal));
   if (input.candidate_validation && input.operation !== "validate_candidate") throw new Error("candidate_validation is only accepted by validate_candidate");
   if (input.candidate_review && input.operation !== "review_candidate_changes") throw new Error("candidate_review is only accepted by review_candidate_changes");
   if (["validate_candidate", "review_candidate_changes"].includes(input.operation)) return JSON.stringify(await verifyCandidate(input, async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request), {...context, signal})), context.signal));

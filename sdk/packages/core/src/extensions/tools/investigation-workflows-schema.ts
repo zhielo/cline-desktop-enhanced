@@ -24,6 +24,7 @@ export const INVESTIGATION_COMMANDS = [
 	"build_android_candidate",
  "preview_android_candidate",
 	"verify_android_candidate",
+	"plan_runtime_observation",
 	"validate_candidate",
 	"review_candidate_changes",
 	"preview_batch",

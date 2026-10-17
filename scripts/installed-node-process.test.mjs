@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
 	withInstalledActionDeadline,
+ INSTALLED_ACTION_LIMIT,
+ assertInstalledActionSequence,
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	stopOwnedApplication,
@@ -290,17 +292,28 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
  assert.ok(driver.includes('join(evidence, "phase.json")'));
  assert.ok(driver.includes('join(evidence, "action-progress.jsonl")'));
- assert.ok(driver.includes('sequence > 256'));
- assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v11'));
+ assert.ok(driver.includes('assertInstalledActionSequence(sequence)'));
+ assert.ok(driver.includes('sequence > INSTALLED_ACTION_LIMIT'));
+ assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v12'));
  assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
  assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
  assert.ok(driver.includes('installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed'));
  assert.ok(driver.includes('Installed completed batch was replayed'));
  assert.ok(driver.includes('installed-candidate-validation-review-hash-scope-preservation-passed'));
+ assert.ok(driver.includes('installed-runtime-plan-owned-identity-no-attach-no-execute-passed'));
+ assert.ok(driver.includes('Runtime planner executed owned target'));
+ assert.ok(driver.includes('runtime-plan-fixture-cleanup'));
  assert.ok(driver.includes('Installed candidate handle crossed session boundary'));
  assert.ok(driver.includes('installed-ai-batch-read-only-profile-denied'));
  assert.ok(driver.includes('Installed batch widened the Read Only session'));
  assert.ok(driver.indexOf('const triageScope=') < driver.indexOf('const batchRequest='));
  assert.ok(driver.includes('installed-owned-app-cleanup-confirmed'));
  assert.ok(driver.indexOf('installed-owned-app-cleanup-confirmed')<driver.indexOf('status: "passed"'));
+});
+
+
+test("expanded installed workload retains a finite fail-closed action evidence budget", () => {
+ assert.equal(INSTALLED_ACTION_LIMIT,384);
+ for(const sequence of [1,256,257,384]) assert.doesNotThrow(()=>assertInstalledActionSequence(sequence));
+ for(const sequence of [0,-1,1.5,385,Infinity,NaN,Number.MAX_SAFE_INTEGER+1]) assert.throws(()=>assertInstalledActionSequence(sequence),/evidence budget reached/);
 });

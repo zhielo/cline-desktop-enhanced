@@ -1,5 +1,5 @@
 import { bindHybridObservation } from "./hybrid-analysis";
-import { HybridProposalSchema, runtimeAnalysisEnabled } from "@cline/core";
+import { InvestigationSchemas, HybridProposalSchema, runtimeAnalysisEnabled } from "@cline/core";
 import { evidenceIndex, reconcileFeature } from "./investigation-report";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -12,6 +12,7 @@ const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
  ...BATCH_WORKFLOW_COMMANDS,
+	"plan_runtime_observation",
 	"validate_candidate",
  "review_candidate_changes",
 	"open_binary",
@@ -246,6 +247,15 @@ export async function handleAnalysisWorkflow(
 				}
 			: artifact;
 	}
+ if (command === "plan_runtime_observation") {
+  const req = z.object({artifactId: Id, observation: z.unknown(), phase: z.enum(["prepare","run"]).default("prepare"), planId: Id.optional(), executionToken: z.string().max(512).optional()}).strict().parse(input);
+  const params = InvestigationSchemas.plan_runtime_observation.parse({artifactId:req.artifactId, observation:req.observation});
+  const artifact = await store.verify(scope, req.artifactId);
+  const request = {operation: command, target: artifact.path, timeout_ms: 20000, runtime_observation_plan: {...params.observation, expected_sha256: artifact.sha256}};
+  if (req.phase === "prepare") return ports.invoke("prepare_analysis_task", {kind:"static", request});
+  if (!req.planId || !req.executionToken) throw new Error("A separately approved one-use plan is required");
+  return ports.invoke("run_static_analysis", {input:request, planId:req.planId, executionToken:req.executionToken});
+ }
  if (command === "validate_candidate" || command === "review_candidate_changes") {
   const req = z.object({
    artifactId: Id,

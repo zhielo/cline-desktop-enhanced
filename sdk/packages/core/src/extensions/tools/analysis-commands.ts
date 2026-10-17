@@ -199,11 +199,12 @@ export function analysisCommandCatalog() {
 				command,
 				effect: isAnalysisWriteOperation(command)
 					? "candidate-write"
-					: ["preview_batch", "preview_android_candidate"].includes(command)
+					: ["preview_batch", "preview_android_candidate", "plan_runtime_observation"].includes(command)
 						? "plan-only"
 						: "read",
 				availability: "implemented-bounded",
 				limitations:
+     command === "plan_runtime_observation" ? "Plan only: exact live local Node Inspector PID/birth/listener and hash-bound source, no socket connection or target execution. Fresh Runtime/Hybrid Debug approval and identity recheck remain mandatory. No persistent session or other runtime commands." :
      command === "validate_candidate" ? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass." :
      command === "review_candidate_changes" ? "Exact manifest-declared source/output recipe audit with required manifest hash. Missing, mismatched and unverified outputs do not pass. No baseline for undeclared files or whole-project change review." :
 					command === "annotate_analysis_project"
