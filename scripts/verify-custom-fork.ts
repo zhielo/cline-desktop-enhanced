@@ -4,6 +4,12 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/executors/advanced-candidates.ts",markers:["matching preview_sha256", "No-op byte patch", "bounded-structure-only", "reconstructed-constant-Int32-body"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/candidate-files.ts",markers:["fs.link(temp, output)","Source changed before publication", "cleanupWarning", "no overwrite permitted"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/candidate-batch.ts",markers:["Batch outputs may not replace inputs/manifest", "batch_preview_sha256", "NOT an all-or-nothing transaction", "manifestHash"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/evidence-trace.ts",markers:["declared-data-flow-edges-only", "observedExecution: false", "untrusted-imported-report", "Trace seed/coverage exceeds output byte budget"]},
+ {path:"apps/examples/desktop-app/sidecar/model-investigation.ts",markers:["capture_network_metadata", "independentRecordingConsent: true", "analysis_workflow_hybrid_prepare"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-preview-approved-binary-ast-batch-originals-preserved"]},
  {path:"sdk/packages/core/src/extensions/tools/analysis-commands.ts",markers:["ANALYSIS_COMMAND_ALIASES","isAnalysisWriteOperation","planInvestigation","notebook_run"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/smali-patch.ts",markers:["preview_sha256","fs.link(temporary, output)","expected_sha256","MAX_SOURCE_BYTES"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/advanced-command-workspace.tsx",markers:["Advanced AI commands","Prepare advanced command for review","Not available in this command pack"]},

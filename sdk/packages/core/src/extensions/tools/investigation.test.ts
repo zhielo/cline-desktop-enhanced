@@ -55,3 +55,8 @@ it("disabling reverse engineering also disables host investigation registration"
 		}).some((t) => t.name === "open_binary"),
 	).toBe(false);
 });
+
+it("network metadata alias shares strict browser schema and rejects self-consent", () => {
+ expect(InvestigationSchemas.capture_network_metadata).toBe(InvestigationSchemas.capture_browser_scenario);
+ expect(() => InvestigationSchemas.capture_network_metadata.parse({action:"start",browserSessionId:"11111111-1111-4111-8111-111111111111",purpose:"owned",confirmRecord:true})).toThrow();
+});

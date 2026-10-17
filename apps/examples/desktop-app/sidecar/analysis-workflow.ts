@@ -14,6 +14,7 @@ export const WORKFLOW_COMMANDS = [
 	"analyze_function",
 	"trace_application_feature",
 	"capture_browser_scenario",
+ "capture_network_metadata",
 	"get_evidence_bundle",
 	"analysis_workflow_status",
 	"analysis_workflow_hybrid_prepare",
@@ -92,7 +93,8 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
-	if (command === "analysis_workflow_hybrid_prepare") {
+	if (command === "capture_network_metadata") command = "capture_browser_scenario";
+ if (command === "analysis_workflow_hybrid_prepare") {
 		if (
 			!options.trusted ||
 			options.mode !== "hybrid" ||

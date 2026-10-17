@@ -83,6 +83,7 @@ const EXTERNAL_TOOLS = new Set([
 	"analyze_function",
 	"trace_application_feature",
 	"capture_browser_scenario",
+ "capture_network_metadata",
 	"get_evidence_bundle",
 	"android_device",
 	"live_debugger",
