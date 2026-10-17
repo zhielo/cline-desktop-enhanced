@@ -190,15 +190,17 @@ function requirementsFor(
 		isAnalysisWriteOperation(operation)
 	) {
 		requirements.add(
-			[
-				"patch_binary",
-				"apply_ast_transform",
-				"patch_dotnet_constant",
-				"patch_jvm_constant",
-				"apply_candidate_batch",
-			].includes(operation)
-				? "authorized-candidate-artifact-modification"
-				: "authorized-android-artifact-modification",
+			operation === "export_evidence_bundle"
+				? "authorized-redacted-evidence-export"
+				: [
+							"patch_binary",
+							"apply_ast_transform",
+							"patch_dotnet_constant",
+							"patch_jvm_constant",
+							"apply_candidate_batch",
+						].includes(operation)
+					? "authorized-candidate-artifact-modification"
+					: "authorized-android-artifact-modification",
 		);
 		requirements.add("new-output-no-overwrite");
 		if (operation === "sign_apk") {
@@ -357,7 +359,7 @@ function normalizeRequestPaths(
 	request: AnalysisRequest,
 	workspaceRoot: string,
 ): AnalysisRequest {
-	return Object.fromEntries(
+	const normalized = Object.fromEntries(
 		Object.entries(request).map(([key, value]) => {
 			if (
 				REQUEST_PATH_FIELDS.has(key) &&
@@ -372,6 +374,30 @@ function normalizeRequestPaths(
 			return [key, value];
 		}),
 	);
+	const evidence = normalized.dependency_evidence;
+	if (evidence && typeof evidence === "object" && !Array.isArray(evidence)) {
+		const q = { ...evidence } as Record<string, unknown>;
+		if (typeof q.lockfile === "string")
+			q.lockfile = canonicalFuturePath(
+				isAbsolute(q.lockfile)
+					? q.lockfile
+					: resolve(workspaceRoot, q.lockfile),
+			);
+		if (
+			q.advisory_snapshot &&
+			typeof q.advisory_snapshot === "object" &&
+			!Array.isArray(q.advisory_snapshot)
+		) {
+			const a = { ...q.advisory_snapshot } as Record<string, unknown>;
+			if (typeof a.path === "string")
+				a.path = canonicalFuturePath(
+					isAbsolute(a.path) ? a.path : resolve(workspaceRoot, a.path),
+				);
+			q.advisory_snapshot = a;
+		}
+		normalized.dependency_evidence = q;
+	}
+	return normalized;
 }
 
 export class AnalysisTaskOrchestrator {
@@ -410,7 +436,16 @@ export class AnalysisTaskOrchestrator {
 			throw new Error("Native memory observation requires Debug task kind");
 		const target =
 			typeof request.target === "string" ? request.target : undefined;
-		const externalTarget = Boolean(target && !isWithin(workspaceRoot, target));
+		const dependency = request.dependency_evidence as
+			| { lockfile?: unknown; advisory_snapshot?: { path?: unknown } }
+			| undefined;
+		const evidencePaths = [
+			dependency?.lockfile,
+			dependency?.advisory_snapshot?.path,
+		].filter((v): v is string => typeof v === "string");
+		const externalTarget =
+			Boolean(target && !isWithin(workspaceRoot, target)) ||
+			evidencePaths.some((p) => !isWithin(workspaceRoot, p));
 		if (externalTarget && input.allowExternalTarget !== true) {
 			throw new Error(
 				"Target resolves outside the workspace. Review it and explicitly allow an external target.",

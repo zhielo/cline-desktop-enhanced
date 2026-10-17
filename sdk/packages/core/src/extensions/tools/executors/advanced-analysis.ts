@@ -25,6 +25,7 @@ export const ADVANCED_ACTIONS = [
 	"dex_index",
 	"native_inventory",
 	"native_disassemble",
+	"native_crosscheck",
 	"simplify_expression",
 	"compare_expressions",
 	"transform_blob",
@@ -53,14 +54,26 @@ export const ADVANCED_ACTIONS = [
 	"native_function",
 	"analysis_readiness",
 	"investigation_graph",
-  "full_readiness",
-  "angr_readiness",
-  "unicorn_emulate",
-  "angr_lift",
+	"full_readiness",
+	"angr_readiness",
+	"unicorn_emulate",
+	"angr_lift",
 ] as const;
 export type AdvancedAction = (typeof ADVANCED_ACTIONS)[number];
 const LOCAL_ACTIONS = new Set<AdvancedAction>([
-	...ADVANCED_ACTIONS.slice(0, 12),
+	"toolchain",
+	"suite",
+	"triage",
+	"apk_inventory",
+	"dex_index",
+	"native_inventory",
+	"native_disassemble",
+	"simplify_expression",
+	"compare_expressions",
+	"transform_blob",
+	"triton_expression",
+	"match_native_functions",
+	"native_crosscheck",
 	"lift_native_ir",
 	"deobfuscation_pass",
 	"decrypt_blob",
@@ -70,10 +83,10 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"android_method_code",
 	"native_function",
 	"analysis_readiness",
-  "full_readiness",
-  "angr_readiness",
-  "unicorn_emulate",
-  "angr_lift",
+	"full_readiness",
+	"angr_readiness",
+	"unicorn_emulate",
+	"angr_lift",
 ]);
 export const ADVANCED_BACKENDS = [
 	{ id: "cryptography", integration: "host-gated-authenticated-decryption" },
@@ -231,10 +244,10 @@ async function runAdvancedAnalysisOwned(
 			);
 	}
 	const paths =
-    request.action === "toolchain" ||
-    request.action === "analysis_readiness" ||
-    request.action === "full_readiness" ||
-    request.action === "angr_readiness"
+		request.action === "toolchain" ||
+		request.action === "analysis_readiness" ||
+		request.action === "full_readiness" ||
+		request.action === "angr_readiness"
 			? []
 			: [
 					request.target,
@@ -253,18 +266,18 @@ async function runAdvancedAnalysisOwned(
 			throw new Error("Input must be file <=128 MiB");
 	}
 	const executable =
-    (request.action === "angr_lift" || request.action === "angr_readiness"
-      ? process.env.CLINE_ANGR_PYTHON?.trim()
-      : undefined) ||
+		(request.action === "angr_lift" || request.action === "angr_readiness"
+			? process.env.CLINE_ANGR_PYTHON?.trim()
+			: undefined) ||
 		process.env.CLINE_RE_PYTHON?.trim() ||
 		(process.platform === "win32" ? "python.exe" : "python3");
-  if (
-    (process.env.CLINE_RE_PYTHON ||
-      ((request.action === "angr_lift" ||
-        request.action === "angr_readiness") &&
-        process.env.CLINE_ANGR_PYTHON)) &&
-    !isAbsolute(executable)
-  )
+	if (
+		(process.env.CLINE_RE_PYTHON ||
+			((request.action === "angr_lift" ||
+				request.action === "angr_readiness") &&
+				process.env.CLINE_ANGR_PYTHON)) &&
+		!isAbsolute(executable)
+	)
 		throw new Error("CLINE_RE_PYTHON must be an absolute interpreter path");
 	const started = Date.now();
 	const diagnostics: WorkerDiagnostics = {

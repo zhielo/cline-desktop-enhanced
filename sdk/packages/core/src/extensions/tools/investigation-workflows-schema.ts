@@ -54,3 +54,43 @@ export const HypothesisSchema = z
 				message: "Node hypothesis does not accept edge fields",
 			});
 	});
+
+export const DependencyEvidenceOptionsSchema = z
+	.object({
+		lockfile: z.string().min(1).max(4096),
+		lockfile_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+		advisory_snapshot: z
+			.object({
+				path: z.string().min(1).max(4096),
+				sha256: z.string().regex(/^[a-f0-9]{64}$/),
+			})
+			.strict()
+			.optional(),
+	})
+	.strict();
+
+export const EvidenceArchiveOptionsSchema = z
+	.object({
+		manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+	})
+	.strict();
+export const EvidenceArchiveManifestSchema = z
+	.object({
+		schemaVersion: z.literal(1),
+		title: z.string().min(1).max(120),
+		entries: z
+			.array(
+				z
+					.object({
+						id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+						path: z.string().min(1).max(1024),
+						sha256: z.string().regex(/^[a-f0-9]{64}$/),
+						kind: z.enum(["finding", "receipt", "log", "limitations"]),
+						format: z.enum(["json", "text"]),
+					})
+					.strict(),
+			)
+			.min(1)
+			.max(32),
+	})
+	.strict();

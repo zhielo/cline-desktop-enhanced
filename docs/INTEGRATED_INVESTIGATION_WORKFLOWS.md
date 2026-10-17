@@ -10,7 +10,7 @@ These scoped commands use the existing `reverse_engineer` tool and desktop **Adv
 {"operation":"explain_behavior","target":"/absolute/owned-project/src/owned.ts","workflow_query":{"symbol":"ownedFunction","max_depth":4,"max_results":100},"timeout_ms":120000}
 ```
 
-`compare_public_api` takes a second JS/TS file/directory in `compare_target`. It compares top-level exported declaration names, not resolved reexports, types, signatures or ABI compatibility. `inspect_dependency_risk` reads a selected package.json and distinguishes declared dependencies from unresolved versions and unqueried advisories. Unknown risk is not a clean bill of health.
+`compare_public_api` takes a second JS/TS file/directory in `compare_target`. It compares top-level exported declaration names and explicit syntax signatures (parameter/return/type syntax and selected public class members), excluding function bodies. Changed signatures are not automatically breaking changes. Inferred types, resolved reexports and ABI compatibility remain unresolved. `inspect_dependency_risk` reads a selected package.json; optional hash-bound lockfile/advisory evidence is described below. Unknown risk is not a clean bill of health.
 
 `map_dotnet_interop` reads bounded PE/CLI ImplMap and ModuleRef declarations without loading the CLR/native library. It validates referenced metadata rows and returns flags, member token, import/module names and metadata offsets. It does not establish runtime resolution, marshaling correctness or COM mappings.
 
@@ -43,3 +43,36 @@ Other-file `compare_versions` performs a bounded fixed-offset byte comparison (1
 Orchestrated stages share one deadline (default 120 seconds; capped at 600 seconds). Real advanced-result provenance wrappers are preserved. Blocked, failed, partial and cancelled child outcomes are distinguished; failed prerequisites do not trigger dependent engine runs, and cancellation retains already-published candidate receipts. These are bounded application controls, not OS isolation or a hard preemptive CPU sandbox.
 
 New commands are included in the blocking advanced regression suite. Installed WebView acceptance additionally exercises exact-function source evidence, declared hypothesis verification, real notebook preview, original preservation and the exact 55-command ledger. Fixture tests do not establish compatibility with arbitrary engines/targets, and no catalog entry certifies release. Require the exact-current-head Windows setup.exe build, installed-binary smoke, installed WebView acceptance and all other applicable required checks before merge.
+
+
+## Exact-range dual-engine disassembly
+
+`crosscheck_disassembly` invokes both installed **Capstone and Miasm** through the existing supervised Python worker. It uses a single captured byte slice and explicit architecture, file offset, virtual address and byte count. It never executes the analyzed target. Missing either engine blocks the workflow; there is no single-engine fallback. Each engine retains version, decoded byte count and instruction evidence. The merged comparison identifies instruction boundary/byte differences, not semantic correctness or a winning engine. Undecoded bytes and instruction-budget exhaustion produce partial status and never prefix-only agreement. The same `native_crosscheck` action is available in static notebooks for existing checkpoint/resume behavior.
+
+```json
+{"operation":"crosscheck_disassembly","target":"/absolute/owned.bin","advanced_options":{"architecture":"x86_64","offset":0,"address":4096,"bytes":4},"max_results":200,"timeout_ms":120000}
+```
+
+Supported modes are x86, x86_64, ARM little-endian, Thumb little-endian and AArch64 little-endian. Limits: 65,536 selected bytes, at most 1,000 instructions per engine and the existing supervised time/output budgets. Architecture/mode and code/data identification remain caller responsibilities.
+
+## Hash-bound dependency evidence
+
+Optional `dependency_evidence` selects an absolute npm `package-lock.json` v2/v3 and its SHA-256. Registry versions retain nested package locations; workspace links and unresolved entries remain explicit. The adapter never installs packages, executes scripts or reads registry URLs into output.
+
+```json
+{"operation":"inspect_dependency_risk","target":"/absolute/package.json","dependency_evidence":{"lockfile":"/absolute/package-lock.json","lockfile_sha256":"<64 lowercase hex>","advisory_snapshot":{"path":"/absolute/osv-snapshot.json","sha256":"<64 lowercase hex>"}}}
+```
+
+The optional imported OSV snapshot shape is `{schemaVersion:1,source:"OSV",retrievedAt:"ISO UTC",advisories:[...]}`. Advisory objects contain `id`, `modified`, optional `withdrawn`, and OSV `affected` package/versions/ranges entries. Only exact `affected.versions` membership for npm is evaluated. Withdrawn records are excluded; ranges are reported as unevaluated. SHA verification binds selected bytes, **not publisher identity, advisory completeness or freshness**. Risk remains unknown, even when no match appears. Select snapshots from trusted sources and review their provenance separately. Limits: 8 MiB per lockfile/snapshot, 10,000 lock entries, 2,000 advisories, 200,000 comparison work units and 2,000 returned matches/range limitations.
+
+## Selected redacted provenance archive
+
+`export_evidence_bundle` with `evidence_archive` reads a hash-bound selected manifest and publishes a **new** `.json.gz` portable evidence container. It requires Modify approval and never overwrites a file. Without this option the legacy forensic-report path remains available. The archive contains selected JSON/text findings, receipts, logs and limitations, with separate original and exported-content SHA-256 hashes; it omits original filesystem paths and never includes raw binary payloads.
+
+```json
+{"operation":"export_evidence_bundle","target":"/absolute/evidence/manifest.json","output_file":"/absolute/evidence/export.json.gz","evidence_archive":{"manifest_sha256":"<64 lowercase hex>"},"acknowledge_external_output":true}
+```
+
+Manifest shape: `{schemaVersion:1,title:"Selected evidence",entries:[{id:"receipt",path:"receipt.json",sha256:"<64 lowercase hex>",kind:"receipt",format:"json"}]}`. Paths are confined relative files under the manifest directory; symlinks, traversal, duplicate IDs/paths, changed hashes and overwrite attempts fail. Entry kinds: finding, receipt, log, limitations; formats: json or text. Limits: 32 entries, 1 MiB per entry, 8 MiB aggregate input, 12 MiB serialized export, JSON depth 32 / 20,000 nodes per entry. It redacts known sensitive environment values, credential patterns and sensitive JSON keys. **Unknown secrets may remain: review before sharing.** Imported tool/version/producer claims are retained as untrusted evidence, not authenticated attestations. Source files never execute or change.
+
+The installed Windows journey additionally checks explicit API changes, hash-bound lockfile evidence, approved archive publication/original preservation, and real Capstone/Miasm range comparison after installing the full engine pack. This does not certify the remaining runtime or mixed-effect workflow gaps.

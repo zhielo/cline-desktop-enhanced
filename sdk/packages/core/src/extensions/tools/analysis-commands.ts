@@ -22,6 +22,10 @@ export const ANALYSIS_COMMAND_ALIASES = {
 		operation: "advanced_analysis",
 		advanced_action: "native_inventory",
 	},
+	crosscheck_disassembly: {
+		operation: "advanced_analysis",
+		advanced_action: "native_crosscheck",
+	},
 	disassemble_range: {
 		operation: "advanced_analysis",
 		advanced_action: "native_disassemble",
@@ -65,6 +69,7 @@ export const ANALYSIS_ALIAS_NAMES = Object.keys(ANALYSIS_COMMAND_ALIASES) as [
 	...(keyof typeof ANALYSIS_COMMAND_ALIASES)[],
 ];
 export const ANALYSIS_WRITE_OPERATIONS = [
+	"export_evidence_bundle",
 	"build_android_candidate",
 	"annotate_analysis_project",
 	"patch_binary",
@@ -159,6 +164,8 @@ export function normalizeAnalysisCommand<
 }
 
 const notes: Record<string, string> = {
+	crosscheck_disassembly:
+		"Two actual static decoders (Capstone/Miasm), exact explicit range/mode, bounded instructions; boundaries/bytes only, no semantic winner or runtime execution. Both engines required.",
 	disassemble_dex:
 		"Standalone DEX only; Baksmali output. No directory batching implied.",
 	decode_apk:
@@ -179,7 +186,7 @@ const notes: Record<string, string> = {
 	resume_investigation:
 		"Same static notebook runner; reuses matching input/engine/dependency fingerprints, not arbitrary writes.",
 	export_evidence_bundle:
-		"Existing forensic JSON/HTML report; not a secret-free guarantee or an archive of all session data.",
+		"With evidence_archive: hash-bound selected text/JSON provenance container in new .json.gz, redaction and no overwrite. Without it: legacy forensic report. Unknown secrets and producer authenticity remain unverified.",
 };
 export function analysisCommandCatalog() {
 	return {
