@@ -12,6 +12,8 @@ const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
  ...BATCH_WORKFLOW_COMMANDS,
+	"validate_candidate",
+ "review_candidate_changes",
 	"open_binary",
 	"analyze_function",
 	"trace_application_feature",
@@ -244,6 +246,21 @@ export async function handleAnalysisWorkflow(
 				}
 			: artifact;
 	}
+ if (command === "validate_candidate" || command === "review_candidate_changes") {
+  const req = z.object({
+   artifactId: Id,
+   kind: z.enum(["javascript", "typescript", "dex", "apk"]).optional(),
+   phase: z.enum(["prepare", "run"]).default("prepare"),
+   planId: Id.optional(), executionToken: z.string().max(512).optional(),
+  }).strict().parse(input);
+  if ((command === "validate_candidate") !== !!req.kind) throw new Error("Only validate_candidate requires a validation kind");
+  const artifact = await store.verify(scope, req.artifactId);
+  const request = {operation: command, target: artifact.path, timeout_ms: 120000,
+   ...(command === "validate_candidate" ? {candidate_validation: {expected_sha256: artifact.sha256, kind: req.kind}} : {candidate_review: {manifest_sha256: artifact.sha256}})};
+  if (req.phase === "prepare") return ports.invoke("prepare_analysis_task", {kind: "static", request});
+  if (!req.planId || !req.executionToken) throw new Error("A separately approved one-use plan is required");
+  return ports.invoke("run_static_analysis", {input: request, planId: req.planId, executionToken: req.executionToken});
+ }
 	if (command === "analyze_function") {
 		const req = z
 			.object({

@@ -73,6 +73,8 @@ export const InvestigationSchemas = {
 	resume_investigation: z
 		.object({ receiptId: Id, revision: z.number().int().min(0) })
 		.strict(),
+	validate_candidate: z.object({artifactId: Id, kind: z.enum(["javascript", "typescript", "dex", "apk"])}).strict(),
+ review_candidate_changes: z.object({artifactId: Id}).strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
 	analyze_function: z
 		.object({
@@ -118,6 +120,8 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Cancel only this owning-session AI batch through the existing supervised runner. Read its checkpoint to confirm terminal outcome; never replays stages. Available after Analysis is disabled.",
 	resume_investigation:
 		"Request a freshly approved continuation of never-started built-in static stages from an exact terminal checkpoint revision. Revalidates every input hash, implementation fingerprint and reused result. Never retries failed/started stages or replays writes/runtime; unresolved dependencies block continuation.",
+	validate_candidate: "Request hash-bound candidate checks after independent human approval: JS/TS syntax, DEX header/checksum/table bounds, or APK structure and signature. Results declare their exact coverage, failures and unavailable checks; no execution, signing, build, install or semantic-equivalence claim.",
+ review_candidate_changes: "Request read-only exact-recipe audit of an immutable candidate batch manifest after independent human approval. Verifies declared source hashes and candidate bytes using existing patch implementations; missing/mismatched/unverified outputs never pass. Only declared files, not a whole-project change review; cannot authorize writes or replay stages.",
 	open_binary:
 		"Create an immutable workspace-confined artifact handle; does not execute or decompile the binary. Analysis mode must be enabled.",
 	analyze_function:

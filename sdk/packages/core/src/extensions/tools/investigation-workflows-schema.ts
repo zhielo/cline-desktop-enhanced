@@ -24,6 +24,8 @@ export const INVESTIGATION_COMMANDS = [
 	"build_android_candidate",
  "preview_android_candidate",
 	"verify_android_candidate",
+	"validate_candidate",
+	"review_candidate_changes",
 	"preview_batch",
 ] as const;
 export const WorkflowQuerySchema = z
@@ -95,3 +97,12 @@ export const EvidenceArchiveManifestSchema = z
 			.max(32),
 	})
 	.strict();
+
+/** Checks are explicitly selected, never inferred from an untrusted filename. */
+export const CandidateValidationSchema = z.object({
+ expected_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+ kind: z.enum(["javascript", "typescript", "dex", "apk"]),
+}).strict();
+export const CandidateReviewSchema = z.object({
+ manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();

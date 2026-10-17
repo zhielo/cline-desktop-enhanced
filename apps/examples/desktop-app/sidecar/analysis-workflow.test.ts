@@ -253,3 +253,17 @@ it("batch new work requires enabled trusted scope; cleanup remains possible afte
  const batch=vi.fn(async()=>({status:"owned"}));const ports={invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn(),batch};const scope={sessionId:"owned",workspace:root};
  try{for(const command of ["plan_batch","preview_batch","run_batch","resume_investigation"]){await expect(handleAnalysisWorkflow(command,{},scope,{trusted:true,idle:true,mode:"off"},store,ports)).rejects.toThrow("Analysis enabled");}for(const command of ["checkpoint_investigation","cancel_batch"]){expect(await handleAnalysisWorkflow(command,{},scope,{trusted:true,idle:false,mode:"off",actor:"model"},store,ports)).toEqual({status:"owned"});await expect(handleAnalysisWorkflow(command,{},scope,{trusted:false,idle:true,mode:"static"},store,ports)).rejects.toThrow("trusted");}}finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+it.each(["validate_candidate","review_candidate_changes"])("%s binds immutable owning artifact into separately approved request",async(command)=>{
+ const root=await mkdtemp(join(tmpdir(),"candidate-workflow-")),scope={sessionId:"owned",workspace:root},store=new AnalysisWorkflowStore(join(root,"workflow.sqlite"));
+ const invoke=vi.fn(async()=>({id:"plan"})),ports={invoke,staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn()};
+ try {
+  await writeFile(join(root,"candidate.ts"),"export const owned=1;");const h=await store.open(scope,"candidate.ts");const input={artifactId:h.id,...(command==="validate_candidate"?{kind:"typescript"}:{})};
+  await handleAnalysisWorkflow(command,input,scope,{trusted:true,idle:true,mode:"static"},store,ports);
+  expect(invoke).toHaveBeenCalledWith("prepare_analysis_task",expect.objectContaining({kind:"static",request:expect.objectContaining({operation:command,target:h.path,...(command==="validate_candidate"?{candidate_validation:{expected_sha256:h.sha256,kind:"typescript"}}:{candidate_review:{manifest_sha256:h.sha256}})})}));
+  await expect(handleAnalysisWorkflow(command,{...input,phase:"run"},scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("one-use");
+  await expect(handleAnalysisWorkflow(command,input,{...scope,sessionId:"other"},{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("unavailable");
+  await expect(handleAnalysisWorkflow(command,input,scope,{trusted:true,idle:true,mode:"off"},store,ports)).rejects.toThrow("Analysis enabled");
+  await expect(handleAnalysisWorkflow(command,input,scope,{trusted:false,idle:true,mode:"static"},store,ports)).rejects.toThrow("trusted");
+  await writeFile(h.path,"changed");await expect(handleAnalysisWorkflow(command,input,scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("changed");
+ } finally {store.close();await rm(root,{recursive:true,force:true});}
+});

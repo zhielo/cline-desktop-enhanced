@@ -82,8 +82,8 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `checkpoint_investigation` | partial | AI command reads the latest owning-session durable execution receipt, revision and stage evidence; it does not force a new flush or unite all evidence stores. |
 | `resume_investigation` | partial | AI continuation revalidates exact terminal revision, input/implementation/result fingerprints and resumes only never-started built-in static stages with fresh approval. No started-stage/write/runtime replay. |
 | `cancel_batch` | partial | Owning-session AI command cancels its durable batch through the existing supervisor; terminal confirmation is read separately. Other runners remain separate. |
-| `validate_candidate` | partial | Artifact-specific checks exist; no unified dispatch/verification receipt. |
-| `review_candidate_changes` | partial | Existing candidate receipt audit and diffs; no unified approved-scope review command. |
+| `validate_candidate` | partial | Unified approved hash-bound JS/TS parse diagnostics, standard DEX header/integrity/extents and APK structure/signature checks. No arbitrary-format, type/VM/device/build/semantic-equivalence verification. |
+| `review_candidate_changes` | partial | Unified approved exact-recipe audit with immutable receipt hash; missing/mismatched/unverified candidates do not pass. Only manifest-declared files; no undeclared-file baseline or whole-project scope review. |
 | `export_evidence_bundle` | partial | Approved gzip JSON archive of hash-bound selected text findings/receipts/logs with source/export hashes and redaction. Unknown secrets, completeness and producer authenticity remain unverified. |
 | `check_release_gate` | partial | Existing exact-head CI/installed checks; no AI command or immutable gate receipt. |
 
