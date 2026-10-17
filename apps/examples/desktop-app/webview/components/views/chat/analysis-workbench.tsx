@@ -1,4 +1,5 @@
 "use client";
+import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
 import { GuidedInvestigation } from "./guided-investigation";
 
@@ -31,6 +32,7 @@ import { ExecutionWorkspace } from "./execution-workspace";
 import {FirstPartyAnalysisWorkspace} from "./first-party-analysis-workspace";
 
 type WorkbenchMode =
+ | "advanced-commands"
  | "android"
  | "guide"
  | "first-party"
@@ -105,6 +107,7 @@ const modes: Array<{
 	label: string;
 }> = [
 	{ id: "guide", icon: FileSearch, label: "Start here" },
+ { id: "advanced-commands", icon: ListChecks, label: "AI commands" },
  {id:"android",icon:Binary,label:"Android tools"},
 	{ id: "execution", icon: Terminal, label: "Execution lab" },
 	{ id: "incidents", icon: Bug, label: "APK incidents" },
@@ -185,10 +188,11 @@ export function AnalysisWorkbench({
 	const common = useMemo(
 		() => ({
 			environmentId,
+   ...(sessionId ? { sessionId } : {}),
 			...(cwd?.trim() ? { cwd } : {}),
 			...(investigationId ? { investigationId } : {}),
 		}),
-		[cwd, environmentId, investigationId],
+		[cwd, environmentId, investigationId, sessionId],
 	);
 
 	const refreshLedger = useCallback(async () => {
@@ -514,7 +518,8 @@ export function AnalysisWorkbench({
 						/>
 					)}
 					{mode === "guide" && <GuidedInvestigation key={environmentId} sessionId={sessionId} environmentId={environmentId} onNavigate={setMode} />}
-					{mode === "android" && <AndroidToolchainWorkspace key={environmentId} environmentId={environmentId} onPrepare={request=>prepare("static",request)}/>}
+					{mode === "advanced-commands" && <AdvancedCommandWorkspace environmentId={environmentId} onPrepare={request => prepare("static", request)} />}
+     {mode === "android" && <AndroidToolchainWorkspace key={environmentId} environmentId={environmentId} onPrepare={request=>prepare("static",request)}/>}
 					{mode === "first-party" && <FirstPartyAnalysisWorkspace key={sessionId} sessionId={sessionId} environmentId={environmentId}/>}
 					{mode === "execution" && (
 						<ExecutionWorkspace cwd={cwd ?? ""} environmentId={environmentId} />

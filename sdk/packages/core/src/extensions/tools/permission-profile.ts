@@ -1,3 +1,4 @@
+import { isAnalysisWriteOperation } from "./analysis-commands";
 /**
  * Host-enforced permission profiles.
  *
@@ -277,13 +278,7 @@ function evaluateTool(
 		!profile.allowFileWrites &&
 		typeof context.input === "object" &&
 		context.input !== null &&
-		[
-			"project_edit",
-			"assemble_smali",
-			"rebuild_apk",
-			"align_apk",
-			"sign_apk",
-		].includes(String((context.input as { operation?: unknown }).operation))
+		isAnalysisWriteOperation(String((context.input as { operation?: unknown }).operation))
 	)
 		return blockedReason(
 			profile.name,

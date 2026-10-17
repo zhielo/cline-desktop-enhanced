@@ -260,3 +260,14 @@ it("authenticated originless integrations cannot mint analysis execution approva
 		}),
 	).rejects.toThrow("trusted desktop connection");
 });
+
+it("returns only a static catalog without requiring a live session", async () => {
+ const catalog = await handleCommand(context, "analysis_command_catalog", { cwd: workspace, environmentId: "local" }) as { entries: { command: string }[]; unavailable: string[] };
+ expect(catalog.entries.some(entry => entry.command === "patch_smali_method")).toBe(true);
+ expect(catalog.unavailable).toContain("patch_binary");
+});
+it.each(["build_apk", "recompile_smali", "validate_smali_project", "patch_smali_method", "patch_smali"])("workbench adapter %s cannot bypass trusted write approval", async operation => {
+ await expect(handleCommand(context, "run_static_analysis", {
+  cwd: workspace, input: { operation, target: join(workspace, "owned.smali") },
+ })).rejects.toThrow("trusted desktop connection");
+});

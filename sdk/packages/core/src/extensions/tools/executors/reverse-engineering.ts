@@ -1,3 +1,6 @@
+import { disassembleDexDirectory } from "./dex-directory";
+import { analysisCommandCatalog, normalizeAnalysisCommand, planInvestigation } from "../analysis-commands";
+import { smaliPatch } from "./smali-patch";
 import {
 	bundledAndroidTool,
 	bundledAndroidTools,
@@ -2530,6 +2533,15 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+  input = normalizeAnalysisCommand(input);
+  if (input.operation === "baksmali_dir") return JSON.stringify(await disassembleDexDirectory(input, async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(request, { ...context, signal })), context.signal));
+  if (input.operation === "analysis_command_catalog") return JSON.stringify(analysisCommandCatalog());
+  if (["plan_investigation", "plan_batch"].includes(input.operation)) return JSON.stringify(planInvestigation(input));
+  if (["preview_smali_patch", "patch_smali_method", "patch_smali"].includes(input.operation)) {
+   if (!input.output_file || !path.isAbsolute(input.output_file)) throw new Error("Absolute candidate output_file required");
+   const outputScope = await enforceOutputPath(input.output_file, input.acknowledge_external_output);
+   return withAnalysisLock(input.target ?? "", async () => JSON.stringify({ ...(await smaliPatch(input, context.signal)), outputScope }), context.signal);
+  }
 		if (
 			input.operation === "javascript_analysis" ||
 			input.operation === "analysis_evidence"

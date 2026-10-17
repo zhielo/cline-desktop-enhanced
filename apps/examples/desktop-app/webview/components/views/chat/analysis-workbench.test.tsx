@@ -324,3 +324,32 @@ it("prepares a native candidate preview without executing or overriding the enve
 		invoke.mock.calls.some(([command]) => command === "run_static_analysis"),
 	).toBe(false);
 });
+
+it("carries the owning session through advanced candidate preparation, approval and execution", async () => {
+ const invoke = vi.spyOn(desktopClient, "invoke").mockImplementation(async (command: string, args?: unknown) => {
+  if (["list_analysis_tasks", "binary_triage_history"].includes(command)) return [];
+  if (command === "analysis_command_catalog") return { entries: [
+   { command: "identify_artifact", effect: "static-analysis", limitations: "Read only" },
+   { command: "build_apk", effect: "candidate-write", limitations: "Unsigned candidate" },
+  ], unavailable: [] };
+  if (command === "prepare_analysis_task") return { id: "owned-build", kind: "static", operation: "build_apk", request: (args as { request: unknown }).request, requestHash: "a".repeat(64), permission: "Modify", status: "awaiting-approval", requirements: [], risk: "low", budget: {}, createdAt: "", expiresAt: "" };
+  if (command === "approve_analysis_task") return { executionToken: "owned-token" };
+  if (command === "run_static_analysis") return { result: { succeeded: true } };
+  return {};
+ });
+ await act(async () => { root.render(<AnalysisWorkbench sessionId="owning-chat" cwd={"C:\\owned"} environmentId="local" />); });
+ await clickText("AI commands");
+ await act(async () => {
+  const select = container.querySelector('section[aria-label="Advanced AI commands"] select') as HTMLSelectElement;
+  select.value = "build_apk"; select.dispatchEvent(new Event("change", { bubbles: true }));
+ });
+ await act(async () => {
+  const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(textarea, JSON.stringify({ target: "C:\\owned\\decoded", output_file: "C:\\owned\\candidate.apk", acknowledge_external_output: true }));
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+ });
+ await clickText("Prepare advanced command for review");
+ await clickText("Approve exact plan and run");
+ for (const command of ["prepare_analysis_task", "approve_analysis_task", "run_static_analysis"])
+  expect(invoke).toHaveBeenCalledWith(command, expect.objectContaining({ sessionId: "owning-chat", environmentId: "local", cwd: "C:\\owned" }));
+});

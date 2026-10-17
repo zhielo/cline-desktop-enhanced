@@ -818,3 +818,37 @@ The radare2 adapter passes r2pipe 2.0.0 a one-element target list. Its plain-str
 - History may render while attach is pending, but composer sending and reasoning edits remain locked until the destination configuration is restored. Request ownership rejects late attach results and immediate stale send callbacks. Tests cover independent Medium/High/Extra chats, remount, rapid switching, draft defaults, outgoing request settings, Auto wire reset, mode-before-send and fail-closed mode configuration. Installed WebView acceptance checks fresh-draft visibility and selection with no live model turn. Windows installer and existing installed acceptance remain blocking before merge.
 
 - Mounted inactive drafts use a distinct “Draft Analysis mode” accessible label and React-generated unique control IDs; the active header retains “Session Analysis mode”. Installed acceptance targets the intended draft/session explicitly rather than weakening strict locators.
+
+## Advanced AI command pack (review-first)
+
+The Analysis workspace now has an **AI commands** panel available before a first task as well as in an existing local session. Opening it reads a static catalog only: it does not discover engines, run fixtures, install software, grant approval, or execute a target. Each prepared request goes through the existing exact-request approval ledger. Unsupported capabilities are listed separately, not represented as working commands.
+
+### Fixed command adapters
+
+- Android: `baksmali_dir` (flat directory, max 32 DEX files / 256 entries / 512 MiB, shared deadline, managed outputs only), `disassemble_dex` (DEX only), `decode_apk` (ordinary APK only), `recompile_smali`, `build_apk`, and `validate_smali_project`. Assembly/validation produces a **new DEX**; Apktool rebuild produces a **new unsigned APK**. Original signatures and device correctness are not preserved or certified.
+- Native/artifact: `identify_artifact`, `inspect_binary`, `decompile_function` (explicit Ghidra/IDA plus exact symbol/address), `inspect_elf`, `disassemble_range`, `read_native_function`.
+- Android evidence: `index_multidex`, `map_jni_bindings` (static relationships/JNI-name candidates, not observed dynamic registration), `read_android_method_code`.
+- Electron: `inspect_asar` uses the owning session's first-party static parser and existing Analysis-mode requirements. It does not execute source or prove complete IPC/data flow.
+- Saved evidence: `query_investigation`, `query_investigation_graph`, `export_evidence_bundle` (the existing bounded forensic JSON/HTML report, not a blanket archive of all session data).
+- Static notebooks: `validate_batch`, `run_batch`, `resume_investigation` reuse the existing maximum-20-cell, allowlisted static notebook runner. `target` is the notebook manifest path. Its existing input/engine/dependency fingerprints control checkpoint reuse. These aliases do **not** accept arbitrary shell, Smali-patch, signing, device, or debugger batches.
+
+`analysis_command_catalog` reports the exact adapter names and limitations. Adapter availability is not tool installation, compatibility, or successful fixture readiness. All backend-specific options and bounds remain in force. No duplicate execution engines, automatic downloads, cross-device preference sync, or broader privileges are introduced.
+
+### Precise Smali candidates
+
+1. Read one `.smali` file (maximum 512 KiB) and compute its SHA-256.
+2. Call `preview_smali_patch` with `target`, a distinct new `.smali` `output_file` in an existing parent directory, and `smali_patch`: `expected_sha256`, exact `class_descriptor`, exact `method_signature`, `expected_method`, and `replacement_method`.
+3. Review the returned before/after text and `previewSha256`. Preview publishes no file.
+4. Separately approve `patch_smali_method` (alias `patch_smali`) with those same parameters and `smali_patch.preview_sha256` set to the reviewed hash. Source, method, replacement and destination are bound into that hash.
+5. The operation rejects stale hashes, ambiguous/duplicate methods, changed signatures, class/field insertion, symlink paths, existing outputs and cancellation before publication. An exclusive temporary file is atomically hard-linked to the new output; no overwrite fallback is used. The original remains unchanged.
+6. Integrate the **single candidate file** into a separately managed candidate project; assemble/rebuild, compare, align, and separately sign/verify as applicable. This is not a whole-project copy, parser-backed register repair, assembly test, ART verifier, installation, or runtime test. The receipt explicitly says `validation: not-run`.
+
+All new construction aliases and patch operations are classified as writes **before** normalization. Read-only profiles cannot invoke them, and workbench execution additionally requires an idle Full Access owning session through a trusted desktop connection. Full Access is never enabled automatically.
+
+### Planning, not automatic execution
+
+`plan_investigation` / `plan_batch` take an `investigation_plan` with `workflow` (`artifact`, `android`, `native`, `electron`) and descriptive `goal`, plus an explicit target. They return dependency-labelled stage proposals; no stage runs or receives approval. The Android recipe accepts ordinary APKs only; split/bundle validation remains separate. Native exact decompile is proposed only with an explicit supported engine and selector. Plans are not executable notebook manifests.
+
+Still not implemented in this pack: recursive/unbounded Baksmali batching, universal cross-language/data-flow tracing, .NET/JVM transformations, arbitrary native binary rewriting, automatic runtime capture, general write-batch replay, universal hypothesis verification, or a new tool installer/readiness system. Existing device/debugger workflows stay separately authorized. Analyzed content and descriptive goals are untrusted data, not executable AI instructions.
+
+Regression coverage includes SDK alias/schema/permission checks, adversarial patch tests, notebook checkpoint tests, desktop write classification, command-panel tests, and installed Windows catalog plus preview/approved-candidate verification. Merge remains gated on current-head CI, Windows setup.exe, and installed WebView acceptance.

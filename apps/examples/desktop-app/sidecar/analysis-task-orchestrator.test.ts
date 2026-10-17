@@ -520,3 +520,14 @@ it("requires independent Execute kind for active JS and exact reviewed scenario 
 	).rejects.toThrow();
 	o.complete(plan.id, { owned: true }, "owned-test");
 });
+
+it.each(["build_apk", "recompile_smali", "validate_smali_project", "patch_smali_method", "patch_smali"])("classifies advanced write adapter %s before execution", async operation => {
+ const root = workspace();
+ const target = join(root, "owned.smali");
+ writeFileSync(target, "owned");
+ const orchestrator = new AnalysisTaskOrchestrator();
+ const plan = await orchestrator.prepare({ workspaceRoot: root, kind: "static", request: { operation, target } });
+ expect(plan.permission).toBe("Modify");
+ expect(plan.requirements).toContain("new-output-no-overwrite");
+ expect(() => orchestrator.approve(plan.id, [], plan.requestHash)).toThrow();
+});

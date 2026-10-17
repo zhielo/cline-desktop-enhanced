@@ -1205,3 +1205,5 @@ export {
 
 export { verifyAndroidToolchain, androidToolchainRoot, ANDROID_TOOLCHAIN_PROFILE } from "./extensions/tools/executors/android-toolchain";
 export { testAndroidToolchain } from "./extensions/tools/executors/android-toolchain-fixtures";
+
+export { analysisCommandCatalog, isAnalysisWriteOperation } from "./extensions/tools/analysis-commands";

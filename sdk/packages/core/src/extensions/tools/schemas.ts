@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import { ANALYSIS_ALIAS_NAMES, SmaliPatchSchema, InvestigationPlanSchema } from "./analysis-commands";
 import { NativeProjectEditSchema } from "./native-project-edits-schema";
 
 export const INPUT_ARG_CHAR_LIMIT = 6000;
@@ -277,7 +278,11 @@ export const ReverseEngineeringInputSchema = z.object({
 		})
 		.strict()
 		.optional(),
-	operation: z.enum([
+	smali_patch: SmaliPatchSchema.optional(),
+ investigation_plan: InvestigationPlanSchema.optional(),
+ operation: z.enum([
+  ...ANALYSIS_ALIAS_NAMES,
+  "baksmali_dir", "analysis_command_catalog", "plan_investigation", "plan_batch", "preview_smali_patch", "patch_smali_method", "patch_smali",
 		"javascript_analysis",
 		"analysis_evidence",
 		"discover",
