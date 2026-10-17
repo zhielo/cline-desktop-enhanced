@@ -626,5 +626,5 @@ it("normalizes selected dependency evidence and rejects unreviewed external inpu
 	});
 	expect(
 		(local.request.dependency_evidence as { lockfile: string }).lockfile,
-	).toBe(join(realpathSync(root), "package-lock.json"));
+	).toBe(join(realpathSync.native(root), "package-lock.json"));
 });
