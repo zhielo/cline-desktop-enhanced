@@ -188,10 +188,11 @@ export function AnalysisWorkbench({
 	const common = useMemo(
 		() => ({
 			environmentId,
+   ...(sessionId ? { sessionId } : {}),
 			...(cwd?.trim() ? { cwd } : {}),
 			...(investigationId ? { investigationId } : {}),
 		}),
-		[cwd, environmentId, investigationId],
+		[cwd, environmentId, investigationId, sessionId],
 	);
 
 	const refreshLedger = useCallback(async () => {
