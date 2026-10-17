@@ -16,6 +16,15 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
 
+/** v12 owns more than 256 RPC/native actions. Keep evidence finite and fail closed,
+ * including cleanup/restart actions; never drop records to manufacture a pass.
+ * At most 384 actions / 768 running+terminal progress records, no child log payloads. */
+export const INSTALLED_ACTION_LIMIT = 384;
+export function assertInstalledActionSequence(sequence: number) {
+  if (!Number.isSafeInteger(sequence) || sequence < 1 || sequence > INSTALLED_ACTION_LIMIT)
+    throw new Error("Installed action evidence budget reached");
+}
+
 /** Newly produced receipts must match the shipped parser, not a stale test literal.
  * Persisted historical receipts remain governed by their own immutable profile. */
 export function verifyInstalledAnalysisProfile(profile: string) {
@@ -284,7 +293,7 @@ export async function main() {
   let lastAction = { phase: "setup", status: "running" };
   async function acceptanceAction<T>(phase: string, operation: () => Promise<T>, timeoutMs = 95_000) {
     const sequence = ++actionSequence;
-    if (sequence > 256) throw new Error("Installed action evidence budget reached");
+    assertInstalledActionSequence(sequence);
     lastAction = { phase, status: "running" };
     const startedAt = new Date().toISOString();
     const persist = async () => {
