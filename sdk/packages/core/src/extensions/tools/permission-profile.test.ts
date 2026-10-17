@@ -254,6 +254,7 @@ it.each([
 
 it("keeps investigation tools behind the external-tool permission profile", async () => {
 	for (const name of [
+		"plan_runtime_observation",
 		"validate_candidate",
 		"review_candidate_changes",
 		"open_binary",

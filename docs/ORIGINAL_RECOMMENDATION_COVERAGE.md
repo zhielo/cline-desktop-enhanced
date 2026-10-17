@@ -61,7 +61,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
-| `plan_runtime_observation` | not-implemented | Existing separate runtime workbenches; no unified bounded observation-plan command. |
+| `plan_runtime_observation` | partial | Approved read-only immutable-source plan for live local Node Inspector PID/birth/listener, Linux/Windows; no socket connection, attachment or execution. Fresh Runtime/Hybrid Debug approval remains separate. Native/JVM/Android planning and persistent sessions remain incomplete. |
 | `attach_debug_session` | not-implemented | Existing one-shot debugger attach is not a persistent managed session. |
 | `set_scoped_breakpoints` | not-implemented | Persistent session-scoped breakpoint lifecycle not implemented. |
 | `capture_execution_trace` | not-implemented | No unified supervised execution-trace command. |

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RuntimeObservationOptionsSchema } from "./runtime-observation-schema";
 import {
 	createTool,
 	zodToJsonSchema,
@@ -73,6 +74,7 @@ export const InvestigationSchemas = {
 	resume_investigation: z
 		.object({ receiptId: Id, revision: z.number().int().min(0) })
 		.strict(),
+	plan_runtime_observation: z.object({artifactId: Id, observation: RuntimeObservationOptionsSchema}).strict(),
 	validate_candidate: z.object({artifactId: Id, kind: z.enum(["javascript", "typescript", "dex", "apk"])}).strict(),
  review_candidate_changes: z.object({artifactId: Id}).strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
@@ -120,6 +122,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Cancel only this owning-session AI batch through the existing supervised runner. Read its checkpoint to confirm terminal outcome; never replays stages. Available after Analysis is disabled.",
 	resume_investigation:
 		"Request a freshly approved continuation of never-started built-in static stages from an exact terminal checkpoint revision. Revalidates every input hash, implementation fingerprint and reused result. Never retries failed/started stages or replays writes/runtime; unresolved dependencies block continuation.",
+	plan_runtime_observation: "Prepare an independently approved read-only plan for an immutable source and an exact live local Node Inspector PID/birth identity/listener. No socket connection, attachment or target execution. Plan is NOT runtime consent: use the existing Runtime/Hybrid workbench with fresh human Debug approval and, in Hybrid, static evidence. Linux/Windows only; not a persistent debugger or trace command.",
 	validate_candidate: "Request hash-bound candidate checks after independent human approval: JS/TS syntax, DEX header/checksum/table bounds, or APK structure and signature. Results declare their exact coverage, failures and unavailable checks; no execution, signing, build, install or semantic-equivalence claim.",
  review_candidate_changes: "Request read-only exact-recipe audit of an immutable candidate batch manifest after independent human approval. Verifies declared source hashes and candidate bytes using existing patch implementations; missing/mismatched/unverified outputs never pass. Only declared files, not a whole-project change review; cannot authorize writes or replay stages.",
 	open_binary:

@@ -291,12 +291,15 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('join(evidence, "phase.json")'));
  assert.ok(driver.includes('join(evidence, "action-progress.jsonl")'));
  assert.ok(driver.includes('sequence > 256'));
- assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v11'));
+ assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v12'));
  assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
  assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
  assert.ok(driver.includes('installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed'));
  assert.ok(driver.includes('Installed completed batch was replayed'));
  assert.ok(driver.includes('installed-candidate-validation-review-hash-scope-preservation-passed'));
+ assert.ok(driver.includes('installed-runtime-plan-owned-identity-no-attach-no-execute-passed'));
+ assert.ok(driver.includes('Runtime planner executed owned target'));
+ assert.ok(driver.includes('runtime-plan-fixture-cleanup'));
  assert.ok(driver.includes('Installed candidate handle crossed session boundary'));
  assert.ok(driver.includes('installed-ai-batch-read-only-profile-denied'));
  assert.ok(driver.includes('Installed batch widened the Read Only session'));

@@ -247,9 +247,9 @@ export const RECOMMENDATION_COVERAGE = [
 	{
 		group: "runtime",
 		command: "plan_runtime_observation",
-		scope: "not-implemented",
+		scope: "partial",
 		limitations:
-			"Existing separate runtime workbenches; no unified bounded observation-plan command.",
+			"Approved read-only immutable-source plan for a live local Node Inspector PID/birth/listener, Linux/Windows. No socket attachment or execution. Actual runtime needs separate Runtime/Hybrid Debug approval; native/JVM/Android planning and persistent sessions remain separate.",
 	},
 	{
 		group: "runtime",

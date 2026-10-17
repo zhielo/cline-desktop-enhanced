@@ -267,3 +267,16 @@ it.each(["validate_candidate","review_candidate_changes"])("%s binds immutable o
   await writeFile(h.path,"changed");await expect(handleAnalysisWorkflow(command,input,scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("changed");
  } finally {store.close();await rm(root,{recursive:true,force:true});}
 });
+it("runtime planner binds owning immutable source but never invokes runtime from Static mode",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"runtime-plan-workflow-")),scope={sessionId:"owned",workspace:root},store=new AnalysisWorkflowStore(join(root,"workflow.sqlite"));
+ const invoke=vi.fn(async()=>({id:"plan"})),ports={invoke,staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn()};
+ try{
+  await writeFile(join(root,"owned.js"),"throw new Error('MUST_NOT_EXECUTE');");const h=await store.open(scope,"owned.js");
+  const input={artifactId:h.id,observation:{backend:"node-inspector",pid:123,processToken:"owned",endpoint:"ws://127.0.0.1:9229/00000000-0000-0000-0000-000000000000"}};
+  await handleAnalysisWorkflow("plan_runtime_observation",input,scope,{trusted:true,idle:true,mode:"static"},store,ports);
+  expect(invoke).toHaveBeenCalledWith("prepare_analysis_task",expect.objectContaining({kind:"static",request:expect.objectContaining({operation:"plan_runtime_observation",target:h.path,runtime_observation_plan:expect.objectContaining({expected_sha256:h.sha256})})}));
+  await expect(handleAnalysisWorkflow("plan_runtime_observation",{...input,phase:"run"},scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("one-use");
+  await expect(handleAnalysisWorkflow("plan_runtime_observation",input,{...scope,sessionId:"other"},{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("unavailable");
+  expect(ports.capture).not.toHaveBeenCalled();
+ }finally{store.close();await rm(root,{recursive:true,force:true});}
+});

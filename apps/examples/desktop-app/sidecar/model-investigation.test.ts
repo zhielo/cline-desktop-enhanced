@@ -352,3 +352,11 @@ it.each([
  expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
  const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation(name,input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();expect(denied.cancel).toHaveBeenCalledWith(id);
 });
+it("runtime planning requires independent review but never requests or self-grants runtime consent",async()=>{
+ const p=ports(),input={artifactId:id,observation:{backend:"node-inspector",pid:123,processToken:"owned",endpoint:"ws://127.0.0.1:9229/00000000-0000-0000-0000-000000000000"}};
+ await runModelInvestigation("plan_runtime_observation",input,p);
+ expect(p.review).toHaveBeenCalledTimes(1);expect(p.approve).toHaveBeenCalledTimes(1);
+ expect(p.invoke).toHaveBeenCalledWith("plan_runtime_observation",expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
+ p.review=vi.fn(async()=>false);p.approve=vi.fn();
+ await expect(runModelInvestigation("plan_runtime_observation",input,p)).rejects.toThrow("denied");expect(p.approve).not.toHaveBeenCalled();
+});

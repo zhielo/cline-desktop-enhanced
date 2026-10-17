@@ -1,3 +1,4 @@
+import { RuntimeObservationPlanSchema } from "./runtime-observation-schema";
 import { AndroidProjectPatchSchema } from "./android-project-schema";
 import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
 import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
@@ -301,6 +302,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		})
 		.strict()
 		.optional(),
+	runtime_observation_plan: RuntimeObservationPlanSchema.optional(),
 	candidate_validation: CandidateValidationSchema.optional(),
 	candidate_review: CandidateReviewSchema.optional(),
 	workflow_query: WorkflowQuerySchema.optional(),

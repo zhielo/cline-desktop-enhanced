@@ -1068,6 +1068,37 @@ ConvertTo-Json -InputObject @($rows) -Compress
     }
     if(await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText||!(await readFile(batchBinary)).equals(batchBinaryBefore)||await readFile(batchAst,"utf8")!==batchAstBefore)throw new Error("Installed candidate verification changed originals");
     stages.push("installed-candidate-validation-review-hash-scope-preservation-passed");
+    // Test harness owns this paused Node child. The product planner must not connect or resume it.
+    const runtimePlanSource=join(workspace,"owned-runtime-plan.js"),runtimePlanMarker=join(workspace,"runtime-plan-MUST-NOT-EXECUTE");
+    const runtimePlanText='require("node:fs").writeFileSync('+JSON.stringify(runtimePlanMarker)+',"executed");';
+    await writeFile(runtimePlanSource,runtimePlanText);
+    const runtimePlanChild=startAcceptanceProcess(process.execPath,["--inspect-brk=127.0.0.1:0",runtimePlanSource],workspace,process.env);
+    try {
+      let runtimePlanEndpoint:string|undefined;
+      for(let attempt=0;attempt<200;attempt++){
+        runtimePlanEndpoint=/ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9-]+/.exec(runtimePlanChild.diagnostics.stderrTail)?.[0];
+        if(runtimePlanEndpoint)break;await delay(50);
+      }
+      if(!runtimePlanEndpoint||!runtimePlanChild.child.pid)throw new Error("Owned runtime planner fixture did not start paused");
+      // Reuse the installed host's exact OS birth-identity binder, without approving/consuming its runtime plan.
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
+      const identityPlan=await rpc<{id:string;request:{processToken:string}}>(page,"first_party_analysis_inspector_prepare",{...triageScope,input:{operation:"js_inspector_observe",target:runtimePlanSource,pid:runtimePlanChild.child.pid,endpoint:runtimePlanEndpoint,durationMs:300}});
+      await rpc(page,"cancel_analysis_task",{...triageScope,cwd:workspace,planId:identityPlan.id});
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+      const sourceHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:runtimePlanSource}});
+      const planInput={artifactId:sourceHandle.id,observation:{backend:"node-inspector",pid:runtimePlanChild.child.pid,processToken:identityPlan.request.processToken,endpoint:runtimePlanEndpoint,durationMs:300,captureConsole:false}};
+      const plan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"plan_runtime_observation",{...triageScope,input:{...planInput,phase:"prepare"}});
+      const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
+      const planned=await rpc<{result:{protocol:string;status:string;attached:boolean;observedExecution:boolean;approval:{granted:boolean};receiptSha256:string}}>(page,"plan_runtime_observation",{...triageScope,input:{...planInput,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+      if(planned.result.protocol!=="cline-runtime-observation-plan/v1"||planned.result.status!=="completed"||planned.result.attached!==false||planned.result.observedExecution!==false||planned.result.approval.granted!==false||!/^[a-f0-9]{64}$/.test(planned.result.receiptSha256)||runtimePlanChild.diagnostics.stderrTail.includes("Debugger attached")||await readFile(runtimePlanSource,"utf8")!==runtimePlanText)throw new Error("Installed runtime planner attached, changed source or granted consent");
+      let markerCreated=true;try{await readFile(runtimePlanMarker);}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;markerCreated=false;}if(markerCreated)throw new Error("Runtime planner executed owned target");
+      let crossScopeDenied=false;try{await rpc(page,"plan_runtime_observation",{...analysisArgs,input:{...planInput,phase:"prepare"}});}catch{crossScopeDenied=true;}if(!crossScopeDenied)throw new Error("Runtime plan artifact handle crossed sessions");
+      stages.push("installed-runtime-plan-owned-identity-no-attach-no-execute-passed");
+    } finally {
+      if(runtimePlanChild.child.exitCode===null&&runtimePlanChild.child.signalCode===null)runtimePlanChild.child.kill();
+      await withInstalledActionDeadline("runtime-plan-fixture-cleanup",()=>runtimePlanChild.closed,10000);
+    }
+
 
     const triageRequestId=randomUUID();
     const triageReceipt=await rpc<{id:string;status:string;resultHash:string;evidence:{data:unknown}}>(page,"binary_triage_run",{...triageScope,confirmed:true,requestId:triageRequestId,input:triageInput});
@@ -1254,7 +1285,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v11",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v12",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },
