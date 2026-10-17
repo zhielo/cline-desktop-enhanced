@@ -83,6 +83,7 @@ const EXTERNAL_TOOLS = new Set([
 	"analyze_function",
 	"trace_application_feature",
 	"capture_browser_scenario",
+ "capture_network_metadata",
 	"get_evidence_bundle",
 	"android_device",
 	"live_debugger",
@@ -282,7 +283,7 @@ function evaluateTool(
 	)
 		return blockedReason(
 			profile.name,
-			"native project edits and Android artifact construction/signing require a write-enabled profile",
+			"candidate construction/signing and project edits require a write-enabled profile",
 		);
 	const explicitlyAllowed = profile.allowedToolNames.has(toolName);
 	if (!isKnownTool(toolName) && !isCoordinationTool(toolName)) {

@@ -6202,10 +6202,10 @@ export async function handleCommand(
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
   if(isAnalysisWriteOperation(input.operation)){
-   if(!options?.connection?.data?.canApproveTools)throw new Error("Android construction/signing requires the trusted desktop connection");
+   if(!options?.connection?.data?.canApproveTools)throw new Error("Candidate construction/signing requires the trusted desktop connection");
    const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id);
    const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"read-only";
-   if(!live||live.busy||live.transitioningProvider||profile!=="full-access")throw new Error("Android construction/signing requires an idle Full Access owning session; restricted profiles are not widened");
+   if(!live||live.busy||live.transitioningProvider||profile!=="full-access")throw new Error("Candidate construction/signing requires an idle Full Access owning session; restricted profiles are not widened");
   }
   const planId = String(args?.planId ?? "").trim();
 		const executionToken = String(args?.executionToken ?? "").trim();
@@ -6230,7 +6230,7 @@ export async function handleCommand(
 		try {
 			const parsed = JSON.parse(result);
 			if (
-				["blocked", "failed", "cancelled"].includes(parsed?.status) || ["blocked", "failed", "cancelled"].includes(parsed?.result?.status) || parsed?.succeeded === false || parsed?.verified === false || parsed?.validated === false || (typeof parsed?.exitCode === "number" && parsed.exitCode !== 0) || parsed?.timedOut === true || parsed?.cancelled === true || parsed?.outputDrainTimedOut === true
+				(["blocked", "failed", "cancelled"].includes(parsed?.status) || (input.operation === "apply_candidate_batch" && parsed?.status === "partial")) || ["blocked", "failed", "cancelled"].includes(parsed?.result?.status) || parsed?.succeeded === false || parsed?.verified === false || parsed?.validated === false || (typeof parsed?.exitCode === "number" && parsed.exitCode !== 0) || parsed?.timedOut === true || parsed?.cancelled === true || parsed?.outputDrainTimedOut === true
 			) {
 				const plan = desktopAnalysisTaskOrchestrator.fail(
 					planId,
@@ -6241,7 +6241,8 @@ export async function handleCommand(
 			const outputPaths =
 				parsed && typeof parsed === "object"
 					? [
-							parsed.outputDirectory,
+							...(Array.isArray(parsed.outputFiles) ? parsed.outputFiles : []),
+ parsed.outputDirectory,
 							parsed.outputFile,
 							parsed.reportOutputFile,
 						].filter((value): value is string => typeof value === "string")

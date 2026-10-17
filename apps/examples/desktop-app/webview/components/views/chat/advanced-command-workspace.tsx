@@ -13,9 +13,78 @@ type Catalog = {
 	entries: Entry[];
 	unavailable: string[];
 	limitations: string[];
+	runtimeCommands?: {
+		command: string;
+		workflow: string;
+		limitations: string;
+	}[];
 };
 function template(command: string) {
 	const base: Record<string, unknown> = { target: "", timeout_ms: 120000 };
+	if (
+		[
+			"preview_binary_patch",
+			"patch_binary",
+			"preview_ast_transform",
+			"apply_ast_transform",
+			"preview_dotnet_constant",
+			"patch_dotnet_constant",
+			"preview_jvm_constant",
+			"patch_jvm_constant",
+		].includes(command)
+	) {
+		base.output_file = "";
+		base.acknowledge_external_output = false;
+		base.candidate = {
+			expected_sha256: "",
+			...(command.startsWith("preview_") ? {} : { preview_sha256: "" }),
+			...(command.includes("binary")
+				? {
+						byte_patch: {
+							offset: 0,
+							expected_hex: "00",
+							replacement_hex: "01",
+						},
+					}
+				: command.includes("ast")
+					? { literal: { start: 0, expected: "0", replacement: "1" } }
+					: command.includes("dotnet")
+						? {
+								managed: {
+									method_token: "0x06000001",
+									instruction_offset: 0,
+									expected_value: 0,
+									replacement_value: 1,
+								},
+							}
+						: {
+								jvm: {
+									method_name: "value",
+									descriptor: "()I",
+									expected_value: 0,
+									replacement_value: 1,
+								},
+							}),
+		};
+	}
+	if (["trace_cross_language", "trace_data_flow"].includes(command))
+		base.evidence_trace = {
+			start_id: "",
+			max_depth: 6,
+			max_nodes: 100,
+			max_edges: 200,
+		};
+	if (command === "decompile_dotnet_method")
+		base.managed_method = { method_token: "0x06000001" };
+	if (command === "read_jvm_method")
+		base.jvm_method = { method_name: "value", descriptor: "()I" };
+	if (command === "apply_candidate_batch") {
+		base.batch_preview_sha256 = "";
+		base.acknowledge_external_output = false;
+	}
+	if (command === "preview_candidate_batch")
+		base.acknowledge_external_output = false;
+
 	if (["plan_investigation", "plan_batch"].includes(command))
 		base.investigation_plan = {
 			workflow: "artifact",
@@ -146,8 +215,10 @@ export function AdvancedCommandWorkspace({
 			<p className="text-xs">
 				run_batch and resume_investigation take a reviewed static notebook
 				manifest as target—not a shell command or arbitrary operation list.
-				Patching publishes one new Smali file; assemble it in a separate
-				candidate tree before rebuilding.
+				Candidate batches use a confined JSON manifest with up to eight
+				independent files. They are not transactional and never replay writes.
+				Smali patching publishes one file; assemble it in a separate candidate
+				tree before rebuilding.
 			</p>
 			<Button
 				disabled={!local || !entry || busy}
@@ -158,12 +229,17 @@ export function AdvancedCommandWorkspace({
 			{error && <p role="alert">{error}</p>}
 			{catalog && (
 				<>
+					{catalog.runtimeCommands?.map((value) => (
+						<p key={value.command} className="text-xs">
+							{value.command}: {value.workflow}. {value.limitations}
+						</p>
+					))}
 					<h4 className="font-semibold">Not available in this command pack</h4>
 					<p className="text-xs">{catalog.unavailable.join(", ")}</p>
 					<p className="text-xs">
 						Runtime work uses separately authorized device/debugger workflows.
-						No universal cross-language trace, native binary patcher, or .NET
-						transformation is implied.
+						No universal cross-language resolution, arbitrary native rewriting,
+						complete .NET decompilation or verifier acceptance is implied.
 					</p>
 				</>
 			)}

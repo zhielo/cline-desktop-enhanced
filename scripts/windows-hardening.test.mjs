@@ -205,3 +205,11 @@ test("installed advanced commands verify catalog and separately approved immutab
  expect(driver.includes('operation:"patch_smali_method"')).toBe(true);
  expect(driver.includes("preview_sha256:ownedPreview.result.previewSha256")).toBe(true);
 });
+
+test("installed advanced batch requires reviewed preview, separate approval and preserved originals", () => {
+ const driver = readFileSync("apps/vscode/scripts/desktop-installed-acceptance.ts", "utf8");
+ expect(driver.includes("installed-preview-approved-binary-ast-batch-originals-preserved")).toBe(true);
+ expect(driver.includes('operation:"preview_candidate_batch"')).toBe(true);
+ expect(driver.includes('operation:"apply_candidate_batch"')).toBe(true);
+ expect(driver.includes('batchApply.result.results')).toBe(true);
+});

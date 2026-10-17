@@ -258,6 +258,7 @@ it("keeps investigation tools behind the external-tool permission profile", asyn
 		"analyze_function",
 		"trace_application_feature",
 		"capture_browser_scenario",
+ "capture_network_metadata",
 		"get_evidence_bundle",
 	]) {
 		expect(await before("read-only", name)).toMatchObject({ skip: true });
@@ -276,4 +277,9 @@ it.each([
 	expect(
 		await before("read-only", "reverse_engineer", { operation }),
 	).toBeDefined();
+});
+
+it.each(["patch_binary","apply_ast_transform","patch_dotnet_constant","patch_jvm_constant","apply_candidate_batch"])("new candidate write %s cannot evade either restricted profile",async(operation)=>{
+ for(const profile of ["read-only","project-notion-bridge"] as const)expect((await before(profile,"reverse_engineer",{operation}))?.skip).toBe(true);
+ expect(await before("full-access","reverse_engineer",{operation})).toBeUndefined();
 });

@@ -23,7 +23,7 @@ export async function runModelInvestigation(
 		ports.assertCurrent();
 	};
 	current();
-	if (name === "capture_browser_scenario") {
+	if (name === "capture_browser_scenario" || name === "capture_network_metadata") {
 		const req = input as { action: string };
 		if (req.action === "list") {
 			const status = (await ports.invoke("analysis_workflow_status", {})) as {

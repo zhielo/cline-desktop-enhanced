@@ -917,7 +917,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;results?:{status:string}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -925,6 +925,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const ownedApplied=await runOwnedAdvanced({...previewRequest,operation:"patch_smali_method",smali_patch:{...ownedPatch,preview_sha256:ownedPreview.result.previewSha256}});
     if(!ownedApplied.result.published||ownedApplied.plan.status!=="completed"||await readFile(ownedSmaliSource,"utf8")!==ownedSmaliText||await readFile(ownedSmaliOutput,"utf8")!==ownedSmaliText.replace(ownedSmaliBefore,ownedSmaliAfter))throw new Error("Installed hash-bound Smali candidate patch failed");
     stages.push("installed-advanced-smali-preview-approved-candidate-original-preserved");
+    const batchBinary=join(workspace,"owned-candidate-input.bin"),batchAst=join(workspace,"owned-candidate-input.ts"),batchManifest=join(workspace,"owned-candidate-batch.json");
+    const batchBinaryBefore=Buffer.from([0,1,2,3]),batchAstBefore="export const owned = 1;\n";
+    await writeFile(batchBinary,batchBinaryBefore);await writeFile(batchAst,batchAstBefore);
+    const ownedBatch={schemaVersion:1,stages:[
+      {id:"bytes",operation:"patch_binary",target:"owned-candidate-input.bin",output_file:"owned-candidate-output.bin",candidate:{expected_sha256:createHash("sha256").update(batchBinaryBefore).digest("hex"),byte_patch:{offset:1,expected_hex:"01",replacement_hex:"ff"}}},
+      {id:"literal",operation:"apply_ast_transform",target:"owned-candidate-input.ts",output_file:"owned-candidate-output.ts",candidate:{expected_sha256:createHash("sha256").update(batchAstBefore).digest("hex"),literal:{start:batchAstBefore.indexOf("1"),expected:"1",replacement:"2"}}}
+    ]};
+    await writeFile(batchManifest,JSON.stringify(ownedBatch));
+    const batchPreview=await runOwnedAdvanced({operation:"preview_candidate_batch",target:batchManifest,acknowledge_external_output:true,timeout_ms:120000});
+    if(batchPreview.plan.status!=="completed"||!batchPreview.result.batchPreviewSha256)throw new Error("Installed candidate batch preview failed");
+    const batchApply=await runOwnedAdvanced({operation:"apply_candidate_batch",target:batchManifest,batch_preview_sha256:batchPreview.result.batchPreviewSha256,acknowledge_external_output:true,timeout_ms:120000});
+    if(batchApply.plan.status!=="completed"||batchApply.result.status!=="completed"||batchApply.result.results?.length!==2||!batchApply.result.results.every(s=>s.status==="completed")||!(await readFile(batchBinary)).equals(batchBinaryBefore)||await readFile(batchAst,"utf8")!==batchAstBefore||!(await readFile(join(workspace,"owned-candidate-output.bin"))).equals(Buffer.from([0,255,2,3]))||await readFile(join(workspace,"owned-candidate-output.ts"),"utf8")!==batchAstBefore.replace("= 1","= 2"))throw new Error("Installed approved candidate batch did not preserve inputs or publish exact candidates");
+    stages.push("installed-preview-approved-binary-ast-batch-originals-preserved");
+
     const triageScope={sessionId:triageSession.sessionId,environmentId:"local"};
     await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
     const triageRequestId=randomUUID();

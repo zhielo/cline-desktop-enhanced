@@ -26,6 +26,38 @@ async function cleanupFixtures(
 afterEach(async () => {
 	await cleanupFixtures(resources.splice(0));
 });
+function ownedObservationGate(options: { sleep: () => Promise<void> }) {
+	let release: (() => void) | undefined;
+	let entered!: () => void;
+	const observationEntered = new Promise<void>((resolve) => {
+		entered = resolve;
+	});
+	options.sleep = async () =>
+		new Promise<void>((resolve) => {
+			release = resolve;
+			entered();
+		});
+	return {
+		async wait() {
+			let deadline: ReturnType<typeof setTimeout> | undefined;
+			try {
+				await Promise.race([
+					observationEntered,
+					new Promise<never>((_, reject) => {
+						deadline = setTimeout(
+							() =>
+								reject(new Error("Owned observation boundary was not entered")),
+							5000,
+						);
+					}),
+				]);
+			} finally {
+				clearTimeout(deadline);
+			}
+		},
+		release: () => release?.(),
+	};
+}
 async function fixture() {
 	const root = await mkdtemp(join(tmpdir(), "incident-case-")),
 		original = apk(),
@@ -273,22 +305,31 @@ describe("durable APK incidents", () => {
 	});
 	it("marks another owner's live case control-unavailable without reclaiming execution", async () => {
 		const f = await fixture();
-		let release!: () => void;
-		f.options.sleep = async () =>
-			new Promise<void>((res) => {
-				release = res;
-			});
+		const observation = ownedObservationGate(f.options);
 		const otherService = new ApkIncidentService(f.options);
 		resources.push({ root: f.root, service: otherService });
 		const r = await f.start({ ...f.request, duration_seconds: 4 });
-		for (let i = 0; i < 50 && !release; i++)
-			await new Promise((res) => setTimeout(res, 10));
-		expect(otherService.get(f.root, r.id).controlUnavailable).toBe(true);
-		const before = f.calls.length;
-		otherService.list(f.root);
-		expect(f.calls.length).toBe(before);
-		release();
-		await f.completed(r.id);
+		let inspected = false;
+		try {
+			await observation.wait();
+			expect(otherService.get(f.root, r.id).controlUnavailable).toBe(true);
+			const before = f.calls.length;
+			otherService.list(f.root);
+			expect(f.calls.length).toBe(before);
+			inspected = true;
+		} finally {
+			if (!inspected) {
+				const c = f.service.get(f.root, r.id);
+				if (
+					f.tasks
+						.list(f.root)
+						.some((plan) => plan.id === c.planId && plan.status === "running")
+				)
+					f.tasks.cancel(c.planId);
+			}
+			observation.release();
+			await f.completed(r.id);
+		}
 	});
 	it("retains matching failure evidence but does not automatically call it fixed", async () => {
 		const f = await fixture();
@@ -324,18 +365,23 @@ it("one-shot approval cannot create duplicate jobs", async () => {
 });
 it("cancels observation without replaying or claiming a fix", async () => {
 	const f = await fixture();
-	let release!: () => void;
-	f.options.sleep = async () =>
-		new Promise<void>((r) => {
-			release = r;
-		});
+	const observation = ownedObservationGate(f.options);
 	const accepted = await f.start({ ...f.request, duration_seconds: 4 });
-	for (let i = 0; i < 50 && !release; i++)
-		await new Promise((r) => setTimeout(r, 10));
 	const c = f.service.get(f.root, accepted.id);
-	f.tasks.cancel(c.planId);
-	release();
-	const stopped = await f.completed(c.id);
+	try {
+		await observation.wait();
+	} finally {
+		if (
+			f.tasks
+				.list(f.root)
+				.some((plan) => plan.id === c.planId && plan.status === "running")
+		)
+			f.tasks.cancel(c.planId);
+		observation.release();
+		// Drain before afterEach closes SQLite/removes the root, even on wait failure.
+		await f.completed(c.id);
+	}
+	const stopped = f.service.get(f.root, c.id);
 	expect(stopped.status).toBe("incomplete");
 	expect(stopped.result).toContain("Do not infer a fix");
 	const count = f.calls.length;

@@ -180,7 +180,7 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
- if(kind==="static"&&operation!=="project_edit"&&isAnalysisWriteOperation(operation)){requirements.add("authorized-android-artifact-modification");requirements.add("new-output-no-overwrite");if(operation==="sign_apk"){requirements.add("host-configured-test-key");requirements.add("original-signature-not-preserved");}}
+ if(kind==="static"&&operation!=="project_edit"&&isAnalysisWriteOperation(operation)){requirements.add(["patch_binary", "apply_ast_transform", "patch_dotnet_constant", "patch_jvm_constant", "apply_candidate_batch"].includes(operation) ? "authorized-candidate-artifact-modification" : "authorized-android-artifact-modification");requirements.add("new-output-no-overwrite");if(operation==="sign_apk"){requirements.add("host-configured-test-key");requirements.add("original-signature-not-preserved");}}
 	if (operation === "js_isolated_execute") {
 		requirements.add("independent-execute-approval");
 		requirements.add("authorized-target-execution");

@@ -1,3 +1,9 @@
+import { CANDIDATE_COMMANDS } from "../advanced-candidates-schema";
+import { advancedCandidate, decompileManagedSelection } from "./advanced-candidates";
+import { candidateBatch } from "./candidate-batch";
+import { traceEvidence } from "./evidence-trace";
+import { candidateHash, readCandidateFile } from "./candidate-files";
+import { inspectJvmMethod } from "./jvm-method";
 import { disassembleDexDirectory } from "./dex-directory";
 import { analysisCommandCatalog, normalizeAnalysisCommand, planInvestigation } from "../analysis-commands";
 import { smaliPatch } from "./smali-patch";
@@ -2534,6 +2540,28 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
   input = normalizeAnalysisCommand(input);
+  if ((CANDIDATE_COMMANDS as readonly string[]).includes(input.operation)) {
+   if (!input.output_file) throw new Error("Candidate output_file required");
+   const outputScope = await enforceOutputPath(input.output_file, input.acknowledge_external_output);
+   return withAnalysisLock(input.target ?? "", async () => JSON.stringify({...await advancedCandidate(input, context.signal), outputScope}), context.signal);
+  }
+  if (["preview_candidate_batch", "apply_candidate_batch"].includes(input.operation)) {
+   if (!input.target) throw new Error("Manifest target required");
+   const outputScope = await enforceOutputPath(path.join(path.dirname(input.target), ".candidate-output-scope"), input.acknowledge_external_output);
+   return withAnalysisLock(input.target, async () => JSON.stringify({...await candidateBatch(input, context.signal), outputScope}), context.signal);
+  }
+  if (["trace_cross_language", "trace_data_flow", "decompile_dotnet_method", "read_jvm_method"].includes(input.operation)) {
+   if (!input.target) throw new Error("Explicit target required");
+   const bytes = await readCandidateFile(input.target, 16 * 1024 * 1024, context.signal);
+   if (["trace_cross_language", "trace_data_flow"].includes(input.operation)) {
+    if(bytes.length > 4*1024*1024)throw new Error("Evidence graph exceeds 4 MiB budget");
+    return JSON.stringify({...traceEvidence(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)),input.evidence_trace,input.operation==="trace_data_flow"),inputSha256:candidateHash(bytes)});
+   }
+   if(input.operation==="decompile_dotnet_method")return JSON.stringify({...decompileManagedSelection(bytes,input.managed_method),inputSha256:candidateHash(bytes)});
+   if(!input.jvm_method)throw new Error("Exact JVM method selector required");
+   const method=inspectJvmMethod(bytes,input.jvm_method.method_name,input.jvm_method.descriptor);
+   return JSON.stringify({...method,bytes:undefined,byteLength:method.bytes.length,hex:method.bytes.subarray(0,4096).toString("hex"),truncated:method.bytes.length>4096,status:method.bytes.length>4096?"partial":"completed",inputSha256:candidateHash(bytes)});
+  }
   if (input.operation === "baksmali_dir") return JSON.stringify(await disassembleDexDirectory(input, async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(request, { ...context, signal })), context.signal));
   if (input.operation === "analysis_command_catalog") return JSON.stringify(analysisCommandCatalog());
   if (["plan_investigation", "plan_batch"].includes(input.operation)) return JSON.stringify(planInvestigation(input));

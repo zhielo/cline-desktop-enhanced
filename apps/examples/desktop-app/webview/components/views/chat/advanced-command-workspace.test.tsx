@@ -20,8 +20,24 @@ const catalog = {
 			availability: "implemented",
 			limitations: "Exact-method candidate only",
 		},
+		...[
+			"patch_binary",
+			"apply_ast_transform",
+			"patch_dotnet_constant",
+			"patch_jvm_constant",
+			"apply_candidate_batch",
+			"trace_cross_language",
+			"trace_data_flow",
+			"decompile_dotnet_method",
+			"read_jvm_method",
+		].map((command) => ({
+			command,
+			effect: "candidate-write",
+			availability: "implemented",
+			limitations: "Bounded candidate only",
+		})),
 	],
-	unavailable: ["patch_binary"],
+	unavailable: ["general_native_rewriting"],
 };
 beforeEach(() => {
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -68,7 +84,7 @@ it("loads only the catalog and grants no approvals or execution on mount", async
 		environmentId: "local",
 	});
 	expect(onPrepare).not.toHaveBeenCalled();
-	expect(container.textContent).toContain("patch_binary");
+	expect(container.textContent).toContain("general_native_rewriting");
 });
 it("prepares one selected command and ignores operation substitution in JSON", async () => {
 	const { onPrepare } = await mount();
@@ -111,4 +127,30 @@ it("reports failed preparation without running a fallback", async () => {
 	await click();
 	expect(container.textContent).toContain("Permission denied");
 	expect(invoke).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+	["patch_binary", "byte_patch"],
+	["apply_ast_transform", "literal"],
+	["patch_dotnet_constant", "managed"],
+	["patch_jvm_constant", "jvm"],
+	["apply_candidate_batch", "batch_preview_sha256"],
+	["trace_cross_language", "evidence_trace"],
+	["trace_data_flow", "evidence_trace"],
+	["decompile_dotnet_method", "managed_method"],
+	["read_jvm_method", "jvm_method"],
+])("prepares %s explicitly without executing on selection", async (command, key) => {
+	const { invoke, onPrepare } = await mount();
+	await act(async () => {
+		const select = container.querySelector("select")!;
+		select.value = command;
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const value = JSON.parse(container.querySelector("textarea")!.value);
+	expect(JSON.stringify(value)).toContain(key);
+	if (value.candidate) expect(value.candidate).toHaveProperty("preview_sha256");
+	expect(invoke).toHaveBeenCalledTimes(1);
+	expect(onPrepare).not.toHaveBeenCalled();
+	await click();
+	expect(onPrepare).toHaveBeenCalledWith({ ...value, operation: command });
 });

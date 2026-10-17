@@ -20,6 +20,18 @@ const Selector = z
 		(v) => !!v.symbol !== !!v.address,
 		"Choose exactly one function selector",
 	);
+const CaptureSchema = z
+		.object({
+			action: z.enum(["list", "start", "stop"]),
+			browserSessionId: Id.optional(),
+			purpose: z.string().trim().min(1).max(160).optional(),
+			hybridProposal: HybridProposalSchema.optional(),
+		})
+		.strict()
+		.refine(
+			(v) => v.action === "list" || !!(v.browserSessionId && v.purpose),
+			"Recording requires browserSessionId and purpose",
+		);
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
@@ -38,18 +50,8 @@ export const InvestigationSchemas = {
 			scenarioIds: z.array(Id).max(5).default([]),
 		})
 		.strict(),
-	capture_browser_scenario: z
-		.object({
-			action: z.enum(["list", "start", "stop"]),
-			browserSessionId: Id.optional(),
-			purpose: z.string().trim().min(1).max(160).optional(),
-			hybridProposal: HybridProposalSchema.optional(),
-		})
-		.strict()
-		.refine(
-			(v) => v.action === "list" || !!(v.browserSessionId && v.purpose),
-			"Recording requires browserSessionId and purpose",
-		),
+	capture_browser_scenario: CaptureSchema,
+ capture_network_metadata: CaptureSchema,
 	get_evidence_bundle: z
 		.object({
 			receiptIds: z.array(Id).max(10).default([]),
@@ -73,7 +75,8 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Reconcile selected owning-session static facts and recorded scenarios. Returns provenance, candidate links and unresolved boundaries, never proves runtime causality from label matches.",
 	capture_browser_scenario:
 		"List owned built-in browsers, or request bounded metadata-only recording. Start requires Runtime or Hybrid mode and fresh human recording consent. In Hybrid, inspect first using available static tools, then supply hybridProposal (owning receipt/static-task ID and the unresolved question). Missing evidence must be gathered, never invented. Hybrid does not launch targets automatically. Stop remains available after mode changes. Never opens/replays a browser or captures bodies/cookies.",
-	get_evidence_bundle:
+	capture_network_metadata: "Alias for capture_browser_scenario: owned built-in browser Network/Page protocol metadata only. Explicit fresh human consent and Runtime/Hybrid scope required; no bodies, headers, cookies, arbitrary process capture or automatic browser launch.",
+ get_evidence_bundle:
 		"Export explicitly selected owning-session evidence with integrity hash, provenance index and limitations. Not a backup; review best-effort redaction before sharing.",
 };
 export function createInvestigationTools(

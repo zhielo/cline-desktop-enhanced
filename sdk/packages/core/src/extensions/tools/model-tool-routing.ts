@@ -57,6 +57,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	analyze_function: "enableReverseEngineering",
 	trace_application_feature: "enableReverseEngineering",
 	capture_browser_scenario: "enableReverseEngineering",
+ capture_network_metadata: "enableReverseEngineering",
 	get_evidence_bundle: "enableReverseEngineering",
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",

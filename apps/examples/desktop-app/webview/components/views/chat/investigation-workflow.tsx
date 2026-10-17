@@ -336,7 +336,7 @@ export function InvestigationWorkflow({
 									return;
 								const r = revision.current;
 								void work(async () => {
-									const v = await invoke("capture_browser_scenario", {
+									const v = await invoke("capture_network_metadata", {
 										browserSessionId: browserId,
 										action: "start",
 										confirmRecord: true,
@@ -366,7 +366,7 @@ export function InvestigationWorkflow({
 								const r = revision.current;
 								void work(async () => {
 									const v = await invoke<{ id: string }>(
-										"capture_browser_scenario",
+										"capture_network_metadata",
 										{
 											browserSessionId: recording || browserId,
 											action: "stop",

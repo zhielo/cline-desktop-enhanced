@@ -144,6 +144,55 @@ it("stop remains cleanup without a fresh start consent; list never starts record
 	expect(p.invoke).toHaveBeenLastCalledWith("analysis_workflow_status", {});
 });
 
+it("network metadata alias recording cannot self-consent and start always requests human approval", async () => {
+	const p = ports();
+	p.review = vi.fn(async () => false);
+	await expect(
+		runModelInvestigation(
+			"capture_network_metadata",
+			{ action: "start", browserSessionId: id, purpose: "owned" },
+			p,
+		),
+	).rejects.toThrow("consent");
+	expect(p.invoke).not.toHaveBeenCalled();
+	await expect(
+		runModelInvestigation(
+			"capture_network_metadata",
+			{
+				action: "start",
+				browserSessionId: id,
+				purpose: "owned",
+				confirmRecord: true,
+			},
+			p,
+		),
+	).rejects.toThrow();
+});
+it("network metadata alias stop remains cleanup without a fresh start consent; list never starts recording", async () => {
+	const p = ports();
+	await runModelInvestigation(
+		"capture_network_metadata",
+		{ action: "stop", browserSessionId: id, purpose: "cleanup" },
+		p,
+	);
+	expect(p.review).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledWith(
+		"capture_network_metadata",
+		expect.objectContaining({ action: "stop", confirmRecord: true }),
+	);
+	p.invoke = vi.fn(async () => ({ browsers: [{ id }] }));
+	expect(
+		JSON.parse(
+			await runModelInvestigation(
+				"capture_network_metadata",
+				{ action: "list" },
+				p,
+			),
+		),
+	).toEqual({ browsers: [{ id }] });
+	expect(p.invoke).toHaveBeenLastCalledWith("analysis_workflow_status", {});
+});
+
 it("a failed execution keeps its original failure when the host reports a terminal plan", async () => {
 	const p = ports();
 	p.invoke = vi.fn(async (_name, input) => {
@@ -223,6 +272,67 @@ it("missing Hybrid evidence never reaches consent; stopping remains cleanup", as
 	);
 	expect(p.invoke).toHaveBeenLastCalledWith(
 		"capture_browser_scenario",
+		expect.objectContaining({ action: "stop" }),
+	);
+});
+
+it("network metadata alias Hybrid preflight precedes fresh consent; denial never captures", async () => {
+	const p = ports();
+	p.mode = "hybrid";
+	p.invoke = vi.fn(async () => ({ evidenceHash: "a".repeat(64) }));
+	p.review = vi.fn(async () => false);
+	const proposal = {
+		baselineKind: "receipt",
+		baselineId: id,
+		question: "Which event occurs?",
+	};
+	await expect(
+		runModelInvestigation(
+			"capture_network_metadata",
+			{
+				action: "start",
+				browserSessionId: id,
+				purpose: "owned",
+				hybridProposal: proposal,
+			},
+			p,
+		),
+	).rejects.toThrow("denied");
+	expect(p.invoke).toHaveBeenCalledTimes(1);
+	expect(p.invoke).toHaveBeenCalledWith(
+		"analysis_workflow_hybrid_prepare",
+		proposal,
+	);
+	expect(p.review).toHaveBeenCalledWith(
+		expect.objectContaining({
+			hybrid: { evidenceHash: "a".repeat(64) },
+			independentRecordingConsent: true,
+		}),
+	);
+});
+it("network metadata alias missing Hybrid evidence never reaches consent; stopping remains cleanup", async () => {
+	const p = ports();
+	p.mode = "hybrid";
+	p.invoke = vi.fn(async (name) => {
+		if (name === "analysis_workflow_hybrid_prepare")
+			throw new Error("missing static basis");
+		return { stopped: true };
+	});
+	await expect(
+		runModelInvestigation(
+			"capture_network_metadata",
+			{ action: "start", browserSessionId: id, purpose: "owned" },
+			p,
+		),
+	).rejects.toThrow("missing static basis");
+	expect(p.review).not.toHaveBeenCalled();
+	await runModelInvestigation(
+		"capture_network_metadata",
+		{ action: "stop", browserSessionId: id, purpose: "stop" },
+		p,
+	);
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		"capture_network_metadata",
 		expect.objectContaining({ action: "stop" }),
 	);
 });
