@@ -303,6 +303,9 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('installed-runtime-plan-owned-identity-no-attach-no-execute-passed'));
  assert.ok(driver.includes('Runtime planner executed owned target'));
  assert.ok(driver.includes('runtime-plan-fixture-cleanup'));
+ assert.ok(driver.includes('installed-runtime-process-file-capture-approval-no-attach-passed'));
+ assert.ok(driver.includes('Runtime approval replay succeeded'));
+ assert.ok(driver.includes('Static enabled runtime metadata capture'));
  assert.ok(driver.includes('Installed candidate handle crossed session boundary'));
  assert.ok(driver.includes('installed-ai-batch-read-only-profile-denied'));
  assert.ok(driver.includes('Installed batch widened the Read Only session'));

@@ -12,6 +12,8 @@ const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
  ...BATCH_WORKFLOW_COMMANDS,
+	"capture_process_tree",
+	"capture_file_activity",
 	"plan_runtime_observation",
 	"validate_candidate",
  "review_candidate_changes",
@@ -30,6 +32,7 @@ export interface WorkflowPorts {
 	taskBundle: (id: string) => unknown;
 	capture: (input: Record<string, unknown>) => Promise<unknown>;
 	browsers?: () => unknown;
+ runtimeCapture?: (command: string, input: unknown) => Promise<unknown>;
  batch?: (command: string, input: unknown) => Promise<unknown>;
 }
 export function sanitizeEvidence(value: unknown): unknown {
@@ -247,6 +250,19 @@ export async function handleAnalysisWorkflow(
 				}
 			: artifact;
 	}
+ if (command === "capture_process_tree" || command === "capture_file_activity") {
+  if (!runtimeAnalysisEnabled(options.mode)) throw new Error("Capture requires Runtime or Hybrid mode; Static never enables observation");
+  const envelope = z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().max(512).optional()}).passthrough().parse(input);
+  const {phase,planId,executionToken,...publicInput}=envelope;
+  // SDK uses Zod 4; parse plain values rather than extending it with host Zod 3.
+  const params=InvestigationSchemas[command].parse(publicInput);
+  const artifact=await store.verify(scope,params.artifactId);
+  const {hybridProposal,artifactId:_artifact,...captureOptions}=params;
+  if (options.mode !== "hybrid" && hybridProposal) throw new Error("Hybrid proposal requires Hybrid mode");
+  const hybrid=options.mode === "hybrid" ? await bindHybridObservation(hybridProposal,scope,{receipt:ports.staticReceipt,task:(id)=>(ports.taskBundle(id) as {providerSnapshot?:unknown})?.providerSnapshot},artifact.path) : undefined;
+  if (!ports.runtimeCapture) throw new Error("Runtime capture host unavailable");
+  return ports.runtimeCapture(command,{phase,planId,executionToken,request:{operation:command,target:artifact.path,expected_sha256:artifact.sha256,options:captureOptions,...(hybrid?{hybrid}:{})}});
+ }
  if (command === "plan_runtime_observation") {
   const req = z.object({artifactId: Id, observation: z.unknown(), phase: z.enum(["prepare","run"]).default("prepare"), planId: Id.optional(), executionToken: z.string().max(512).optional()}).strict().parse(input);
   const params = InvestigationSchemas.plan_runtime_observation.parse({artifactId:req.artifactId, observation:req.observation});

@@ -360,3 +360,13 @@ it("runtime planning requires independent review but never requests or self-gran
  p.review=vi.fn(async()=>false);p.approve=vi.fn();
  await expect(runModelInvestigation("plan_runtime_observation",input,p)).rejects.toThrow("denied");expect(p.approve).not.toHaveBeenCalled();
 });
+
+it.each([
+ ["capture_process_tree",{artifactId:id,pid:123}],
+ ["capture_file_activity",{artifactId:id,durationMs:200,maxEvents:2}],
+] as const)("%s requires independent runtime metadata approval with private tokens",async(name,input)=>{
+ const p=ports();await runModelInvestigation(name,input,p);
+ expect(p.review).toHaveBeenCalledWith(expect.objectContaining({operation:name,independentAnalysisApproval:true}));
+ expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
+ const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation(name,input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();expect(denied.cancel).toHaveBeenCalledWith(id);
+});

@@ -79,6 +79,8 @@ const WORKSPACE_TOOLS = new Set([
 
 const NETWORK_TOOLS = new Set(["fetch_web_content", "web_search"]);
 const EXTERNAL_TOOLS = new Set([
+	"capture_process_tree",
+	"capture_file_activity",
 	"plan_runtime_observation",
 	"validate_candidate",
  "review_candidate_changes",

@@ -52,3 +52,15 @@ it("plans a real owned paused Node listener without connecting or executing; rej
   await writeFile(target,text+"\n//changed");await expect(planRuntimeObservation(input)).rejects.toThrow("hash changed");
  }finally{child.kill("SIGKILL");await new Promise<void>(resolve=>{if(child.exitCode!==null||child.signalCode!==null)resolve();else child.once("exit",()=>resolve());});await rm(root,{recursive:true,force:true});}
 },process.platform==="win32"?90000:30000);
+
+it("runtime metadata commands reject model authority and unsafe resource budgets",()=>{
+ const artifactId="11111111-1111-4111-8111-111111111111";
+ expect(InvestigationSchemas.capture_process_tree.parse({artifactId,pid:123})).toMatchObject({maxProcesses:64});
+ expect(InvestigationSchemas.capture_file_activity.parse({artifactId})).toMatchObject({durationMs:1000,maxEvents:64});
+ for(const key of ["executionToken","processToken","owner_session_id","confirmRecord","mode","target"]){
+  expect(()=>InvestigationSchemas.capture_process_tree.parse({artifactId,pid:123,[key]:"forged"})).toThrow();
+  expect(()=>InvestigationSchemas.capture_file_activity.parse({artifactId,[key]:"forged"})).toThrow();
+ }
+ expect(()=>InvestigationSchemas.capture_file_activity.parse({artifactId,durationMs:5001})).toThrow();
+ expect(()=>InvestigationSchemas.capture_process_tree.parse({artifactId,pid:123,maxProcesses:129})).toThrow();
+});

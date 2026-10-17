@@ -274,14 +274,14 @@ export const RECOMMENDATION_COVERAGE = [
 	{
 		group: "runtime",
 		command: "capture_process_tree",
-		scope: "not-implemented",
-		limitations: "No bounded target-owned process-tree command.",
+		scope: "partial",
+		limitations: "Independently approved Runtime/Hybrid Linux /proc or Windows CIM ancestry snapshot, exact root PID/birth checks and 128-process output cap. Non-atomic metadata only; not an execution trace or proof the basis artifact ran in the selected process.",
 	},
 	{
 		group: "runtime",
 		command: "capture_file_activity",
-		scope: "not-implemented",
-		limitations: "No unified target-scoped file activity capture command.",
+		scope: "partial",
+		limitations: "Independently approved Runtime/Hybrid exact-file fs.watch notifications, 5-second/128-event caps, cancellation and mode-change cleanup. No recursive, syscall or PID-attributed tracing; coalesced/missing notifications prevent completeness claims.",
 	},
 	{
 		group: "runtime",

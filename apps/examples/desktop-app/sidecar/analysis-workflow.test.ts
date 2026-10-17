@@ -280,3 +280,18 @@ it("runtime planner binds owning immutable source but never invokes runtime from
   expect(ports.capture).not.toHaveBeenCalled();
  }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+
+it.each(["capture_process_tree","capture_file_activity"] as const)("%s cannot run in Static or cross artifact owners",async(command)=>{
+ const root=await mkdtemp(join(tmpdir(),"runtime-workflow-")),scope={sessionId:"owned",workspace:root},store=new AnalysisWorkflowStore(join(root,"store.sqlite"));
+ const runtimeCapture=vi.fn(async()=>({status:"prepared"})),ports={invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn(),runtimeCapture};
+ try{
+  await writeFile(join(root,"owned.js"),"owned");const artifact=await store.open(scope,"owned.js");
+  const input={artifactId:artifact.id,...(command==="capture_process_tree"?{pid:process.pid}:{durationMs:200})};
+  await expect(handleAnalysisWorkflow(command,input,scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("Runtime or Hybrid");
+  expect(runtimeCapture).not.toHaveBeenCalled();
+  await handleAnalysisWorkflow(command,input,scope,{trusted:true,idle:true,mode:"runtime"},store,ports);
+  expect(runtimeCapture).toHaveBeenCalledWith(command,expect.objectContaining({phase:"prepare",request:expect.objectContaining({target:artifact.path,expected_sha256:artifact.sha256})}));
+  await expect(handleAnalysisWorkflow(command,input,{...scope,sessionId:"other"},{trusted:true,idle:true,mode:"runtime"},store,ports)).rejects.toThrow("unavailable");
+  await expect(handleAnalysisWorkflow(command,{...input,confirmRecord:true},scope,{trusted:true,idle:true,mode:"runtime"},store,ports)).rejects.toThrow();
+ }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
