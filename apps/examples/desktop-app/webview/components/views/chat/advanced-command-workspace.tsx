@@ -172,11 +172,17 @@ function template(command: string) {
 	)
 		base.function_selector = { symbol: "" };
 	if (command === "decompile_function_bundle") base.engine = "ghidra";
-	if (command === "build_android_candidate") {
+	if (["preview_android_candidate", "build_android_candidate"].includes(command)) {
 		base.output_file = "";
 		base.acknowledge_external_output = false;
 	}
-	if (command === "annotate_analysis_project") {
+	if (["preview_android_candidate", "build_android_candidate"].includes(command)) {
+  base.android_project_patch = {
+   ...(command === "build_android_candidate" ? {expected_project_sha256:"", preview_sha256:""} : {}),
+   patches:[{path:"smali/example/Owned.smali",patch:{expected_sha256:"",class_descriptor:"Lexample/Owned;",method_signature:"value()I",expected_method:"",replacement_method:""}}],
+  };
+ }
+ if (command === "annotate_analysis_project") {
 		base.engine = "ghidra";
 		base.function_selector = { symbol: "" };
 		base.project_edit = { mode: "preview" };

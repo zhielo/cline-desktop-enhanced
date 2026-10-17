@@ -199,7 +199,7 @@ export function analysisCommandCatalog() {
 				command,
 				effect: isAnalysisWriteOperation(command)
 					? "candidate-write"
-					: command === "preview_batch"
+					: ["preview_batch", "preview_android_candidate"].includes(command)
 						? "plan-only"
 						: "read",
 				availability: "implemented-bounded",
@@ -207,10 +207,12 @@ export function analysisCommandCatalog() {
 					command === "annotate_analysis_project"
 						? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
 						: command === "build_android_candidate"
-							? "Existing unsigned Apktool candidate rebuild then inspection. No automatic signing, install or device verification."
-							: command === "preview_batch"
-								? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
-								: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
+							? "Optional preview-bound exact-method patch project snapshot, all Smali roots assembled, existing Apktool rebuild and bounded output checks before no-overwrite publication. Legacy unpatched rebuild retained. No signing/install/device proof."
+							: command === "preview_android_candidate"
+								? "Hash-bound exact-method diffs for a confined decoded Apktool project; engine readiness not probed, no final output or automatic write approval."
+								: command === "preview_batch"
+									? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
+									: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
 			})),
 			...CANDIDATE_COMMANDS.map((command) => ({
 				command,

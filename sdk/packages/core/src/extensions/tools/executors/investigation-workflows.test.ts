@@ -507,7 +507,7 @@ it("publishes the exact 55 recommendations without falsely certifying release or
 	expect(
 		catalog.recommendations.find((r) => r.command === "build_android_candidate")
 			?.scope,
-	).toBe("partial");
+	).toBe("bounded");
 });
 
 it.each([

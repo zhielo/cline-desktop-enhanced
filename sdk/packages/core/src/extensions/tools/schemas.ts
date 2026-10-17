@@ -1,3 +1,4 @@
+import { AndroidProjectPatchSchema } from "./android-project-schema";
 import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
 import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
@@ -301,6 +302,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	workflow_query: WorkflowQuerySchema.optional(),
 	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
 	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
+ android_project_patch: AndroidProjectPatchSchema.optional(),
 	hypothesis: HypothesisSchema.optional(),
 	candidate: CandidateSchema.optional(),
 	evidence_trace: EvidenceTraceSchema.optional(),

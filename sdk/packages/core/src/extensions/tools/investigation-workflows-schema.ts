@@ -22,6 +22,7 @@ export const INVESTIGATION_COMMANDS = [
 	"explain_decompiler_disagreement",
 	"annotate_analysis_project",
 	"build_android_candidate",
+ "preview_android_candidate",
 	"verify_android_candidate",
 	"preview_batch",
 ] as const;

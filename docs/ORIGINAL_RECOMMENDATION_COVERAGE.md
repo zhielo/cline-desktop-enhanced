@@ -28,7 +28,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `patch_smali_method` | bounded | Approved preview publishes one new file; project integration is separate. |
 | `validate_smali_project` | bounded | Existing assembler over supported inputs with new output; no ART/device proof. |
 | `diff_android_resources` | partial | ZIP-entry size/CRC comparison; no decoded resource semantic diff. |
-| `build_android_candidate` | partial | Existing unsigned Apktool rebuild plus inspection; no integrated patch-project pipeline. |
+| `build_android_candidate` | bounded | Preview-bound decoded-project snapshot, exact-method patches, all Smali roots assembled, unsigned Apktool rebuild and hash/structure validation before new-file publication. No signing/install/device proof. |
 | `verify_android_candidate` | partial | Structure, signature and optional ZIP comparison; build receipts/device checks remain separate. |
 
 ## native
