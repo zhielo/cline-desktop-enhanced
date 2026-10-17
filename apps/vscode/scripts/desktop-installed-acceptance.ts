@@ -62,6 +62,22 @@ export function startAcceptanceProcess(
   return { child, exited, closed, diagnostics, startedAt };
 }
 
+/** Terminate the owned native tree before closing CDP. Browser.close() can
+ * terminate WebView processes, racing taskkill /T's enumeration. Still attempt
+ * disconnect after a failed stop and preserve both failures; never retry a kill
+ * or turn an unconfirmed termination into successful acceptance. */
+export async function stopOwnedApplication(
+  terminate: () => Promise<void>,
+  disconnect: () => Promise<void>,
+) {
+  const failures: unknown[] = [];
+  try { await terminate(); } catch (error) { failures.push(error); }
+  try { await disconnect(); } catch (error) { failures.push(error); }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, "Owned application termination and disconnect failed");
+}
+
 /** Node-owned deadline: renderer timers can stop while a WebView/IPC call is stuck.
  * Timeout fails acceptance, never retries or claims a submitted operation was undone. */
 export async function withInstalledActionDeadline<T>(
@@ -306,7 +322,13 @@ export async function main() {
       environment,
     );
     const code = await withInstalledActionDeadline("owned-process-tree-stop", () => killer.exited, 10_000).catch((error) => { killer.child.kill(); throw error; });
-    if (code !== 0) throw new Error("Owned process-tree cleanup was not confirmed");
+    if (code !== 0)
+      throw new Error(
+        `Owned process-tree cleanup was not confirmed (taskkill exit ${code}): ${
+          redactedLaunchText(killer.diagnostics.stderrTail || killer.diagnostics.stdoutTail ||
+            killer.diagnostics.launchError).slice(-1200)
+        }`,
+      );
 	}
 
   async function retainLaunchReceipt(
@@ -548,17 +570,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .click();
 	}
 	async function stop() {
+    const ownedBrowser = browser;
+    const ownedApp = app;
     try {
-      const ownedBrowser = browser;
-      if (ownedBrowser) await withInstalledActionDeadline("owned-browser-disconnect", () => ownedBrowser.close(), 10_000);
+      await stopOwnedApplication(
+        async () => {
+          if (ownedApp && ownedApp.child.exitCode === null && ownedApp.child.pid) {
+            await killOwnedProcess(ownedApp.child.pid);
+            await withInstalledActionDeadline("owned-app-exit", () => ownedApp.exited, 10_000);
+          }
+        },
+        async () => {
+          if (ownedBrowser)
+            await withInstalledActionDeadline("owned-browser-disconnect", () => ownedBrowser.close(), 10_000);
+        },
+      );
     } finally {
-      // Disconnect failure must not bypass termination of this owned app.
       browser = undefined;
-      const ownedApp = app;
-      if (ownedApp && ownedApp.child.exitCode === null && ownedApp.child.pid) {
-        await killOwnedProcess(ownedApp.child.pid);
-        await withInstalledActionDeadline("owned-app-exit", () => ownedApp.exited, 10_000);
-      }
       app = undefined;
     }
 	}
