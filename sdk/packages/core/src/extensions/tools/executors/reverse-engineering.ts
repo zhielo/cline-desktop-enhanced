@@ -1,6 +1,7 @@
 import { CANDIDATE_COMMANDS } from "../advanced-candidates-schema";
 import { advancedCandidate, decompileManagedSelection } from "./advanced-candidates";
 import { candidateBatch } from "./candidate-batch";
+import { traceSourceSink } from "./source-sink-trace";
 import { traceEvidence } from "./evidence-trace";
 import { candidateHash, readCandidateFile } from "./candidate-files";
 import { inspectJvmMethod } from "./jvm-method";
@@ -2545,17 +2546,22 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
    const outputScope = await enforceOutputPath(input.output_file, input.acknowledge_external_output);
    return withAnalysisLock(input.target ?? "", async () => JSON.stringify({...await advancedCandidate(input, context.signal), outputScope}), context.signal);
   }
+  if(input.operation === "audit_candidate_batch") {
+   if(!input.target)throw new Error("Manifest target required");
+   return withAnalysisLock(input.target, async()=>JSON.stringify(await candidateBatch(input,context.signal)),context.signal);
+  }
   if (["preview_candidate_batch", "apply_candidate_batch"].includes(input.operation)) {
    if (!input.target) throw new Error("Manifest target required");
    const outputScope = await enforceOutputPath(path.join(path.dirname(input.target), ".candidate-output-scope"), input.acknowledge_external_output);
    return withAnalysisLock(input.target, async () => JSON.stringify({...await candidateBatch(input, context.signal), outputScope}), context.signal);
   }
-  if (["trace_cross_language", "trace_data_flow", "decompile_dotnet_method", "read_jvm_method"].includes(input.operation)) {
+  if (["trace_source_sink", "trace_cross_language", "trace_data_flow", "decompile_dotnet_method", "read_jvm_method"].includes(input.operation)) {
    if (!input.target) throw new Error("Explicit target required");
    const bytes = await readCandidateFile(input.target, 16 * 1024 * 1024, context.signal);
-   if (["trace_cross_language", "trace_data_flow"].includes(input.operation)) {
+   if (["trace_source_sink", "trace_cross_language", "trace_data_flow"].includes(input.operation)) {
     if(bytes.length > 4*1024*1024)throw new Error("Evidence graph exceeds 4 MiB budget");
-    return JSON.stringify({...traceEvidence(JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes)),input.evidence_trace,input.operation==="trace_data_flow"),inputSha256:candidateHash(bytes)});
+    const document=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+    return JSON.stringify({...input.operation==="trace_source_sink" ? traceSourceSink(document,input.source_sink) : traceEvidence(document,input.evidence_trace,input.operation==="trace_data_flow"),inputSha256:candidateHash(bytes)});
    }
    if(input.operation==="decompile_dotnet_method")return JSON.stringify({...decompileManagedSelection(bytes,input.managed_method),inputSha256:candidateHash(bytes)});
    if(!input.jvm_method)throw new Error("Exact JVM method selector required");

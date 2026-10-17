@@ -6,8 +6,19 @@
  */
 
 import { z } from "zod";
-import { CandidateSchema, CANDIDATE_COMMANDS, EvidenceTraceSchema, ManagedMethodSchema, JvmMethodSchema } from "./advanced-candidates-schema";
-import { ANALYSIS_ALIAS_NAMES, SmaliPatchSchema, InvestigationPlanSchema } from "./analysis-commands";
+import {
+	CandidateSchema,
+	CANDIDATE_COMMANDS,
+	EvidenceTraceSchema,
+	SourceSinkSchema,
+	ManagedMethodSchema,
+	JvmMethodSchema,
+} from "./advanced-candidates-schema";
+import {
+	ANALYSIS_ALIAS_NAMES,
+	SmaliPatchSchema,
+	InvestigationPlanSchema,
+} from "./analysis-commands";
 import { NativeProjectEditSchema } from "./native-project-edits-schema";
 
 export const INPUT_ARG_CHAR_LIMIT = 6000;
@@ -280,16 +291,34 @@ export const ReverseEngineeringInputSchema = z.object({
 		.strict()
 		.optional(),
 	candidate: CandidateSchema.optional(),
- evidence_trace: EvidenceTraceSchema.optional(),
- managed_method: ManagedMethodSchema.optional(),
- jvm_method: JvmMethodSchema.optional(),
- batch_preview_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
- smali_patch: SmaliPatchSchema.optional(),
- investigation_plan: InvestigationPlanSchema.optional(),
- operation: z.enum([
-  ...ANALYSIS_ALIAS_NAMES, ...CANDIDATE_COMMANDS,
- "trace_cross_language", "trace_data_flow", "decompile_dotnet_method", "read_jvm_method", "preview_candidate_batch", "apply_candidate_batch",
-  "baksmali_dir", "analysis_command_catalog", "plan_investigation", "plan_batch", "preview_smali_patch", "patch_smali_method", "patch_smali",
+	evidence_trace: EvidenceTraceSchema.optional(),
+	source_sink: SourceSinkSchema.optional(),
+	managed_method: ManagedMethodSchema.optional(),
+	jvm_method: JvmMethodSchema.optional(),
+	batch_preview_sha256: z
+		.string()
+		.regex(/^[a-f0-9]{64}$/)
+		.optional(),
+	smali_patch: SmaliPatchSchema.optional(),
+	investigation_plan: InvestigationPlanSchema.optional(),
+	operation: z.enum([
+		...ANALYSIS_ALIAS_NAMES,
+		...CANDIDATE_COMMANDS,
+		"trace_source_sink",
+		"audit_candidate_batch",
+		"trace_cross_language",
+		"trace_data_flow",
+		"decompile_dotnet_method",
+		"read_jvm_method",
+		"preview_candidate_batch",
+		"apply_candidate_batch",
+		"baksmali_dir",
+		"analysis_command_catalog",
+		"plan_investigation",
+		"plan_batch",
+		"preview_smali_patch",
+		"patch_smali_method",
+		"patch_smali",
 		"javascript_analysis",
 		"analysis_evidence",
 		"discover",

@@ -133,3 +133,17 @@ describe("advanced command contracts", () => {
 		).toBe(false);
 	});
 });
+
+it.each([
+	"trace_source_sink",
+	"audit_candidate_batch",
+])("parses and advertises read-only %s", (operation) => {
+	expect(ReverseEngineeringInputSchema.parse({ operation }).operation).toBe(
+		operation,
+	);
+	expect(
+		analysisCommandCatalog().entries.find((e) => e.command === operation)
+			?.effect,
+	).toBe("read");
+	expect(isAnalysisWriteOperation(operation)).toBe(false);
+});

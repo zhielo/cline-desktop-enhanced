@@ -1,7 +1,10 @@
 import * as path from "node:path";
 import { CandidateBatchSchema } from "../advanced-candidates-schema";
 import { canonical } from "../../../analysis/contracts";
-import { advancedCandidate } from "./advanced-candidates";
+import {
+	advancedCandidate,
+	auditAdvancedCandidate,
+} from "./advanced-candidates";
 import {
 	candidateHash,
 	readCandidateFile,
@@ -18,6 +21,14 @@ export async function candidateBatch(
 	input: { operation: string; target?: string; batch_preview_sha256?: string },
 	signal?: AbortSignal,
 ) {
+	if (
+		![
+			"preview_candidate_batch",
+			"apply_candidate_batch",
+			"audit_candidate_batch",
+		].includes(input.operation)
+	)
+		throw new Error("Unknown candidate batch operation");
 	if (!input.target || !path.isAbsolute(input.target))
 		throw new Error("Candidate batch requires absolute JSON manifest target");
 	const manifestBytes = await readCandidateFile(
@@ -68,6 +79,57 @@ export async function candidateBatch(
 			throw new Error(
 				"Batch outputs may not replace inputs/manifest or feed other stages",
 			);
+	if (input.operation === "audit_candidate_batch") {
+		const results = [];
+		for (const stage of stages) {
+			signal?.throwIfAborted();
+			try {
+				results.push({
+					id: stage.id,
+					...(await auditAdvancedCandidate(stage, signal)),
+				});
+			} catch {
+				signal?.throwIfAborted();
+				results.push({
+					id: stage.id,
+					status: "unverified",
+					sourcePreserved: null,
+					error:
+						"Source/recipe/path could not be verified; no replay or repair performed",
+				});
+			}
+		}
+		if (
+			candidateHash(
+				await readCandidateFile(input.target, 1024 * 1024, signal),
+			) !== candidateHash(manifestBytes)
+		)
+			throw new Error("Batch manifest changed during audit");
+		const clean = results.every(
+			(r) => r.status === "verified" || r.status === "missing",
+		);
+		return {
+			status: results.every((r) => r.status === "verified")
+				? "completed"
+				: "partial",
+			results,
+			manifestHash: candidateHash(manifestBytes),
+			published: false,
+			verifiedStageIds: results
+				.filter((r) => r.status === "verified")
+				.map((r) => r.id),
+			remainingStageIds: clean
+				? results.filter((r) => r.status === "missing").map((r) => r.id)
+				: [],
+			recoveryBlocked: !clean,
+			limitations: [
+				"Read-only byte/hash audit against current manifest recipes; no outputs are written, overwritten, deleted, replayed, signed or executed.",
+				"Remaining IDs are proposals only. Create and preview a new manifest excluding verified stages, then request separate approval; mismatched or unverified stages require investigation.",
+				"Matching bytes do not prove who produced an artifact, semantic correctness, signatures or runtime compatibility. Filesystem checks are not a sandbox against concurrent hostile mutation.",
+			],
+		};
+	}
+
 	const previews: Awaited<ReturnType<typeof advancedCandidate>>[] = [];
 	for (const s of stages) {
 		signal?.throwIfAborted();

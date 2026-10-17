@@ -209,6 +209,7 @@ test("installed advanced commands verify catalog and separately approved immutab
 test("installed advanced batch requires reviewed preview, separate approval and preserved originals", () => {
  const driver = readFileSync("apps/vscode/scripts/desktop-installed-acceptance.ts", "utf8");
  expect(driver.includes("installed-preview-approved-binary-ast-batch-originals-preserved")).toBe(true);
+ expect(driver.includes("installed-multiedit-audit-source-sink-originals-preserved")).toBe(true);
  expect(driver.includes('operation:"preview_candidate_batch"')).toBe(true);
  expect(driver.includes('operation:"apply_candidate_batch"')).toBe(true);
  expect(driver.includes('batchApply.result.results')).toBe(true);
