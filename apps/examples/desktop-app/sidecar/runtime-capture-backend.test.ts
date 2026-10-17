@@ -1,6 +1,14 @@
+import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+	mkdtemp,
+	readFile,
+	rename,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeProcessStartTokenAsync } from "@cline/core";
@@ -19,7 +27,9 @@ afterEach(async () => {
 	roots.length = 0;
 });
 async function fixture() {
-	const root = await mkdtemp(join(tmpdir(), "owned-capture-"));
+	const root = realpathSync.native(
+		await mkdtemp(join(tmpdir(), "owned-capture-")),
+	);
 	roots.push(root);
 	const target = join(root, "owned.js"),
 		text = "setInterval(()=>{},1000);\n";
@@ -166,4 +176,26 @@ it("pre-aborted capture cannot register a watcher", async () => {
 	await expect(
 		captureFileActivity(f.target, f.hash, 200, 4, controller.signal),
 	).rejects.toThrow("pre-aborted");
+});
+
+it("native canonical fixture remains valid but a directory alias is rejected", async () => {
+	const f = await fixture(),
+		aliasRoot = realpathSync.native(
+			await mkdtemp(join(tmpdir(), "capture-alias-")),
+		);
+	roots.push(aliasRoot);
+	expect(realpathSync.native(f.target)).toBe(f.target);
+	await assertCaptureFile(f.target, f.hash, new AbortController().signal);
+	await symlink(
+		f.root,
+		join(aliasRoot, "alias"),
+		process.platform === "win32" ? "junction" : "dir",
+	);
+	await expect(
+		assertCaptureFile(
+			join(aliasRoot, "alias", "owned.js"),
+			f.hash,
+			new AbortController().signal,
+		),
+	).rejects.toThrow("path changed");
 });

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { statSync, watch } from "node:fs";
-import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { realpathSync, statSync, watch } from "node:fs";
+import { open, readdir, readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
 	probeProcessStartTokenAsync,
@@ -20,7 +20,8 @@ export async function assertCaptureFile(
 	signal: AbortSignal,
 ) {
 	check(signal);
-	const canonical = await realpath(target);
+	// Same native canonical resolver as immutable artifact/task bindings (Windows 8.3 aliases included).
+	const canonical = realpathSync.native(target);
 	if (resolve(canonical) !== resolve(target))
 		throw new Error("Capture target path changed");
 	const file = await open(target, "r");
