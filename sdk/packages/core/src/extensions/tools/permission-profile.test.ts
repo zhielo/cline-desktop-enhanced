@@ -267,6 +267,7 @@ it("keeps investigation tools behind the external-tool permission profile", asyn
 });
 
 it.each([
+ "build_apk", "recompile_smali", "validate_smali_project", "patch_smali_method", "patch_smali",
 	"assemble_smali",
 	"rebuild_apk",
 	"align_apk",

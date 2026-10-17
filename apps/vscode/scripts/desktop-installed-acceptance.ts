@@ -611,6 +611,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const analysisToggle = page.getByRole("button", { name: "Toggle Analysis workspace", exact: true });
     await analysisToggle.click();
     await page.getByRole("region", { name: "Pre-task Analysis workspace", exact: true }).waitFor();
+    const preTaskWorkspace = page.getByRole("region", { name: "Pre-task Analysis workspace", exact: true });
+    await preTaskWorkspace.getByRole("button", { name: "AI commands", exact: true }).click();
+    const advancedPanel = preTaskWorkspace.getByRole("region", { name: "Advanced AI commands", exact: true });
+    await advancedPanel.getByLabel("Advanced command", { exact: true }).selectOption("preview_smali_patch", { timeout: 30000 });
+    if (!(await advancedPanel.getByLabel("Exact command parameters (JSON)", { exact: true }).inputValue()).includes("expected_sha256")) throw new Error("Installed advanced command template missing hash guard");
+    if (!(await advancedPanel.textContent())?.includes("Not available in this command pack")) throw new Error("Installed advanced catalog hid unavailable capabilities");
+    stages.push("installed-fresh-advanced-command-catalog-visible-without-execution");
     await analysisToggle.click();
     await freshAnalysis.selectOption("off");
     stages.push("installed-fresh-draft-analysis-visible-before-first-task");
@@ -897,6 +904,27 @@ ConvertTo-Json -InputObject @($rows) -Compress
     catch { restrictedTriageDenied=true; }
     if(!restrictedTriageDenied)throw new Error("Binary triage widened the Read Only session");
     const triageSession=await rpc<{sessionId:string}>(page,"chat_session_command",{request:{action:"start",config:{sessionId:"installer-owned-triage",environmentId:"local",cwd:workspace,workspaceRoot:workspace,provider:"openai",model:"gpt-4.1-mini",apiKey:"owned-offline-fixture",baseUrl:"http://127.0.0.1:1/v1",enableTools:false,permissionProfile:"full-access",initialMessages:[{id:"owned-triage-start",role:"user",content:"Owned offline static triage fixture"}]}}});
+
+    // Exercise exact preview -> separately approved write through the installed SDK/sidecar.
+    const ownedSmaliBefore = ".method public value()I\n    .locals 1\n    const/4 v0, 0x0\n    return v0\n.end method";
+    const ownedSmaliAfter = ownedSmaliBefore.replace("0x0", "0x1");
+    const ownedSmaliText = `.class public Lowned/Sample;\n.super Ljava/lang/Object;\n\n${ownedSmaliBefore}\n`;
+    const ownedSmaliSource = join(workspace, "owned-source.smali");
+    const ownedSmaliOutput = join(workspace, "owned-candidate.smali");
+    await writeFile(ownedSmaliSource, ownedSmaliText);
+    const ownedPatchArgs = {sessionId:triageSession.sessionId,environmentId:"local",cwd:workspace};
+    const ownedPatch = {expected_sha256:createHash("sha256").update(ownedSmaliText).digest("hex"),class_descriptor:"Lowned/Sample;",method_signature:"value()I",expected_method:ownedSmaliBefore,replacement_method:ownedSmaliAfter};
+    async function runOwnedAdvanced(request:Record<string,unknown>) {
+      const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
+      const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
+      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+    }
+    const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
+    const ownedPreview=await runOwnedAdvanced(previewRequest);
+    if(ownedPreview.result.published||ownedPreview.plan.status!=="completed")throw new Error("Installed Smali preview unexpectedly published or failed");
+    const ownedApplied=await runOwnedAdvanced({...previewRequest,operation:"patch_smali_method",smali_patch:{...ownedPatch,preview_sha256:ownedPreview.result.previewSha256}});
+    if(!ownedApplied.result.published||ownedApplied.plan.status!=="completed"||await readFile(ownedSmaliSource,"utf8")!==ownedSmaliText||await readFile(ownedSmaliOutput,"utf8")!==ownedSmaliText.replace(ownedSmaliBefore,ownedSmaliAfter))throw new Error("Installed hash-bound Smali candidate patch failed");
+    stages.push("installed-advanced-smali-preview-approved-candidate-original-preserved");
     const triageScope={sessionId:triageSession.sessionId,environmentId:"local"};
     await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
     const triageRequestId=randomUUID();

@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/extensions/tools/analysis-commands.ts",markers:["ANALYSIS_COMMAND_ALIASES","isAnalysisWriteOperation","planInvestigation","notebook_run"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/smali-patch.ts",markers:["preview_sha256","fs.link(temporary, output)","expected_sha256","MAX_SOURCE_BYTES"]},
+ {path:"apps/examples/desktop-app/webview/components/views/chat/advanced-command-workspace.tsx",markers:["Advanced AI commands","Prepare advanced command for review","Not available in this command pack"]},
  {path:"apps/examples/desktop-app/webview/lib/session-reasoning.ts", markers:["cline.reasoning.v1:","writeSessionReasoning","readDraftReasoning","normalizeProviderId"]},
  {path:"apps/examples/desktop-app/webview/hooks/use-chat-session.ts", markers:["hydrationPendingRef","updateReasoning","boundConfig.analysisMode","readSessionReasoning"]},
  {path:"apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx", markers:["onDraftModeChange","Runtime mode does not grant execution permission"]},

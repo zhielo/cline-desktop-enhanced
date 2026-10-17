@@ -197,3 +197,11 @@ test("installed Analysis waits use the active accessible identity, not obsolete 
  for (const mode of ["static", "hybrid", "off"]) expect(source).toContain(`select?.value==="${mode}"&&!select.disabled`);
  expect(source).toContain('getByLabel("Draft Analysis mode", { exact: true })');
 });
+
+test("installed advanced commands verify catalog and separately approved immutable Smali candidates", () => {
+ const driver = readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts", import.meta.url), "utf8");
+ expect(driver.includes("installed-fresh-advanced-command-catalog-visible-without-execution")).toBe(true);
+ expect(driver.includes("installed-advanced-smali-preview-approved-candidate-original-preserved")).toBe(true);
+ expect(driver.includes('operation:"patch_smali_method"')).toBe(true);
+ expect(driver.includes("preview_sha256:ownedPreview.result.previewSha256")).toBe(true);
+});

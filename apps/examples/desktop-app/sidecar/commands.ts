@@ -1,3 +1,4 @@
+import { analysisCommandCatalog, isAnalysisWriteOperation } from "@cline/core";
 import {androidToolchainStatus,testOwnedAndroidToolchain} from "./android-toolchain-readiness";
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -5809,7 +5810,8 @@ export async function handleCommand(
 		return incidentReadiness(discovery, adb, undefined);
 	}
 	if (
-		command === "prepare_analysis_task" ||
+		command === "analysis_command_catalog" ||
+  command === "prepare_analysis_task" ||
 		command === "approve_analysis_task" ||
 		command === "cancel_analysis_task" ||
 		command === "export_analysis_evidence" ||
@@ -5834,6 +5836,7 @@ export async function handleCommand(
 				? args.cwd.trim()
 				: ctx.localWorkspaceRoot,
 		);
+  if (command === "analysis_command_catalog") return analysisCommandCatalog();
 		if (command === "list_investigations")
 			return investigations().list(baseDir);
 		if (command === "get_investigation") {
@@ -6178,7 +6181,8 @@ export async function handleCommand(
 			const operation = String(rawInput.operation ?? "");
 			if (
 				![
-					"inspect",
+					...analysisCommandCatalog().entries.map(entry => entry.command),
+     "inspect",
 					"advanced_analysis",
 					"forensic_report",
 					"apk_security_report",
@@ -6197,7 +6201,7 @@ export async function handleCommand(
 			}
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
-  if(["assemble_smali","rebuild_apk","align_apk","sign_apk"].includes(input.operation)){
+  if(isAnalysisWriteOperation(input.operation)){
    if(!options?.connection?.data?.canApproveTools)throw new Error("Android construction/signing requires the trusted desktop connection");
    const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id);
    const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"read-only";
@@ -6226,11 +6230,11 @@ export async function handleCommand(
 		try {
 			const parsed = JSON.parse(result);
 			if (
-				(input.operation === "advanced_analysis" && ["blocked", "failed", "cancelled"].includes(parsed?.result?.status)) || parsed?.succeeded === false || parsed?.verified === false || parsed?.validated === false || (typeof parsed?.exitCode === "number" && parsed.exitCode !== 0) || parsed?.timedOut === true || parsed?.cancelled === true || parsed?.outputDrainTimedOut === true
+				["blocked", "failed", "cancelled"].includes(parsed?.status) || ["blocked", "failed", "cancelled"].includes(parsed?.result?.status) || parsed?.succeeded === false || parsed?.verified === false || parsed?.validated === false || (typeof parsed?.exitCode === "number" && parsed.exitCode !== 0) || parsed?.timedOut === true || parsed?.cancelled === true || parsed?.outputDrainTimedOut === true
 			) {
 				const plan = desktopAnalysisTaskOrchestrator.fail(
 					planId,
-					`Advanced analysis ${parsed.result.status}; inspect evidence for details.`,
+					`Analysis ${parsed?.result?.status ?? parsed?.status ?? "failed validation"}; inspect evidence for details.`,
 				);
 				return { kind: "reverse-engineering", result: parsed, plan };
 			}
