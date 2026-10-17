@@ -119,3 +119,13 @@ complete. Installed Windows acceptance exercises preview, independent approval,
 real built-in inspect/string DAG results, durable checkpoints and completed-stage
 replay denial. Cancellation/resume edge cases are additionally covered by focused
 runner and approval tests, not claimed as live hardware/runtime coverage.
+
+
+## Hash-bound candidate validation and recipe review
+
+`validate_candidate` and `review_candidate_changes` are standalone AI tools over the existing static approval/task infrastructure. Open a workspace-confined immutable handle with `open_binary` first. Both commands require fresh independent human approval; models cannot provide session identity, phase, approval tokens or consent. Restricted permission profiles remain restricted.
+
+- `validate_candidate({artifactId, kind})`: choose `javascript`, `typescript`, `dex` or `apk`. JS/TS runs parse diagnostics without evaluating code (1 MiB); DEX checks supported standard 035–040 headers, SHA1/Adler32 and fixed-width table extents (16 MiB); APK uses the existing container inspector and installed `apksigner`. No downloads, signing, rebuilding, target execution or installation. Missing checks are not passes. DEX 041/compact DEX, complete bytecode verification, type checking, JSX/TSX and behavioral equivalence are not supported.
+- `review_candidate_changes({artifactId})`: select an immutable candidate-batch manifest. Reuses exact AST/managed/JVM/byte recipe reconstruction and source preservation checks. Missing candidates are partial; mismatched or unverified candidates fail. Only declared input/output pairs, not undeclared files or an entire project. A recipe is not itself human approval.
+
+Receipts use `cline-candidate-verification/v1`, with input hashes, bounded check results, limitations and canonical SHA256 integrity fingerprints, persisted through existing immutable owning-session task evidence. Hashes prove integrity, not producer authentication or correctness. Source and manifest mutation invalidates the operation. These additions do not complete runtime, mixed-effect chaining, whole-project scope or semantic-analysis recommendations.

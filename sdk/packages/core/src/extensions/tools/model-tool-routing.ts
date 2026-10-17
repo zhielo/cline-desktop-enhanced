@@ -53,7 +53,9 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableSubmitAndExit"
 	>
 > = {
-	open_binary: "enableReverseEngineering",
+	validate_candidate: "enableReverseEngineering",
+ review_candidate_changes: "enableReverseEngineering",
+ open_binary: "enableReverseEngineering",
 	analyze_function: "enableReverseEngineering",
 	trace_application_feature: "enableReverseEngineering",
 	capture_browser_scenario: "enableReverseEngineering",

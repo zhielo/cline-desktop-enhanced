@@ -343,3 +343,12 @@ it.each(["run_batch","resume_investigation"] as const)("%s uses independent revi
 it.each(["run_batch","resume_investigation"] as const)("%s denial cancels prepared work without execution",async name=>{
  const p=ports();p.review=vi.fn(async()=>false);const input=name==="run_batch"?{operation_id:id,title:"Owned",stages:[{id:"a",request:{operation:"inspect",target:"owned.bin"}}]}:{receiptId:id,revision:1};await expect(runModelInvestigation(name,input,p)).rejects.toThrow("denied");expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();expect(p.cancel).toHaveBeenCalledWith(id);
 });
+it.each([
+ ["validate_candidate",{artifactId:id,kind:"typescript"}],
+ ["review_candidate_changes",{artifactId:id}],
+] as const)("%s requires independent approval and private tokens",async(name,input)=>{
+ const p=ports();await runModelInvestigation(name,input,p);
+ expect(p.review).toHaveBeenCalledWith(expect.objectContaining({operation:name,independentAnalysisApproval:true}));
+ expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
+ const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation(name,input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();expect(denied.cancel).toHaveBeenCalledWith(id);
+});

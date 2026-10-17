@@ -72,7 +72,7 @@ export async function runModelInvestigation(
 			),
 		);
 	}
-	if (!["analyze_function", "run_batch", "resume_investigation"].includes(name))
+	if (!["analyze_function", "validate_candidate", "review_candidate_changes", "run_batch", "resume_investigation"].includes(name))
 		return JSON.stringify(sanitizeEvidence(await ports.invoke(name, input)));
 	const plan = (await ports.invoke(name, { ...input, phase: "prepare" })) as {
 		id: string;

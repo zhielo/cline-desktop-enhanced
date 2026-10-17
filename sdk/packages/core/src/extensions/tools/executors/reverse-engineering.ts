@@ -1,3 +1,4 @@
+import { verifyCandidate, validateDexBytes } from "./candidate-verification";
 import { sha256Directory } from "./android-project-files";
 import { androidProjectCandidate } from "./android-project-candidate";
 import { exportEvidenceArchive } from "./evidence-archive";
@@ -2478,35 +2479,15 @@ async function validateDexOutput(file: string) {
 	if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 512 * 1024 * 1024)
 		throw new Error("Assembled DEX exceeds bounded regular-file validation");
 	const bytes = await fs.readFile(file);
-	if (
-		bytes.length < 112 ||
-		bytes.length > 512 * 1024 * 1024 ||
-		!/^dex\n0(?:3[5-9]|40)\0$/.test(bytes.subarray(0, 8).toString("binary")) ||
-		bytes.readUInt32LE(32) !== bytes.length ||
-		bytes.readUInt32LE(36) !== 112 ||
-		bytes.readUInt32LE(40) !== 0x12345678
-	)
-		throw new Error("Assembled DEX failed bounded header validation");
-	if (
-		!createHash("sha1")
-			.update(bytes.subarray(32))
-			.digest()
-			.equals(bytes.subarray(12, 32))
-	)
-		throw new Error("Assembled DEX SHA1 mismatch");
-	let a = 1,
-		b = 0;
-	for (const value of bytes.subarray(12)) {
-		a = (a + value) % 65521;
-		b = (b + a) % 65521;
-	}
-	if (((b << 16) | a) >>> 0 !== bytes.readUInt32LE(8))
-		throw new Error("Assembled DEX Adler32 mismatch");
+	validateDexBytes(bytes);
 }
 
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+  if (input.candidate_validation && input.operation !== "validate_candidate") throw new Error("candidate_validation is only accepted by validate_candidate");
+  if (input.candidate_review && input.operation !== "review_candidate_changes") throw new Error("candidate_review is only accepted by review_candidate_changes");
+  if (["validate_candidate", "review_candidate_changes"].includes(input.operation)) return JSON.stringify(await verifyCandidate(input, async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request), {...context, signal})), context.signal));
   if(input.android_project_patch&&!["preview_android_candidate","build_android_candidate"].includes(input.operation))throw new Error("android_project_patch is accepted only by Android project preview/build commands");
  if(input.operation==="export_evidence_bundle"&&input.evidence_archive){
   if(!input.output_file)throw new Error("Evidence archive output_file required");

@@ -204,6 +204,8 @@ export function analysisCommandCatalog() {
 						: "read",
 				availability: "implemented-bounded",
 				limitations:
+     command === "validate_candidate" ? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass." :
+     command === "review_candidate_changes" ? "Exact manifest-declared source/output recipe audit with required manifest hash. Missing, mismatched and unverified outputs do not pass. No baseline for undeclared files or whole-project change review." :
 					command === "annotate_analysis_project"
 						? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
 						: command === "build_android_candidate"

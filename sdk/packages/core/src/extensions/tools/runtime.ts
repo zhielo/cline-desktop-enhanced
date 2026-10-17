@@ -42,7 +42,9 @@ type RuntimeToolCatalogEntry = Omit<ToolCatalogEntry, "defaultEnabled">;
 
 const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 	...[
-		"open_binary",
+		"validate_candidate",
+ "review_candidate_changes",
+ "open_binary",
 		"analyze_function",
 		"trace_application_feature",
 		"capture_browser_scenario",
@@ -199,7 +201,9 @@ const TOOL_NAME_TO_FLAG: Partial<
 		>
 	>
 > = {
-	open_binary: "enableReverseEngineering",
+	validate_candidate: "enableReverseEngineering",
+ review_candidate_changes: "enableReverseEngineering",
+ open_binary: "enableReverseEngineering",
 	analyze_function: "enableReverseEngineering",
 	trace_application_feature: "enableReverseEngineering",
 	capture_browser_scenario: "enableReverseEngineering",

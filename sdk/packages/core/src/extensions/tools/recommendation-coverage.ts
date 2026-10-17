@@ -358,14 +358,14 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "validate_candidate",
 		scope: "partial",
 		limitations:
-			"Artifact-specific checks exist; no unified dispatch/verification receipt.",
+			"Unified approved hash-bound JS/TS parse diagnostics, standard DEX header/integrity/extents and APK structure/signature checks. No arbitrary-format, type/VM/device/build/semantic-equivalence verification.",
 	},
 	{
 		group: "bulk",
 		command: "review_candidate_changes",
 		scope: "partial",
 		limitations:
-			"Existing candidate receipt audit and diffs; no unified approved-scope review command.",
+			"Unified approved exact-recipe audit with immutable receipt hash; missing/mismatched/unverified candidates do not pass. Only manifest-declared files; no undeclared-file baseline or whole-project scope review.",
 	},
 	{
 		group: "bulk",

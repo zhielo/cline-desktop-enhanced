@@ -1054,6 +1054,21 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const batchCancelled=await rpc<InstalledBatchCheckpoint>(page,"cancel_batch",{...triageScope,input:{receiptId:batchStarted.id}});
     if(batchCancelled.receipt.revision!==batchCheckpoint.receipt.revision)throw new Error("Installed terminal cancellation mutated completed evidence");
     stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
+    const candidateValidationHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:ownedWorkflowSource}});
+    const candidateReviewHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:batchManifest}});
+    for(const [command,input] of [
+      ["validate_candidate",{artifactId:candidateValidationHandle.id,kind:"typescript"}],
+      ["review_candidate_changes",{artifactId:candidateReviewHandle.id}],
+    ] as const){
+      const plan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
+      const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
+      const result=await rpc<{result:{protocol:string;status:string;receiptSha256:string;published:boolean}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+      if(result.result.protocol!=="cline-candidate-verification/v1"||result.result.status!=="completed"||result.result.published!==false||!/^[a-f0-9]{64}$/.test(result.result.receiptSha256))throw new Error("Installed hash-bound candidate verification failed");
+      let denied=false;try{await rpc(page,command,{...analysisArgs,input:{...input,phase:"prepare"}});}catch{denied=true;}if(!denied)throw new Error("Installed candidate handle crossed session boundary");
+    }
+    if(await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText||!(await readFile(batchBinary)).equals(batchBinaryBefore)||await readFile(batchAst,"utf8")!==batchAstBefore)throw new Error("Installed candidate verification changed originals");
+    stages.push("installed-candidate-validation-review-hash-scope-preservation-passed");
+
     const triageRequestId=randomUUID();
     const triageReceipt=await rpc<{id:string;status:string;resultHash:string;evidence:{data:unknown}}>(page,"binary_triage_run",{...triageScope,confirmed:true,requestId:triageRequestId,input:triageInput});
     if(triageReceipt.status!=="completed"||!JSON.stringify(triageReceipt.evidence.data).includes("cline_owned_fixture")||!/^[a-f0-9]{64}$/.test(triageReceipt.resultHash))throw new Error("Installed owned YARA target receipt failed");
@@ -1239,7 +1254,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v10",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v11",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },
