@@ -214,3 +214,9 @@ test("installed advanced batch requires reviewed preview, separate approval and 
  expect(driver.includes('operation:"apply_candidate_batch"')).toBe(true);
  expect(driver.includes('batchApply.result.results')).toBe(true);
 });
+
+test("installed integrated workflows retain exact evidence and honest recommendation coverage",()=>{
+ const driver=readFileSync("apps/vscode/scripts/desktop-installed-acceptance.ts","utf8");
+ for(const marker of ["installed-integrated-source-hypothesis-notebook-coverage-passed",'operation:"explain_behavior"','operation:"verify_hypothesis"','operation:"preview_batch"',"not-certified-by-catalog","ownedWorkflowText"])expect(driver.includes(marker)).toBe(true);
+ const validation=readFileSync("scripts/validate-advanced-build.mjs","utf8");expect(validation.includes("executors/investigation-workflows.test.ts")).toBe(true);
+});

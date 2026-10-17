@@ -4,9 +4,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { desktopClient } from "@/lib/desktop-client";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
+
 let container: HTMLDivElement;
 let root: Root;
 const catalog = {
+	recommendations: [
+		{
+			command: "attach_debug_session",
+			scope: "not-implemented",
+			limitations: "Persistent lifecycle pending",
+		},
+	],
 	entries: [
 		{
 			command: "identify_artifact",
@@ -21,6 +29,14 @@ const catalog = {
 			limitations: "Exact-method candidate only",
 		},
 		...[
+			"explain_behavior",
+			"trace_android_method",
+			"decompile_function_bundle",
+			"annotate_analysis_project",
+			"verify_hypothesis",
+			"compare_public_api",
+			"build_android_candidate",
+			"preview_batch",
 			"patch_binary",
 			"apply_ast_transform",
 			"patch_dotnet_constant",
@@ -157,4 +173,37 @@ it.each([
 	expect(onPrepare).not.toHaveBeenCalled();
 	await click();
 	expect(onPrepare).toHaveBeenCalledWith({ ...value, operation: command });
+});
+
+it.each([
+	["explain_behavior", "workflow_query"],
+	["trace_android_method", "advanced_options"],
+	["decompile_function_bundle", "function_selector"],
+	["annotate_analysis_project", "project_edit"],
+	["verify_hypothesis", "hypothesis"],
+	["compare_public_api", "compare_target"],
+	["build_android_candidate", "output_file"],
+])("prepares %s with its scoped review template, never runs it", async (command, field) => {
+	const { onPrepare, invoke } = await mount();
+	await act(async () => {
+		const select = container.querySelector("select")!;
+		select.value = command;
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const request = JSON.parse(container.querySelector("textarea")!.value);
+	expect(request).toHaveProperty(field);
+	expect(onPrepare).not.toHaveBeenCalled();
+	expect(invoke).toHaveBeenCalledTimes(1);
+	await click();
+	expect(onPrepare).toHaveBeenCalledWith(
+		expect.objectContaining({ operation: command, [field]: request[field] }),
+	);
+	if (command === "annotate_analysis_project")
+		expect(request.project_edit).toEqual({ mode: "preview" });
+});
+it("shows unresolved original recommendations without certifying release", async () => {
+	await mount();
+	expect(container.textContent).toContain("attach_debug_session");
+	expect(container.textContent).toContain("not-implemented");
+	expect(container.textContent).toContain("not complete workflow coverage");
 });

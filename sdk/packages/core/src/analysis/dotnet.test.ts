@@ -1,15 +1,14 @@
+import { expect, it } from "vitest";
 import {
 	OWNED_EH_BASE64,
 	OWNED_EH_SHA256,
-} from "../../scripts/owned-managed-fixture.mjs";
-import {
 	OWNED_MANAGED_BASE64,
 	OWNED_MANAGED_SHA256,
 } from "../../scripts/owned-managed-fixture.mjs";
-import { expect, it } from "vitest";
+import { byteDigest, ResultSchema } from "./contracts";
 import { inspectManagedPE } from "./dotnet";
 import { analyzeSources } from "./parser";
-import { byteDigest, ResultSchema } from "./contracts";
+
 /** Owned minimal PE32/CLI image: one declared type and tiny IL method (ldc.i4.1;ret). */
 function fixture() {
 	const b = Buffer.alloc(2048),
@@ -243,4 +242,44 @@ it("retains real owned catch/finally declarations without inventing exception di
 	expect(
 		result.edges.some((x) => x.kind === "managed-exception-candidate"),
 	).toBe(true);
+});
+
+function interopFixture() {
+	const b = fixture(),
+		t = 720;
+	const originalRows = Buffer.from(b.subarray(t + 32, t + 32 + 28));
+	b.fill(0, t + 32, t + 128);
+	b.writeBigUInt64LE(
+		(1n << 2n) | (1n << 6n) | (1n << 26n) | (1n << 28n),
+		t + 8,
+	);
+	for (let i = 0; i < 4; i++) b.writeUInt32LE(1, t + 24 + i * 4);
+	originalRows.copy(b, t + 40);
+	// ModuleRef followed by ImplMap: one MethodDef MemberForwarded row, import name, scope.
+	b.writeUInt16LE(17, t + 68);
+	b.writeUInt16LE(0x100, t + 70);
+	b.writeUInt16LE(3, t + 72);
+	b.writeUInt16LE(34, t + 74);
+	b.writeUInt16LE(1, t + 76);
+	b.write("owned-native.dll\0OwnedImport\0", 848 + 17);
+	return b;
+}
+it("reads owned ImplMap declarations without loading a native library", () => {
+	const b = interopFixture(),
+		r = inspectManagedPE(b);
+	expect(r.interop).toEqual({
+		declarations: [
+			{
+				flags: 0x100,
+				memberToken: "0x06000001",
+				importName: "OwnedImport",
+				moduleName: "owned-native.dll",
+				metadataOffset: 790,
+			},
+		],
+		truncated: false,
+	});
+	const bad = Buffer.from(b);
+	bad.writeUInt16LE(2, 796);
+	expect(() => inspectManagedPE(bad)).toThrow("Invalid ImplMap");
 });

@@ -8,11 +8,51 @@ import {
 	withInstalledActionDeadline,
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
+	stopOwnedApplication,
 	verifyRestartInstructions,
 	verifyRecoveredHubSession,
 	waitForInstalledBackendEndpoint,
 	verifyInstalledAnalysisProfile,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
+
+test("owned native tree is stopped before CDP can tear down its WebView children", async () => {
+  const order = [];
+  let rootAlive = true;
+  await stopOwnedApplication(async () => {
+    assert.equal(rootAlive, true);
+    order.push("terminate-tree");
+    rootAlive = false;
+  }, async () => {
+    assert.equal(rootAlive, false);
+    order.push("disconnect-cdp");
+  });
+  assert.deepEqual(order, ["terminate-tree", "disconnect-cdp"]);
+});
+
+test("owned stop failures remain failures and disconnect still runs without replay", async () => {
+  const stopError = new Error("owned tree termination unconfirmed");
+  const disconnectError = new Error("owned disconnect failed");
+  let kills = 0, disconnects = 0;
+  await assert.rejects(stopOwnedApplication(async () => {
+    kills++; throw stopError;
+  }, async () => { disconnects++; }), error => error === stopError);
+  assert.equal(kills, 1);
+  assert.equal(disconnects, 1);
+  await assert.rejects(stopOwnedApplication(async () => {
+    kills++; throw stopError;
+  }, async () => { disconnects++; throw disconnectError; }), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [stopError, disconnectError]);
+    return true;
+  });
+  assert.equal(kills, 2);
+  assert.equal(disconnects, 2);
+  await assert.rejects(stopOwnedApplication(async () => { kills++; },
+    async () => { disconnects++; throw disconnectError; }),
+    error => error === disconnectError);
+  assert.equal(kills, 3);
+  assert.equal(disconnects, 3);
+});
 
 test("Hub crash acceptance reattaches before local discovery without replay or hiding errors", async () => {
   const calls = [];

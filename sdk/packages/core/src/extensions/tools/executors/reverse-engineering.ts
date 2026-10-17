@@ -1,3 +1,6 @@
+import { INVESTIGATION_COMMANDS } from "../investigation-workflows-schema";
+import { investigationWorkflow } from "./investigation-workflows";
+import { ReverseEngineeringInputSchema } from "../schemas";
 import { CANDIDATE_COMMANDS } from "../advanced-candidates-schema";
 import { advancedCandidate, decompileManagedSelection } from "./advanced-candidates";
 import { candidateBatch } from "./candidate-batch";
@@ -2540,6 +2543,17 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+		if (input.operation === "annotate_analysis_project")
+			input = { ...input, operation: "project_edit" };
+		if ((INVESTIGATION_COMMANDS as readonly string[]).includes(input.operation)) {
+			return JSON.stringify(await investigationWorkflow(
+				input,
+				async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(
+					ReverseEngineeringInputSchema.parse(request), { ...context, signal },
+				)),
+				context.signal,
+			));
+		}
   input = normalizeAnalysisCommand(input);
   if ((CANDIDATE_COMMANDS as readonly string[]).includes(input.operation)) {
    if (!input.output_file) throw new Error("Candidate output_file required");

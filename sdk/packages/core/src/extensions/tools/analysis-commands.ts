@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { CANDIDATE_COMMANDS } from "./advanced-candidates-schema";
+import { INVESTIGATION_COMMANDS } from "./investigation-workflows-schema";
+import { RECOMMENDATION_COVERAGE } from "./recommendation-coverage";
 
 /** Explicit aliases only: no arbitrary command, script, engine or permission fallback. */
 export const ANALYSIS_COMMAND_ALIASES = {
@@ -63,6 +65,8 @@ export const ANALYSIS_ALIAS_NAMES = Object.keys(ANALYSIS_COMMAND_ALIASES) as [
 	...(keyof typeof ANALYSIS_COMMAND_ALIASES)[],
 ];
 export const ANALYSIS_WRITE_OPERATIONS = [
+	"build_android_candidate",
+	"annotate_analysis_project",
 	"patch_binary",
 	"apply_ast_transform",
 	"patch_dotnet_constant",
@@ -179,9 +183,28 @@ const notes: Record<string, string> = {
 };
 export function analysisCommandCatalog() {
 	return {
+		recommendations: RECOMMENDATION_COVERAGE,
+		releaseStatus: "not-certified-by-catalog",
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
+			...INVESTIGATION_COMMANDS.map((command) => ({
+				command,
+				effect: isAnalysisWriteOperation(command)
+					? "candidate-write"
+					: command === "preview_batch"
+						? "plan-only"
+						: "read",
+				availability: "implemented-bounded",
+				limitations:
+					command === "annotate_analysis_project"
+						? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
+						: command === "build_android_candidate"
+							? "Existing unsigned Apktool candidate rebuild then inspection. No automatic signing, install or device verification."
+							: command === "preview_batch"
+								? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
+								: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
+			})),
 			...CANDIDATE_COMMANDS.map((command) => ({
 				command,
 				effect: isAnalysisWriteOperation(command) ? "candidate-write" : "read",

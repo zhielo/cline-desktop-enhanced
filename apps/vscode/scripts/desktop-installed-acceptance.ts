@@ -62,6 +62,22 @@ export function startAcceptanceProcess(
   return { child, exited, closed, diagnostics, startedAt };
 }
 
+/** Keep native process-tree termination authoritative and independent of CDP
+ * teardown: a disconnected transport is not proof of native process exit.
+ * Still attempt disconnect after a failed stop and preserve both failures;
+ * never retry a kill or accept an unconfirmed termination. */
+export async function stopOwnedApplication(
+  terminate: () => Promise<void>,
+  disconnect: () => Promise<void>,
+) {
+  const failures: unknown[] = [];
+  try { await terminate(); } catch (error) { failures.push(error); }
+  try { await disconnect(); } catch (error) { failures.push(error); }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, "Owned application termination and disconnect failed");
+}
+
 /** Node-owned deadline: renderer timers can stop while a WebView/IPC call is stuck.
  * Timeout fails acceptance, never retries or claims a submitted operation was undone. */
 export async function withInstalledActionDeadline<T>(
@@ -306,7 +322,13 @@ export async function main() {
       environment,
     );
     const code = await withInstalledActionDeadline("owned-process-tree-stop", () => killer.exited, 10_000).catch((error) => { killer.child.kill(); throw error; });
-    if (code !== 0) throw new Error("Owned process-tree cleanup was not confirmed");
+    if (code !== 0)
+      throw new Error(
+        `Owned process-tree cleanup was not confirmed (taskkill exit ${code}): ${
+          redactedLaunchText(killer.diagnostics.stderrTail || killer.diagnostics.stdoutTail ||
+            killer.diagnostics.launchError).slice(-1200)
+        }`,
+      );
 	}
 
   async function retainLaunchReceipt(
@@ -548,17 +570,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
       .click();
 	}
 	async function stop() {
+    const ownedBrowser = browser;
+    const ownedApp = app;
     try {
-      const ownedBrowser = browser;
-      if (ownedBrowser) await withInstalledActionDeadline("owned-browser-disconnect", () => ownedBrowser.close(), 10_000);
+      await stopOwnedApplication(
+        async () => {
+          if (ownedApp && ownedApp.child.exitCode === null && ownedApp.child.pid) {
+            await killOwnedProcess(ownedApp.child.pid);
+            await withInstalledActionDeadline("owned-app-exit", () => ownedApp.exited, 10_000);
+          }
+        },
+        async () => {
+          if (ownedBrowser)
+            await withInstalledActionDeadline("owned-browser-disconnect", () => ownedBrowser.close(), 10_000);
+        },
+      );
     } finally {
-      // Disconnect failure must not bypass termination of this owned app.
       browser = undefined;
-      const ownedApp = app;
-      if (ownedApp && ownedApp.child.exitCode === null && ownedApp.child.pid) {
-        await killOwnedProcess(ownedApp.child.pid);
-        await withInstalledActionDeadline("owned-app-exit", () => ownedApp.exited, 10_000);
-      }
       app = undefined;
     }
 	}
@@ -917,7 +945,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -945,6 +973,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const witness=await runOwnedAdvanced({operation:"trace_source_sink",target:witnessGraph,source_sink:{source_ids:["a"],sink_ids:["b"],relation:"declared-relationships"},timeout_ms:120000});
     if(witness.plan.status!=="completed"||witness.result.status!=="completed"||witness.result.observedExecution!==false||witness.result.witnesses?.length!==1||witness.result.witnesses[0].route.join(",")!=="a,b"||!(await readFile(batchBinary)).equals(batchBinaryBefore)||await readFile(batchAst,"utf8")!==batchAstBefore)throw new Error("Installed source/sink or multi-edit preservation failed");
     stages.push("installed-multiedit-audit-source-sink-originals-preserved");
+    const workflowCatalog=await rpc<{recommendations:{command:string;scope:string}[];releaseStatus:string}>(page,"analysis_command_catalog",{environmentId:"local"});
+    if(workflowCatalog.recommendations.length!==55||new Set(workflowCatalog.recommendations.map(r=>r.command)).size!==55||workflowCatalog.releaseStatus!=="not-certified-by-catalog")throw new Error("Installed original recommendation ledger is incomplete or falsely certified");
+    const ownedWorkflowSource=join(workspace,"owned-workflow.ts"),ownedWorkflowText='export function ownedWorkflow(){ return "owned evidence"; }\n';
+    await writeFile(ownedWorkflowSource,ownedWorkflowText);
+    const explanation=await runOwnedAdvanced({operation:"explain_behavior",target:ownedWorkflowSource,workflow_query:{symbol:"ownedWorkflow"},timeout_ms:120000});
+    if(explanation.plan.status!=="completed"||explanation.result.status!=="partial"||explanation.result.observedExecution!==false||explanation.result.selectedFunction?.sha256!==createHash("sha256").update(ownedWorkflowText).digest("hex")||!explanation.result.selectedFunction?.text.includes('return "owned evidence"')||await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText)throw new Error("Installed exact-function evidence failed or changed the original");
+    const hypothesis=await runOwnedAdvanced({operation:"verify_hypothesis",target:witnessGraph,hypothesis:{statement:"Owned declared relationship only",kind:"declared-edge",node_id:"a",target_id:"b",relation:"references-candidate",expected:true},timeout_ms:120000});
+    if(hypothesis.plan.status!=="completed"||hypothesis.result.status!=="completed"||hypothesis.result.conclusion!=="supported")throw new Error("Installed declared hypothesis verification failed");
+    const ownedNotebook=join(workspace,"owned-workflow-notebook.json");
+    await writeFile(ownedNotebook,JSON.stringify({schemaVersion:1,title:"Owned preview",cells:[{id:"triage",action:"triage",target:"owned-candidate-input.bin"},{id:"inventory",action:"native_inventory",target:"owned-candidate-input.bin",dependsOn:["triage"]}]}));
+    const notebookPreview=await runOwnedAdvanced({operation:"preview_batch",target:ownedNotebook,timeout_ms:120000});
+    if(notebookPreview.plan.status!=="completed"||notebookPreview.result.status!=="completed"||notebookPreview.result.executed!==false||notebookPreview.result.stages?.length!==2||notebookPreview.result.stages[1].dependsOn.join(",")!=="triage")throw new Error("Installed static notebook preview failed");
+    stages.push("installed-integrated-source-hypothesis-notebook-coverage-passed");
+
 
 
     const triageScope={sessionId:triageSession.sessionId,environmentId:"local"};

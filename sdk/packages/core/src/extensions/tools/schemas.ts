@@ -1,3 +1,8 @@
+import {
+	HypothesisSchema,
+	INVESTIGATION_COMMANDS,
+	WorkflowQuerySchema,
+} from "./investigation-workflows-schema";
 /**
  * Zod Schemas for Default Tool Inputs
  *
@@ -7,17 +12,17 @@
 
 import { z } from "zod";
 import {
-	CandidateSchema,
 	CANDIDATE_COMMANDS,
+	CandidateSchema,
 	EvidenceTraceSchema,
-	SourceSinkSchema,
-	ManagedMethodSchema,
 	JvmMethodSchema,
+	ManagedMethodSchema,
+	SourceSinkSchema,
 } from "./advanced-candidates-schema";
 import {
 	ANALYSIS_ALIAS_NAMES,
-	SmaliPatchSchema,
 	InvestigationPlanSchema,
+	SmaliPatchSchema,
 } from "./analysis-commands";
 import { NativeProjectEditSchema } from "./native-project-edits-schema";
 
@@ -290,6 +295,8 @@ export const ReverseEngineeringInputSchema = z.object({
 		})
 		.strict()
 		.optional(),
+	workflow_query: WorkflowQuerySchema.optional(),
+	hypothesis: HypothesisSchema.optional(),
 	candidate: CandidateSchema.optional(),
 	evidence_trace: EvidenceTraceSchema.optional(),
 	source_sink: SourceSinkSchema.optional(),
@@ -304,6 +311,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	operation: z.enum([
 		...ANALYSIS_ALIAS_NAMES,
 		...CANDIDATE_COMMANDS,
+		...INVESTIGATION_COMMANDS,
 		"trace_source_sink",
 		"audit_candidate_batch",
 		"trace_cross_language",

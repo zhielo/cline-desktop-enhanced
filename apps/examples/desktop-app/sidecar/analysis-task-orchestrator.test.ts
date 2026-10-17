@@ -384,7 +384,10 @@ it("requires separate persistent engine process and private project acknowledgem
 	expect(() => tasks.approve(plan.id, [], plan.requestHash)).toThrow();
 });
 
-it("classifies native project candidates as Modify with explicit state/pointer approvals", async () => {
+it.each([
+	"project_edit",
+	"annotate_analysis_project",
+])("classifies %s as Modify with explicit state/pointer approvals", async (operation) => {
 	const root = workspace();
 	writeFileSync(join(root, "owned.so"), "owned fixture");
 	const tasks = new AnalysisTaskOrchestrator();
@@ -392,7 +395,7 @@ it("classifies native project candidates as Modify with explicit state/pointer a
 		workspaceRoot: root,
 		kind: "static",
 		request: {
-			operation: "project_edit",
+			operation,
 			target: "owned.so",
 			engine: "ghidra",
 			project_edit: { mode: "preview" },
@@ -521,21 +524,44 @@ it("requires independent Execute kind for active JS and exact reviewed scenario 
 	o.complete(plan.id, { owned: true }, "owned-test");
 });
 
-it.each(["build_apk", "recompile_smali", "validate_smali_project", "patch_smali_method", "patch_smali"])("classifies advanced write adapter %s before execution", async operation => {
- const root = workspace();
- const target = join(root, "owned.smali");
- writeFileSync(target, "owned");
- const orchestrator = new AnalysisTaskOrchestrator();
- const plan = await orchestrator.prepare({ workspaceRoot: root, kind: "static", request: { operation, target } });
- expect(plan.permission).toBe("Modify");
- expect(plan.requirements).toContain("new-output-no-overwrite");
- expect(() => orchestrator.approve(plan.id, [], plan.requestHash)).toThrow();
+it.each([
+	"build_android_candidate",
+	"build_apk",
+	"recompile_smali",
+	"validate_smali_project",
+	"patch_smali_method",
+	"patch_smali",
+])("classifies advanced write adapter %s before execution", async (operation) => {
+	const root = workspace();
+	const target = join(root, "owned.smali");
+	writeFileSync(target, "owned");
+	const orchestrator = new AnalysisTaskOrchestrator();
+	const plan = await orchestrator.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: { operation, target },
+	});
+	expect(plan.permission).toBe("Modify");
+	expect(plan.requirements).toContain("new-output-no-overwrite");
+	expect(() => orchestrator.approve(plan.id, [], plan.requestHash)).toThrow();
 });
 
-it.each(["audit_candidate_batch","trace_source_sink"])("keeps %s read-only and still requires one-use exact approval",async operation=>{
- const root=workspace(),target=join(root,"owned.json");writeFileSync(target,"{}");
- const orchestrator=new AnalysisTaskOrchestrator();
- const plan=await orchestrator.prepare({workspaceRoot:root,kind:"static",request:{operation,target}});
- expect(plan.permission).toBe("Inspect");expect(plan.status).toBe("awaiting-approval");
- expect(plan.requirements).not.toContain("authorized-candidate-artifact-modification");
+it.each([
+	"audit_candidate_batch",
+	"trace_source_sink",
+])("keeps %s read-only and still requires one-use exact approval", async (operation) => {
+	const root = workspace(),
+		target = join(root, "owned.json");
+	writeFileSync(target, "{}");
+	const orchestrator = new AnalysisTaskOrchestrator();
+	const plan = await orchestrator.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: { operation, target },
+	});
+	expect(plan.permission).toBe("Inspect");
+	expect(plan.status).toBe("awaiting-approval");
+	expect(plan.requirements).not.toContain(
+		"authorized-candidate-artifact-modification",
+	);
 });

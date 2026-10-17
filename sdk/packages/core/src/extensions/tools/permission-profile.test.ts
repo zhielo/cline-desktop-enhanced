@@ -279,7 +279,7 @@ it.each([
 	).toBeDefined();
 });
 
-it.each(["patch_binary","apply_ast_transform","patch_dotnet_constant","patch_jvm_constant","apply_candidate_batch"])("new candidate write %s cannot evade either restricted profile",async(operation)=>{
+it.each(["build_android_candidate","annotate_analysis_project","patch_binary","apply_ast_transform","patch_dotnet_constant","patch_jvm_constant","apply_candidate_batch"])("new candidate write %s cannot evade either restricted profile",async(operation)=>{
  for(const profile of ["read-only","project-notion-bridge"] as const)expect((await before(profile,"reverse_engineer",{operation}))?.skip).toBe(true);
  expect(await before("full-access","reverse_engineer",{operation})).toBeUndefined();
 });
