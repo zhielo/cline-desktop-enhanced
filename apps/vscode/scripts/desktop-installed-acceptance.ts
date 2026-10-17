@@ -770,30 +770,11 @@ ConvertTo-Json -InputObject @($rows) -Compress
     try{await rpc(page,"analysis_workflow_hybrid_prepare",{...analysisArgs,input:{baselineKind:"receipt",baselineId:"11111111-1111-4111-8111-111111111111",question:"Missing basis must deny"}});}catch{missingBasisDenied=true;}
     if(!missingBasisDenied)throw new Error("Installed Hybrid accepted missing static evidence");
     stages.push("installed-hybrid-mode-persistence-static-preflight-passed");
-    const batchRequest={operation_id:randomUUID(),title:"Installed owned static DAG",parallel:2,stages:[
-      {id:"inspect",request:{operation:"inspect",target:hybridFixtureTarget}},
-      {id:"strings",depends_on:["inspect"],request:{operation:"scan_strings",target:hybridFixtureTarget,max_results:20}},
-    ]};
-    const staticBatchPreview=await rpc<{status:string;request:{stages:Array<{target_sha256:string}>}}>(page,"preview_batch",{...analysisArgs,input:batchRequest});
-    if(staticBatchPreview.status!=="previewed-not-approved"||staticBatchPreview.request.stages.some(s=>!/^[a-f0-9]{64}$/.test(s.target_sha256)))throw new Error("Installed batch preview omitted input fingerprints");
-    const batchPlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"run_batch",{...analysisArgs,input:{...batchRequest,phase:"prepare"}});
-    const batchApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...analysisArgs,cwd:workspace,planId:batchPlan.id,requestHash:batchPlan.requestHash,requirements:batchPlan.requirements});
-    const batchStarted=await rpc<{id:string;accepted:boolean;completed:boolean}>(page,"run_batch",{...analysisArgs,input:{...batchRequest,phase:"run",planId:batchPlan.id,executionToken:batchApproval.executionToken}});
-    if(!batchStarted.accepted||batchStarted.completed)throw new Error("Installed batch start claimed completion prematurely");
-    type InstalledBatchCheckpoint={receipt:{status:string;revision:number;hash:string;jobs:Array<{status:string;result?:unknown}>}};
-    let batchCheckpoint:InstalledBatchCheckpoint|undefined;
-    for(let attempt=0;attempt<100;attempt++){
-      batchCheckpoint=await rpc<InstalledBatchCheckpoint>(page,"checkpoint_investigation",{...analysisArgs,input:{receiptId:batchStarted.id}});
-      if(!["accepted","starting","running"].includes(batchCheckpoint.receipt.status))break;
-      await delay(100);
-    }
-    if(batchCheckpoint?.receipt.status!=="completed"||batchCheckpoint.receipt.jobs.some(j=>j.status!=="completed")||!/^[a-f0-9]{64}$/.test(batchCheckpoint.receipt.hash)||!JSON.stringify(batchCheckpoint.receipt.jobs[1].result).includes("process.stdout.write"))throw new Error("Installed durable batch DAG results failed");
-    let batchReplayDenied=false;
-    try{await rpc(page,"resume_investigation",{...analysisArgs,input:{receiptId:batchStarted.id,revision:batchCheckpoint.receipt.revision}});}catch{batchReplayDenied=true;}
-    if(!batchReplayDenied)throw new Error("Installed completed batch was replayed");
-    const batchCancelled=await rpc<InstalledBatchCheckpoint>(page,"cancel_batch",{...analysisArgs,input:{receiptId:batchStarted.id}});
-    if(batchCancelled.receipt.revision!==batchCheckpoint.receipt.revision)throw new Error("Installed terminal cancellation mutated completed evidence");
-    stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
+    let restrictedBatchDenied=false;
+    try{await rpc(page,"preview_batch",{...analysisArgs,input:{operation_id:randomUUID(),title:"Read Only batch must deny",stages:[{id:"inspect",request:{operation:"inspect",target:hybridFixtureTarget}}]}});}
+    catch(error){if(!String(error).includes("Full Access"))throw error;restrictedBatchDenied=true;}
+    if(!restrictedBatchDenied)throw new Error("Installed batch widened the Read Only session");
+    stages.push("installed-ai-batch-read-only-profile-denied");
     const hybridExecutePlan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"first_party_analysis_execute_prepare",{
       ...analysisArgs,
       hybridProposal:{baselineKind:"receipt",baselineId:parsed.id,question:"Does this owned isolated fixture exit 0 and emit the expected bytes?"},
@@ -1049,6 +1030,30 @@ ConvertTo-Json -InputObject @($rows) -Compress
 
     const triageScope={sessionId:triageSession.sessionId,environmentId:"local"};
     await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+    const batchRequest={operation_id:randomUUID(),title:"Installed owned static DAG",parallel:2,stages:[
+      {id:"inspect",request:{operation:"inspect",target:hybridFixtureTarget}},
+      {id:"strings",depends_on:["inspect"],request:{operation:"scan_strings",target:hybridFixtureTarget,max_results:20}},
+    ]};
+    const staticBatchPreview=await rpc<{status:string;request:{stages:Array<{target_sha256:string}>}}>(page,"preview_batch",{...triageScope,input:batchRequest});
+    if(staticBatchPreview.status!=="previewed-not-approved"||staticBatchPreview.request.stages.some(s=>!/^[a-f0-9]{64}$/.test(s.target_sha256)))throw new Error("Installed batch preview omitted input fingerprints");
+    const batchPlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"run_batch",{...triageScope,input:{...batchRequest,phase:"prepare"}});
+    const batchApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:batchPlan.id,requestHash:batchPlan.requestHash,requirements:batchPlan.requirements});
+    const batchStarted=await rpc<{id:string;accepted:boolean;completed:boolean}>(page,"run_batch",{...triageScope,input:{...batchRequest,phase:"run",planId:batchPlan.id,executionToken:batchApproval.executionToken}});
+    if(!batchStarted.accepted||batchStarted.completed)throw new Error("Installed batch start claimed completion prematurely");
+    type InstalledBatchCheckpoint={receipt:{status:string;revision:number;hash:string;jobs:Array<{status:string;result?:unknown}>}};
+    let batchCheckpoint:InstalledBatchCheckpoint|undefined;
+    for(let attempt=0;attempt<100;attempt++){
+      batchCheckpoint=await rpc<InstalledBatchCheckpoint>(page,"checkpoint_investigation",{...triageScope,input:{receiptId:batchStarted.id}});
+      if(!["accepted","starting","running"].includes(batchCheckpoint.receipt.status))break;
+      await delay(100);
+    }
+    if(batchCheckpoint?.receipt.status!=="completed"||batchCheckpoint.receipt.jobs.some(j=>j.status!=="completed")||!/^[a-f0-9]{64}$/.test(batchCheckpoint.receipt.hash)||!JSON.stringify(batchCheckpoint.receipt.jobs[1].result).includes("process.stdout.write"))throw new Error("Installed durable batch DAG results failed");
+    let batchReplayDenied=false;
+    try{await rpc(page,"resume_investigation",{...triageScope,input:{receiptId:batchStarted.id,revision:batchCheckpoint.receipt.revision}});}catch{batchReplayDenied=true;}
+    if(!batchReplayDenied)throw new Error("Installed completed batch was replayed");
+    const batchCancelled=await rpc<InstalledBatchCheckpoint>(page,"cancel_batch",{...triageScope,input:{receiptId:batchStarted.id}});
+    if(batchCancelled.receipt.revision!==batchCheckpoint.receipt.revision)throw new Error("Installed terminal cancellation mutated completed evidence");
+    stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
     const triageRequestId=randomUUID();
     const triageReceipt=await rpc<{id:string;status:string;resultHash:string;evidence:{data:unknown}}>(page,"binary_triage_run",{...triageScope,confirmed:true,requestId:triageRequestId,input:triageInput});
     if(triageReceipt.status!=="completed"||!JSON.stringify(triageReceipt.evidence.data).includes("cline_owned_fixture")||!/^[a-f0-9]{64}$/.test(triageReceipt.resultHash))throw new Error("Installed owned YARA target receipt failed");

@@ -296,6 +296,9 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
  assert.ok(driver.includes('installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed'));
  assert.ok(driver.includes('Installed completed batch was replayed'));
+ assert.ok(driver.includes('installed-ai-batch-read-only-profile-denied'));
+ assert.ok(driver.includes('Installed batch widened the Read Only session'));
+ assert.ok(driver.indexOf('const triageScope=') < driver.indexOf('const batchRequest='));
  assert.ok(driver.includes('installed-owned-app-cleanup-confirmed'));
  assert.ok(driver.indexOf('installed-owned-app-cleanup-confirmed')<driver.indexOf('status: "passed"'));
 });
