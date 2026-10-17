@@ -23,6 +23,10 @@ export const PipelineInput = z
 		operation_id: Id,
 		title: z.string().min(1).max(120),
 		trusted_host_work: z.literal(true),
+  owner_session_id: z.string().min(1).max(200).optional(),
+  client_request_hash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  implementation_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  resume_from: z.object({id: Id, revision: z.number().int().min(0), hash: z.string().regex(/^[a-f0-9]{64}$/), reused: z.array(z.string()).max(12)}).strict().optional(),
 		parallel: z.number().int().min(1).max(2).default(1),
 		archive_logs: z.boolean().default(false),
 		stages: z
@@ -262,7 +266,7 @@ export class ExecutionControlService {
 				};
 			});
 	}
-	async prepare(root: string, value: unknown) {
+	async preview(root: string, value: unknown) {
 		const p: Pipeline = PipelineInput.parse(value);
 		validateGraph(p);
 		for (const stage of p.stages) {
@@ -359,6 +363,10 @@ export class ExecutionControlService {
 						? `debugger:${stage.request.pid ?? stage.request.target ?? "discovery"}`
 						: `analysis:${stage.request.output_directory ?? stage.request.target ?? "health"}`;
 		}
+  return p;
+ }
+ async prepare(root: string, value: unknown) {
+  const p = await this.preview(root, value);
 		return this.options.tasks.prepare({
 			workspaceRoot: root,
 			kind: "execution",
@@ -560,8 +568,8 @@ export class ExecutionControlService {
 				const result = await (stage.backend === "static"
 					? this.options.static
 					: this.options.debugger)(stage.request, signal);
-				signal.throwIfAborted();
-				const encoded = JSON.stringify(result);
+    // Preserve returned evidence even when cancellation races adapter completion.
+				const encoded = JSON.stringify(result) ?? "null";
 				j.resultHash = digest(encoded);
 				j.resultTruncated = Buffer.byteLength(encoded) > 65536;
 				j.result = j.resultTruncated
@@ -570,6 +578,7 @@ export class ExecutionControlService {
 							sha256: j.resultHash,
 						}
 					: result;
+				signal.throwIfAborted();
 				j.status =
 					(result as { succeeded?: boolean })?.succeeded === false ||
 					(result as { exitCode?: number | null })?.exitCode === null ||
@@ -584,9 +593,10 @@ export class ExecutionControlService {
 					)?.cancelled ||
 					(result as { timedOut?: boolean })?.timedOut ||
 					(result as { outputDrainTimedOut?: boolean })?.outputDrainTimedOut ||
-					["failed", "blocked", "cancelled"].includes(
-						(result as { result?: { status?: string } })?.result?.status ?? "",
-					)
+					["failed", "blocked", "cancelled", "partial", "uncertain"].some(status =>
+      (result as { status?: string })?.status === status ||
+      (result as { result?: { status?: string } })?.result?.status === status
+     )
 						? "failed"
 						: "completed";
 				j.outputComplete = true;

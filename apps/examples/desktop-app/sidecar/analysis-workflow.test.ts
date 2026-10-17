@@ -248,3 +248,8 @@ it("Hybrid preflight is unavailable to untrusted, Off or busy UI callers",async(
  for(const options of [{trusted:false,idle:true,mode:"hybrid"},{trusted:true,idle:true,mode:"off"},{trusted:true,idle:false,mode:"hybrid"}])await expect(handleAnalysisWorkflow("analysis_workflow_hybrid_prepare",{},scope,options,{} as AnalysisWorkflowStore,ports)).rejects.toThrow("trusted enabled");
  expect(ports.capture).not.toHaveBeenCalled();expect(ports.invoke).not.toHaveBeenCalled();
 });
+it("batch new work requires enabled trusted scope; cleanup remains possible after Off",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"batch-mode-")),store=new AnalysisWorkflowStore(join(root,"store.sqlite"));
+ const batch=vi.fn(async()=>({status:"owned"}));const ports={invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn(),batch};const scope={sessionId:"owned",workspace:root};
+ try{for(const command of ["plan_batch","preview_batch","run_batch","resume_investigation"]){await expect(handleAnalysisWorkflow(command,{},scope,{trusted:true,idle:true,mode:"off"},store,ports)).rejects.toThrow("Analysis enabled");}for(const command of ["checkpoint_investigation","cancel_batch"]){expect(await handleAnalysisWorkflow(command,{},scope,{trusted:true,idle:false,mode:"off",actor:"model"},store,ports)).toEqual({status:"owned"});await expect(handleAnalysisWorkflow(command,{},scope,{trusted:false,idle:true,mode:"static"},store,ports)).rejects.toThrow("trusted");}}finally{store.close();await rm(root,{recursive:true,force:true});}
+});

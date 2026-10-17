@@ -21,19 +21,58 @@ const Selector = z
 		"Choose exactly one function selector",
 	);
 const CaptureSchema = z
-		.object({
-			action: z.enum(["list", "start", "stop"]),
-			browserSessionId: Id.optional(),
-			purpose: z.string().trim().min(1).max(160).optional(),
-			hybridProposal: HybridProposalSchema.optional(),
-		})
-		.strict()
-		.refine(
-			(v) => v.action === "list" || !!(v.browserSessionId && v.purpose),
-			"Recording requires browserSessionId and purpose",
-		);
+	.object({
+		action: z.enum(["list", "start", "stop"]),
+		browserSessionId: Id.optional(),
+		purpose: z.string().trim().min(1).max(160).optional(),
+		hybridProposal: HybridProposalSchema.optional(),
+	})
+	.strict()
+	.refine(
+		(v) => v.action === "list" || !!(v.browserSessionId && v.purpose),
+		"Recording requires browserSessionId and purpose",
+	);
+const BatchStage = z
+	.object({
+		id: z.string().regex(/^[A-Za-z0-9_-]{1,50}$/),
+		depends_on: z
+			.array(z.string().regex(/^[A-Za-z0-9_-]{1,50}$/))
+			.max(12)
+			.default([]),
+		timeout_ms: z.number().int().min(1000).max(120000).default(120000),
+		request: z
+			.object({
+				operation: z.enum(["inspect", "scan_strings", "compare_apks"]),
+				target: z.string().min(1).max(4096),
+				compare_target: z.string().min(1).max(4096).optional(),
+				max_results: z.number().int().min(1).max(500).default(100),
+				min_string_length: z.number().int().min(4).max(1024).default(6),
+			})
+			.strict()
+			.refine(
+				(v) => v.operation !== "compare_apks" || !!v.compare_target,
+				"Comparison requires compare_target",
+			),
+	})
+	.strict();
+const BatchRequest = z
+	.object({
+		operation_id: Id,
+		title: z.string().trim().min(1).max(120),
+		parallel: z.number().int().min(1).max(2).default(1),
+		stages: z.array(BatchStage).min(1).max(12),
+	})
+	.strict();
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
+	plan_batch: BatchRequest,
+	preview_batch: BatchRequest,
+	run_batch: BatchRequest,
+	checkpoint_investigation: z.object({ receiptId: Id }).strict(),
+	cancel_batch: z.object({ receiptId: Id }).strict(),
+	resume_investigation: z
+		.object({ receiptId: Id, revision: z.number().int().min(0) })
+		.strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
 	analyze_function: z
 		.object({
@@ -51,7 +90,7 @@ export const InvestigationSchemas = {
 		})
 		.strict(),
 	capture_browser_scenario: CaptureSchema,
- capture_network_metadata: CaptureSchema,
+	capture_network_metadata: CaptureSchema,
 	get_evidence_bundle: z
 		.object({
 			receiptIds: z.array(Id).max(10).default([]),
@@ -67,6 +106,18 @@ export type InvestigationExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 const descriptions: Record<InvestigationToolName, string> = {
+	plan_batch:
+		"Validate a bounded dependency graph of up to 12 existing workspace artifact inspect/string/APK-comparison stages. Uses the durable desktop runner. No shell, target execution or candidate writes; no approval or execution occurs.",
+	preview_batch:
+		"Preview canonical input hashes, dependency ordering, scope and budgets for a bounded built-in static batch. No approval or execution occurs.",
+	run_batch:
+		"Request execution of a bounded built-in static batch after fresh independent human approval. Returns an asynchronous receipt, not a completion claim. Inspect it with checkpoint_investigation. No shell, candidate writes, runtime, external engines or produced-input chaining in this front door.",
+	checkpoint_investigation:
+		"Read the latest durable owning-session batch checkpoint with revision, per-stage results and integrity hash. Does not force a new checkpoint or repeat work; available for cleanup/status after Analysis is disabled.",
+	cancel_batch:
+		"Cancel only this owning-session AI batch through the existing supervised runner. Read its checkpoint to confirm terminal outcome; never replays stages. Available after Analysis is disabled.",
+	resume_investigation:
+		"Request a freshly approved continuation of never-started built-in static stages from an exact terminal checkpoint revision. Revalidates every input hash, implementation fingerprint and reused result. Never retries failed/started stages or replays writes/runtime; unresolved dependencies block continuation.",
 	open_binary:
 		"Create an immutable workspace-confined artifact handle; does not execute or decompile the binary. Analysis mode must be enabled.",
 	analyze_function:
@@ -75,8 +126,9 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Reconcile selected owning-session static facts and recorded scenarios. Returns provenance, candidate links and unresolved boundaries, never proves runtime causality from label matches.",
 	capture_browser_scenario:
 		"List owned built-in browsers, or request bounded metadata-only recording. Start requires Runtime or Hybrid mode and fresh human recording consent. In Hybrid, inspect first using available static tools, then supply hybridProposal (owning receipt/static-task ID and the unresolved question). Missing evidence must be gathered, never invented. Hybrid does not launch targets automatically. Stop remains available after mode changes. Never opens/replays a browser or captures bodies/cookies.",
-	capture_network_metadata: "Alias for capture_browser_scenario: owned built-in browser Network/Page protocol metadata only. Explicit fresh human consent and Runtime/Hybrid scope required; no bodies, headers, cookies, arbitrary process capture or automatic browser launch.",
- get_evidence_bundle:
+	capture_network_metadata:
+		"Alias for capture_browser_scenario: owned built-in browser Network/Page protocol metadata only. Explicit fresh human consent and Runtime/Hybrid scope required; no bodies, headers, cookies, arbitrary process capture or automatic browser launch.",
+	get_evidence_bundle:
 		"Export explicitly selected owning-session evidence with integrity hash, provenance index and limitations. Not a backup; review best-effort redaction before sharing.",
 };
 export function createInvestigationTools(

@@ -76,12 +76,12 @@ This is the exact original 55-command checklist, not a statement that all recomm
 
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
-| `plan_batch` | partial | Fixed investigation recipe alias; not a general mixed-effect dependency planner. |
-| `preview_batch` | partial | Real confined static notebook DAG preview; no candidate-write/runtime stages. |
-| `run_batch` | partial | Existing bounded static notebook runner; no mixed-effect orchestration. |
-| `checkpoint_investigation` | partial | Durable cases and notebook checkpoints exist; no unified checkpoint command. |
-| `resume_investigation` | partial | Existing matching static notebook fingerprints; not mixed-effect replay. |
-| `cancel_batch` | partial | Existing execution-workspace cancellation; no unified command across runners. |
+| `plan_batch` | partial | AI front door validates a 12-stage built-in static DAG over existing inputs using the durable desktop runner; candidate-write/runtime stages remain separate. |
+| `preview_batch` | partial | AI front door previews canonical input hashes and dependency/budget checks without approval or execution. No candidate-write/runtime stages. |
+| `run_batch` | partial | AI front door uses fresh human approval and the existing durable dependency runner for inspect/string/APK-comparison stages. No mixed-effect orchestration. |
+| `checkpoint_investigation` | partial | AI command reads the latest owning-session durable execution receipt, revision and stage evidence; it does not force a new flush or unite all evidence stores. |
+| `resume_investigation` | partial | AI continuation revalidates exact terminal revision, input/implementation/result fingerprints and resumes only never-started built-in static stages with fresh approval. No started-stage/write/runtime replay. |
+| `cancel_batch` | partial | Owning-session AI command cancels its durable batch through the existing supervisor; terminal confirmation is read separately. Other runners remain separate. |
 | `validate_candidate` | partial | Artifact-specific checks exist; no unified dispatch/verification receipt. |
 | `review_candidate_changes` | partial | Existing candidate receipt audit and diffs; no unified approved-scope review command. |
 | `export_evidence_bundle` | partial | Approved gzip JSON archive of hash-bound selected text findings/receipts/logs with source/export hashes and redaction. Unknown secrets, completeness and producer authenticity remain unverified. |

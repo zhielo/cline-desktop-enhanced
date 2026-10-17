@@ -79,3 +79,43 @@ The optional imported OSV snapshot shape is `{schemaVersion:1,source:"OSV",retri
 Manifest shape: `{schemaVersion:1,title:"Selected evidence",entries:[{id:"receipt",path:"receipt.json",sha256:"<64 lowercase hex>",kind:"receipt",format:"json"}]}`. Paths are confined relative files under the manifest directory; symlinks, traversal, duplicate IDs/paths, changed hashes and overwrite attempts fail. Entry kinds: finding, receipt, log, limitations; formats: json or text. Limits: 32 entries, 1 MiB per entry, 8 MiB aggregate input, 12 MiB serialized export, JSON depth 32 / 20,000 nodes per entry. It redacts known sensitive environment values, credential patterns and sensitive JSON keys. **Unknown secrets may remain: review before sharing.** Imported tool/version/producer claims are retained as untrusted evidence, not authenticated attestations. Source files never execute or change.
 
 The installed Windows journey additionally checks explicit API changes, hash-bound lockfile evidence, approved archive publication/original preservation, and real Capstone/Miasm range comparison after installing the full engine pack. This does not certify the remaining runtime or mixed-effect workflow gaps.
+
+
+## AI durable static batch front door
+
+The desktop now exposes standalone `plan_batch`, `preview_batch`, `run_batch`,
+`checkpoint_investigation`, `resume_investigation` and `cancel_batch` tools. These
+are host investigation tools, distinct from the older `reverse_engineer`
+notebook-operation aliases. They reuse `ExecutionControlService`, not another runner.
+
+- An attached Full Access local owning session and enabled Analysis are required
+  for new work; restricted permission profiles are never widened. Checkpoint and
+  cancellation remain available for cleanup after Analysis is disabled.
+- The strict model schema accepts at most twelve built-in `inspect`, `scan_strings`
+  and `compare_apks` stages, two parallel reads, bounded output and per-stage time.
+  Dependencies determine order only. All targets must already exist in the workspace
+  as regular files no larger than 64 MiB. Produced-input chaining is not implemented.
+- Preview validates without creating a plan or execution receipt. Run prepares a
+  canonical hash-bound plan, requests independent human approval and consumes a
+  host-private one-use token. The model never supplies owner, token, mode or consent.
+- Start returns an asynchronous receipt ID, **not success**. Checkpoint reads the
+  existing durable revision, input fingerprints, stage results and integrity hash.
+  Receipts are owning-session-bound even when two sessions share a workspace.
+- Resume accepts an exact certain terminal revision, verifies all original input
+  fingerprints and the executing implementation fingerprint, and validates retained
+  completed results before reusing dependencies. It prepares a new separately
+  approved continuation containing only never-started stages. Failed or started
+  stages are never retried automatically; unresolved dependencies block continuation.
+  Both preparation and execution recheck reused input evidence. Interrupted-host
+  uncertain work requires explicit reconciliation, not replay through this command.
+- Top-level and nested failed, blocked, partial, cancelled or uncertain adapter
+  statuses cannot unlock dependencies. Returned evidence is retained when adapter
+  completion races cancellation; that does not turn cancellation into success.
+
+This front door does **not** yet orchestrate candidate writes, shell, debuggers,
+external engines or runtime observation. Those existing separately approved
+workbenches remain separate; this is not a claim that all 55 recommendations are
+complete. Installed Windows acceptance exercises preview, independent approval,
+real built-in inspect/string DAG results, durable checkpoints and completed-stage
+replay denial. Cancellation/resume edge cases are additionally covered by focused
+runner and approval tests, not claimed as live hardware/runtime coverage.

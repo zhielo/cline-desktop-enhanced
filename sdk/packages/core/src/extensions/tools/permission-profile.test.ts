@@ -260,6 +260,13 @@ it("keeps investigation tools behind the external-tool permission profile", asyn
 		"capture_browser_scenario",
  "capture_network_metadata",
 		"get_evidence_bundle",
+		"plan_batch",
+		"preview_batch",
+		"run_batch",
+		"checkpoint_investigation",
+		"cancel_batch",
+		"resume_investigation",
+
 	]) {
 		expect(await before("read-only", name)).toMatchObject({ skip: true });
 		expect(await before("workspace", name)).toMatchObject({ skip: true });

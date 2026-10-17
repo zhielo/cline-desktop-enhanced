@@ -48,6 +48,13 @@ const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 		"capture_browser_scenario",
  "capture_network_metadata",
 		"get_evidence_bundle",
+		"plan_batch",
+		"preview_batch",
+		"run_batch",
+		"checkpoint_investigation",
+		"cancel_batch",
+		"resume_investigation",
+
 	].map((id) => ({
 		id,
 		description: "Desktop-owned, session-scoped investigation workflow.",
@@ -198,6 +205,13 @@ const TOOL_NAME_TO_FLAG: Partial<
 	capture_browser_scenario: "enableReverseEngineering",
  capture_network_metadata: "enableReverseEngineering",
 	get_evidence_bundle: "enableReverseEngineering",
+	plan_batch: "enableReverseEngineering",
+	preview_batch: "enableReverseEngineering",
+	run_batch: "enableReverseEngineering",
+	checkpoint_investigation: "enableReverseEngineering",
+	cancel_batch: "enableReverseEngineering",
+	resume_investigation: "enableReverseEngineering",
+
 	read_files: "enableReadFiles",
 	reverse_engineer: "enableReverseEngineering",
 	live_debugger: "enableLiveDebugger",
