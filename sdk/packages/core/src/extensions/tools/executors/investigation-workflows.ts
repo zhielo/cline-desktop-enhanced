@@ -152,7 +152,11 @@ export async function investigationWorkflow(
 		};
 	}
 	if (input.operation === "inspect_dependency_risk")
-		return dependencyInventory(input.target, combined);
+		return dependencyInventory(
+			input.target,
+			combined,
+			input.dependency_evidence,
+		);
 	if (input.operation === "inspect_binary_mitigations") {
 		const bytes = await readCandidateFile(
 			input.target,

@@ -41,7 +41,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `compare_native_functions` | partial | Same exact selector in both images; no inferred semantic match confidence. |
 | `inspect_binary_mitigations` | bounded | Bounded PE/ELF header declarations only; no mitigation enforcement claim. |
 | `annotate_analysis_project` | bounded | Existing isolated exact-state project preview/candidate/rollback; no executable rewriting. |
-| `crosscheck_disassembly` | not-implemented | No unified exact-range dual-engine comparison command. |
+| `crosscheck_disassembly` | bounded | Actual Capstone/Miasm exact raw range, explicit architecture/offset/address, boundary and byte comparison. No semantic equivalence or code/data proof. |
 | `explain_decompiler_disagreement` | partial | Compares imported selected-function evidence; does not authenticate or rerun engines. |
 
 ## source
@@ -54,8 +54,8 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `preview_ast_transform` | bounded | Existing supported primitive literal transforms; parser-backed exact offsets. |
 | `apply_ast_transform` | bounded | Hash-bound approved candidate transform; no arbitrary AST program rewriting. |
 | `map_dotnet_interop` | partial | ImplMap/PInvoke declarations only; COM, marshaling and runtime resolution unresolved. |
-| `compare_public_api` | partial | JS/TS top-level export declarations; no signature/type/ABI or resolved reexport comparison. |
-| `inspect_dependency_risk` | partial | Declared package.json dependencies; resolved versions and verified advisory matching unavailable. |
+| `compare_public_api` | partial | JS/TS explicit syntax signatures and public class members; no inferred type/ABI or resolved reexport comparison. |
+| `inspect_dependency_risk` | partial | Declared package.json plus explicit hash-bound npm lock v2/v3 and imported OSV exact-version evidence. Range events, publisher authority and freshness remain unresolved. |
 
 ## runtime
 
@@ -84,7 +84,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `cancel_batch` | partial | Existing execution-workspace cancellation; no unified command across runners. |
 | `validate_candidate` | partial | Artifact-specific checks exist; no unified dispatch/verification receipt. |
 | `review_candidate_changes` | partial | Existing candidate receipt audit and diffs; no unified approved-scope review command. |
-| `export_evidence_bundle` | partial | Existing forensic JSON/HTML report adapter; no full redacted provenance archive. |
+| `export_evidence_bundle` | partial | Approved gzip JSON archive of hash-bound selected text findings/receipts/logs with source/export hashes and redaction. Unknown secrets, completeness and producer authenticity remain unverified. |
 | `check_release_gate` | partial | Existing exact-head CI/installed checks; no AI command or immutable gate receipt. |
 
 ## Release contract

@@ -177,8 +177,9 @@ export const RECOMMENDATION_COVERAGE = [
 	{
 		group: "native",
 		command: "crosscheck_disassembly",
-		scope: "not-implemented",
-		limitations: "No unified exact-range dual-engine comparison command.",
+		scope: "bounded",
+		limitations:
+			"Actual Capstone/Miasm exact raw range, explicit architecture/offset/address, boundary and byte comparison. No semantic equivalence or code/data proof.",
 	},
 	{
 		group: "native",
@@ -234,14 +235,14 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "compare_public_api",
 		scope: "partial",
 		limitations:
-			"JS/TS top-level export declarations; no signature/type/ABI or resolved reexport comparison.",
+			"JS/TS explicit syntax signatures and public class members; no inferred type/ABI or resolved reexport comparison.",
 	},
 	{
 		group: "source",
 		command: "inspect_dependency_risk",
 		scope: "partial",
 		limitations:
-			"Declared package.json dependencies; resolved versions and verified advisory matching unavailable.",
+			"Declared package.json plus explicit hash-bound npm lock v2/v3 and imported OSV exact-version evidence. Range events, publisher authority and freshness remain unresolved.",
 	},
 	{
 		group: "runtime",
@@ -371,7 +372,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "export_evidence_bundle",
 		scope: "partial",
 		limitations:
-			"Existing forensic JSON/HTML report adapter; no full redacted provenance archive.",
+			"Approved gzip JSON archive of hash-bound selected text findings/receipts/logs with source/export hashes and redaction. Unknown secrets, completeness and producer authenticity remain unverified.",
 	},
 	{
 		group: "bulk",

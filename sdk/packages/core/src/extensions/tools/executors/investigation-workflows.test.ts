@@ -569,8 +569,129 @@ it("preserves a completed candidate receipt when cancellation occurs between sta
 	expect(r.status).toBe("cancelled");
 	expect(run).toHaveBeenCalledTimes(1);
 	expect(r).toHaveProperty("stages.0.result.succeeded", true);
-	expect(r).toHaveProperty("stages.1.result", expect.objectContaining({
-		status: "cancelled",
-		executed: false,
-	}));
+	expect(r).toHaveProperty(
+		"stages.1.result",
+		expect.objectContaining({
+			status: "cancelled",
+			executed: false,
+		}),
+	);
+});
+
+it("compares explicit API signatures without treating body-only changes as API changes", async () => {
+	const dir = await fixture(),
+		target = join(dir, "before.ts"),
+		compare_target = join(dir, "after.ts");
+	await writeFile(
+		target,
+		"export function stable(x: string): number { return 1; }\nexport function changed(x: string): number { return 1; }",
+	);
+	await writeFile(
+		compare_target,
+		"export function stable(x: string): number { return 200; }\nexport function changed(x: number, y?: boolean): string { return 'owned'; }",
+	);
+	const r = await execute({
+		operation: "compare_public_api",
+		target,
+		compare_target,
+	});
+	expect(r.comparison.added).toEqual([]);
+	expect(r.comparison.removed).toEqual([]);
+	expect(r.comparison.changed).toEqual(["<entry>:changed"]);
+	expect(r.comparison.leftDeclarations[0].signature).not.toContain("return 1");
+	expect(r.status).toBe("partial");
+});
+it("includes public class signatures but excludes private members and method bodies", async () => {
+	const dir = await fixture(),
+		target = join(dir, "before.ts"),
+		compare_target = join(dir, "after.ts");
+	await writeFile(
+		target,
+		"export class Owned { private secret: string; public value(x: string): number { return 1; } }",
+	);
+	await writeFile(
+		compare_target,
+		"export class Owned { private different: boolean; public value(x: string): number { return 200; } }",
+	);
+	let r = await execute({
+		operation: "compare_public_api",
+		target,
+		compare_target,
+	});
+	expect(r.comparison.changed).toEqual([]);
+	await writeFile(
+		compare_target,
+		"export class Owned { public value(x: number): number { return 200; } }",
+	);
+	r = await execute({
+		operation: "compare_public_api",
+		target,
+		compare_target,
+	});
+	expect(r.comparison.changed).toEqual(["<entry>:Owned"]);
+});
+it("dependency evidence routes through the registered command with exact lock hash", async () => {
+	const dir = await fixture(),
+		target = join(dir, "package.json"),
+		lockfile = join(dir, "package-lock.json"),
+		raw = JSON.stringify({
+			lockfileVersion: 3,
+			packages: { "node_modules/owned": { version: "1.2.3" } },
+		});
+	await writeFile(
+		target,
+		JSON.stringify({ dependencies: { owned: "^1.0.0" } }),
+	);
+	await writeFile(lockfile, raw);
+	const r = await execute({
+		operation: "inspect_dependency_risk",
+		target,
+		dependency_evidence: { lockfile, lockfile_sha256: candidateHash(raw) },
+	});
+	expect(r.resolvedEvidence.resolved[0]).toMatchObject({
+		name: "owned",
+		version: "1.2.3",
+	});
+	expect(r.riskVerdict).toBe("unknown");
+	await expect(
+		execute({
+			operation: "inspect_dependency_risk",
+			target,
+			dependency_evidence: { lockfile, lockfile_sha256: "0".repeat(64) },
+		}),
+	).rejects.toThrow("Lockfile hash mismatch");
+});
+
+it("publishes the registered redacted archive only to a new approved output", async () => {
+	const dir = await fixture(),
+		target = join(dir, "manifest.json"),
+		output_file = join(dir, "owned.json.gz"),
+		content = "password=owned-secret\n";
+	await writeFile(join(dir, "evidence.txt"), content);
+	const raw = JSON.stringify({
+		schemaVersion: 1,
+		title: "Owned",
+		entries: [
+			{
+				id: "log",
+				path: "evidence.txt",
+				sha256: candidateHash(content),
+				kind: "log",
+				format: "text",
+			},
+		],
+	});
+	await writeFile(target, raw);
+	const request = {
+		operation: "export_evidence_bundle",
+		target,
+		output_file,
+		evidence_archive: { manifest_sha256: candidateHash(raw) },
+		acknowledge_external_output: true,
+	};
+	const result = await execute(request);
+	expect(result.published).toBe(true);
+	expect(result.outputSha256).toBe(candidateHash(await readFile(output_file)));
+	expect(await readFile(join(dir, "evidence.txt"), "utf8")).toBe(content);
+	await expect(execute(request)).rejects.toThrow("exists");
 });

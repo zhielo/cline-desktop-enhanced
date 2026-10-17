@@ -1,3 +1,5 @@
+import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
+import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
 	HypothesisSchema,
 	INVESTIGATION_COMMANDS,
@@ -137,6 +139,7 @@ export const ReverseEngineeringInputSchema = z.object({
 			"dex_index",
 			"native_inventory",
 			"native_disassemble",
+			"native_crosscheck",
 			"simplify_expression",
 			"compare_expressions",
 			"transform_blob",
@@ -296,6 +299,8 @@ export const ReverseEngineeringInputSchema = z.object({
 		.strict()
 		.optional(),
 	workflow_query: WorkflowQuerySchema.optional(),
+	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
+	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
 	hypothesis: HypothesisSchema.optional(),
 	candidate: CandidateSchema.optional(),
 	evidence_trace: EvidenceTraceSchema.optional(),

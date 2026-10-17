@@ -1,3 +1,4 @@
+import { resolvedDependencyEvidence } from "./dependency-evidence";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import ts from "typescript";
@@ -160,12 +161,106 @@ function selectedReport(
 		sourceStatus: report.status,
 	};
 }
+/** Explicit syntax signatures only; never infer types or load imports. */
+function declarationSignature(node: ts.Node, file: ts.SourceFile): string {
+	const printer = ts.createPrinter({ removeComments: true });
+	const print = (n: ts.Node | undefined) =>
+		n ? printer.printNode(ts.EmitHint.Unspecified, n, file) : null;
+	const callable = (n: ts.SignatureDeclarationBase) => ({
+		typeParameters: n.typeParameters?.map(print) ?? [],
+		parameters: n.parameters.map((p) => ({
+			name: print(p.name),
+			type: print(p.type),
+			optional: !!p.questionToken,
+			rest: !!p.dotDotDotToken,
+			defaulted: !!p.initializer,
+		})),
+		returnType: print(n.type),
+	});
+	let shape: unknown;
+	if (
+		ts.isFunctionDeclaration(node) ||
+		ts.isMethodDeclaration(node) ||
+		ts.isMethodSignature(node) ||
+		ts.isCallSignatureDeclaration(node) ||
+		ts.isConstructSignatureDeclaration(node) ||
+		ts.isConstructorDeclaration(node) ||
+		ts.isGetAccessorDeclaration(node) ||
+		ts.isSetAccessorDeclaration(node)
+	)
+		shape = { kind: ts.SyntaxKind[node.kind], ...callable(node) };
+	else if (ts.isVariableStatement(node))
+		shape = {
+			kind: "variables",
+			flags:
+				node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let),
+			declarations: node.declarationList.declarations.map((d) => ({
+				name: print(d.name),
+				type: print(d.type),
+				callable:
+					d.initializer &&
+					(ts.isArrowFunction(d.initializer) ||
+						ts.isFunctionExpression(d.initializer))
+						? callable(d.initializer)
+						: null,
+				inferredTypeNotResolved: !d.type,
+			})),
+		};
+	else if (ts.isClassDeclaration(node))
+		shape = {
+			kind: "class",
+			typeParameters: node.typeParameters?.map(print) ?? [],
+			heritage: node.heritageClauses?.map(print) ?? [],
+			members: node.members
+				.filter(
+					(m) =>
+						!(m.name && ts.isPrivateIdentifier(m.name)) &&
+						!(
+							ts.canHaveModifiers(m) &&
+							ts
+								.getModifiers(m)
+								?.some(
+									(v) =>
+										v.kind === ts.SyntaxKind.PrivateKeyword ||
+										v.kind === ts.SyntaxKind.ProtectedKeyword,
+								)
+						),
+				)
+				.map((m) => ({
+					name: m.name ? print(m.name) : "constructor",
+					modifiers: ts.canHaveModifiers(m)
+						? ts.getModifiers(m)?.map((v) => ts.SyntaxKind[v.kind])
+						: [],
+					signature: ts.isPropertyDeclaration(m)
+						? JSON.stringify({
+								kind: "property",
+								type: print(m.type),
+								optional: !!m.questionToken,
+								inferredTypeNotResolved: !m.type,
+							})
+						: declarationSignature(m, file),
+				})),
+		};
+	else if (
+		ts.isInterfaceDeclaration(node) ||
+		ts.isTypeAliasDeclaration(node) ||
+		ts.isEnumDeclaration(node) ||
+		ts.isExportDeclaration(node) ||
+		ts.isExportAssignment(node)
+	)
+		shape = { kind: ts.SyntaxKind[node.kind], syntax: print(node) };
+	else shape = { kind: ts.SyntaxKind[node.kind], unsupportedSignature: true };
+	return JSON.stringify(shape);
+}
 function publicDeclarations(sources: SourceArtifact[]) {
 	const declarations: {
 		key: string;
 		path: string;
 		line: number;
 		sha256: string;
+		signature: string;
+		signatureSha256: string;
+		signatureTruncated: boolean;
 	}[] = [];
 	for (const source of sources) {
 		const file = ts.createSourceFile(
@@ -198,6 +293,7 @@ function publicDeclarations(sources: SourceArtifact[]) {
 				else if ("name" in statement && statement.name)
 					names = [(statement.name as ts.Node).getText(file)];
 			}
+			const signature = declarationSignature(statement, file);
 			for (const name of names) {
 				if (declarations.length >= 8000 || name.length > 4096)
 					throw new Error("Public declaration budget exceeded");
@@ -208,6 +304,9 @@ function publicDeclarations(sources: SourceArtifact[]) {
 						file.getLineAndCharacterOfPosition(statement.getStart(file)).line +
 						1,
 					sha256: source.sha256,
+					signature: signature.slice(0, 8192),
+					signatureSha256: candidateHash(signature),
+					signatureTruncated: signature.length > 8192,
 				});
 			}
 		}
@@ -280,10 +379,38 @@ export async function sourceInvestigation(
 			b = new Set(rightDeclarations.map((d) => d.key)),
 			added = [...b].filter((x) => !a.has(x)),
 			removed = [...a].filter((x) => !b.has(x));
+		const signatures = (rows: typeof leftDeclarations) => {
+			const grouped = new Map<string, string[]>();
+			for (const row of rows) {
+				const values = grouped.get(row.key) ?? [];
+				values.push(row.signatureSha256);
+				grouped.set(row.key, values);
+			}
+			return new Map(
+				[...grouped].map(([key, values]) => [
+					key,
+					candidateHash(JSON.stringify(values.sort())),
+				]),
+			);
+		};
+		const leftSignatures = signatures(leftDeclarations),
+			rightSignatures = signatures(rightDeclarations);
+		const changed = [...a].filter(
+			(key) =>
+				b.has(key) && leftSignatures.get(key) !== rightSignatures.get(key),
+		);
 		comparison = {
+			changed: changed.slice(0, q.max_results),
+			signatureModel:
+				"explicit-js-ts-syntax/v1; inferred types and resolved reexports excluded",
 			added: added.slice(0, q.max_results),
 			removed: removed.slice(0, q.max_results),
-			truncated: added.length > q.max_results || removed.length > q.max_results,
+			truncated:
+				added.length > q.max_results ||
+				removed.length > q.max_results ||
+				changed.length > q.max_results ||
+				leftDeclarations.length > q.max_results ||
+				rightDeclarations.length > q.max_results,
 			leftDeclarations: leftDeclarations.slice(0, q.max_results),
 			rightDeclarations: rightDeclarations.slice(0, q.max_results),
 			rightArtifacts: right.artifacts,
@@ -313,13 +440,14 @@ export async function sourceInvestigation(
 			...report.limitations,
 			"JS/TS syntax and bounded declared static relationships only. No target code executes, dynamic dispatch/IPC execution proof, vulnerability verdict, whole-program flow, or behavior equivalence.",
 			"Explanation is selected function evidence and relationships, not a speculative natural-language behavioral conclusion.",
-			"Public API comparison covers syntactic export declarations, not types, resolved re-exports or ABI compatibility. Other language adapters are not implied.",
+			"Public API comparison covers explicit syntax signatures and selected public class members, not inferred types, resolved re-exports, full accessibility rules or ABI compatibility. Function bodies are excluded; signature changes are not automatically breaking changes. Other language adapters are not implied.",
 		],
 	};
 }
 export async function dependencyInventory(
 	target: string,
 	signal?: AbortSignal,
+	options?: unknown,
 ) {
 	const bytes = await readCandidateFile(target, 1024 * 1024, signal);
 	const doc: unknown = JSON.parse(
@@ -349,16 +477,22 @@ export async function dependencyInventory(
 			rows.push({ group, name, declared: value });
 		}
 	}
+	const resolvedEvidence = options
+		? await resolvedDependencyEvidence(options, signal)
+		: undefined;
 	return {
 		status: "partial",
 		effect: "read",
 		inputSha256: candidateHash(bytes),
 		declared: rows,
-		resolvedVersions: "not-established",
-		advisoryMatches: [],
+		resolvedEvidence,
+		resolvedVersions: resolvedEvidence
+			? "selected-lockfile-evidence"
+			: "not-established",
+		advisoryMatches: resolvedEvidence?.advisoryMatches ?? [],
 		riskVerdict: "unknown",
 		limitations: [
-			"package.json declarations only, not lockfile resolution or verified advisory matching. No network request, install, script execution or clean-risk conclusion.",
+			"Declarations are separate from optional selected package-lock resolution and imported hash-pinned advisory evidence. No network request, install, script execution or clean-risk conclusion.",
 		],
 	};
 }

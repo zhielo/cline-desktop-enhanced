@@ -1,6 +1,7 @@
 import {
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	symlinkSync,
 	writeFileSync,
@@ -564,4 +565,66 @@ it.each([
 	expect(plan.requirements).not.toContain(
 		"authorized-candidate-artifact-modification",
 	);
+});
+
+it("requires Modify and separate evidence export acknowledgement", async () => {
+	const root = workspace(),
+		target = join(root, "evidence.json");
+	writeFileSync(target, "{}");
+	const o = new AnalysisTaskOrchestrator();
+	const plan = await o.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: {
+			operation: "export_evidence_bundle",
+			target,
+			output_file: join(root, "export.json.gz"),
+			evidence_archive: { manifest_sha256: "a".repeat(64) },
+		},
+	});
+	expect(plan.permission).toBe("Modify");
+	expect(plan.requirements).toContain("authorized-redacted-evidence-export");
+	expect(plan.requirements).toContain("new-output-no-overwrite");
+	expect(plan.requirements).not.toContain(
+		"authorized-android-artifact-modification",
+	);
+	expect(() => o.approve(plan.id, [], plan.requestHash)).toThrow();
+});
+it("normalizes selected dependency evidence and rejects unreviewed external inputs", async () => {
+	const root = workspace(),
+		outside = workspace(),
+		target = join(root, "package.json"),
+		lock = join(outside, "package-lock.json");
+	writeFileSync(target, "{}");
+	writeFileSync(lock, "{}");
+	const o = new AnalysisTaskOrchestrator();
+	const request = {
+		operation: "inspect_dependency_risk",
+		target,
+		dependency_evidence: { lockfile: lock, lockfile_sha256: "a".repeat(64) },
+	};
+	await expect(
+		o.prepare({ workspaceRoot: root, kind: "static", request }),
+	).rejects.toThrow("outside");
+	const external = await o.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request,
+		allowExternalTarget: true,
+	});
+	expect(external.requirements).toContain("external-target");
+	const local = await o.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: {
+			...request,
+			dependency_evidence: {
+				lockfile: "package-lock.json",
+				lockfile_sha256: "b".repeat(64),
+			},
+		},
+	});
+	expect(
+		(local.request.dependency_evidence as { lockfile: string }).lockfile,
+	).toBe(join(realpathSync.native(root), "package-lock.json"));
 });

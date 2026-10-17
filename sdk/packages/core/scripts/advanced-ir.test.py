@@ -17,4 +17,48 @@ class StaticIRTests(unittest.TestCase):
   result=self.run_owned('lift_native_ir',bytes.fromhex('90909090c3'),limit=2);self.assertEqual(result['status'],'partial');self.assertEqual(result['evidence']['instructionCount'],2)
  def test_unknown_architecture(self):
   with self.assertRaises(ValueError):self.run_owned('lift_native_ir',b'owned','unknown')
+class DualDecoderTests(unittest.TestCase):
+ def run_owned(self,data,architecture='x86_64',limit=200,**changes):
+  with tempfile.TemporaryDirectory() as directory:
+   target=Path(directory)/'owned.bin';target.write_bytes(data)
+   options={'architecture':architecture,'offset':0,'address':4096,'bytes':len(data)}; options.update(changes)
+   return w.main({'action':'native_crosscheck','target':str(target),'limit':limit,'options':options})
+ def test_x86_two_actual_engines(self):
+  result=self.run_owned(bytes.fromhex('31c090c3'))
+  self.assertEqual(result['status'],'completed'); self.assertTrue(result['evidence']['boundaryAgreement'])
+  self.assertEqual([d['engine'] for d in result['evidence']['decoders']],['capstone','miasm'])
+  self.assertTrue(all(d['version'] for d in result['evidence']['decoders']))
+  self.assertEqual(result['evidence']['rangeSha256'],w.digest(bytes.fromhex('31c090c3')))
+  self.assertIsNone(result['evidence']['winner']); self.assertFalse(result['evidence']['observedExecution'])
+ def test_arm64_both_decode(self):
+  result=self.run_owned(bytes.fromhex('1f2003d5c0035fd6'),'arm64')
+  self.assertEqual(result['status'],'completed'); self.assertTrue(result['evidence']['boundaryAgreement'])
+ def test_ret_does_not_end_linear_range(self):
+  result=self.run_owned(bytes.fromhex('c390c3'))
+  self.assertEqual(result['evidence']['decoders'][1]['instructions'],3)
+ def test_range_origin_not_whole_input(self):
+  result=self.run_owned(bytes.fromhex('cccc90c3cc'),offset=2,bytes=2,address=8192)
+  self.assertEqual(result['evidence']['comparisons'][0]['address'],8192)
+  self.assertEqual(result['evidence']['rangeSha256'],w.digest(bytes.fromhex('90c3')))
+  self.assertEqual(result['evidence']['requestedBytes'],2)
+ def test_budget_never_agrees_on_prefix_only(self):
+  result=self.run_owned(bytes.fromhex('9090c3'),limit=1)
+  self.assertEqual(result['status'],'partial'); self.assertFalse(result['evidence']['boundaryAgreement'])
+  self.assertTrue(all(d['decodedBytes']==1 for d in result['evidence']['decoders']))
+ def test_bad_truncated_instruction_is_partial(self):
+  result=self.run_owned(bytes.fromhex('900f'))
+  self.assertEqual(result['status'],'partial'); self.assertFalse(result['evidence']['boundaryAgreement'])
+ def test_explicit_selection_required(self):
+  for changes in [{'offset':None},{'address':None},{'architecture':'unknown'},{'bytes':0},{'bytes':65537},{'address':9007199254740991},{'offset':True}]:
+   with self.subTest(changes=changes):
+    with self.assertRaises(ValueError): self.run_owned(b'\x90',**changes)
+ def test_missing_engine_is_blocked_not_single_engine_fallback(self):
+  original=w.required
+  try:
+   def require(name):
+    if name=='miasm': raise w.Blocked('Missing optional engine: miasm')
+    return original(name)
+   w.required=require
+   with self.assertRaises(w.Blocked): self.run_owned(b'\x90')
+  finally: w.required=original
 if __name__=='__main__':unittest.main(verbosity=2)

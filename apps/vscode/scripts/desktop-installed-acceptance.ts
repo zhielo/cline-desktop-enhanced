@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 /**
  * Windows CI only: attach to the installed app's own WebView2.
  * No dev web server, model credential, browser download, or production test bypass.
@@ -945,7 +946,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -986,6 +987,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const notebookPreview=await runOwnedAdvanced({operation:"preview_batch",target:ownedNotebook,timeout_ms:120000});
     if(notebookPreview.plan.status!=="completed"||notebookPreview.result.status!=="completed"||notebookPreview.result.executed!==false||notebookPreview.result.stages?.length!==2||notebookPreview.result.stages[1].dependsOn.join(",")!=="triage")throw new Error("Installed static notebook preview failed");
     stages.push("installed-integrated-source-hypothesis-notebook-coverage-passed");
+    const ownedApiAfter=join(workspace,"owned-workflow-after.ts");
+    await writeFile(ownedApiAfter,'export function ownedWorkflow(x: number): string { return "owned evidence"; }\n');
+    const ownedApiComparison=await runOwnedAdvanced({operation:"compare_public_api",target:ownedWorkflowSource,compare_target:ownedApiAfter,timeout_ms:120000});
+    if(ownedApiComparison.plan.status!=="completed"||ownedApiComparison.result.comparison?.changed.join(",")!=="<entry>:ownedWorkflow")throw new Error("Installed explicit API signature comparison failed");
+    const ownedPackage=join(workspace,"owned-package.json"),ownedLock=join(workspace,"owned-package-lock.json"),ownedLockText=JSON.stringify({lockfileVersion:3,packages:{"node_modules/owned-fixture":{version:"1.2.3"}}});
+    await writeFile(ownedPackage,JSON.stringify({dependencies:{"owned-fixture":"^1.0.0"}}));await writeFile(ownedLock,ownedLockText);
+    const ownedDependencies=await runOwnedAdvanced({operation:"inspect_dependency_risk",target:ownedPackage,dependency_evidence:{lockfile:ownedLock,lockfile_sha256:createHash("sha256").update(ownedLockText).digest("hex")},timeout_ms:120000});
+    if(ownedDependencies.plan.status!=="completed"||ownedDependencies.result.resolvedEvidence?.resolved[0]?.version!=="1.2.3")throw new Error("Installed hash-bound lockfile resolution failed");
+    stages.push("installed-explicit-api-signatures-lockfile-evidence-passed");
+    const ownedArchiveManifest=join(workspace,"owned-evidence-manifest.json"),ownedArchiveOutput=join(workspace,"owned-evidence.json.gz"),ownedArchiveManifestText=JSON.stringify({schemaVersion:1,title:"Owned installed evidence",entries:[{id:"source",path:"owned-workflow.ts",sha256:createHash("sha256").update(ownedWorkflowText).digest("hex"),kind:"finding",format:"text"}]});
+    await writeFile(ownedArchiveManifest,ownedArchiveManifestText);
+    const ownedArchive=await runOwnedAdvanced({operation:"export_evidence_bundle",target:ownedArchiveManifest,output_file:ownedArchiveOutput,evidence_archive:{manifest_sha256:createHash("sha256").update(ownedArchiveManifestText).digest("hex")},acknowledge_external_output:true,timeout_ms:120000});
+    const ownedArchiveDocument=JSON.parse(gunzipSync(await readFile(ownedArchiveOutput)).toString("utf8"));
+    if(ownedArchive.plan.status!=="completed"||ownedArchive.result.published!==true||ownedArchiveDocument.protocol!=="cline-evidence-archive/v1"||ownedArchiveDocument.entries[0]?.sourceSha256!==createHash("sha256").update(ownedWorkflowText).digest("hex")||ownedArchiveDocument.entries[0]?.content!==ownedWorkflowText||await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText)throw new Error("Installed approved provenance archive failed");
+    stages.push("installed-approved-provenance-archive-originals-preserved");
+
+
 
 
 
@@ -1061,6 +1079,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
       throw new Error("Installed Setup Center did not show its tracked job beside the actions");
     stages.push("installed-tracked-full-setup-job-passed");
     stages.push("installed-full-eleven-engine-owned-fixtures-passed");
+    const ownedDualDecoder=join(workspace,"owned-dual-decoder.bin"),ownedDualBytes=Buffer.from([0x31,0xc0,0x90,0xc3]);
+    await writeFile(ownedDualDecoder,ownedDualBytes);
+    const ownedCrosscheck=await runOwnedAdvanced({operation:"crosscheck_disassembly",target:ownedDualDecoder,advanced_options:{architecture:"x86_64",offset:0,address:4096,bytes:4},timeout_ms:120000});
+    const ownedCrosscheckResult=ownedCrosscheck.result.result;
+    if(ownedCrosscheck.plan.status!=="completed"||ownedCrosscheckResult?.status!=="completed"||ownedCrosscheckResult.evidence.boundaryAgreement!==true||ownedCrosscheckResult.evidence.rangeSha256!==createHash("sha256").update(ownedDualBytes).digest("hex")||ownedCrosscheckResult.evidence.decoders.map(d=>d.engine).join(",")!=="capstone,miasm"||!ownedCrosscheckResult.evidence.decoders.every(d=>d.version&&d.decodedBytes===4)||!(await readFile(ownedDualDecoder)).equals(ownedDualBytes))throw new Error("Installed exact-range Capstone/Miasm evidence failed");
+    stages.push("installed-full-pack-exact-range-dual-decoder-passed");
+
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
     await stop();
     page = await launch();
@@ -1169,7 +1194,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v7",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v8",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },

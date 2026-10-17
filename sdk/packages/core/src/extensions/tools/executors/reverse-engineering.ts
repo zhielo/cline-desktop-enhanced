@@ -1,3 +1,4 @@
+import { exportEvidenceArchive } from "./evidence-archive";
 import { INVESTIGATION_COMMANDS } from "../investigation-workflows-schema";
 import { investigationWorkflow } from "./investigation-workflows";
 import { ReverseEngineeringInputSchema } from "../schemas";
@@ -2543,6 +2544,11 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+ if(input.operation==="export_evidence_bundle"&&input.evidence_archive){
+  if(!input.output_file)throw new Error("Evidence archive output_file required");
+  const outputScope=await enforceOutputPath(input.output_file,input.acknowledge_external_output);
+  return withAnalysisLock(input.target??"",async()=>JSON.stringify({...await exportEvidenceArchive(input,context.signal),outputScope}),context.signal);
+ }
 		if (input.operation === "annotate_analysis_project")
 			input = { ...input, operation: "project_edit" };
 		if ((INVESTIGATION_COMMANDS as readonly string[]).includes(input.operation)) {
