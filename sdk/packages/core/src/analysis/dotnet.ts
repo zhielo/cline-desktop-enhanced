@@ -1,8 +1,8 @@
-import { inspectManagedSignature } from "./managed-signature";
-import { inspectExceptionSections } from "./managed-exceptions";
-import { modelManagedStack } from "./managed-stack";
-import { decodeIL } from "./il";
 import { byteDigest } from "./contracts";
+import { decodeIL } from "./il";
+import { inspectExceptionSections } from "./managed-exceptions";
+import { inspectManagedSignature } from "./managed-signature";
+import { modelManagedStack } from "./managed-stack";
 /** Bounded ECMA-335 PE metadata and method-body inspection. No CLR load/execute. */
 export type ManagedRecord = {
 	kind:
@@ -88,7 +88,20 @@ const schema = [
 export function inspectManagedPE(
 	bytes: Uint8Array,
 	budget = 256,
-): { records: ManagedRecord[]; limitations: string[] } {
+): {
+	records: ManagedRecord[];
+	limitations: string[];
+	interop: {
+		declarations: {
+			flags: number;
+			memberToken: string;
+			importName: string;
+			moduleName: string;
+			metadataOffset: number;
+		}[];
+		truncated: boolean;
+	};
+} {
 	const b = Buffer.from(bytes);
 	const bounds = (o: number, n: number) => {
 		if (!Number.isSafeInteger(o) || o < 0 || n < 0 || o + n > b.length)
@@ -547,5 +560,35 @@ export function inspectManagedPE(
 	}
 	if (rows[2] > budget || rows[6] > budget)
 		limitations.push("Managed row coverage is partial");
-	return { records, limitations: limitations.slice(0, 80) };
+	const declarations: {
+		flags: number;
+		memberToken: string;
+		importName: string;
+		moduleName: string;
+		metadataOffset: number;
+	}[] = [];
+	for (let i = 0; i < Math.min(rows[28], budget); i++) {
+		const [flags, forwarded, name, scope] = values(28, i),
+			memberTable = forwarded & 1 ? 6 : 4,
+			memberRow = forwarded >>> 1;
+		if (
+			memberRow < 1 ||
+			memberRow > rows[memberTable] ||
+			scope < 1 ||
+			scope > rows[26]
+		)
+			throw new Error("Invalid ImplMap member/module reference");
+		declarations.push({
+			flags,
+			memberToken: `0x${((memberTable << 24) | memberRow).toString(16).padStart(8, "0")}`,
+			importName: str(name),
+			moduleName: str(values(26, scope - 1)[0]),
+			metadataOffset: offsets[28] + i * widths[28],
+		});
+	}
+	return {
+		records,
+		limitations: limitations.slice(0, 80),
+		interop: { declarations, truncated: rows[28] > declarations.length },
+	};
 }

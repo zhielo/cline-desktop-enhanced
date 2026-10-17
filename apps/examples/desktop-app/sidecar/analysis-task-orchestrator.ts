@@ -1,4 +1,3 @@
-import { isAnalysisWriteOperation } from "@cline/core";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
 	chmodSync,
@@ -11,6 +10,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { isAnalysisWriteOperation } from "@cline/core";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { assertAnalysisSandboxReady } from "./analysis-sandbox-client";
 
@@ -167,7 +167,11 @@ function permissionFor(
 			? "Inspect"
 			: "Execute";
 	if (kind === "static")
-		return operation === "sign_apk" ? "Publish" : isAnalysisWriteOperation(operation) ? "Modify" : "Inspect";
+		return operation === "sign_apk"
+			? "Publish"
+			: isAnalysisWriteOperation(operation)
+				? "Modify"
+				: "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
 	if (["launch", "continue", "step"].includes(operation)) return "Execute";
 	return "Debug";
@@ -180,7 +184,28 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
- if(kind==="static"&&operation!=="project_edit"&&isAnalysisWriteOperation(operation)){requirements.add(["patch_binary", "apply_ast_transform", "patch_dotnet_constant", "patch_jvm_constant", "apply_candidate_batch"].includes(operation) ? "authorized-candidate-artifact-modification" : "authorized-android-artifact-modification");requirements.add("new-output-no-overwrite");if(operation==="sign_apk"){requirements.add("host-configured-test-key");requirements.add("original-signature-not-preserved");}}
+	if (
+		kind === "static" &&
+		!["project_edit", "annotate_analysis_project"].includes(operation) &&
+		isAnalysisWriteOperation(operation)
+	) {
+		requirements.add(
+			[
+				"patch_binary",
+				"apply_ast_transform",
+				"patch_dotnet_constant",
+				"patch_jvm_constant",
+				"apply_candidate_batch",
+			].includes(operation)
+				? "authorized-candidate-artifact-modification"
+				: "authorized-android-artifact-modification",
+		);
+		requirements.add("new-output-no-overwrite");
+		if (operation === "sign_apk") {
+			requirements.add("host-configured-test-key");
+			requirements.add("original-signature-not-preserved");
+		}
+	}
 	if (operation === "js_isolated_execute") {
 		requirements.add("independent-execute-approval");
 		requirements.add("authorized-target-execution");
@@ -245,7 +270,10 @@ function requirementsFor(
 		requirements.add("managed-persistent-engine-process");
 		requirements.add("private-analysis-project-write");
 	}
-	if (kind === "static" && operation === "project_edit") {
+	if (
+		kind === "static" &&
+		["project_edit", "annotate_analysis_project"].includes(operation)
+	) {
 		requirements.add("authorized-target");
 		requirements.add("isolated-analysis-project-write");
 		requirements.add("reviewed-native-project-state");

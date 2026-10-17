@@ -10,6 +10,11 @@ type Entry = {
 	limitations: string;
 };
 type Catalog = {
+	recommendations?: {
+		command: string;
+		scope: "bounded" | "partial" | "not-implemented";
+		limitations: string;
+	}[];
 	entries: Entry[];
 	unavailable: string[];
 	limitations: string[];
@@ -130,6 +135,52 @@ function template(command: string) {
 			replacement_method: "",
 			...(command !== "preview_smali_patch" ? { preview_sha256: "" } : {}),
 		};
+
+	if (["trace_source_symbol", "explain_behavior"].includes(command))
+		base.workflow_query = { symbol: "", max_depth: 4, max_results: 100 };
+	if (
+		[
+			"compare_public_api",
+			"compare_versions",
+			"diff_android_resources",
+			"compare_native_functions",
+			"explain_decompiler_disagreement",
+			"verify_android_candidate",
+		].includes(command)
+	)
+		base.compare_target = "";
+	if (command === "verify_hypothesis")
+		base.hypothesis = {
+			statement: "Check the exact declared relationship",
+			kind: "declared-edge",
+			node_id: "",
+			target_id: "",
+			relation: "references-candidate",
+			expected: true,
+		};
+	if (command === "trace_android_method")
+		base.advanced_options = {
+			method: { class_descriptor: "", name: "", descriptor: "" },
+		};
+	if (
+		[
+			"resolve_native_symbol",
+			"trace_native_calls",
+			"compare_native_functions",
+			"decompile_function_bundle",
+		].includes(command)
+	)
+		base.function_selector = { symbol: "" };
+	if (command === "decompile_function_bundle") base.engine = "ghidra";
+	if (command === "build_android_candidate") {
+		base.output_file = "";
+		base.acknowledge_external_output = false;
+	}
+	if (command === "annotate_analysis_project") {
+		base.engine = "ghidra";
+		base.function_selector = { symbol: "" };
+		base.project_edit = { mode: "preview" };
+	}
 	return JSON.stringify(base, null, 2);
 }
 /** Review-only preparation. Mounting never runs engines or grants approvals. */
@@ -191,6 +242,26 @@ export function AdvancedCommandWorkspace({
 				readiness. Opening this panel runs no analysis, installs nothing, and
 				grants no approvals.
 			</p>
+			{catalog?.recommendations && (
+				<details>
+					<summary>
+						Original recommendation coverage ({catalog.recommendations.length}{" "}
+						commands)
+					</summary>
+					<p className="text-xs">
+						Bounded is not complete workflow coverage, engine readiness,
+						installed validation or release certification. Partial and
+						not-implemented entries are remaining work.
+					</p>
+					<ul className="max-h-64 overflow-auto text-xs">
+						{catalog.recommendations.map((row) => (
+							<li key={row.command}>
+								<strong>{row.command}</strong> — {row.scope}: {row.limitations}
+							</li>
+						))}
+					</ul>
+				</details>
+			)}
 			{!local && <p>Advanced commands require a local environment.</p>}
 			<label htmlFor={`${prefix}-command`}>Advanced command</label>
 			<select
