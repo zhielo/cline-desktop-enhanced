@@ -220,3 +220,13 @@ it("revalidates target bytes after approval and never runs changed artifacts", a
 	expect(c.status).toBe("failed");
 	expect(c.jobs[0].error).toContain("changed after approval");
 });
+it.each(["blocked","failed","partial","uncertain","cancelled"])("top-level adapter status %s cannot unlock dependent stages",async(status)=>{
+ const f=await setup(); let calls=0;f.options.static=async()=>{calls++;return{status} as unknown as {succeeded:boolean};};
+ await writeFile(join(f.root,"owned.bin"),"fixture");
+ const {r}=await start(f,input([{id:"a",backend:"static",request:{operation:"inspect",target:"owned.bin"}},{id:"b",backend:"static",depends_on:["a"],request:{operation:"inspect",target:"owned.bin"}}]));
+ const c=await terminal(f,r.id);expect(c.status).toBe("failed");expect(c.jobs[1].startedAt).toBeUndefined();expect(calls).toBe(1);
+});
+it("preserves returned adapter evidence when cancellation races its completion",async()=>{
+ const f=await setup();f.options.static=async()=>{for(const p of f.tasks.list(f.root))if(p.kind==="execution")await f.tasks.cancel(p.id);return{outputFile:"candidate",succeeded:true};};
+ await writeFile(join(f.root,"owned.bin"),"fixture");const {r}=await start(f,input([{id:"a",backend:"static",request:{operation:"inspect",target:"owned.bin"}}]));const c=await terminal(f,r.id);expect(c.jobs[0].result).toMatchObject({outputFile:"candidate"});expect(c.jobs[0].status).toBe("cancelled");expect(c.jobs[0].resultHash).toMatch(/^[a-f0-9]{64}$/);
+});

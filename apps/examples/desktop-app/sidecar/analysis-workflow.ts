@@ -9,7 +9,9 @@ import type {
 	WorkflowScope,
 } from "./analysis-workflow-store";
 const Id = z.string().uuid();
+export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
+ ...BATCH_WORKFLOW_COMMANDS,
 	"open_binary",
 	"analyze_function",
 	"trace_application_feature",
@@ -25,6 +27,7 @@ export interface WorkflowPorts {
 	taskBundle: (id: string) => unknown;
 	capture: (input: Record<string, unknown>) => Promise<unknown>;
 	browsers?: () => unknown;
+ batch?: (command: string, input: unknown) => Promise<unknown>;
 }
 export function sanitizeEvidence(value: unknown): unknown {
 	const secrets = Object.entries(process.env)
@@ -93,6 +96,13 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
+ if ((BATCH_WORKFLOW_COMMANDS as readonly string[]).includes(command)) {
+  const cleanup = command === "checkpoint_investigation" || command === "cancel_batch";
+  if (!options.trusted || (!cleanup && ((!options.idle && options.actor !== "model") || options.mode === "off")))
+   throw new Error("Batch work requires a trusted owning session with Analysis enabled");
+  if (!ports.batch) throw new Error("Durable batch runner unavailable");
+  return ports.batch(command, input);
+ }
 	if (command === "capture_network_metadata") command = "capture_browser_scenario";
  if (command === "analysis_workflow_hybrid_prepare") {
 		if (

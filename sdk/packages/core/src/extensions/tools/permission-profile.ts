@@ -85,6 +85,13 @@ const EXTERNAL_TOOLS = new Set([
 	"capture_browser_scenario",
  "capture_network_metadata",
 	"get_evidence_bundle",
+		"plan_batch",
+		"preview_batch",
+		"run_batch",
+		"checkpoint_investigation",
+		"cancel_batch",
+		"resume_investigation",
+
 	"android_device",
 	"live_debugger",
 	"reverse_engineer",

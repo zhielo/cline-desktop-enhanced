@@ -336,3 +336,10 @@ it("network metadata alias missing Hybrid evidence never reaches consent; stoppi
 		expect.objectContaining({ action: "stop" }),
 	);
 });
+it.each(["run_batch","resume_investigation"] as const)("%s uses independent review and keeps the token private",async(name)=>{
+ const p=ports();const input=name==="run_batch"?{operation_id:id,title:"Owned",stages:[{id:"a",request:{operation:"inspect",target:"owned.bin"}}]}:{receiptId:id,revision:3};
+ const result=await runModelInvestigation(name,input,p);expect(p.review).toHaveBeenCalledBefore(p.approve as ReturnType<typeof vi.fn>);expect(p.approve).toHaveBeenCalledOnce();expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));expect(result).not.toContain("must-not-leak");
+});
+it.each(["run_batch","resume_investigation"] as const)("%s denial cancels prepared work without execution",async name=>{
+ const p=ports();p.review=vi.fn(async()=>false);const input=name==="run_batch"?{operation_id:id,title:"Owned",stages:[{id:"a",request:{operation:"inspect",target:"owned.bin"}}]}:{receiptId:id,revision:1};await expect(runModelInvestigation(name,input,p)).rejects.toThrow("denied");expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();expect(p.cancel).toHaveBeenCalledWith(id);
+});

@@ -1,3 +1,4 @@
+import { handleBatchInvestigation } from "./batch-investigation";
 import { analysisCommandCatalog, isAnalysisWriteOperation } from "@cline/core";
 import {androidToolchainStatus,testOwnedAndroidToolchain} from "./android-toolchain-readiness";
 import { execFile, spawn } from "node:child_process";
@@ -3009,6 +3010,11 @@ export async function handleCommand(
 							{ ...payload, sessionId: id, cwd: root, environmentId: "local" },
 							options,
 						),
+     batch: async (batchCommand, input) => {
+      const profile = live?.config.permissionProfile ?? live?.config.permission_profile ?? readGlobalSettings().permissionProfile ?? "full-access";
+      if (!live || profile !== "full-access") throw new Error("AI batch requires an attached Full Access local session; restricted profiles are not widened");
+      return handleBatchInvestigation(batchCommand, input, {sessionId:id, workspace:root}, executions(), desktopAnalysisTaskOrchestrator);
+     },
 					staticReceipt: (receiptId) => firstPartyStore().get(id, receiptId),
 					taskBundle: (taskId) => {
 						const snapshot = sessionTaskSnapshots(id, root).find(

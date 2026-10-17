@@ -316,42 +316,42 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "plan_batch",
 		scope: "partial",
 		limitations:
-			"Fixed investigation recipe alias; not a general mixed-effect dependency planner.",
+			"AI front door validates a 12-stage built-in static DAG over existing inputs using the durable desktop runner; candidate-write/runtime stages remain separate.",
 	},
 	{
 		group: "bulk",
 		command: "preview_batch",
 		scope: "partial",
 		limitations:
-			"Real confined static notebook DAG preview; no candidate-write/runtime stages.",
+			"AI front door previews canonical input hashes and dependency/budget checks without approval or execution. No candidate-write/runtime stages.",
 	},
 	{
 		group: "bulk",
 		command: "run_batch",
 		scope: "partial",
 		limitations:
-			"Existing bounded static notebook runner; no mixed-effect orchestration.",
+			"AI front door uses fresh human approval and the existing durable dependency runner for inspect/string/APK-comparison stages. No mixed-effect orchestration.",
 	},
 	{
 		group: "bulk",
 		command: "checkpoint_investigation",
 		scope: "partial",
 		limitations:
-			"Durable cases and notebook checkpoints exist; no unified checkpoint command.",
+			"AI command reads the latest owning-session durable execution receipt, revision and stage evidence; it does not force a new flush or unite all evidence stores.",
 	},
 	{
 		group: "bulk",
 		command: "resume_investigation",
 		scope: "partial",
 		limitations:
-			"Existing matching static notebook fingerprints; not mixed-effect replay.",
+			"AI continuation revalidates exact terminal revision, input/implementation/result fingerprints and resumes only never-started built-in static stages with fresh approval. No started-stage/write/runtime replay.",
 	},
 	{
 		group: "bulk",
 		command: "cancel_batch",
 		scope: "partial",
 		limitations:
-			"Existing execution-workspace cancellation; no unified command across runners.",
+			"Owning-session AI command cancels its durable batch through the existing supervisor; terminal confirmation is read separately. Other runners remain separate.",
 	},
 	{
 		group: "bulk",

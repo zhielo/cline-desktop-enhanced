@@ -291,9 +291,11 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('join(evidence, "phase.json")'));
  assert.ok(driver.includes('join(evidence, "action-progress.jsonl")'));
  assert.ok(driver.includes('sequence > 256'));
- assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v9'));
+ assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v10'));
  assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
  assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
+ assert.ok(driver.includes('installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed'));
+ assert.ok(driver.includes('Installed completed batch was replayed'));
  assert.ok(driver.includes('installed-owned-app-cleanup-confirmed'));
  assert.ok(driver.indexOf('installed-owned-app-cleanup-confirmed')<driver.indexOf('status: "passed"'));
 });
