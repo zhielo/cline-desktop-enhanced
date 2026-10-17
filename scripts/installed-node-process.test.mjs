@@ -291,7 +291,7 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('join(evidence, "phase.json")'));
  assert.ok(driver.includes('join(evidence, "action-progress.jsonl")'));
  assert.ok(driver.includes('sequence > 256'));
- assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v8'));
+ assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v9'));
  assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
  assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
  assert.ok(driver.includes('installed-owned-app-cleanup-confirmed'));

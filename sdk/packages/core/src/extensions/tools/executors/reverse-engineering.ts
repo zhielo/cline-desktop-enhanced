@@ -1,3 +1,5 @@
+import { sha256Directory } from "./android-project-files";
+import { androidProjectCandidate } from "./android-project-candidate";
 import { exportEvidenceArchive } from "./evidence-archive";
 import { INVESTIGATION_COMMANDS } from "../investigation-workflows-schema";
 import { investigationWorkflow } from "./investigation-workflows";
@@ -750,45 +752,6 @@ async function sha256(filePath: string): Promise<string> {
 	});
 }
 
-async function sha256Directory(directory: string): Promise<string> {
-	const hash = createHash("sha256");
-	let files = 0,
-		bytes = 0;
-	const visit = async (current: string, depth = 0) => {
-		if (depth > 48) throw new Error("Android directory depth budget exceeded");
-		const entries = await fs.readdir(current, { withFileTypes: true });
-		entries.sort((left, right) => left.name.localeCompare(right.name));
-		for (const entry of entries) {
-			if (++files > 25000)
-				throw new Error("Android directory entry budget exceeded");
-			const absolute = path.join(current, entry.name);
-			const relative = path.relative(directory, absolute).replace(/\\/g, "/");
-			if (entry.isSymbolicLink()) {
-				throw new Error(
-					`Symbolic links are not allowed in Smali/APK build inputs: ${relative}`,
-				);
-			}
-			if (entry.isDirectory()) {
-				hash.update(`D\0${relative}\0`);
-				await visit(absolute, depth + 1);
-			} else if (entry.isFile()) {
-				bytes += (await fs.stat(absolute)).size;
-				if (bytes > 512 * 1024 * 1024)
-					throw new Error("Android directory byte budget exceeded");
-				hash.update(`F\0${relative}\0`);
-				await new Promise<void>((resolve, reject) => {
-					const stream = createReadStream(absolute);
-					stream.on("data", (chunk) => hash.update(chunk));
-					stream.once("error", reject);
-					stream.once("end", resolve);
-				});
-				hash.update("\0");
-			}
-		}
-	};
-	await visit(directory);
-	return hash.digest("hex");
-}
 
 async function toolIdentity(engine: Engine, command: string | undefined) {
 	if (!command)
@@ -2544,11 +2507,17 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+  if(input.android_project_patch&&!["preview_android_candidate","build_android_candidate"].includes(input.operation))throw new Error("android_project_patch is accepted only by Android project preview/build commands");
  if(input.operation==="export_evidence_bundle"&&input.evidence_archive){
   if(!input.output_file)throw new Error("Evidence archive output_file required");
   const outputScope=await enforceOutputPath(input.output_file,input.acknowledge_external_output);
   return withAnalysisLock(input.target??"",async()=>JSON.stringify({...await exportEvidenceArchive(input,context.signal),outputScope}),context.signal);
  }
+  if(input.operation==="preview_android_candidate"||(input.operation==="build_android_candidate"&&input.android_project_patch)){
+   if(!input.output_file)throw new Error("New candidate output_file required");
+   const outputScope=await enforceOutputPath(input.output_file,input.acknowledge_external_output);
+   return withAnalysisLock(input.target??"",async()=>JSON.stringify({...await androidProjectCandidate(input,async(request,signal)=>JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request),{...context,signal})),context.signal),outputScope}),context.signal);
+  }
 		if (input.operation === "annotate_analysis_project")
 			input = { ...input, operation: "project_edit" };
 		if ((INVESTIGATION_COMMANDS as readonly string[]).includes(input.operation)) {

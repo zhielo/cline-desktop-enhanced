@@ -121,9 +121,9 @@ export const RECOMMENDATION_COVERAGE = [
 	{
 		group: "android",
 		command: "build_android_candidate",
-		scope: "partial",
+		scope: "bounded",
 		limitations:
-			"Existing unsigned Apktool rebuild plus inspection; no integrated patch-project pipeline.",
+			"Preview-bound decoded-project snapshot, exact-method patches, all Smali roots assembled, unsigned Apktool rebuild and hash/structure validation before new-file publication. No signing/install/device proof.",
 	},
 	{
 		group: "android",

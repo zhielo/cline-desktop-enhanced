@@ -946,7 +946,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -954,6 +954,22 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const ownedApplied=await runOwnedAdvanced({...previewRequest,operation:"patch_smali_method",smali_patch:{...ownedPatch,preview_sha256:ownedPreview.result.previewSha256}});
     if(!ownedApplied.result.published||ownedApplied.plan.status!=="completed"||await readFile(ownedSmaliSource,"utf8")!==ownedSmaliText||await readFile(ownedSmaliOutput,"utf8")!==ownedSmaliText.replace(ownedSmaliBefore,ownedSmaliAfter))throw new Error("Installed hash-bound Smali candidate patch failed");
     stages.push("installed-advanced-smali-preview-approved-candidate-original-preserved");
+
+    const ownedProject=join(workspace,"owned-apk-project"), ownedProjectSmali=join(ownedProject,"smali/owned");
+    await mkdir(ownedProjectSmali,{recursive:true});await mkdir(join(ownedProject,"smali_classes2/owned"),{recursive:true});await mkdir(join(ownedProject,"res/values"),{recursive:true});
+    await writeFile(join(ownedProjectSmali,"Sample.smali"),ownedSmaliText);
+    await writeFile(join(ownedProject,"smali_classes2/owned/Second.smali"),".class public Lowned/Second;\n.super Ljava/lang/Object;\n.method public static value()I\n .registers 1\n const/4 v0, 0x7\n return v0\n.end method\n");
+    await writeFile(join(ownedProject,"AndroidManifest.xml"),'<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.cline.owned" android:versionCode="1" android:versionName="1"><uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35"/><application android:label="@string/app_name" android:hasCode="true"/></manifest>');
+    await writeFile(join(ownedProject,"res/values/strings.xml"),'<resources><string name="app_name">Owned installed candidate</string></resources>');
+    await writeFile(join(ownedProject,"apktool.yml"),'version: 3.0.3\napkFileName: owned.apk\nusesFramework:\n  ids:\n  - 1\nsdkInfo:\n  minSdkVersion: 23\n  targetSdkVersion: 35\nversionInfo:\n  versionCode: 1\n  versionName: "1"\n');
+    const ownedProjectPatch={patches:[{path:"smali/owned/Sample.smali",patch:ownedPatch}]};
+    const projectPreviewRequest={operation:"preview_android_candidate",target:ownedProject,output_file:join(workspace,"owned-project-candidate.apk"),android_project_patch:ownedProjectPatch,timeout_ms:120000,smali_api_level:28};
+    const projectPreview=await runOwnedAdvanced(projectPreviewRequest);
+    if(projectPreview.plan.status!=="completed"||projectPreview.result.executed!==false||projectPreview.result.published||!projectPreview.result.projectSha256)throw new Error("Installed project preview failed or wrote output");
+    const projectApplied=await runOwnedAdvanced({...projectPreviewRequest,operation:"build_android_candidate",android_project_patch:{...ownedProjectPatch,expected_project_sha256:projectPreview.result.projectSha256,preview_sha256:projectPreview.result.previewSha256}});
+    if(projectApplied.plan.status!=="completed"||projectApplied.result.status!=="completed"||!projectApplied.result.published||!projectApplied.result.sourceUnchanged||!projectApplied.result.outputSha256||!["assemble-smali","assemble-smali_classes2","rebuild-apk"].every(id=>projectApplied.result.stages?.some(stage=>stage.id===id))||await readFile(join(ownedProjectSmali,"Sample.smali"),"utf8")!==ownedSmaliText)throw new Error("Installed approved Android project pipeline failed or altered its source");
+    stages.push("installed-approved-android-project-patch-assemble-rebuild-originals-preserved");
+
     const batchBinary=join(workspace,"owned-candidate-input.bin"),batchAst=join(workspace,"owned-candidate-input.ts"),batchManifest=join(workspace,"owned-candidate-batch.json");
     const batchBinaryBefore=Buffer.from([0,1,2,3]),batchAstBefore="export const owned = 1; export const enabled = false;\n";
     await writeFile(batchBinary,batchBinaryBefore);await writeFile(batchAst,batchAstBefore);
@@ -1194,7 +1210,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
           schemaVersion: 1,
           sourceCommit: process.env.GITHUB_SHA,
           environmentId: `${process.platform}-${process.arch}-${process.env.RUNNER_OS ?? "local"}`,
-          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v8",
+          workloadVersion: "installed-owned-ui/processor-setup-core-full-core-120-row-v9",
           runtimeProfiles: ["core", "full", "core-after-rollback"],
           metrics: { installedReadyMs: startupSamples, nativeAppWorkingSetMB: appWorkingSetSamples,
             ownedTranscriptScrollRoundTripMs: transcriptScrollSamples },

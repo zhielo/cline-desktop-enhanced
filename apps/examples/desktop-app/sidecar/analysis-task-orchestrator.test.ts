@@ -628,3 +628,67 @@ it("normalizes selected dependency evidence and rejects unreviewed external inpu
 		(local.request.dependency_evidence as { lockfile: string }).lockfile,
 	).toBe(join(realpathSync.native(root), "package-lock.json"));
 });
+
+it("keeps Android project preview Inspect and binds a separately approved build to all nested edits", async () => {
+	const root = workspace(),
+		target = join(root, "owned.smali");
+	writeFileSync(target, "owned");
+	const orchestrator = new AnalysisTaskOrchestrator();
+	const request = {
+		operation: "preview_android_candidate",
+		target,
+		output_file: join(root, "new.apk"),
+		android_project_patch: {
+			patches: [
+				{
+					path: "smali/Owned.smali",
+					patch: { replacement_method: "approved" },
+				},
+			],
+		},
+	};
+	const preview = await orchestrator.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request,
+	});
+	expect(preview.permission).toBe("Inspect");
+	expect(preview.requirements).not.toContain(
+		"authorized-android-artifact-modification",
+	);
+	const buildRequest = { ...request, operation: "build_android_candidate" };
+	const build = await orchestrator.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: buildRequest,
+	});
+	expect(build.permission).toBe("Modify");
+	expect(build.requirements).toContain(
+		"authorized-android-artifact-modification",
+	);
+	expect(build.requirements).toContain("new-output-no-overwrite");
+	const approved = orchestrator.approve(
+		build.id,
+		build.requirements,
+		build.requestHash,
+	);
+	await expect(
+		orchestrator.consume({
+			planId: build.id,
+			executionToken: approved.executionToken,
+			workspaceRoot: root,
+			kind: "static",
+			request: {
+				...buildRequest,
+				android_project_patch: {
+					patches: [
+						{
+							path: "smali/Owned.smali",
+							patch: { replacement_method: "changed" },
+						},
+					],
+				},
+			},
+		}),
+	).rejects.toThrow("exact request envelope");
+});

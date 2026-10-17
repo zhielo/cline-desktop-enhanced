@@ -1,13 +1,13 @@
-import { ownedZip } from "./android-owned-zip";
+import { createHash, randomBytes } from "node:crypto";
 /** Fixed owned static corpus. Never installs, launches or instruments an Android application. */
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { randomBytes } from "node:crypto";
+import { ownedZip } from "./android-owned-zip";
 import {
-	verifyAndroidToolchain,
-	runAndroidTool,
 	androidChildEnvironment,
+	runAndroidTool,
+	verifyAndroidToolchain,
 } from "./android-toolchain";
 import { runSupervised as runBaseSupervised } from "./supervised-process";
 
@@ -139,6 +139,83 @@ export async function testAndroidToolchain(signal?: AbortSignal) {
 			output_file: rebuilt,
 		});
 		checks.apktool = "owned-resource-and-multidex-round-trip-passed";
+
+		// Real engines, not a mock receipt: preview, patch a private project, assemble
+		// both DEX roots, rebuild with Apktool, decode, and check the exact edit.
+		const sourceFile = path.join(smali, "Fixture.smali");
+		const sourceText = await fs.readFile(sourceFile, "utf8");
+		const beforeMethod =
+			".method public static answer()I\n .registers 1\n const/16 v0, 0x2a\n return v0\n.end method";
+		const projectPatch = {
+			patches: [
+				{
+					path: "smali/com/cline/owned/Fixture.smali",
+					patch: {
+						expected_sha256: createHash("sha256")
+							.update(sourceText)
+							.digest("hex"),
+						class_descriptor: "Lcom/cline/owned/Fixture;",
+						method_signature: "answer()I",
+						expected_method: beforeMethod,
+						replacement_method: beforeMethod.replace("0x2a", "0x2b"),
+					},
+				},
+			],
+		};
+		const projectOutput = path.join(root, "approved patched.apk");
+		const preview = await call({
+			operation: "preview_android_candidate",
+			target: project,
+			output_file: projectOutput,
+			android_project_patch: projectPatch,
+			smali_api_level: 28,
+		});
+		if (
+			preview.status !== "completed" ||
+			preview.published ||
+			preview.executed !== false
+		)
+			throw new Error("Owned project preview failed");
+		const patched = await call({
+			operation: "build_android_candidate",
+			target: project,
+			output_file: projectOutput,
+			smali_api_level: 28,
+			android_project_patch: {
+				...projectPatch,
+				expected_project_sha256: preview.projectSha256,
+				preview_sha256: preview.previewSha256,
+			},
+		});
+		if (
+			patched.status !== "completed" ||
+			!patched.published ||
+			!patched.sourceUnchanged ||
+			!patched.stages.some(
+				(s: { id: string }) => s.id === "assemble-smali_classes2",
+			) ||
+			(await fs.readFile(sourceFile, "utf8")) !== sourceText
+		)
+			throw new Error("Owned project build or original preservation failed");
+		const patchedDecoded = path.join(root, "patched APK decoded");
+		await call({
+			operation: "disassemble_smali",
+			target: projectOutput,
+			output_directory: patchedDecoded,
+		});
+		const patchedMethod = await call({
+			operation: "read_smali_method",
+			target: path.join(patchedDecoded, "smali/com/cline/owned/Fixture.smali"),
+			smali_method: "answer()I",
+		});
+		if (!JSON.stringify(patchedMethod).includes("0x2b"))
+			throw new Error("Owned built APK did not retain approved method edit");
+		await fs.access(
+			path.join(patchedDecoded, "smali_classes2/com/cline/owned/Second.smali"),
+		);
+		checks.projectCandidate =
+			"owned-preview-patch-all-dex-assemble-apktool-decode-original-preserved-passed";
+
 		const java = await call({
 			operation: "decompile",
 			engine: "jadx",
