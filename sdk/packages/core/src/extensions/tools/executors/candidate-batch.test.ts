@@ -83,15 +83,19 @@ it("requires matching manifest/preview hash and never autoexecutes", async () =>
 	).rejects.toThrow("batch_preview_sha256");
 	expect(existsSync(join(root, "a.candidate.bin"))).toBe(false);
 });
-it.each([
-	[{ ...stage("a"), target: "../escape.bin" }],
-	[{ ...stage("a"), output_file: "../escape.bin" }],
-	[stage("a"), stage("a")],
-	[stage("a"), { ...stage("b"), target: "a.candidate.bin" }],
-	[{ ...stage("a"), output_file: "manifest.json" }],
-	[{ ...stage("a"), operation: "sign_apk" }],
-	[...Array.from({ length: 9 }, (_, i) => stage(`n${i}`))],
-])("rejects escape, duplicate, dependency substitution and arbitrary batches", async (stages) => {
+it.each(
+	[
+		[{ ...stage("a"), target: "../escape.bin" }],
+		[{ ...stage("a"), output_file: "../escape.bin" }],
+		[stage("a"), stage("a")],
+		[stage("a"), { ...stage("b"), target: "a.candidate.bin" }],
+		[{ ...stage("a"), output_file: "manifest.json" }],
+		[{ ...stage("a"), operation: "sign_apk" }],
+		[...Array.from({ length: 9 }, (_, i) => stage(`n${i}`))],
+	].map((stages) => ({ stages })),
+)("rejects escape, duplicate, dependency substitution and arbitrary batches", async ({
+	stages,
+}) => {
 	await manifest(stages);
 	await expect(
 		candidateBatch({ operation: "preview_candidate_batch", target }),
