@@ -324,18 +324,44 @@ it("one-shot approval cannot create duplicate jobs", async () => {
 });
 it("cancels observation without replaying or claiming a fix", async () => {
 	const f = await fixture();
-	let release!: () => void;
+	let release: (() => void) | undefined;
+	let entered!: () => void;
+	const observationEntered = new Promise<void>((resolve) => {
+		entered = resolve;
+	});
 	f.options.sleep = async () =>
-		new Promise<void>((r) => {
-			release = r;
+		new Promise<void>((resolve) => {
+			release = resolve;
+			entered(); // Signal the actual observation boundary, not elapsed runner time.
 		});
 	const accepted = await f.start({ ...f.request, duration_seconds: 4 });
-	for (let i = 0; i < 50 && !release; i++)
-		await new Promise((r) => setTimeout(r, 10));
 	const c = f.service.get(f.root, accepted.id);
-	f.tasks.cancel(c.planId);
-	release();
-	const stopped = await f.completed(c.id);
+	let deadline: ReturnType<typeof setTimeout> | undefined;
+	try {
+		await Promise.race([
+			observationEntered,
+			new Promise<never>((_, reject) => {
+				deadline = setTimeout(
+					() => reject(new Error("Owned observation boundary was not entered")),
+					5000,
+				);
+			}),
+		]);
+		expect(release).toBeTypeOf("function");
+	} finally {
+		clearTimeout(deadline);
+		if (
+			f.tasks
+				.list(f.root)
+				.some((plan) => plan.id === c.planId && plan.status === "running")
+		)
+			f.tasks.cancel(c.planId);
+		release?.();
+		// Drain the owned operation before afterEach closes SQLite/removes its root,
+		// even when synchronization failed. Never leave a background writer behind.
+		await f.completed(c.id);
+	}
+	const stopped = f.service.get(f.root, c.id);
 	expect(stopped.status).toBe("incomplete");
 	expect(stopped.result).toContain("Do not infer a fix");
 	const count = f.calls.length;
