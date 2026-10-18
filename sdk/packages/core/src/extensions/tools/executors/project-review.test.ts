@@ -32,7 +32,11 @@ async function fixture(
 	before: Record<string, string>,
 	after: Record<string, string>,
 ) {
-	const root = await fs.mkdtemp(join(tmpdir(), "owned-project-review-"));
+	// Match the verifier's canonical roots. Windows runner TEMP may contain
+	// an 8.3 alias (RUNNER~1) that fs.realpath expands before opendir.
+	const root = await fs.realpath(
+		await fs.mkdtemp(join(tmpdir(), "owned-project-review-")),
+	);
 	for (const [dir, files] of Object.entries({ before, after }))
 		for (const [p, s] of Object.entries(files)) {
 			const file = join(root, dir, p);
