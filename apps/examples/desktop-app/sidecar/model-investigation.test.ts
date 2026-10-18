@@ -370,3 +370,19 @@ it.each([
  expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
  const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation(name,input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();expect(denied.cancel).toHaveBeenCalledWith(id);
 });
+it.each([
+ ["attach_debug_session",{artifactId:id,pid:123,endpoint:"ws://127.0.0.1:9229/11111111-1111-4111-8111-111111111111"}],
+ ["set_scoped_breakpoints",{runtimeSessionId:id,locations:[{line:2}]}],
+ ["capture_execution_trace",{runtimeSessionId:id,durationMs:200}],
+] as const)("%s requires fresh human approval and does not expose tokens",async(name,input)=>{
+ const p=ports();p.review=vi.fn(async()=>false);
+ await expect(runModelInvestigation(name,input,p)).rejects.toThrow("denied");
+ expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledTimes(1);
+ const ok=ports(),result=await runModelInvestigation(name,input,ok);
+ expect(ok.review).toHaveBeenCalledOnce();expect(ok.invoke).toHaveBeenCalledTimes(2);
+ expect(result).not.toContain("private-one-use");
+});
+it("managed stop is cleanup without manufacturing a new approval",async()=>{
+ const p=ports();await runModelInvestigation("stop_runtime_session",{runtimeSessionId:id},p);
+ expect(p.review).not.toHaveBeenCalled();expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();
+});

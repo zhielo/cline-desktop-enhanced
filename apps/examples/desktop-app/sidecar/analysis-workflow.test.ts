@@ -295,3 +295,20 @@ it.each(["capture_process_tree","capture_file_activity"] as const)("%s cannot ru
   await expect(handleAnalysisWorkflow(command,{...input,confirmRecord:true},scope,{trusted:true,idle:true,mode:"runtime"},store,ports)).rejects.toThrow();
  }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+it("managed debugger front door binds immutable artifacts, denies Static and permits Off cleanup",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"managed-workflow-")),store=new AnalysisWorkflowStore(join(root,"store.sqlite")),scope={sessionId:"owned",workspace:root};
+ const managedRuntime=vi.fn(async()=>({status:"partial"}));
+ const ports={invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn(),managedRuntime,managedSession:vi.fn(()=>({target:join(root,"owned.js"),expected_sha256:"a".repeat(64)}))};
+ try{
+  await writeFile(join(root,"owned.js"),"// owned");const artifact=await store.open(scope,"owned.js");
+  const input={artifactId:artifact.id,pid:123,endpoint:"ws://127.0.0.1:9229/11111111-1111-4111-8111-111111111111"};
+  await expect(handleAnalysisWorkflow("attach_debug_session",input,scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("Runtime/Hybrid");
+  await handleAnalysisWorkflow("attach_debug_session",input,scope,{trusted:true,idle:true,mode:"runtime"},store,ports);
+  expect(managedRuntime).toHaveBeenCalledWith("attach_debug_session",expect.objectContaining({request:expect.objectContaining({target:realpathSync.native(join(root,"owned.js")),expected_sha256:artifact.sha256})}));
+  await handleAnalysisWorkflow("set_scoped_breakpoints",{runtimeSessionId:artifact.id,locations:[{line:1}]},scope,{trusted:true,idle:true,mode:"runtime"},store,ports);
+  expect(ports.managedSession).toHaveBeenCalledWith(artifact.id);
+  await handleAnalysisWorkflow("stop_runtime_session",{runtimeSessionId:artifact.id},scope,{trusted:true,idle:false,mode:"off"},store,ports);
+  expect(managedRuntime).toHaveBeenLastCalledWith("stop_runtime_session",{runtimeSessionId:artifact.id});
+  await expect(handleAnalysisWorkflow("stop_runtime_session",{runtimeSessionId:artifact.id},scope,{trusted:false,idle:true,mode:"off"},store,ports)).rejects.toThrow("Trusted");
+ }finally{store.close();await rm(root,{recursive:true,force:true});}
+});

@@ -195,6 +195,7 @@ export function analysisCommandCatalog() {
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
+   ...["attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "stop_runtime_session"].map(command=>({command,effect:command==="stop_runtime_session"?"runtime-cleanup":"runtime-execution-control",availability:"implemented-bounded",limitations:"Desktop managed Node Inspector only. Independent Execute approval for new work, exact process/source identity, 1–120-second session lifetime and bounded cleanup. Activation/disconnect may pause/resume. CPU sampling is NOT a complete trace; no universal debugger parity."})),
    ...["capture_process_tree","capture_file_activity"].map(command=>({command,effect:"runtime-metadata",availability:"implemented-bounded",limitations:command==="capture_process_tree"?"Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, Linux /proc or Windows CIM exact root PID/birth metadata. Not an execution trace or proof of artifact execution.":"Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, exact-file notifications (5 seconds/128 events), no PID attribution, contents, recursive watch or completeness claim."})),
 			...INVESTIGATION_COMMANDS.map((command) => ({
 				command,

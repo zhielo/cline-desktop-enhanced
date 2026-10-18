@@ -254,7 +254,11 @@ it.each([
 
 it("keeps investigation tools behind the external-tool permission profile", async () => {
 	for (const name of [
-		"capture_process_tree",
+		"attach_debug_session",
+ "set_scoped_breakpoints",
+ "capture_execution_trace",
+ "stop_runtime_session",
+ "capture_process_tree",
 		"capture_file_activity",
 		"plan_runtime_observation",
 		"validate_candidate",

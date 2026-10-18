@@ -183,6 +183,11 @@ it("normalizes Windows extended source labels without opening label paths", () =
 	).toBe(false);
 });
 
+it("does not guess Windows short-path aliases or resolve untrusted Inspector labels",()=>{
+ expect(sameInspectorSourcePath("C:\\Users\\RUNNER~1\\owned.js","C:\\Users\\runneradmin\\owned.js","win32")).toBe(false);
+ expect(sameInspectorSourcePath("\\\\untrusted-server\\share\\owned.js","C:\\owned\\owned.js","win32")).toBe(false);
+});
+
 it("captures only opt-in source-bound primitive console reports from a running owned Node fixture", async () => {
 	if (!["linux", "win32"].includes(process.platform)) return;
 	const root = await realpath(

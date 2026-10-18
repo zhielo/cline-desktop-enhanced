@@ -503,7 +503,7 @@ it("publishes the exact 55 recommendations without falsely certifying release or
 	expect(
 		catalog.recommendations.find((r) => r.command === "attach_debug_session")
 			?.scope,
-	).toBe("not-implemented");
+	).toBe("partial");
 	expect(
 		catalog.recommendations.find((r) => r.command === "build_android_candidate")
 			?.scope,

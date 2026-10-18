@@ -320,3 +320,14 @@ test("expanded installed workload retains a finite fail-closed action evidence b
  for(const sequence of [1,256,257,384]) assert.doesNotThrow(()=>assertInstalledActionSequence(sequence));
  for(const sequence of [0,-1,1.5,385,Infinity,NaN,Number.MAX_SAFE_INTEGER+1]) assert.throws(()=>assertInstalledActionSequence(sequence),/evidence budget reached/);
 });
+
+test("installed acceptance retains managed Node Execute approval, sampling limits and Off cleanup",()=>{
+ const driver=readFileSync(new URL('../apps/vscode/scripts/desktop-installed-acceptance.ts',import.meta.url),'utf8');
+ for(const text of ['installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed','debugger-activation-cleanup-may-pause-or-resume','v8-cpu-sampling-selected-script','managed-runtime-fixture-cleanup','Managed stop crossed owning sessions','Static enabled managed debugger'])assert.ok(driver.includes(text),text);
+});
+
+
+test("installed managed fixtures launch through a trusted canonical root, not Windows 8.3 aliases",()=>{
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.ok(driver.includes('const root = realpathSync.native(await mkdtemp(join(tmpdir(), "cline-installed-ui-")))'));
+});

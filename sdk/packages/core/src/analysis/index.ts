@@ -1,4 +1,6 @@
 export {
+	assertInspectorOwner,
+	sameInspectorSourcePath,
 	InspectorRequestSchema,
 	observeJavaScriptInspector,
 } from "./inspector";

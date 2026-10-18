@@ -74,7 +74,11 @@ export const InvestigationSchemas = {
 	resume_investigation: z
 		.object({ receiptId: Id, revision: z.number().int().min(0) })
 		.strict(),
-	capture_process_tree: z.object({
+	attach_debug_session: z.object({artifactId:Id,pid:z.number().int().positive().max(4294967295),endpoint:z.string().max(200).regex(/^ws:\/\/127\.0\.0\.1:[0-9]{1,5}\/[a-fA-F0-9-]{36}$/),lifetimeMs:z.number().int().min(1000).max(120000).default(60000),hybridProposal:HybridProposalSchema.optional()}).strict(),
+ set_scoped_breakpoints: z.object({runtimeSessionId:Id,locations:z.array(z.object({line:z.number().int().min(0).max(100000),column:z.number().int().min(0).max(4096).default(0)}).strict()).min(1).max(8)}).strict(),
+ capture_execution_trace: z.object({runtimeSessionId:Id,durationMs:z.number().int().min(200).max(2000).default(1000)}).strict(),
+ stop_runtime_session: z.object({runtimeSessionId:Id}).strict(),
+ capture_process_tree: z.object({
 		artifactId: Id,
 		pid: z.number().int().positive().max(4294967295),
 		maxProcesses: z.number().int().min(1).max(128).default(64),
@@ -134,6 +138,10 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Cancel only this owning-session AI batch through the existing supervised runner. Read its checkpoint to confirm terminal outcome; never replays stages. Available after Analysis is disabled.",
 	resume_investigation:
 		"Request a freshly approved continuation of never-started built-in static stages from an exact terminal checkpoint revision. Revalidates every input hash, implementation fingerprint and reused result. Never retries failed/started stages or replays writes/runtime; unresolved dependencies block continuation.",
+ attach_debug_session: "Request a separately human-approved Execute/debug-control session for one exact local Node Inspector PID/birth/listener and hash-matched loaded source. Runtime/Hybrid and attached Full Access only. Lifetime 1–120 seconds, one per owner/two globally. Activation and cleanup CAN pause/resume the process. No evaluate/launch/step/explicit resume; not passive or exclusive. Hybrid requires a real static basis. Missing loaded source fails without starting it.",
+ set_scoped_breakpoints: "Request fresh Execute approval for at most eight unconditional zero-based breakpoints in the managed session's one hash-matched script. Can pause execution; no conditions, logpoints, expressions or automatic continuation. Owning session only. Cleanup may resume the target.",
+ capture_execution_trace: "Request fresh Execute approval for 200–2000 ms of V8 statistical CPU SAMPLING in an existing owned managed Node session, NOT a full execution trace. Retain only selected-script nodes and samples with function names hashed. Empty samples do not prove no execution. No native/JVM/Android parity.",
+ stop_runtime_session: "Stop an owned managed Node Inspector connection, even after Analysis Off. Bounded best-effort owned profiler stop/disable and debugger disable, then transport closure. No process kill or explicit resume, but disabling/disconnecting a debugger CAN resume a paused process. Report cleanup uncertainty; never claims target exit or exclusive debugger ownership.",
 	capture_process_tree: "Request a fresh independently approved Runtime/Hybrid snapshot of one exact OS PID/birth identity and bounded descendants. Linux /proc or Windows CIM only; no command lines, environment, memory, process launch or execution control. Artifact is the immutable evidence basis, NOT proof it runs in that process. Host binds PID birth identity at prepare and rechecks before/after capture. Hybrid requires a real static basis. Non-atomic metadata, not an execution trace.",
 	capture_file_activity: "Request fresh independently approved Runtime/Hybrid fs.watch metadata on exactly one immutable opened workspace file for 200–5000 ms, maximum 128 events. No contents, filenames from sibling files, recursive directory watch or process attribution. OS notifications may be coalesced/missed; zero events never proves no access. Rename/replacement ends observation as partial. Hybrid requires a real static basis. Existing task cancellation closes the watcher.",
 	plan_runtime_observation: "Prepare an independently approved read-only plan for an immutable source and an exact live local Node Inspector PID/birth identity/listener. No socket connection, attachment or target execution. Plan is NOT runtime consent: use the existing Runtime/Hybrid workbench with fresh human Debug approval and, in Hybrid, static evidence. Linux/Windows only; not a persistent debugger or trace command.",

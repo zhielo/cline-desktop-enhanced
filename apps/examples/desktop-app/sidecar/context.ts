@@ -33,6 +33,7 @@ import {
 	disposeDesktopFeatureFlagsService,
 	getDesktopFeatureFlagsService,
 } from "./feature-flags";
+import { managedInspectorSessions } from "./managed-inspector";
 import { sessionLogPath } from "./paths";
 import { createRepositoryExecutor } from "./repository-tool";
 import {
@@ -1169,7 +1170,9 @@ export async function disposeSidecarContext(
 	ctx: SidecarContext,
 	reason = "code_sidecar_shutdown",
 ): Promise<void> {
-	const cleanup: Array<Promise<unknown>> = [];
+	const cleanup: Array<Promise<unknown>> = [
+		managedInspectorSessions.stopAll(reason),
+	];
 	const approvalCleanup: Array<Promise<unknown>> = [];
 
 	for (const scoped of getEnvironmentContexts(ctx)) {

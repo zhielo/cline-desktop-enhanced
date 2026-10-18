@@ -12,7 +12,11 @@ const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
  ...BATCH_WORKFLOW_COMMANDS,
-	"capture_process_tree",
+	"attach_debug_session",
+ "set_scoped_breakpoints",
+ "capture_execution_trace",
+ "stop_runtime_session",
+ "capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",
 	"validate_candidate",
@@ -32,6 +36,8 @@ export interface WorkflowPorts {
 	taskBundle: (id: string) => unknown;
 	capture: (input: Record<string, unknown>) => Promise<unknown>;
 	browsers?: () => unknown;
+ managedSession?: (id:string)=>{target:string;expected_sha256:string;hybrid?:unknown};
+ managedRuntime?: (command:string,input:unknown)=>Promise<unknown>;
  runtimeCapture?: (command: string, input: unknown) => Promise<unknown>;
  batch?: (command: string, input: unknown) => Promise<unknown>;
 }
@@ -102,6 +108,10 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
+ if (command === "stop_runtime_session") {
+  if (!options.trusted || !ports.managedRuntime) throw new Error("Trusted owning cleanup host required");
+  return ports.managedRuntime(command,InvestigationSchemas.stop_runtime_session.parse(input));
+ }
  if ((BATCH_WORKFLOW_COMMANDS as readonly string[]).includes(command)) {
   const cleanup = command === "checkpoint_investigation" || command === "cancel_batch";
   if (!options.trusted || (!cleanup && ((!options.idle && options.actor !== "model") || options.mode === "off")))
@@ -250,6 +260,25 @@ export async function handleAnalysisWorkflow(
 				}
 			: artifact;
 	}
+ if (["attach_debug_session","set_scoped_breakpoints","capture_execution_trace"].includes(command)) {
+  if(!runtimeAnalysisEnabled(options.mode))throw new Error("Managed debugger requires Runtime/Hybrid; Static never enables debug control");
+  if(!ports.managedRuntime)throw new Error("Managed runtime host unavailable");
+  const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().max(512).optional()}).passthrough().parse(input);
+  const {phase,planId,executionToken,...publicInput}=envelope;
+  const name=command as "attach_debug_session"|"set_scoped_breakpoints"|"capture_execution_trace";
+  const params=InvestigationSchemas[name].parse(publicInput);
+  let target:string,expected_sha256:string,hybrid:unknown,controlOptions:unknown;
+  if("artifactId" in params){
+   const artifact=await store.verify(scope,params.artifactId);target=artifact.path;expected_sha256=artifact.sha256;
+   const {artifactId:_artifact,hybridProposal,...rest}=params;controlOptions=rest;
+   if(options.mode!=="hybrid"&&hybridProposal)throw new Error("Hybrid proposal requires Hybrid mode");
+   hybrid=options.mode==="hybrid"?await bindHybridObservation(hybridProposal,scope,{receipt:ports.staticReceipt,task:(id)=>(ports.taskBundle(id) as {providerSnapshot?:unknown})?.providerSnapshot},target):undefined;
+  }else{
+   const session=ports.managedSession?.(params.runtimeSessionId);if(!session)throw new Error("Owned managed runtime session unavailable");
+   target=session.target;expected_sha256=session.expected_sha256;hybrid=session.hybrid;controlOptions=params;
+  }
+  return ports.managedRuntime(command,{phase,planId,executionToken,request:{operation:command,target,expected_sha256,options:controlOptions,...(hybrid?{hybrid}:{})}});
+ }
  if (command === "capture_process_tree" || command === "capture_file_activity") {
   if (!runtimeAnalysisEnabled(options.mode)) throw new Error("Capture requires Runtime or Hybrid mode; Static never enables observation");
   const envelope = z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().max(512).optional()}).passthrough().parse(input);

@@ -254,22 +254,20 @@ export const RECOMMENDATION_COVERAGE = [
 	{
 		group: "runtime",
 		command: "attach_debug_session",
-		scope: "not-implemented",
-		limitations:
-			"Existing one-shot debugger attach is not a persistent managed session.",
+		scope: "partial",
+		limitations: "Independently Execute-approved 1–120-second managed local Node Inspector session, exact PID/birth/listener and loaded-source hash. Debugger activation/cleanup may pause/resume. No evaluate/launch/step/explicit resume, exclusive ownership or native/JVM/Android parity.",
 	},
 	{
 		group: "runtime",
 		command: "set_scoped_breakpoints",
-		scope: "not-implemented",
-		limitations:
-			"Persistent session-scoped breakpoint lifecycle not implemented.",
+		scope: "partial",
+		limitations: "Fresh Execute approval for up to eight unconditional zero-based locations in one exact hash-matched managed Node script. Can pause target; no conditions/logpoints/evaluation or automatic continuation.",
 	},
 	{
 		group: "runtime",
 		command: "capture_execution_trace",
-		scope: "not-implemented",
-		limitations: "No unified supervised execution-trace command.",
+		scope: "partial",
+		limitations: "Fresh Execute approval for 200–2000 ms selected-script V8 CPU sampling, not a full execution trace. 128 selected nodes/256 samples; names hashed, unrelated script metadata excluded. Missing samples do not prove no execution.",
 	},
 	{
 		group: "runtime",
@@ -307,9 +305,8 @@ export const RECOMMENDATION_COVERAGE = [
 	{
 		group: "runtime",
 		command: "stop_runtime_session",
-		scope: "not-implemented",
-		limitations:
-			"Existing backend-specific cancellation; no unified persistent runtime session lifecycle.",
+		scope: "partial",
+		limitations: "Owning managed Node connection only, including after Analysis Off. Bounded best-effort owned profiler/debugger cleanup and transport closure; no process kill. Disconnect may resume target; uncertainty stays partial. Not a universal backend stop.",
 	},
 	{
 		group: "bulk",
