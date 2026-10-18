@@ -66,6 +66,7 @@ const BatchRequest = z
 	.strict();
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
+ correlate_static_runtime: z.object({receiptId:Id, taskIds:z.array(Id).min(1).max(10)}).strict(),
 	plan_batch: BatchRequest,
 	preview_batch: BatchRequest,
 	run_batch: BatchRequest,
@@ -126,6 +127,7 @@ export type InvestigationExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 const descriptions: Record<InvestigationToolName, string> = {
+ correlate_static_runtime: "Reconcile one exact owning-session saved static receipt with up to ten saved approved task snapshots (at least one runtime task). Hash/scope checks, exact artifact identity, selected Node CPU-sample function-definition-line candidates and supported native module/RVA observations only. Read-only: no attachment, execution, downloads, approval grant or automatic rerun. Shared lines, sampled locations and byte identity never prove causal execution paths or behavior. Unmatched identities stay unresolved.",
 	plan_batch:
 		"Validate a bounded dependency graph of up to 12 existing workspace artifact inspect/string/APK-comparison stages. Uses the durable desktop runner. No shell, target execution or candidate writes; no approval or execution occurs.",
 	preview_batch:

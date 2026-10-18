@@ -331,3 +331,8 @@ test("installed managed fixtures launch through a trusted canonical root, not Wi
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
  assert.ok(driver.includes('const root = realpathSync.native(await mkdtemp(join(tmpdir(), "cline-installed-ui-")))'));
 });
+
+test("installed saved correlation keeps identity, owner and no-rerun boundaries",()=>{
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ for(const text of ["installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed","Saved correlation crossed owning sessions","saved-evidence-read","verifiedExecutionPath"])assert.ok(driver.includes(text),text);
+});

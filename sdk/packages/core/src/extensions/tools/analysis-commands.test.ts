@@ -147,3 +147,9 @@ it.each([
 	).toBe("read");
 	expect(isAnalysisWriteOperation(operation)).toBe(false);
 });
+
+it("advertises saved correlation as read-only rather than runtime execution or a reverse-engineering alias",()=>{
+ const row=analysisCommandCatalog().entries.find(e=>e.command==="correlate_static_runtime");
+ expect(row).toMatchObject({effect:"saved-evidence-read",availability:"implemented-bounded"});
+ expect(ReverseEngineeringInputSchema.safeParse({operation:"correlate_static_runtime"}).success).toBe(false);
+});

@@ -68,6 +68,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	capture_browser_scenario: "enableReverseEngineering",
  capture_network_metadata: "enableReverseEngineering",
 	get_evidence_bundle: "enableReverseEngineering",
+ correlate_static_runtime: "enableReverseEngineering",
 	plan_batch: "enableReverseEngineering",
 	preview_batch: "enableReverseEngineering",
 	run_batch: "enableReverseEngineering",

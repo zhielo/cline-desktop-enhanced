@@ -1,5 +1,6 @@
+import { realpathSync } from "node:fs";
 import { bindHybridObservation } from "./hybrid-analysis";
-import { InvestigationSchemas, HybridProposalSchema, runtimeAnalysisEnabled } from "@cline/core";
+import { InvestigationSchemas, HybridProposalSchema, runtimeAnalysisEnabled, correlateSavedEvidence } from "@cline/core";
 import { evidenceIndex, reconcileFeature } from "./investigation-report";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -27,6 +28,7 @@ export const WORKFLOW_COMMANDS = [
 	"capture_browser_scenario",
  "capture_network_metadata",
 	"get_evidence_bundle",
+ "correlate_static_runtime",
 	"analysis_workflow_status",
 	"analysis_workflow_hybrid_prepare",
 ] as const;
@@ -144,6 +146,17 @@ export async function handleAnalysisWorkflow(
 			browsers: ports.browsers?.() ?? [],
 			mode: options.mode,
 		};
+	if (command === "correlate_static_runtime") {
+  if (!options.trusted) throw new Error("Trusted owning saved-evidence host required");
+  const req=InvestigationSchemas.correlate_static_runtime.parse(input);
+  if(new Set(req.taskIds).size!==req.taskIds.length)throw new Error("Select distinct task IDs");
+  const snapshots=req.taskIds.map(id=>{
+   const bundle=ports.taskBundle(id) as {providerSnapshot?:unknown};
+   if(!bundle?.providerSnapshot)throw new Error("Owning hash-checked provider snapshot unavailable; no observation will be rerun");
+   return bundle.providerSnapshot;
+  });
+  return correlateSavedEvidence({...scope,workspace:realpathSync(scope.workspace)},ports.staticReceipt(req.receiptId),snapshots);
+ }
 	if (command === "get_evidence_bundle") {
 		const req = z
 			.object({

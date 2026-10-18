@@ -312,3 +312,36 @@ it("managed debugger front door binds immutable artifacts, denies Static and per
   await expect(handleAnalysisWorkflow("stop_runtime_session",{runtimeSessionId:artifact.id},scope,{trusted:false,idle:true,mode:"off"},store,ports)).rejects.toThrow("Trusted");
  }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+
+it("saved correlation rejects missing, duplicate and untrusted task inputs without rerunning providers",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"correlation-owned-"));
+ try {
+  const scope={sessionId:"owned",workspace:root},input={receiptId:"11111111-1111-4111-8111-111111111111",taskIds:["22222222-2222-4222-8222-222222222222"]};
+  const ports={invoke:vi.fn(),capture:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(()=>({}))};
+  const store={} as AnalysisWorkflowStore;
+  await expect(handleAnalysisWorkflow("correlate_static_runtime",input,scope,{trusted:false,idle:true,mode:"off"},store,ports)).rejects.toThrow("Trusted");
+  expect(ports.taskBundle).not.toHaveBeenCalled();
+  await expect(handleAnalysisWorkflow("correlate_static_runtime",{...input,taskIds:[...input.taskIds,...input.taskIds]},scope,{trusted:true,idle:true,mode:"off"},store,ports)).rejects.toThrow("distinct");
+  await expect(handleAnalysisWorkflow("correlate_static_runtime",input,scope,{trusted:true,idle:true,mode:"off"},store,ports)).rejects.toThrow("no observation will be rerun");
+  expect(ports.invoke).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();expect(ports.staticReceipt).not.toHaveBeenCalled();
+ } finally {await rm(root,{recursive:true,force:true});}
+});
+it("correlates owning saved static/runtime evidence in Off without invoking tools",async()=>{
+ const {ANALYSIS_PROFILE,digest}=await import("@cline/core");
+ const root=await mkdtemp(join(tmpdir(),"correlation-positive-"));
+ try {
+  const scope={sessionId:"owned",workspace:realpathSync(root)},hash="a".repeat(64);
+  const result={profile:ANALYSIS_PROFILE,parserVersion:"owned",status:"completed",artifacts:[{path:"owned.js",sha256:hash,bytes:1,role:"source"}],facts:[],edges:[],limitations:[],counters:{entries:1,bytes:1,nodes:0}};
+  const receipt={...scope,id:"11111111-1111-4111-8111-111111111111",status:"completed",result,resultHash:digest(result)};
+  const observed={provider:"v8-cpu-sampling-selected-script",sourceSha256:hash,nodes:[],samples:[]};
+  const raw={...scope,id:hash,taskId:"22222222-2222-4222-8222-222222222222",domain:"debugger",operation:"capture_execution_trace",tool:"managed-node-inspector/1",targetSha256:hash,resultHash:digest(observed),requestHash:hash,at:new Date().toISOString(),result:observed};
+  let snapshot={...raw,snapshotHash:digest(raw)};
+  const ports={invoke:vi.fn(),capture:vi.fn(),staticReceipt:vi.fn(()=>receipt),taskBundle:vi.fn(()=>({providerSnapshot:snapshot}))};
+  const input={receiptId:receipt.id,taskIds:[raw.taskId]},options={trusted:true,idle:true,mode:"off"};
+  const report=await handleAnalysisWorkflow("correlate_static_runtime",input,scope,options,{} as AnalysisWorkflowStore,ports);
+  expect(report).toMatchObject({status:"partial",effect:"saved-evidence-read",verifiedBehavior:false,sampling:[{sourceIdentity:"exact-byte-match",candidates:[]}]});
+  const foreign={...raw,sessionId:"other"};snapshot={...foreign,snapshotHash:digest(foreign)};
+  await expect(handleAnalysisWorkflow("correlate_static_runtime",input,scope,options,{} as AnalysisWorkflowStore,ports)).rejects.toThrow("scope");
+  expect(ports.invoke).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();
+ } finally {await rm(root,{recursive:true,force:true});}
+});
