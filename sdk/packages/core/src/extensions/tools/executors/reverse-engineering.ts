@@ -3,6 +3,7 @@ import { verifyCandidate, validateDexBytes } from "./candidate-verification";
 import { sha256Directory } from "./android-project-files";
 import { androidProjectCandidate } from "./android-project-candidate";
 import { exportEvidenceArchive } from "./evidence-archive";
+import { freshCrossLanguage } from "./fresh-cross-language";
 import { INVESTIGATION_COMMANDS } from "../investigation-workflows-schema";
 import { investigationWorkflow } from "./investigation-workflows";
 import { ReverseEngineeringInputSchema } from "../schemas";
@@ -2486,6 +2487,13 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+ if(input.cross_language && input.operation !== "trace_cross_language")throw new Error("cross_language is accepted only by trace_cross_language");
+ if(input.advanced_options?.jni_trace && (input.operation!=="advanced_analysis"||input.advanced_action!=="android_relationships"))throw new Error("jni_trace requires the fixed android_relationships action");
+ if(input.operation === "trace_cross_language" && input.cross_language){
+  if(input.evidence_trace || input.advanced_options || input.advanced_action)throw new Error("Fresh cross-language mode rejects imported graph and advanced overrides");
+  return JSON.stringify(await freshCrossLanguage(input,async(request,signal)=>JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request),{...context,signal})),context.signal));
+ }
+
  if(input.operation === "identify_artifact" && (input.advanced_action || input.advanced_options)) throw new Error("identify_artifact accepts only artifact_discovery budgets, not advanced overrides");
  if(input.artifact_discovery && input.operation !== "identify_artifact") throw new Error("artifact_discovery is accepted only by identify_artifact");
  if (input.runtime_observation_plan && input.operation !== "plan_runtime_observation") throw new Error("runtime_observation_plan is only accepted by plan_runtime_observation");

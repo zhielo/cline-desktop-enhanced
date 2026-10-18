@@ -11,7 +11,7 @@ import sys
 import zipfile
 import zlib
 
-VERSION = "android-static/v5"
+VERSION = "android-static/v6"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -510,6 +510,8 @@ def investigate(request):
     identify_formats = config.get("identify_formats") is True
     records, warnings, dexes = [], [], []
     native_artifacts = []
+    jni_trace = options.get("jni_trace")
+    native_bytes = {}
     dex_data = []
     selected_code = []
     native_work = [0]
@@ -561,6 +563,7 @@ def investigate(request):
                     meta,_=native_metadata(data,identity,limit)
                     record.update(validation="LIEF-parsed-bounded-file-mappings",native=meta)
                     native_artifacts.append(record)
+                    if jni_trace and (not jni_trace.get("native_artifact") or label==jni_trace["native_artifact"]):native_bytes[identity]=data
                     if meta["functionsTruncated"] or meta["jniExportsTruncated"]:truncated[0]=True
                 except ImportError:record["reason"]="LIEF missing; ELF remains an unverified signature candidate"
                 except (ValueError,RuntimeError) as exc:record["reason"]=str(exc)
@@ -648,8 +651,14 @@ def investigate(request):
     selected = []
     relationships = []
     selector = options.get("method")
-    if request["action"] in ("android_method","android_method_code") and not selector:
+    if (jni_trace or request["action"] in ("android_method","android_method_code")) and not selector:
         raise ValueError("android_method requires exact class_descriptor, name and descriptor")
+    native_short_counts={}
+    for artifact,methods in dexes:
+        for method in methods:
+            if method.get("native"):
+                short="Java_"+jni_escape(method["classDescriptor"][1:-1])+"_"+jni_escape(method["name"])
+                native_short_counts[short]=native_short_counts.get(short,0)+1
     for artifact, methods in dexes:
         for method in methods:
             method["id"] = stable(artifact["id"], method["methodIndex"])
@@ -661,7 +670,8 @@ def investigate(request):
                     except ImportError:selected_code.append({"artifactId":artifact["id"],"methodId":method["id"],"status":"blocked","reason":"Androguard is not installed"})
             if method.get("native"):
                 relationship_count += 1
-            if method.get("native") and len(relationships) < limit:
+            matches_selector=not jni_trace or (method["classDescriptor"],method["name"],method["descriptor"]) == (selector["class_descriptor"],selector["name"],selector["descriptor"])
+            if method.get("native") and matches_selector and len(relationships) < limit:
                 short = "Java_" + jni_escape(method["classDescriptor"][1:-1]) + "_" + jni_escape(method["name"])
                 parameters = method["descriptor"].split(")",1)[0][1:]
                 relationships.append({"id": stable(method["id"], "jni-name"), "methodId": method["id"], "artifactId": artifact["id"], "kind": "jni-name-candidate", "shortName": short, "longName": short + "__" + jni_escape(parameters), "confidence": "derived-name-only", "verifiedBinding": False})
@@ -671,11 +681,12 @@ def investigate(request):
     for relationship in relationships:short_counts[relationship["shortName"]]=short_counts.get(relationship["shortName"],0)+1
     for relationship in relationships:
         for lib in native_artifacts:
+            if jni_trace and jni_trace.get("native_artifact") and lib["logicalPath"]!=jni_trace["native_artifact"]:continue
             for symbol in lib["native"]["jniExports"]:
                 if symbol["name"] not in (relationship["shortName"],relationship["longName"]):continue
                 export_match_count+=1
                 if len(matches)>=limit:truncated[0]=True;continue
-                matches.append({"id":stable(relationship["methodId"],symbol["id"]),"kind":"jni-export-match-candidate","methodId":relationship["methodId"],"artifactId":relationship["artifactId"],"nativeArtifactId":lib["id"],"nativeSymbolId":symbol["id"],"symbol":symbol["name"],"addressHex":symbol["addressHex"],"confidence":"static-export-name-match","overloadAmbiguous":symbol["name"]==relationship["shortName"] and (short_counts[relationship["shortName"]]>1 or relationship_count>limit),"verifiedBinding":False})
+                matches.append({"id":stable(relationship["methodId"],symbol["id"]),"kind":"jni-export-match-candidate","methodId":relationship["methodId"],"artifactId":relationship["artifactId"],"nativeArtifactId":lib["id"],"nativeSymbolId":symbol["id"],"symbol":symbol["name"],"addressHex":symbol["addressHex"],"confidence":"static-export-name-match","overloadAmbiguous":symbol["name"]==relationship["shortName"] and ((native_short_counts[relationship["shortName"]]>1 if jni_trace else short_counts[relationship["shortName"]]>1 or relationship_count>limit)),"verifiedBinding":False})
     relationships.extend(matches)
     for artifact, _ in dexes:
         for method in artifact["dex"]["methods"] + artifact["dex"]["loaderReferences"]:
@@ -695,7 +706,7 @@ def investigate(request):
         limitations.append("Content signatures are candidates, not full PE/JVM/Mach-O/Wasm verification or proof all embedded formats were found. Conflicts are preserved; ZIP structure does not validate another candidate. Filenames are untrusted labels; unknown bytes are not a successful identification.")
     else:truncated_identification=False
     status = "partial" if truncated_identification or truncated[0] or warnings or any("rejected" in r["validation"] or "candidate" in r["validation"] for r in records) else "completed"
-    if request["action"] in ("android_method","android_method_code"):
+    if jni_trace or request["action"] in ("android_method","android_method_code"):
         evidence["selectedMethods"] = selected[:limit]
         if selected_code:evidence["selectedCode"]=selected_code
         evidence["selectedMethodCount"] = len(selected)
@@ -707,6 +718,27 @@ def investigate(request):
     if relationship_count > limit or any(r.get("dex",{}).get("methodsTruncated") or r.get("dex",{}).get("loaderReferencesTruncated") for r in records):
         status = "partial"
         limitations.append("Method/reference listings truncated; exact selection searches parsed method pools within stated limits.")
+    if jni_trace:
+        maximum=jni_trace.get("max_candidates",16)
+        if type(maximum) is not int or not 1<=maximum<=64:raise ValueError("JNI candidate budget must be 1..64")
+        candidate_exports=matches[:maximum]
+        trace={"protocol":"cline-fresh-cross-language/v1","status":"partial","observedExecution":False,"methodSelector":selector,"nativeArtifactSelector":jni_trace.get("native_artifact"),"selectedMethodCount":len(selected),"selectedMethods":selected[:20],"candidateExports":candidate_exports,"candidateCount":len(matches),"candidatesTruncated":len(matches)>maximum or export_match_count>limit,"nativeTraversal":{"status":"not-started","reason":"Requires one retained defined native method and one unambiguous retained JNI export candidate"},"bindingVerified":False,"registrationStatus":"unresolved-not-observed"}
+        if len(selected)==1 and selected[0].get("native") and len(matches)==1 and not matches[0]["overloadAmbiguous"]:
+            candidate=matches[0];data=native_bytes.get(candidate["nativeArtifactId"])
+            if data is not None:
+                try:
+                    meta,functions=native_metadata(data,candidate["nativeArtifactId"],limit)
+                    roots=[fn for fn in functions if fn["id"]==candidate["nativeSymbolId"]]
+                    if len(roots)!=1:raise ValueError("Exact retained JNI ELF symbol is missing or ambiguous")
+                    budget=native_call_budget(jni_trace.get("native_calls") or {})
+                    selected_root=roots[0];disassembly=disassemble_selected(data,selected_root,min(4096,budget["max_total_bytes"]),meta["segments"])
+                    graph=native_call_traversal(data,selected_root,disassembly,functions,meta,budget,4096)
+                    trace["nativeTraversal"]={"status":"partial","scope":"selected-static-export-candidate-only","nativeArtifactSha256":hashlib.sha256(data).hexdigest(),"callGraph":graph}
+                except ImportError:trace["nativeTraversal"]={"status":"blocked","reason":"Required static LIEF/Capstone engine missing; no execution fallback"}
+                except (ValueError,RuntimeError) as exc:trace["nativeTraversal"]={"status":"partial","reason":str(exc)[:1000]}
+        evidence["crossLanguageTrace"]=trace
+        status="partial"
+        limitations.append("Fresh JNI trace uses an exact parsed DEX native declaration and static JNI export-name candidates only. Retained candidate uniqueness is not global binding proof; ABI/library loading, RegisterNatives, aliases and runtime reachability remain unresolved. Optional native graph starts at a candidate export, never a proven Java call path.")
     return {"protocol": "cline-advanced-analysis/v1", "status": status, "engine": "android-static", "engineVersion": VERSION,
             "input": {"sha256": hashlib.sha256(root).hexdigest(), "bytes": len(root), "format": records[0]["format"]}, "evidence": evidence, "limitations": limitations}
 

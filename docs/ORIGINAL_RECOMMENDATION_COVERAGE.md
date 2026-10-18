@@ -10,7 +10,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `identify_artifact` | partial | Content-based bounded ZIP/gzip/zlib traversal, DEX carving, hashes/origins and conflicting/unknown signatures. PE/JVM/Mach-O/Wasm remain candidates; no universal identification or full format validation. |
 | `map_attack_surface` | partial | JS/TS syntax and APK manifest evidence; no universal entrypoint inventory. |
 | `trace_data_flow` | partial | Declared saved-report edges only; unresolved whole-program paths are not inferred. |
-| `trace_cross_language` | partial | Saved validated graph paths; no universal JNI or Electron resolver. |
+| `trace_cross_language` | partial | Fresh exact DEX-native/JNI export-name candidates plus bounded ELF call graph, or fresh literal Electron renderer/preload/main candidates; saved graph paths retained. No dynamic registration, IPC delivery, observed flow or universal resolver. |
 | `explain_behavior` | partial | Exact JS/TS function evidence and relationships; no generated behavioral verdict. |
 | `compare_versions` | partial | APK ZIP-entry or bounded byte comparison; not a combined semantic/API report. |
 | `query_investigation` | bounded | Existing bounded saved investigation query adapter; no automatic reruns. |

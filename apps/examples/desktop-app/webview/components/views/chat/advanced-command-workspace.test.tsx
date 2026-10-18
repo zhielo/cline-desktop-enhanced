@@ -170,7 +170,7 @@ it.each([
 	["apply_candidate_batch", "batch_preview_sha256"],
 	["trace_source_sink", "source_sink"],
 	["audit_candidate_batch", "target"],
-	["trace_cross_language", "evidence_trace"],
+	["trace_cross_language", "cross_language"],
 	["trace_data_flow", "evidence_trace"],
 	["decompile_dotnet_method", "managed_method"],
 	["read_jvm_method", "jvm_method"],

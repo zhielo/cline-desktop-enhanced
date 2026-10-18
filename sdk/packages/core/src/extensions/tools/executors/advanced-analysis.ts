@@ -127,6 +127,7 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
+        jni_trace?: {native_artifact?:string;max_candidates?:number;native_calls?:{max_depth?:number;max_functions?:number;max_edges?:number;max_total_bytes?:number}};
 		discovery?: {
 			max_depth?: number;
 			max_artifacts?: number;

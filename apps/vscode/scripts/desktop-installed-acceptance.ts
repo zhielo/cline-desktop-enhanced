@@ -1355,6 +1355,29 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const discoveryLimited=(await runOwnedAdvanced({operation:"identify_artifact",target:discoveryTarget,artifact_discovery:{max_depth:0,max_artifacts:8},timeout_ms:120000})).result as unknown as OwnedDiscovery;
     if(discoveryLimited.status!=="partial"||discoveryLimited.stages[0]?.result.result.evidence.artifacts.length!==1||!discoveryLimited.stages[0].result.result.evidence.coverage.truncated||!(await readFile(discoveryTarget)).equals(discoveryBytes))throw new Error("Installed discovery escaped depth budget or changed input");
     stages.push("installed-content-artifact-discovery-nesting-ambiguity-budgets-no-execution-passed");
+    const jniFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-jni-cross-language-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string;nativeSha256:string};
+    const jniBytes=Buffer.from(jniFixture.base64,"base64"),jniTarget=join(workspace,"owned-fresh-jni.apk");
+    if(createHash("sha256").update(jniBytes).digest("hex")!==jniFixture.sha256)throw new Error("Owned fresh JNI fixture digest mismatch");
+    await writeFile(jniTarget,jniBytes);
+    const jniRequest={operation:"trace_cross_language",target:jniTarget,cross_language:{kind:"android-jni",method:{class_descriptor:"LFixture;",name:"native_work",descriptor:"()V"},native_artifact:"lib/x86_64/libowned.so",max_candidates:8,native_calls:{max_depth:2,max_functions:3,max_edges:4,max_total_bytes:32}},timeout_ms:120000};
+    type OwnedJni={status:string;observedExecution:boolean;stages:{result:{result:{input:{sha256:string};evidence:{crossLanguageTrace:{bindingVerified:boolean;observedExecution:boolean;registrationStatus:string;selectedMethodCount:number;candidateCount:number;nativeTraversal:{status:string;nativeArtifactSha256:string;callGraph:OwnedNativeGraph}}}}}}[]};
+    const jniResult=(await runOwnedAdvanced(jniRequest)).result as unknown as OwnedJni,jniWorker=jniResult.stages[0]?.result.result,jniTrace=jniWorker?.evidence.crossLanguageTrace,jniGraph=jniTrace?.nativeTraversal.callGraph;
+    if(jniResult.status!=="partial"||jniResult.observedExecution!==false||jniWorker?.input.sha256!==jniFixture.sha256||jniTrace?.bindingVerified!==false||jniTrace.observedExecution!==false||jniTrace.registrationStatus!=="unresolved-not-observed"||jniTrace.selectedMethodCount!==1||jniTrace.candidateCount!==1||jniTrace.nativeTraversal.nativeArtifactSha256!==jniFixture.nativeSha256||jniGraph?.observedExecution!==false||jniGraph.nodes.map(n=>n.name).join(",")!=="Java_Fixture_native_1work,owned_child,owned_leaf"||jniGraph.edges[2]?.resolution!=="already-scheduled-or-visited")throw new Error("Installed fresh JNI export/native-call candidate evidence failed or claimed an observed binding");
+    const missingJni=(await runOwnedAdvanced({...jniRequest,cross_language:{...jniRequest.cross_language,native_artifact:"lib/missing.so"}})).result as unknown as OwnedJni;
+    if(missingJni.status!=="partial"||missingJni.stages[0]?.result.result.evidence.crossLanguageTrace.candidateCount!==0||missingJni.stages[0].result.result.evidence.crossLanguageTrace.nativeTraversal.status!=="not-started"||!(await readFile(jniTarget)).equals(jniBytes))throw new Error("Installed missing JNI library invented a binding or changed input");
+    stages.push("installed-fresh-android-jni-native-candidates-no-binding-or-execution-passed");
+    const electronRoot=join(workspace,"owned-fresh-electron");await mkdir(electronRoot);
+    const electronSources={"preload.ts":'import {contextBridge as cb,ipcRenderer as ir} from "electron";cb.exposeInMainWorld("owned",{read:(x)=>ir.invoke("owned:read",x)});',"renderer.js":'window.owned.read(1);globalThis.__crossLanguageShouldNotExecute=true;',"main.js":'import {ipcMain} from "electron";ipcMain.handle("owned:read",()=>42);ipcMain.handle("other:channel",()=>0);'};
+    for(const [name,source]of Object.entries(electronSources))await writeFile(join(electronRoot,name),source);
+    type OwnedElectron={status:string;observedExecution:boolean;mode:string;selection:{status:string;handlerCandidates:number};nodes:{kind:string;value:string}[];edges:{kind:string}[];artifacts:{path:string;sha256:string}[];inputFingerprint:string};
+    const electronRequest={operation:"trace_cross_language",target:electronRoot,cross_language:{kind:"electron-ipc",channel:"owned:read",max_depth:4,max_nodes:32,max_edges:32},timeout_ms:120000};
+    const electronResult=(await runOwnedAdvanced(electronRequest)).result as unknown as OwnedElectron;
+    if(electronResult.status!=="partial"||electronResult.observedExecution!==false||electronResult.mode!=="fresh-electron-ipc-candidates"||electronResult.selection.handlerCandidates!==1||!electronResult.nodes.some(n=>n.kind==="preload-call")||!electronResult.edges.some(e=>e.kind==="preload-candidate")||!electronResult.edges.some(e=>e.kind==="ipc-candidate")||electronResult.nodes.some(n=>n.value==="other:channel")||electronResult.artifacts.length!==3||!/^([a-f0-9]{64})$/.test(electronResult.inputFingerprint))throw new Error("Installed fresh Electron renderer/preload/main candidates failed");
+    const missingElectron=(await runOwnedAdvanced({...electronRequest,cross_language:{...electronRequest.cross_language,channel:"missing"}})).result as unknown as OwnedElectron;
+    if(missingElectron.status!=="partial"||missingElectron.selection.status!=="not-found-in-covered-sources"||missingElectron.nodes.length!==0)throw new Error("Installed missing IPC channel invented a path");
+    for(const [name,source]of Object.entries(electronSources))if(await readFile(join(electronRoot,name),"utf8")!==source||!electronResult.artifacts.some(a=>a.path===name&&a.sha256===createHash("sha256").update(source).digest("hex")))throw new Error("Installed fresh Electron input/provenance changed");
+    stages.push("installed-fresh-electron-renderer-preload-main-channel-candidates-passed");
+
 
 
 

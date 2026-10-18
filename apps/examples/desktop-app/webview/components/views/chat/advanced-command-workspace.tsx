@@ -75,7 +75,24 @@ function template(command: string) {
 							}),
 		};
 	}
-	if (["trace_cross_language", "trace_data_flow"].includes(command))
+	if (command === "trace_cross_language")
+		base.cross_language = {
+			kind: "android-jni",
+			method: {
+				class_descriptor: "LFixture;",
+				name: "native_work",
+				descriptor: "()V",
+			},
+			native_artifact: "lib/x86_64/libowned.so",
+			max_candidates: 16,
+			native_calls: {
+				max_depth: 2,
+				max_functions: 16,
+				max_edges: 128,
+				max_total_bytes: 32768,
+			},
+		};
+	if (command === "trace_data_flow")
 		base.evidence_trace = {
 			start_id: "",
 			max_depth: 6,

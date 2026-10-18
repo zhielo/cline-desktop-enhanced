@@ -133,6 +133,44 @@ class AndroidTests(unittest.TestCase):
             r=self.identify(data,**budgets);self.assertEqual(r['status'],'partial');self.assertEqual(len(r['evidence']['artifacts']),1)
         self.assertEqual(self.identify(archive([('../escape',b'x')]))['status'],'partial')
         self.assertEqual(self.identify(b'PK\x03\x04bad')['status'],'partial')
+    def jni_trace(self,data,**overrides):
+        options={'method':{'class_descriptor':'LFixture;','name':'native_work','descriptor':'()V'},'jni_trace':{'max_candidates':16,'native_calls':{'max_depth':2,'max_functions':3,'max_edges':4,'max_total_bytes':32}}}
+        options.update(overrides)
+        return self.run_action(data,'android_relationships',options=options)
+    def test_fresh_jni_missing_and_non_native_selection_no_traversal(self):
+        for data in [dex_fixture(),dex_fixture(True),archive([('opaque',b'x')])]:
+            r=self.jni_trace(data);trace=r['evidence']['crossLanguageTrace']
+            self.assertEqual(r['status'],'partial');self.assertFalse(trace['bindingVerified']);self.assertFalse(trace['observedExecution'])
+            self.assertEqual(trace['nativeTraversal']['status'],'not-started')
+    def test_fresh_jni_real_export_to_bounded_native_cycle(self):
+        try:import lief,capstone
+        except ImportError:self.skipTest('optional LIEF and Capstone unavailable')
+        import base64
+        fixture=json.loads((HERE/'owned-jni-cross-language-fixture.json').read_text());data=base64.b64decode(fixture['base64'])
+        r=self.jni_trace(data);trace=r['evidence']['crossLanguageTrace'];graph=trace['nativeTraversal']['callGraph']
+        self.assertEqual(r['input']['sha256'],fixture['sha256']);self.assertEqual(trace['nativeTraversal']['nativeArtifactSha256'],fixture['nativeSha256'])
+        self.assertEqual(trace['selectedMethodCount'],1);self.assertEqual(trace['candidateCount'],1)
+        self.assertEqual([n['name'] for n in graph['nodes']],['Java_Fixture_native_1work','owned_child','owned_leaf'])
+        self.assertEqual(graph['edges'][-1]['resolution'],'already-scheduled-or-visited');self.assertFalse(graph['observedExecution'])
+        self.assertEqual(r['status'],'partial');self.assertEqual(trace['registrationStatus'],'unresolved-not-observed');self.assertEqual(self.path.read_bytes(),data)
+    def test_fresh_jni_multidex_ambiguity_does_not_follow_native(self):
+        try:import lief
+        except ImportError:self.skipTest('optional LIEF unavailable')
+        r=self.jni_trace(archive([('classes.dex',dex_fixture()),('classes2.dex',dex_fixture()),('lib/owned.so',elf_fixture())]))
+        t=r['evidence']['crossLanguageTrace'];self.assertEqual(t['selectedMethodCount'],2);self.assertEqual(t['nativeTraversal']['status'],'not-started')
+    def test_fresh_jni_abi_selection_and_depth_budget(self):
+        try:import lief,capstone
+        except ImportError:self.skipTest('optional LIEF and Capstone unavailable')
+        data=archive([('classes.dex',dex_fixture()),('lib/a/owned.so',elf_fixture()),('lib/b/owned.so',elf_fixture())])
+        ambiguous=self.jni_trace(data)['evidence']['crossLanguageTrace'];self.assertEqual(ambiguous['candidateCount'],2);self.assertEqual(ambiguous['nativeTraversal']['status'],'not-started')
+        selected=self.jni_trace(data,jni_trace={'native_artifact':'lib/a/owned.so','max_candidates':1,'native_calls':{'max_depth':0}})['evidence']['crossLanguageTrace']
+        self.assertEqual(selected['candidateCount'],1);self.assertEqual(len(selected['nativeTraversal']['callGraph']['nodes']),1)
+        missing=self.jni_trace(data,jni_trace={'native_artifact':'lib/missing.so'})['evidence']['crossLanguageTrace'];self.assertEqual(missing['candidateCount'],0);self.assertEqual(missing['nativeTraversal']['status'],'not-started')
+    def test_fresh_jni_candidate_cap_explicit(self):
+        try:import lief
+        except ImportError:self.skipTest('optional LIEF unavailable')
+        r=self.jni_trace(archive([('classes.dex',dex_fixture()),('lib/a.so',elf_fixture()),('lib/b.so',elf_fixture())]),jni_trace={'max_candidates':1})
+        t=r['evidence']['crossLanguageTrace'];self.assertEqual(len(t['candidateExports']),1);self.assertTrue(t['candidatesTruncated']);self.assertEqual(t['nativeTraversal']['status'],'not-started')
     def test_integrity_and_native_lookup(self):
         result=self.run_action(dex_fixture(),'android_method',options={'method':{'class_descriptor':'LFixture;','name':'native_work','descriptor':'()V'}})
         e=result['evidence'];self.assertEqual(e['selectedMethods'][0]['native'],True)
