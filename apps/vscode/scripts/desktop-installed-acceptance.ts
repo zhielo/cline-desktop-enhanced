@@ -16,10 +16,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
 
-/** v12 owns more than 256 RPC/native actions. Keep evidence finite and fail closed,
- * including cleanup/restart actions; never drop records to manufacture a pass.
- * At most 384 actions / 768 running+terminal progress records, no child log payloads. */
-export const INSTALLED_ACTION_LIMIT = 384;
+/** The expanded v12 journey exceeded 384 RPC/native actions before its final
+ * restart. Reserve bounded headroom for the complete journey, not dropped records
+ * or skipped acceptance steps. At most 768 actions / 1536 running+terminal progress
+ * records, no child log payloads. Native process cleanup is independent of this cap. */
+export const INSTALLED_ACTION_LIMIT = 768;
 export function assertInstalledActionSequence(sequence: number) {
   if (!Number.isSafeInteger(sequence) || sequence < 1 || sequence > INSTALLED_ACTION_LIMIT)
     throw new Error("Installed action evidence budget reached");
