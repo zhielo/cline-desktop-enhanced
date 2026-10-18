@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { InvestigationSchemas } from "@cline/core";
+import { InvestigationSchemas, isBatchStaticOperation } from "@cline/core";
 import { z } from "zod";
 import type { AnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
 import type { ExecutionControlService } from "./execution-control-service";
@@ -16,7 +16,7 @@ const Names = [
 	"resume_investigation",
 ] as const;
 const limits = [
-	"Built-in static inspect, scan_strings and APK comparison only; no target execution, shell, candidate writes or external engines.",
+	"Built-in static file inspection, source/Electron/.NET/mitigation/comparison and saved-graph analysis only; no target execution, shell, candidate writes or external engines. Partial results retain their evidence and allow independent reads; they never pass dependencies. Failures stop the batch.",
 	"All inputs must already exist as confined regular files of at most 64 MiB; no producer-output chaining.",
 	"Dependencies order stages; they do not imply data flow or runtime causality. Two simultaneous reads maximum.",
 	"Resume never retries started stages and blocks unresolved dependencies. Checkpoints are already durable; status reads do not force a flush.",
@@ -74,12 +74,7 @@ export async function handleBatchInvestigation(
 			c.jobs.filter((j) => j.status === "completed").map((j) => j.id),
 		);
 		for (const s of c.request.stages) {
-			if (
-				s.backend !== "static" ||
-				!["inspect", "scan_strings", "compare_apks"].includes(
-					String(s.request.operation),
-				)
-			)
+			if (s.backend !== "static" || !isBatchStaticOperation(s.request))
 				throw new Error("Only built-in static batches can resume here");
 			if (
 				!s.target_sha256 ||
@@ -208,6 +203,7 @@ export async function handleBatchInvestigation(
 			operation: "execution_pipeline",
 			trusted_host_work: true,
 			archive_logs: false,
+			continue_independent_reads: true,
 			stages: req.stages.map((s) => ({ ...s, backend: "static" })),
 		};
 	}

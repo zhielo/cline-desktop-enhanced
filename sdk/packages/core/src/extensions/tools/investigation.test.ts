@@ -57,6 +57,77 @@ it("disabling reverse engineering also disables host investigation registration"
 });
 
 it("network metadata alias shares strict browser schema and rejects self-consent", () => {
- expect(InvestigationSchemas.capture_network_metadata).toBe(InvestigationSchemas.capture_browser_scenario);
- expect(() => InvestigationSchemas.capture_network_metadata.parse({action:"start",browserSessionId:"11111111-1111-4111-8111-111111111111",purpose:"owned",confirmRecord:true})).toThrow();
+	expect(InvestigationSchemas.capture_network_metadata).toBe(
+		InvestigationSchemas.capture_browser_scenario,
+	);
+	expect(() =>
+		InvestigationSchemas.capture_network_metadata.parse({
+			action: "start",
+			browserSessionId: "11111111-1111-4111-8111-111111111111",
+			purpose: "owned",
+			confirmRecord: true,
+		}),
+	).toThrow();
+});
+
+it("accepts bounded source and saved-graph reads, not runtime or output authority", () => {
+	const base = {
+		operation_id: "11111111-1111-4111-8111-111111111111",
+		title: "Owned",
+		stages: [] as unknown[],
+	};
+	const parse = (request: unknown) =>
+		InvestigationSchemas.plan_batch.parse({
+			...base,
+			stages: [{ id: "read", request }],
+		});
+	expect(
+		parse({
+			operation: "trace_source_symbol",
+			target: "owned.ts",
+			workflow_query: { symbol: "owned" },
+		}),
+	).toBeDefined();
+	expect(
+		parse({
+			operation: "advanced_analysis",
+			advanced_action: "graph_query",
+			target: "saved.json",
+			advanced_options: { graph_query: { depth: 2, limit: 20 } },
+		}),
+	).toBeDefined();
+	for (const request of [
+		{ operation: "trace_source_symbol", target: "owned.ts" },
+		{ operation: "compare_public_api", target: "owned.ts" },
+		{ operation: "map_attack_surface", target: "owned.APK" },
+		{
+			operation: "advanced_analysis",
+			advanced_action: "notebook_run",
+			target: "saved.json",
+		},
+		{
+			operation: "advanced_analysis",
+			advanced_action: "unicorn_emulate",
+			target: "saved.bin",
+		},
+		{
+			operation: "advanced_analysis",
+			advanced_action: "graph_query",
+			target: "saved.json",
+			output_file: "new.json",
+		},
+		{
+			operation: "inspect_binary_mitigations",
+			target: "owned.exe",
+			script_path: "run.py",
+		},
+		{ operation: "trace_electron_ipc", target: "owned.ts", engine: "ida" },
+	])
+		expect(() => parse(request)).toThrow();
+	expect(() =>
+		InvestigationSchemas.run_batch.parse({
+			...base,
+			continue_independent_reads: true,
+		}),
+	).toThrow();
 });

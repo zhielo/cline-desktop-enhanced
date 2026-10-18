@@ -329,3 +329,176 @@ it("a failed started dependency blocks continuation, never repairs by replay", a
 		f.call("resume_investigation", { receiptId: r.id, revision: c.revision }),
 	).rejects.toThrow("Unresolved started dependency");
 });
+
+it("retains real source evidence as partial while independent reads finish and dependents never run", async () => {
+	const f = await fixture();
+	const source =
+		'export function owned(){ return "evidence"; }\n(globalThis as any).__batchMustNotRun = true;';
+	await writeFile(join(f.root, "owned.ts"), source);
+	const req = {
+		...f.req,
+		parallel: 1,
+		stages: [
+			{
+				id: "source",
+				request: {
+					operation: "explain_behavior",
+					target: "owned.ts",
+					workflow_query: { symbol: "owned" },
+				},
+			},
+			{
+				id: "dependent",
+				depends_on: ["source"],
+				request: { operation: "inspect", target: "owned.bin" },
+			},
+			{
+				id: "independent",
+				request: { operation: "scan_strings", target: "owned.bin" },
+			},
+		],
+	};
+	const r = await f.run("run_batch", req),
+		c = await terminal(f, r.id);
+	expect(c.status).toBe("partial");
+	expect(c.jobs.map((j) => j.status)).toEqual([
+		"partial",
+		"cancelled",
+		"completed",
+	]);
+	expect(c.jobs[0].result).toMatchObject({
+		status: "partial",
+		observedExecution: false,
+		selectedFunction: { text: expect.stringContaining('return "evidence"') },
+	});
+	expect(c.jobs[0].resultHash).toMatch(/^[a-f0-9]{64}$/);
+	expect(c.jobs[1].startedAt).toBeUndefined();
+	expect((globalThis as any).__batchMustNotRun).toBeUndefined();
+	const { readFile } = await import("node:fs/promises");
+	expect(await readFile(join(f.root, "owned.ts"), "utf8")).toBe(source);
+	await expect(
+		f.call("resume_investigation", { receiptId: r.id, revision: c.revision }),
+	).rejects.toThrow("Unresolved started dependency");
+});
+it("runs saved graph analysis with no worker, shell or target execution", async () => {
+	const f = await fixture();
+	await writeFile(
+		join(f.root, "saved.json"),
+		JSON.stringify({
+			schemaVersion: 1,
+			nodes: [
+				{
+					id: "owned",
+					kind: "artifact",
+					label: "owned",
+					artifactSha256: "a".repeat(64),
+					confidence: "reported",
+					evidenceIndex: 0,
+				},
+			],
+			edges: [],
+			coverage: [],
+			sourceHashes: ["a".repeat(64)],
+		}),
+	);
+	const r = await f.run("run_batch", {
+		...f.req,
+		stages: [
+			{
+				id: "graph",
+				request: {
+					operation: "advanced_analysis",
+					advanced_action: "graph_query",
+					target: "saved.json",
+					advanced_options: { graph_query: { kind: "artifact", limit: 2 } },
+				},
+			},
+		],
+	});
+	const c = await terminal(f, r.id);
+	expect(c.jobs[0].error).toBeUndefined();
+	expect(["completed", "partial"]).toContain(c.status);
+	expect(c.jobs[0].resultHash).toMatch(/^[a-f0-9]{64}$/);
+	expect(JSON.stringify(c.jobs[0].result)).toContain(
+		"content-identity-not-authentication",
+	);
+});
+it("hash-binds both source comparison inputs, rejecting a changed comparison after approval", async () => {
+	const f = await fixture();
+	await writeFile(join(f.root, "a.ts"), "export const a=1;");
+	await writeFile(join(f.root, "b.ts"), "export const b=2;");
+	const req = {
+		...f.req,
+		stages: [
+			{
+				id: "compare",
+				request: {
+					operation: "compare_public_api",
+					target: "a.ts",
+					compare_target: "b.ts",
+				},
+			},
+		],
+	};
+	const p = (await f.call("run_batch", req)) as {
+		id: string;
+		requirements: string[];
+		requestHash: string;
+	};
+	const a = f.tasks.approve(p.id, p.requirements, p.requestHash);
+	await writeFile(join(f.root, "b.ts"), "export const changed=3;");
+	const r = (await f.call("run_batch", {
+		...req,
+		phase: "run",
+		planId: p.id,
+		executionToken: a.executionToken,
+	})) as { id: string };
+	const c = await terminal(f, r.id);
+	expect(c.status).toBe("failed");
+	expect(c.jobs[0].error).toContain("Comparison artifact changed");
+});
+
+it("preserves nested CFG partial status while independent reads finish", async () => {
+	const f = await fixture();
+	await writeFile(
+		join(f.root, "cfg.json"),
+		JSON.stringify({
+			schemaVersion: 1,
+			entry: "a",
+			blocks: [{ id: "a", successors: [] }],
+		}),
+	);
+	const r = await f.run("run_batch", {
+		...f.req,
+		stages: [
+			{
+				id: "cfg",
+				request: {
+					operation: "advanced_analysis",
+					advanced_action: "cfg_analyze",
+					target: "cfg.json",
+				},
+			},
+			{
+				id: "dependent",
+				depends_on: ["cfg"],
+				request: { operation: "inspect", target: "owned.bin" },
+			},
+			{
+				id: "independent",
+				request: { operation: "inspect", target: "owned.bin" },
+			},
+		],
+	});
+	const c = await terminal(f, r.id);
+	expect(c.status).toBe("partial");
+	expect(c.jobs.map((j) => j.status)).toEqual([
+		"partial",
+		"cancelled",
+		"completed",
+	]);
+	expect(c.jobs[0].result).toMatchObject({
+		result: { status: "partial", evidence: { equivalence: "not-proven" } },
+	});
+	expect(c.jobs[1].startedAt).toBeUndefined();
+});

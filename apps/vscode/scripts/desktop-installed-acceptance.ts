@@ -962,7 +962,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -1065,6 +1065,32 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const batchCancelled=await rpc<InstalledBatchCheckpoint>(page,"cancel_batch",{...triageScope,input:{receiptId:batchStarted.id}});
     if(batchCancelled.receipt.revision!==batchCheckpoint.receipt.revision)throw new Error("Installed terminal cancellation mutated completed evidence");
     stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
+    const objectivePlan=await runOwnedAdvanced({operation:"plan_investigation",target:ownedWorkflowSource,compare_target:ownedApiAfter,investigation_plan:{workflow:"electron",goal:"Owned explicit source evidence",objectives:["inventory","exact-function","compare"],symbol:"ownedWorkflow"},timeout_ms:120000});
+    if(objectivePlan.result.executed!==false||objectivePlan.result.batchDraft?.stages.length!==3||objectivePlan.result.enginePreflight?.startsWith("not-run")!==true||objectivePlan.result.batchDraft.stages.some(s=>s.request.script_path||s.request.output_file))throw new Error("Installed structured batch draft fabricated execution or unsafe stages");
+    const ownedBatchCfg=join(workspace,"owned-batch-cfg.json");
+    await writeFile(ownedBatchCfg,JSON.stringify({schemaVersion:1,entry:"a",blocks:[{id:"a",successors:[]}]}));
+    const expandedBatch={operation_id:randomUUID(),title:"Installed source partial and independent reads",parallel:1,stages:[
+      {id:"source",request:{operation:"explain_behavior",target:ownedWorkflowSource,workflow_query:{symbol:"ownedWorkflow"}}},
+      {id:"blocked-dependent",depends_on:["source"],request:{operation:"inspect",target:ownedWorkflowSource}},
+      {id:"independent",request:{operation:"compare_public_api",target:ownedWorkflowSource,compare_target:ownedApiAfter}},
+      {id:"cfg",request:{operation:"advanced_analysis",advanced_action:"cfg_analyze",target:ownedBatchCfg}},
+      {id:"inventory",request:{operation:"inspect",target:ownedWorkflowSource}},
+    ]};
+    const expandedPlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"run_batch",{...triageScope,input:expandedBatch});
+    const expandedApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:expandedPlan.id,requestHash:expandedPlan.requestHash,requirements:expandedPlan.requirements});
+    const expandedStarted=await rpc<{id:string}>(page,"run_batch",{...triageScope,input:{...expandedBatch,phase:"run",planId:expandedPlan.id,executionToken:expandedApproval.executionToken}});
+    let expandedCheckpoint:InstalledBatchCheckpoint|undefined;
+    for(let attempt=0;attempt<100;attempt++){
+      expandedCheckpoint=await rpc<InstalledBatchCheckpoint>(page,"checkpoint_investigation",{...triageScope,input:{receiptId:expandedStarted.id}});
+      if(!["accepted","starting","running"].includes(expandedCheckpoint.receipt.status))break;
+      await delay(100);
+    }
+    if(expandedCheckpoint?.receipt.status!=="partial"||expandedCheckpoint.receipt.jobs.map(j=>j.status).join(",")!=="partial,cancelled,partial,partial,completed"||!(expandedCheckpoint.receipt.jobs[0].result as any)?.selectedFunction?.text.includes('return "owned evidence"')||await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText)throw new Error("Installed partial evidence unlocked dependent work, lost independent reads, or changed the input");
+    let expandedResumeDenied=false;
+    try{await rpc(page,"resume_investigation",{...triageScope,input:{receiptId:expandedStarted.id,revision:expandedCheckpoint.receipt.revision}});}catch{expandedResumeDenied=true;}
+    if(!expandedResumeDenied)throw new Error("Installed partial dependency replayed");
+    stages.push("installed-structured-batch-draft-partial-independent-reads-passed");
+
     const candidateValidationHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:ownedWorkflowSource}});
     const candidateReviewHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:batchManifest}});
     for(const [command,input] of [

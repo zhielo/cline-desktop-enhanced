@@ -1204,7 +1204,19 @@ export {
 	type InvestigationExecutor,
 } from "./extensions/tools/investigation";
 
-export { verifyAndroidToolchain, androidToolchainRoot, ANDROID_TOOLCHAIN_PROFILE } from "./extensions/tools/executors/android-toolchain";
+export {
+	verifyAndroidToolchain,
+	androidToolchainRoot,
+	ANDROID_TOOLCHAIN_PROFILE,
+} from "./extensions/tools/executors/android-toolchain";
 export { testAndroidToolchain } from "./extensions/tools/executors/android-toolchain-fixtures";
 
-export { analysisCommandCatalog, isAnalysisWriteOperation } from "./extensions/tools/analysis-commands";
+export {
+	analysisCommandCatalog,
+	isAnalysisWriteOperation,
+} from "./extensions/tools/analysis-commands";
+
+export {
+	BatchStaticRequestSchema,
+	isBatchStaticOperation,
+} from "./extensions/tools/batch-analysis-schema";

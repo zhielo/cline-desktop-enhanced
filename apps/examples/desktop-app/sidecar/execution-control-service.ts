@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import {
 	LiveDebuggerInputSchema,
+	isBatchStaticOperation,
 	type ProcessSessionManager,
 	probeProcessStartTokenAsync,
 	ReverseEngineeringInputSchema,
@@ -23,12 +24,27 @@ export const PipelineInput = z
 		operation_id: Id,
 		title: z.string().min(1).max(120),
 		trusted_host_work: z.literal(true),
-  owner_session_id: z.string().min(1).max(200).optional(),
-  client_request_hash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  implementation_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  resume_from: z.object({id: Id, revision: z.number().int().min(0), hash: z.string().regex(/^[a-f0-9]{64}$/), reused: z.array(z.string()).max(12)}).strict().optional(),
+		owner_session_id: z.string().min(1).max(200).optional(),
+		client_request_hash: z
+			.string()
+			.regex(/^[a-f0-9]{64}$/)
+			.optional(),
+		implementation_sha256: z
+			.string()
+			.regex(/^[a-f0-9]{64}$/)
+			.optional(),
+		resume_from: z
+			.object({
+				id: Id,
+				revision: z.number().int().min(0),
+				hash: z.string().regex(/^[a-f0-9]{64}$/),
+				reused: z.array(z.string()).max(12),
+			})
+			.strict()
+			.optional(),
 		parallel: z.number().int().min(1).max(2).default(1),
 		archive_logs: z.boolean().default(false),
+		continue_independent_reads: z.boolean().default(false),
 		stages: z
 			.array(
 				z
@@ -75,6 +91,7 @@ type Job = {
 		| "running"
 		| "awaiting-input"
 		| "completed"
+		| "partial"
 		| "failed"
 		| "cancelled"
 		| "uncertain";
@@ -110,6 +127,7 @@ export type ExecutionReceipt = {
 		| "starting"
 		| "running"
 		| "completed"
+		| "partial"
 		| "failed"
 		| "cancelled"
 		| "uncertain";
@@ -270,6 +288,17 @@ export class ExecutionControlService {
 		const p: Pipeline = PipelineInput.parse(value);
 		validateGraph(p);
 		for (const stage of p.stages) {
+			if (
+				p.continue_independent_reads &&
+				(stage.backend !== "static" ||
+					!p.owner_session_id ||
+					!p.client_request_hash ||
+					!isBatchStaticOperation(stage.request))
+			)
+				throw new Error(
+					"Independent read continuation requires an owning fixed static batch",
+				);
+
 			if (stage.backend === "shell") {
 				const s = Shell.parse(stage.request);
 				if (
@@ -322,6 +351,15 @@ export class ExecutionControlService {
 						"analyze",
 						"decompile",
 						"disassemble_smali",
+						"trace_electron_ipc",
+						"audit_preload_bridge",
+						"trace_source_symbol",
+						"explain_behavior",
+						"map_attack_surface",
+						"compare_public_api",
+						"map_dotnet_interop",
+						"inspect_binary_mitigations",
+						"compare_versions",
 					].includes(request.operation) ||
 						("script_path" in request && request.script_path))
 				)
@@ -363,10 +401,10 @@ export class ExecutionControlService {
 						? `debugger:${stage.request.pid ?? stage.request.target ?? "discovery"}`
 						: `analysis:${stage.request.output_directory ?? stage.request.target ?? "health"}`;
 		}
-  return p;
- }
- async prepare(root: string, value: unknown) {
-  const p = await this.preview(root, value);
+		return p;
+	}
+	async prepare(root: string, value: unknown) {
+		const p = await this.preview(root, value);
 		return this.options.tasks.prepare({
 			workspaceRoot: root,
 			kind: "execution",
@@ -509,7 +547,9 @@ export class ExecutionControlService {
 					? "uncertain"
 					: c.jobs.some((j) => j.status === "failed")
 						? "failed"
-						: "cancelled";
+						: c.jobs.some((j) => j.status === "partial")
+							? "partial"
+							: "cancelled";
 			this.checkpoint(c, "terminal-receipt");
 			if (c.status === "completed")
 				this.options.tasks.complete(c.planId, c, "execution-control");
@@ -568,7 +608,7 @@ export class ExecutionControlService {
 				const result = await (stage.backend === "static"
 					? this.options.static
 					: this.options.debugger)(stage.request, signal);
-    // Preserve returned evidence even when cancellation races adapter completion.
+				// Preserve returned evidence even when cancellation races adapter completion.
 				const encoded = JSON.stringify(result) ?? "null";
 				j.resultHash = digest(encoded);
 				j.resultTruncated = Buffer.byteLength(encoded) > 65536;
@@ -593,12 +633,36 @@ export class ExecutionControlService {
 					)?.cancelled ||
 					(result as { timedOut?: boolean })?.timedOut ||
 					(result as { outputDrainTimedOut?: boolean })?.outputDrainTimedOut ||
-					["failed", "blocked", "cancelled", "partial", "uncertain"].some(status =>
-      (result as { status?: string })?.status === status ||
-      (result as { result?: { status?: string } })?.result?.status === status
-     )
+					["failed", "blocked", "cancelled", "partial", "uncertain"].some(
+						(status) =>
+							(result as { status?: string })?.status === status ||
+							(result as { result?: { status?: string } })?.result?.status ===
+								status,
+					)
 						? "failed"
 						: "completed";
+				if (
+					c.request.continue_independent_reads &&
+					j.status === "failed" &&
+					((result as { status?: string })?.status === "partial" ||
+						(result as { result?: { status?: string } })?.result?.status ===
+							"partial") &&
+					!["failed", "blocked", "cancelled", "uncertain"].includes(
+						(result as { status?: string })?.status ?? "",
+					) &&
+					!["failed", "blocked", "cancelled", "uncertain"].includes(
+						(result as { result?: { status?: string } })?.result?.status ?? "",
+					) &&
+					(result as { succeeded?: boolean })?.succeeded !== false &&
+					!(
+						(result as { timedOut?: boolean })?.timedOut ||
+						(result as { cancelled?: boolean })?.cancelled ||
+						(result as { outputDrainTimedOut?: boolean })?.outputDrainTimedOut
+					) &&
+					((result as { exitCode?: number | null })?.exitCode === undefined ||
+						(result as { exitCode?: number | null })?.exitCode === 0)
+				)
+					j.status = "partial";
 				j.outputComplete = true;
 			} else {
 				const s = Shell.parse(stage.request);
