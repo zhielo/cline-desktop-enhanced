@@ -59,7 +59,15 @@ def reseal(data):
 def archive(entries, compressed=False):
     buf=io.BytesIO()
     with zipfile.ZipFile(buf,'w',compression=zipfile.ZIP_DEFLATED if compressed else zipfile.ZIP_STORED) as z:
-        for name,data in entries:z.writestr(name,data)
+        for name,data in entries:
+            # Preserve malicious bytes rather than ZipInfo's host-dependent
+            # separator/NUL normalization before archive serialization.
+            if isinstance(name,zipfile.ZipInfo):
+                z.writestr(name,data);continue
+            entry=zipfile.ZipInfo('fixture')
+            entry.filename=name;entry.orig_filename=name;entry.create_system=3
+            entry.compress_type=zipfile.ZIP_DEFLATED if compressed else zipfile.ZIP_STORED
+            z.writestr(entry,data)
     return buf.getvalue()
 
 
@@ -174,7 +182,7 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(row['before']['xmlStructure']['status'],'unavailable');self.assertNotIn('parsedXmlStructureEqual',row)
         self.assertNotEqual(w.xml_structure_hash(b'<a> A </a>')['sha256'],w.xml_structure_hash(b'<a>A</a>')['sha256'])
     def test_android_zip_duplicate_case_alias_traversal_and_special_entries_rejected(self):
-        for pairs in [[('a',b'a'),('A',b'b')],[('../a',b'a')],[('a\\b',b'a')]]:
+        for pairs in [[('a',b'a'),('A',b'b')],[('../a',b'a')],[('a\\b',b'a')],[('a\x00b',b'a')]]:
             with self.assertRaises(ValueError):self.resources(pairs,[])
         buf=io.BytesIO()
         with zipfile.ZipFile(buf,'w') as z:

@@ -779,6 +779,10 @@ def workflow_zip(target, budget):
         if count>10000 or cursor+46>end or data[cursor:cursor+4]!=b'PK\x01\x02':raise ValueError('Android ZIP central entry budget/framing')
         name_size,extra_size,comment_size=struct.unpack_from('<3H',data,cursor+28)
         if name_size>4096:raise ValueError('Android ZIP encoded name exceeds budget')
+        raw_name=data[cursor+46:cursor+46+name_size]
+        # ZipInfo normalizes host separators and truncates NULs on read. Reject
+        # these raw central bytes first so policy is identical on Windows/Linux.
+        if b'\\' in raw_name or b'\x00' in raw_name:raise ValueError('Android ZIP raw separator/NUL is not canonical')
         cursor+=46+name_size+extra_size+comment_size
     if cursor!=end or count!=total:raise ValueError('Android ZIP central entry count/framing mismatch')
     archive = zipfile.ZipFile(io.BytesIO(data))
