@@ -5,7 +5,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "plan_investigation",
 		scope: "partial",
 		limitations:
-			"Fixed recipe proposals; no general goal-to-DAG planner or engine preflight.",
+			"Fixed recipes plus explicit typed objectives and schema-validated read-only batch drafts; no arbitrary natural-language goal synthesis or executed engine preflight.",
 	},
 	{
 		group: "cross-tool",
@@ -313,21 +313,21 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "plan_batch",
 		scope: "partial",
 		limitations:
-			"AI front door validates a 12-stage built-in static DAG over existing inputs using the durable desktop runner; candidate-write/runtime stages remain separate.",
+			"AI front door validates a 12-stage static DAG over existing hash-bound files, including source/Electron/.NET/mitigation/comparison and saved-graph adapters; writes/runtime/external engines remain separate.",
 	},
 	{
 		group: "bulk",
 		command: "preview_batch",
 		scope: "partial",
 		limitations:
-			"AI front door previews canonical input hashes and dependency/budget checks without approval or execution. No candidate-write/runtime stages.",
+			"AI front door previews canonical input hashes (including both comparison files), dependency/budget checks and strict adapter scope. No approval, execution, writes/runtime or external engines.",
 	},
 	{
 		group: "bulk",
 		command: "run_batch",
 		scope: "partial",
 		limitations:
-			"AI front door uses fresh human approval and the existing durable dependency runner for inspect/string/APK-comparison stages. No mixed-effect orchestration.",
+			"Freshly approved durable static DAG including bounded source/comparison/saved-graph reads. Partial evidence is retained, blocks dependents and allows independent reads; true failures stop work. No mixed-effect orchestration.",
 	},
 	{
 		group: "bulk",

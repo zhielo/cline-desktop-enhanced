@@ -6,7 +6,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
-| `plan_investigation` | partial | Fixed recipe proposals; no general goal-to-DAG planner or engine preflight. |
+| `plan_investigation` | partial | Fixed recipes plus explicit typed objectives and schema-validated read-only batch drafts; no arbitrary natural-language goal synthesis or executed engine preflight. |
 | `identify_artifact` | partial | Existing format inspection; nested or ambiguous containers require separate inspection. |
 | `map_attack_surface` | partial | JS/TS syntax and APK manifest evidence; no universal entrypoint inventory. |
 | `trace_data_flow` | partial | Declared saved-report edges only; unresolved whole-program paths are not inferred. |
@@ -76,9 +76,9 @@ This is the exact original 55-command checklist, not a statement that all recomm
 
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
-| `plan_batch` | partial | AI front door validates a 12-stage built-in static DAG over existing inputs using the durable desktop runner; candidate-write/runtime stages remain separate. |
-| `preview_batch` | partial | AI front door previews canonical input hashes and dependency/budget checks without approval or execution. No candidate-write/runtime stages. |
-| `run_batch` | partial | AI front door uses fresh human approval and the existing durable dependency runner for inspect/string/APK-comparison stages. No mixed-effect orchestration. |
+| `plan_batch` | partial | AI front door validates a 12-stage static DAG over existing hash-bound files, including source/Electron/.NET/mitigation/comparison and saved-graph adapters; writes/runtime/external engines remain separate. |
+| `preview_batch` | partial | AI front door previews canonical input hashes (including both comparison files), dependency/budget checks and strict adapter scope. No approval, execution, writes/runtime or external engines. |
+| `run_batch` | partial | Freshly approved durable static DAG including bounded source/comparison/saved-graph reads. Partial evidence is retained, blocks dependents and allows independent reads; true failures stop work. No mixed-effect orchestration. |
 | `checkpoint_investigation` | partial | AI command reads the latest owning-session durable execution receipt, revision and stage evidence; it does not force a new flush or unite all evidence stores. |
 | `resume_investigation` | partial | AI continuation revalidates exact terminal revision, input/implementation/result fingerprints and resumes only never-started built-in static stages with fresh approval. No started-stage/write/runtime replay. |
 | `cancel_batch` | partial | Owning-session AI command cancels its durable batch through the existing supervisor; terminal confirmation is read separately. Other runners remain separate. |

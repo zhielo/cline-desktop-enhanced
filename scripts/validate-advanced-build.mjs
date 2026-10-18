@@ -171,6 +171,7 @@ async function main() {
       "apps/examples/desktop-app/webview/components/views/chat/investigation-workspace.test.tsx",
       "apps/examples/desktop-app/sidecar/analysis-document-store.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-task-orchestrator.test.ts",
+      "apps/examples/desktop-app/sidecar/batch-investigation.test.ts",
       "apps/examples/desktop-app/sidecar/apk-incident-service.test.ts",
       "apps/examples/desktop-app/sidecar/incident-artifacts.test.ts",
       "apps/examples/desktop-app/sidecar/incident-correlation.test.ts",

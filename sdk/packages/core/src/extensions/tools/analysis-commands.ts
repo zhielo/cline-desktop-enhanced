@@ -1,3 +1,4 @@
+import { BatchStaticRequestSchema } from "./batch-analysis-schema";
 import { z } from "zod";
 import { CANDIDATE_COMMANDS } from "./advanced-candidates-schema";
 import { INVESTIGATION_COMMANDS } from "./investigation-workflows-schema";
@@ -113,7 +114,24 @@ export const SmaliPatchSchema = z
 export const InvestigationPlanSchema = z
 	.object({
 		workflow: z.enum(["artifact", "android", "native", "electron"]),
-		goal: z.string().min(1).max(1000),
+		goal: z.string().trim().min(1).max(1000),
+		objectives: z
+			.array(
+				z.enum([
+					"inventory",
+					"strings",
+					"attack-surface",
+					"relationships",
+					"compare",
+					"exact-function",
+					"mitigations",
+				]),
+			)
+			.min(1)
+			.max(7)
+			.refine((v) => new Set(v).size === v.length, "Duplicate objective")
+			.optional(),
+		symbol: z.string().min(1).max(4096).optional(),
 	})
 	.strict();
 
@@ -195,30 +213,65 @@ export function analysisCommandCatalog() {
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
- {command:"correlate_static_runtime",effect:"saved-evidence-read",availability:"implemented-bounded",limitations:"Desktop saved owning-session static receipt and 1–10 task snapshots only, including runtime evidence. Hash/scope checks, selected same-source sample definition-line candidates and native identity observations. No reruns, attachment, approvals, execution-path proof or universal cross-domain parity."},
-   ...["attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "stop_runtime_session"].map(command=>({command,effect:command==="stop_runtime_session"?"runtime-cleanup":"runtime-execution-control",availability:"implemented-bounded",limitations:"Desktop managed Node Inspector only. Independent Execute approval for new work, exact process/source identity, 1–120-second session lifetime and bounded cleanup. Activation/disconnect may pause/resume. CPU sampling is NOT a complete trace; no universal debugger parity."})),
-   ...["capture_process_tree","capture_file_activity"].map(command=>({command,effect:"runtime-metadata",availability:"implemented-bounded",limitations:command==="capture_process_tree"?"Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, Linux /proc or Windows CIM exact root PID/birth metadata. Not an execution trace or proof of artifact execution.":"Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, exact-file notifications (5 seconds/128 events), no PID attribution, contents, recursive watch or completeness claim."})),
+			{
+				command: "correlate_static_runtime",
+				effect: "saved-evidence-read",
+				availability: "implemented-bounded",
+				limitations:
+					"Desktop saved owning-session static receipt and 1–10 task snapshots only, including runtime evidence. Hash/scope checks, selected same-source sample definition-line candidates and native identity observations. No reruns, attachment, approvals, execution-path proof or universal cross-domain parity.",
+			},
+			...[
+				"attach_debug_session",
+				"set_scoped_breakpoints",
+				"capture_execution_trace",
+				"stop_runtime_session",
+			].map((command) => ({
+				command,
+				effect:
+					command === "stop_runtime_session"
+						? "runtime-cleanup"
+						: "runtime-execution-control",
+				availability: "implemented-bounded",
+				limitations:
+					"Desktop managed Node Inspector only. Independent Execute approval for new work, exact process/source identity, 1–120-second session lifetime and bounded cleanup. Activation/disconnect may pause/resume. CPU sampling is NOT a complete trace; no universal debugger parity.",
+			})),
+			...["capture_process_tree", "capture_file_activity"].map((command) => ({
+				command,
+				effect: "runtime-metadata",
+				availability: "implemented-bounded",
+				limitations:
+					command === "capture_process_tree"
+						? "Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, Linux /proc or Windows CIM exact root PID/birth metadata. Not an execution trace or proof of artifact execution."
+						: "Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, exact-file notifications (5 seconds/128 events), no PID attribution, contents, recursive watch or completeness claim.",
+			})),
 			...INVESTIGATION_COMMANDS.map((command) => ({
 				command,
 				effect: isAnalysisWriteOperation(command)
 					? "candidate-write"
-					: ["preview_batch", "preview_android_candidate", "plan_runtime_observation"].includes(command)
+					: [
+								"preview_batch",
+								"preview_android_candidate",
+								"plan_runtime_observation",
+							].includes(command)
 						? "plan-only"
 						: "read",
 				availability: "implemented-bounded",
 				limitations:
-     command === "plan_runtime_observation" ? "Plan only: exact live local Node Inspector PID/birth/listener and hash-bound source, no socket connection or target execution. Fresh Runtime/Hybrid Debug approval and identity recheck remain mandatory. No persistent session or other runtime commands." :
-     command === "validate_candidate" ? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass." :
-     command === "review_candidate_changes" ? "Exact manifest-declared source/output recipe audit with required manifest hash. Missing, mismatched and unverified outputs do not pass. No baseline for undeclared files or whole-project change review." :
-					command === "annotate_analysis_project"
-						? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
-						: command === "build_android_candidate"
-							? "Optional preview-bound exact-method patch project snapshot, all Smali roots assembled, existing Apktool rebuild and bounded output checks before no-overwrite publication. Legacy unpatched rebuild retained. No signing/install/device proof."
-							: command === "preview_android_candidate"
-								? "Hash-bound exact-method diffs for a confined decoded Apktool project; engine readiness not probed, no final output or automatic write approval."
-								: command === "preview_batch"
-									? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
-									: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
+					command === "plan_runtime_observation"
+						? "Plan only: exact live local Node Inspector PID/birth/listener and hash-bound source, no socket connection or target execution. Fresh Runtime/Hybrid Debug approval and identity recheck remain mandatory. No persistent session or other runtime commands."
+						: command === "validate_candidate"
+							? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass."
+							: command === "review_candidate_changes"
+								? "Exact manifest-declared source/output recipe audit with required manifest hash. Missing, mismatched and unverified outputs do not pass. No baseline for undeclared files or whole-project change review."
+								: command === "annotate_analysis_project"
+									? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
+									: command === "build_android_candidate"
+										? "Optional preview-bound exact-method patch project snapshot, all Smali roots assembled, existing Apktool rebuild and bounded output checks before no-overwrite publication. Legacy unpatched rebuild retained. No signing/install/device proof."
+										: command === "preview_android_candidate"
+											? "Hash-bound exact-method diffs for a confined decoded Apktool project; engine readiness not probed, no final output or automatic write approval."
+											: command === "preview_batch"
+												? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
+												: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
 			})),
 			...CANDIDATE_COMMANDS.map((command) => ({
 				command,
@@ -371,6 +424,7 @@ export function analysisCommandCatalog() {
 
 export function planInvestigation(input: {
 	target?: string;
+	compare_target?: string;
 	investigation_plan?: z.infer<typeof InvestigationPlanSchema>;
 	function_selector?: unknown;
 	engine?: string;
@@ -442,22 +496,132 @@ export function planInvestigation(input: {
 				},
 			});
 	}
+	if (options.objectives) {
+		// Structured objectives, never instructions parsed from untrusted goal text.
+		stages.splice(2);
+		stages[1].request.operation = "inspect";
+		for (const objective of options.objectives) {
+			if (objective === "inventory") continue;
+			let request: Record<string, unknown>;
+			switch (objective) {
+				case "strings":
+					request = {
+						operation: "scan_strings",
+						target: input.target,
+						max_results: 200,
+					};
+					break;
+				case "mitigations":
+					request = {
+						operation: "inspect_binary_mitigations",
+						target: input.target,
+					};
+					break;
+				case "compare":
+					if (!input.compare_target)
+						throw new Error("Compare objective requires compare_target");
+					request = {
+						operation:
+							options.workflow === "electron"
+								? "compare_public_api"
+								: "compare_versions",
+						target: input.target,
+						compare_target: input.compare_target,
+					};
+					break;
+				case "attack-surface":
+					if (options.workflow !== "electron")
+						throw new Error(
+							"Attack-surface objective in this planner supports the Electron source adapter only",
+						);
+					request = { operation: "map_attack_surface", target: input.target };
+					break;
+				case "relationships":
+					if (options.workflow !== "electron")
+						throw new Error(
+							"Relationships objective in this planner supports the Electron source adapter only",
+						);
+					request = { operation: "trace_electron_ipc", target: input.target };
+					break;
+				case "exact-function":
+					if (options.workflow !== "electron" || !options.symbol)
+						throw new Error(
+							"Exact-function objective requires Electron/JS/TS workflow and exact symbol",
+						);
+					request = {
+						operation: "explain_behavior",
+						target: input.target,
+						workflow_query: { symbol: options.symbol },
+					};
+					break;
+			}
+			stages.push({ id: objective, dependsOn: ["inspect"], request });
+		}
+	}
+	const batchStages: Array<{
+		id: string;
+		depends_on: string[];
+		request: unknown;
+		timeout_ms: number;
+	}> = [];
+	const excludedStages: Array<{ id: string; reason: string }> = [];
+	for (const stage of stages) {
+		const parsed = BatchStaticRequestSchema.safeParse(stage.request);
+		if (!parsed.success) {
+			excludedStages.push({
+				id: stage.id,
+				reason:
+					"Requires a separate engine/readiness/output or approval workflow; not supported by the built-in read-only batch",
+			});
+			continue;
+		}
+		// Discovery is deliberately outside the batch. Never drop an unresolved
+		// analysis dependency to make a stage appear independently executable.
+		const unsupported = stage.dependsOn.filter(
+			(id) => id !== "discover" && !batchStages.some((s) => s.id === id),
+		);
+		if (unsupported.length) {
+			excludedStages.push({
+				id: stage.id,
+				reason: `Unsupported analysis dependencies: ${unsupported.join(",")}`,
+			});
+			continue;
+		}
+		batchStages.push({
+			id: stage.id,
+			depends_on: stage.dependsOn.filter((id) => id !== "discover"),
+			request: parsed.data,
+			timeout_ms: 120000,
+		});
+	}
 	return {
 		schemaVersion: 1,
 		status: "completed",
 		goal: options.goal,
 		workflow: options.workflow,
 		executed: false,
+		enginePreflight:
+			"not-run; use discover and inspect actual readiness before preparing engine stages",
+		batchDraft: batchStages.length
+			? { title: options.goal.slice(0, 120), parallel: 2, stages: batchStages }
+			: null,
+		batchDraftRequires:
+			"Supply a fresh operation_id UUID to plan_batch/preview_batch/run_batch; draft is not approved or executed. Partial evidence blocks dependents, not independent reads.",
+		excludedStages,
 		stages: stages.map((stage) => ({
 			...stage,
 			request: { timeout_ms: 120000, ...stage.request },
+			effect:
+				stage.request.operation === "disassemble_smali"
+					? "candidate-write"
+					: "read",
 			approval: "fresh exact-request approval required",
 		})),
 		limitations: [
 			"Plan only; no stage was run or approved.",
 			"Review target format and tool readiness before preparing each stage.",
 			"Goal is descriptive untrusted text, not executable instructions.",
-			"Plans are not notebook manifests; batch execution accepts only the existing static notebook schema.",
+			"Batch draft contains only schema-validated built-in file reads. Excluded stages need separate reviewed workflows; no arbitrary goal-to-code synthesis or engine readiness claim.",
 		],
 	};
 }
