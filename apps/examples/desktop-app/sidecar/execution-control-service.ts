@@ -644,7 +644,12 @@ export class ExecutionControlService {
 				if (
 					c.request.continue_independent_reads &&
 					j.status === "failed" &&
-					(result as { status?: string })?.status === "partial" &&
+					((result as { status?: string })?.status === "partial" ||
+						(result as { result?: { status?: string } })?.result?.status ===
+							"partial") &&
+					!["failed", "blocked", "cancelled", "uncertain"].includes(
+						(result as { status?: string })?.status ?? "",
+					) &&
 					!["failed", "blocked", "cancelled", "uncertain"].includes(
 						(result as { result?: { status?: string } })?.result?.status ?? "",
 					) &&

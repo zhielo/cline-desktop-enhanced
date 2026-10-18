@@ -1067,10 +1067,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
     const objectivePlan=await runOwnedAdvanced({operation:"plan_investigation",target:ownedWorkflowSource,compare_target:ownedApiAfter,investigation_plan:{workflow:"electron",goal:"Owned explicit source evidence",objectives:["inventory","exact-function","compare"],symbol:"ownedWorkflow"},timeout_ms:120000});
     if(objectivePlan.result.executed!==false||objectivePlan.result.batchDraft?.stages.length!==3||objectivePlan.result.enginePreflight?.startsWith("not-run")!==true||objectivePlan.result.batchDraft.stages.some(s=>s.request.script_path||s.request.output_file))throw new Error("Installed structured batch draft fabricated execution or unsafe stages");
+    const ownedBatchCfg=join(workspace,"owned-batch-cfg.json");
+    await writeFile(ownedBatchCfg,JSON.stringify({schemaVersion:1,entry:"a",blocks:[{id:"a",successors:[]}]}));
     const expandedBatch={operation_id:randomUUID(),title:"Installed source partial and independent reads",parallel:1,stages:[
       {id:"source",request:{operation:"explain_behavior",target:ownedWorkflowSource,workflow_query:{symbol:"ownedWorkflow"}}},
       {id:"blocked-dependent",depends_on:["source"],request:{operation:"inspect",target:ownedWorkflowSource}},
       {id:"independent",request:{operation:"compare_public_api",target:ownedWorkflowSource,compare_target:ownedApiAfter}},
+      {id:"cfg",request:{operation:"advanced_analysis",advanced_action:"cfg_analyze",target:ownedBatchCfg}},
       {id:"inventory",request:{operation:"inspect",target:ownedWorkflowSource}},
     ]};
     const expandedPlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"run_batch",{...triageScope,input:expandedBatch});
@@ -1082,7 +1085,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       if(!["accepted","starting","running"].includes(expandedCheckpoint.receipt.status))break;
       await delay(100);
     }
-    if(expandedCheckpoint?.receipt.status!=="partial"||expandedCheckpoint.receipt.jobs.map(j=>j.status).join(",")!=="partial,cancelled,partial,completed"||!(expandedCheckpoint.receipt.jobs[0].result as any)?.selectedFunction?.text.includes('return "owned evidence"')||await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText)throw new Error("Installed partial evidence unlocked dependent work, lost independent reads, or changed the input");
+    if(expandedCheckpoint?.receipt.status!=="partial"||expandedCheckpoint.receipt.jobs.map(j=>j.status).join(",")!=="partial,cancelled,partial,partial,completed"||!(expandedCheckpoint.receipt.jobs[0].result as any)?.selectedFunction?.text.includes('return "owned evidence"')||await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText)throw new Error("Installed partial evidence unlocked dependent work, lost independent reads, or changed the input");
     let expandedResumeDenied=false;
     try{await rpc(page,"resume_investigation",{...triageScope,input:{receiptId:expandedStarted.id,revision:expandedCheckpoint.receipt.revision}});}catch{expandedResumeDenied=true;}
     if(!expandedResumeDenied)throw new Error("Installed partial dependency replayed");

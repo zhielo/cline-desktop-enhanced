@@ -457,3 +457,48 @@ it("hash-binds both source comparison inputs, rejecting a changed comparison aft
 	expect(c.status).toBe("failed");
 	expect(c.jobs[0].error).toContain("Comparison artifact changed");
 });
+
+it("preserves nested CFG partial status while independent reads finish", async () => {
+	const f = await fixture();
+	await writeFile(
+		join(f.root, "cfg.json"),
+		JSON.stringify({
+			schemaVersion: 1,
+			entry: "a",
+			blocks: [{ id: "a", successors: [] }],
+		}),
+	);
+	const r = await f.run("run_batch", {
+		...f.req,
+		stages: [
+			{
+				id: "cfg",
+				request: {
+					operation: "advanced_analysis",
+					advanced_action: "cfg_analyze",
+					target: "cfg.json",
+				},
+			},
+			{
+				id: "dependent",
+				depends_on: ["cfg"],
+				request: { operation: "inspect", target: "owned.bin" },
+			},
+			{
+				id: "independent",
+				request: { operation: "inspect", target: "owned.bin" },
+			},
+		],
+	});
+	const c = await terminal(f, r.id);
+	expect(c.status).toBe("partial");
+	expect(c.jobs.map((j) => j.status)).toEqual([
+		"partial",
+		"cancelled",
+		"completed",
+	]);
+	expect(c.jobs[0].result).toMatchObject({
+		result: { status: "partial", evidence: { equivalence: "not-proven" } },
+	});
+	expect(c.jobs[1].startedAt).toBeUndefined();
+});
