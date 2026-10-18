@@ -129,6 +129,7 @@ import {
 	type AnalysisTaskKind,
 	desktopAnalysisTaskOrchestrator,
 } from "./analysis-task-orchestrator";
+import { handleReleaseGate } from "./release-gate";
 import { handleAnalysisWorkflow, WORKFLOW_COMMANDS } from "./analysis-workflow";
 import { AnalysisWorkflowStore } from "./analysis-workflow-store";
 import { importAndroidDebugEvidence } from "./android-debug-evidence";
@@ -3022,6 +3023,7 @@ export async function handleCommand(
        if(!active||currentProfile!=="full-access")throw new Error("Managed debugger permission profile or attached scope changed");
       });
      },
+     releaseGate: async (input)=> handleReleaseGate(input,{sessionId:id,workspace:root},{tasks:desktopAnalysisTaskOrchestrator,session:(sessionId)=>firstPartyStore().session(sessionId),assertProfile:()=>{const active=ctx.liveSessions.get(id),profile=active?.config.permissionProfile??active?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";if(!active||profile!=="full-access")throw new Error("Release network verification requires an attached Full Access local session; restricted profiles are not widened");},bind:bindFirstPartyTaskEvidence,record:recordFirstPartyTaskEvidence,snapshots:sessionTaskSnapshots}),
      deviceSmoke: async (input)=>{
       const assertProfile=()=>{const active=ctx.liveSessions.get(id),profile=active?.config.permissionProfile??active?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";if(!active||profile!=="full-access")throw new Error("Device launch requires an attached Full Access local session; restricted profiles are not widened");};
       return handleDeviceSmoke(input,{sessionId:id,workspace:root},desktopAnalysisTaskOrchestrator,incidents(),assertProfile);

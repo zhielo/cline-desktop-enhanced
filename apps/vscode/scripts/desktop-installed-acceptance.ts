@@ -1106,6 +1106,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(smokeCancelled.taskStatus!=="cancelled"||!smokeCancelled.cleanupConfirmed||smokeStatus.taskStatus!=="cancelled"||smokeStatus.observationStatus!=="not-started")throw new Error("Installed device smoke cleanup/status replayed work or failed after Off");
     stages.push("installed-device-smoke-exact-plan-static-denial-off-cleanup-no-hardware-passed");
     await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+    // Offline approval contract only. A workflow cannot attest to its own unfinished CI.
+    const releaseInput={action:"check",pullNumber:133,expectedHead:"a".repeat(40)};
+    const releasePlan=await rpc<{id:string;permission:string;requirements:string[];budget:{network:string};request:{owner_session_id:string;expectedHead:string}}>(page,"check_release_gate",{...triageScope,input:releaseInput});
+    if(releasePlan.permission!=="Inspect"||releasePlan.budget.network!=="recorded"||!releasePlan.requirements.includes("public-github-exact-head-read-only-evidence")||releasePlan.request.owner_session_id!==triageSession.sessionId||releasePlan.request.expectedHead!==releaseInput.expectedHead)throw new Error("Installed release verification omitted exact-head independent Inspect/network scope");
+    let unapprovedReleaseDenied=false;try{await rpc(page,"check_release_gate",{...triageScope,input:{...releaseInput,phase:"run",planId:releasePlan.id}});}catch{unapprovedReleaseDenied=true;}if(!unapprovedReleaseDenied)throw new Error("Installed release verification started network work without approval");
+    let foreignReleaseDenied=false;try{await rpc(page,"check_release_gate",{...analysisArgs,input:{action:"cancel",taskId:releasePlan.id}});}catch{foreignReleaseDenied=true;}if(!foreignReleaseDenied)throw new Error("Installed release verification cleanup crossed owning sessions");
+    let releasePolicyInjectionDenied=false;try{await rpc(page,"check_release_gate",{...triageScope,input:{...releaseInput,policy:"accept-anything",url:"https://invalid.example"}});}catch{releasePolicyInjectionDenied=true;}if(!releasePolicyInjectionDenied)throw new Error("Installed release verification accepted model policy or endpoint authority");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"off"});
+    const releaseCancelled=await rpc<{status:string}>(page,"check_release_gate",{...triageScope,input:{action:"cancel",taskId:releasePlan.id}});
+    if(releaseCancelled.status!=="cancelled")throw new Error("Installed release verification failed owning cleanup after Off");
+    let offReleaseDenied=false;try{await rpc(page,"check_release_gate",{...triageScope,input:releaseInput});}catch{offReleaseDenied=true;}if(!offReleaseDenied)throw new Error("Installed Off mode allowed new release verification");
+    stages.push("installed-release-gate-exact-head-inspect-off-cleanup-no-network-passed");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+
 
     const candidateValidationHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:ownedWorkflowSource}});
     const candidateReviewHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:batchManifest}});

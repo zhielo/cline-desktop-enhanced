@@ -85,7 +85,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `validate_candidate` | partial | Unified approved hash-bound JS/TS parse diagnostics, standard DEX header/integrity/extents and APK structure/signature checks. No arbitrary-format, type/VM/device/build/semantic-equivalence verification. |
 | `review_candidate_changes` | partial | Unified approved exact-recipe audit with immutable receipt hash; missing/mismatched/unverified candidates do not pass. Only manifest-declared files; no undeclared-file baseline or whole-project scope review. |
 | `export_evidence_bundle` | partial | Approved gzip JSON archive of hash-bound selected text findings/receipts/logs with source/export hashes and redaction. Unknown secrets, completeness and producer authenticity remain unverified. |
-| `check_release_gate` | partial | Existing exact-head CI/installed checks; no AI command or immutable gate receipt. |
+| `check_release_gate` | partial | Unified independently approved public-GitHub exact-head verifier with authenticated bounded core/engine/installed artifacts and owning immutable receipts. Finite pinned policy only; no signing, private/expired artifact fallback, automatic merge or universal release correctness. |
 
 ## Release contract
 

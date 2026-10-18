@@ -356,3 +356,19 @@ it("device front door binds immutable artifact and denies Static while preservin
  await handleAnalysisWorkflow("run_device_smoke_test",{action:"cancel",taskId:artifact.id},scope,{trusted:true,idle:false,mode:"off"},store,ports);expect(deviceSmoke).toHaveBeenLastCalledWith({request:{action:"cancel",taskId:artifact.id}});
  }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+
+it("release gate is a trusted Inspect workflow; saved reads and cleanup route after Off without network authority",async()=>{
+ const root=realpathSync(await mkdtemp(join(tmpdir(),"release-route-"))),store=new AnalysisWorkflowStore(join(root,"store.sqlite")),scope={sessionId:"owned",workspace:root};
+ const releaseGate=vi.fn(async()=>({status:"cancelled"})),ports={invoke:vi.fn(),capture:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(),releaseGate};
+ const input={action:"check",pullNumber:133,expectedHead:"a".repeat(40)},options={trusted:true,idle:true,mode:"static"};
+ try{
+  await handleAnalysisWorkflow("check_release_gate",input,scope,options,store,ports);
+  expect(releaseGate).toHaveBeenLastCalledWith({phase:"prepare",request:input});
+  for(const extra of [{url:"https://invalid.example"},{policy:"override"},{owner_session_id:"other"}])await expect(handleAnalysisWorkflow("check_release_gate",{...input,...extra},scope,options,store,ports)).rejects.toThrow();
+  await expect(handleAnalysisWorkflow("check_release_gate",input,scope,{...options,trusted:false},store,ports)).rejects.toThrow("Trusted");
+  await expect(handleAnalysisWorkflow("check_release_gate",input,scope,{...options,mode:"off"},store,ports)).rejects.toThrow("enabled");
+  await expect(handleAnalysisWorkflow("check_release_gate",input,scope,{...options,idle:false},store,ports)).rejects.toThrow("enabled");
+  for(const action of ["read","cancel"]){const request={action,taskId:"11111111-1111-4111-8111-111111111111"};await handleAnalysisWorkflow("check_release_gate",request,scope,{...options,idle:false,mode:"off"},store,ports);expect(releaseGate).toHaveBeenLastCalledWith({request});}
+  expect(ports.invoke).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();
+ }finally{store.close();await rm(root,{recursive:true,force:true});}
+});

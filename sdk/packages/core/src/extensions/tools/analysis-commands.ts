@@ -206,6 +206,9 @@ const notes: Record<string, string> = {
 	export_evidence_bundle:
 		"With evidence_archive: hash-bound selected text/JSON provenance container in new .json.gz, redaction and no overwrite. Without it: legacy forensic report. Unknown secrets and producer authenticity remain unverified.",
 };
+const HOST_ONLY_COMMANDS = new Set([
+ "check_release_gate", "correlate_static_runtime", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "stop_runtime_session", "run_device_smoke_test", "capture_process_tree", "capture_file_activity",
+]);
 export function analysisCommandCatalog() {
 	return {
 		recommendations: RECOMMENDATION_COVERAGE,
@@ -213,6 +216,7 @@ export function analysisCommandCatalog() {
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
+   {command:"check_release_gate",effect:"approved-public-network-read",availability:"implemented-bounded",limitations:"AI workflow only; fixed public repository, exact-head CI + authenticated receipts + Windows installer/installed cleanup policy. Independent Inspect approval, bounded credential-free network; never merges, reruns CI, executes installers or certifies complete behavior. Saved read/cancel after Off does not recheck GitHub."},
 			{
 				command: "correlate_static_runtime",
 				effect: "saved-evidence-read",
@@ -396,7 +400,7 @@ export function analysisCommandCatalog() {
 				limitations:
 					"Alias for plan_investigation. Use validate_batch/run_batch for a reviewed static notebook.",
 			},
-		],
+		].map(entry => ({...entry, route: HOST_ONLY_COMMANDS.has(entry.command) ? "ai-workflow" as const : "static-review" as const})),
 		unavailable: [
 			"universal_cross_language_resolution",
 			"whole_program_taint_analysis",

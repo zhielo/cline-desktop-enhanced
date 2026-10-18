@@ -139,3 +139,10 @@ it("device smoke requires an explicit device/artifact, bounds and no self-consen
  expect(()=>InvestigationSchemas.run_device_smoke_test.parse({...input,deviceSerial:""})).toThrow();
  expect(()=>InvestigationSchemas.run_device_smoke_test.parse({action:"status",taskId:input.artifactId,artifactId:input.artifactId})).toThrow();
 });
+
+it("release-gate model inputs cannot supply policy, URL, consent or credential authority",()=>{
+ const input={action:"check",pullNumber:133,expectedHead:"a".repeat(40)};expect(InvestigationSchemas.check_release_gate.parse(input)).toEqual(input);
+ for(const extra of [{executionToken:"fake"},{phase:"run"},{policy:"fake"},{url:"https://other.invalid"},{owner_session_id:"other"},{requiredChecks:[]},{token:"secret"},{confirmNetwork:true}])expect(()=>InvestigationSchemas.check_release_gate.parse({...input,...extra})).toThrow();
+ for(const expectedHead of ["main","a".repeat(39),"../bad"])expect(()=>InvestigationSchemas.check_release_gate.parse({...input,expectedHead})).toThrow();
+ expect(()=>InvestigationSchemas.check_release_gate.parse({action:"read",taskId:"11111111-1111-4111-8111-111111111111",expectedHead:input.expectedHead})).toThrow();
+});

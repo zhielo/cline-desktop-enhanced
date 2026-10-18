@@ -13,6 +13,7 @@ const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
  ...BATCH_WORKFLOW_COMMANDS,
+ "check_release_gate",
  "run_device_smoke_test",
 	"attach_debug_session",
  "set_scoped_breakpoints",
@@ -41,6 +42,7 @@ export interface WorkflowPorts {
 	browsers?: () => unknown;
  managedSession?: (id:string)=>{target:string;expected_sha256:string;hybrid?:unknown};
  managedRuntime?: (command:string,input:unknown)=>Promise<unknown>;
+ releaseGate?: (input: unknown) => Promise<unknown>;
  deviceSmoke?: (input: unknown) => Promise<unknown>;
  runtimeCapture?: (command: string, input: unknown) => Promise<unknown>;
  batch?: (command: string, input: unknown) => Promise<unknown>;
@@ -112,6 +114,15 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
+ if(command === "check_release_gate") {
+  if(!options.trusted || !ports.releaseGate) throw new Error("Trusted owning release verification host required");
+  const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().min(1).max(512).optional()}).passthrough().parse(input);
+  const {phase,planId,executionToken,...publicInput}=envelope;
+  const params=InvestigationSchemas.check_release_gate.parse(publicInput);
+  if(params.action!=="check") return ports.releaseGate({request:params});
+  if(options.mode==="off" || (!options.idle && options.actor!=="model")) throw new Error("Release verification requires an enabled owning Analysis session");
+  return ports.releaseGate({phase,planId,executionToken,request:params});
+ }
  if(command === "run_device_smoke_test") {
   if(!options.trusted || !ports.deviceSmoke) throw new Error("Trusted owning device host required");
   const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().min(1).max(512).optional()}).passthrough().parse(input);
