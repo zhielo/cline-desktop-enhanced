@@ -695,3 +695,48 @@ it("publishes the registered redacted archive only to a new approved output", as
 	expect(await readFile(join(dir, "evidence.txt"), "utf8")).toBe(content);
 	await expect(execute(request)).rejects.toThrow("exists");
 });
+
+it("routes native traversal budgets to the fixed worker without extra processes", async () => {
+	const run = vi.fn<InvestigationRunner>(async () => ({ status: "partial" }));
+	const input = ReverseEngineeringInputSchema.parse({
+		operation: "trace_native_calls",
+		target: "/owned.so",
+		function_selector: { symbol: "owned_root" },
+		advanced_options: {
+			native_calls: {
+				max_depth: 0,
+				max_functions: 2,
+				max_edges: 4,
+				max_total_bytes: 16,
+			},
+		},
+	});
+	const result = await investigationWorkflow(input, run);
+	expect(run).toHaveBeenCalledTimes(1);
+	expect(run.mock.calls[0][0]).toMatchObject({
+		operation: "advanced_analysis",
+		advanced_action: "native_function",
+		advanced_options: {
+			function: { symbol: "owned_root", max_bytes: 4096 },
+			native_calls: input.advanced_options!.native_calls,
+		},
+	});
+	expect(result.status).toBe("partial");
+	expect(result).toMatchObject({ observedExecution: false });
+	expect(result.limitations.join(" ")).toContain("breadth-first");
+});
+it.each([
+	{ max_depth: 5 },
+	{ max_functions: 0 },
+	{ max_edges: 257 },
+	{ max_total_bytes: 65537 },
+	{ max_depth: true },
+	{ shell: "execute" },
+])("rejects native traversal budget escape %j", (native_calls) => {
+	expect(() =>
+		ReverseEngineeringInputSchema.parse({
+			operation: "trace_native_calls",
+			advanced_options: { native_calls },
+		}),
+	).toThrow();
+});

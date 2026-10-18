@@ -472,6 +472,9 @@ export async function investigationWorkflow(
 			advanced_action: "native_function" as const,
 			target: input.target,
 			advanced_options: {
+				...(input.operation === "trace_native_calls"
+					? { native_calls: input.advanced_options?.native_calls ?? {} }
+					: {}),
 				function: {
 					...selector,
 					max_bytes: input.advanced_options?.function?.max_bytes ?? 4096,
@@ -512,7 +515,9 @@ export async function investigationWorkflow(
 			...envelope(
 				[
 					"Bounded selected ELF function, preferred image base, direct/indirect call candidates, selected strings/references and optional exact decompiler output. Inspect each nested stage's ambiguity/truncation/limitations; no absent function or dynamic call is invented.",
-					"Caller discovery and transitive call traversal are not complete; compare selects the same exact symbol/address in both images, not an inferred semantic match. No runtime behavior or equivalence proof.",
+					input.operation === "trace_native_calls"
+						? "Bounded breadth-first traversal follows only decoded direct-call candidates to a unique exact ELF symbol entry. Indirect, ambiguous, unmapped, blocked and budget-limited edges remain explicit. This is not a complete CFG, caller discovery, tail-call graph or runtime trace."
+						: "Caller discovery and transitive call traversal are not complete; compare selects the same exact symbol/address in both images, not an inferred semantic match. No runtime behavior or equivalence proof.",
 				],
 				true,
 			),

@@ -1332,6 +1332,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const ownedCrosscheckResult=ownedCrosscheck.result.result;
     if(ownedCrosscheck.plan.status!=="completed"||ownedCrosscheckResult?.status!=="completed"||ownedCrosscheckResult.evidence.boundaryAgreement!==true||ownedCrosscheckResult.evidence.rangeSha256!==createHash("sha256").update(ownedDualBytes).digest("hex")||ownedCrosscheckResult.evidence.decoders.map(d=>d.engine).join(",")!=="capstone,miasm"||!ownedCrosscheckResult.evidence.decoders.every(d=>d.version&&d.decodedBytes===4)||!(await readFile(ownedDualDecoder)).equals(ownedDualBytes))throw new Error("Installed exact-range Capstone/Miasm evidence failed");
     stages.push("installed-full-pack-exact-range-dual-decoder-passed");
+    const nativeFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-native-call-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string};
+    const nativeBytes=Buffer.from(nativeFixture.base64,"base64"),nativeTarget=join(workspace,"owned-native-call-chain.so");
+    if(createHash("sha256").update(nativeBytes).digest("hex")!==nativeFixture.sha256)throw new Error("Owned native call fixture digest mismatch");
+    await writeFile(nativeTarget,nativeBytes);
+    const nativeTraceRequest={operation:"trace_native_calls",target:nativeTarget,function_selector:{symbol:"owned_root"},advanced_options:{native_calls:{max_depth:2,max_functions:3,max_edges:4,max_total_bytes:32}},timeout_ms:120000};
+    type OwnedNativeGraph={protocol:string;status:string;observedExecution:boolean;nodes:{name:string;depth:number;status:string}[];edges:{resolution:string}[];usage:{requestedBytes:number};coverage:{limitsReached:string[]}};
+    const nativeGraph=(receipt:unknown)=>(receipt as {result:{status:string;observedExecution:boolean;stages:{result:{result:{protocol:string;input:{sha256:string};evidence:{callGraph:OwnedNativeGraph}}}}[]}}).result;
+    const nativeResult=nativeGraph(await runOwnedAdvanced(nativeTraceRequest)),nativeWorker=nativeResult.stages[0]?.result.result,nativeCalls=nativeWorker?.evidence.callGraph;
+    if(nativeResult.status!=="partial"||nativeResult.observedExecution!==false||nativeWorker?.protocol!=="cline-advanced-analysis/v1"||nativeWorker.input.sha256!==nativeFixture.sha256||nativeCalls?.protocol!=="cline-native-call-graph/v1"||nativeCalls.status!=="partial"||nativeCalls.observedExecution!==false||nativeCalls.nodes.map(n=>n.name).join(",")!=="owned_root,owned_child,owned_leaf"||nativeCalls.nodes.map(n=>n.depth).join(",")!=="0,1,2"||!nativeCalls.nodes.every(n=>n.status==="completed")||nativeCalls.edges.length!==3||nativeCalls.edges[2]?.resolution!=="already-scheduled-or-visited"||nativeCalls.usage.requestedBytes!==18||nativeCalls.coverage.limitsReached.length!==0)throw new Error("Installed owned native transitive call evidence failed or claimed runtime execution");
+    const nativeLimited=nativeGraph(await runOwnedAdvanced({...nativeTraceRequest,advanced_options:{native_calls:{max_depth:0,max_functions:3,max_edges:4,max_total_bytes:32}}})).stages[0]?.result.result.evidence.callGraph;
+    if(nativeLimited?.nodes.length!==1||nativeLimited.edges[0]?.resolution!=="depth-limit"||!nativeLimited.coverage.limitsReached.includes("max_depth")||!(await readFile(nativeTarget)).equals(nativeBytes))throw new Error("Installed native traversal escaped its depth budget or changed the target");
+    stages.push("installed-native-direct-call-transitive-budget-cycle-no-execution-passed");
+
 
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
     await stop();

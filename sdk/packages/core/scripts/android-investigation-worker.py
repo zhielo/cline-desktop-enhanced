@@ -11,7 +11,7 @@ import sys
 import zipfile
 import zlib
 
-VERSION = "android-static/v3"
+VERSION = "android-static/v4"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -320,6 +320,8 @@ def disassemble_selected(data, method, maximum, segments=None):
                     for alias in group:register_values.pop(alias,None)
             if destination is not None and candidate is not None:register_values[destination]=candidate
             if instruction.group(capstone.CS_GRP_JUMP) or instruction.group(capstone.CS_GRP_CALL) or instruction.group(capstone.CS_GRP_RET):register_values.clear()
+        if method["architecture"]!="x86_64" and instruction.group(capstone.CS_GRP_CALL) and not calls:
+            if len(indirect_calls)<128:indirect_calls.append({"fromAddressHex":hex(instruction.address),"resolution":"unknown-register-or-memory-target"})
         if method["architecture"]=="x86_64" and segments is not None:
             for operand in instruction.operands:
                 if operand.type != capstone.CS_OP_MEM or operand.mem.base != capstone.x86_const.X86_REG_RIP:continue
@@ -337,7 +339,7 @@ def disassemble_selected(data, method, maximum, segments=None):
                 strings.append({"fromAddressHex":hex(instruction.address),"addressHex":hex(target),"fileOffset":at,"value":value.decode("ascii"),"sha256":hashlib.sha256(value).hexdigest(),"confidence":"file-backed-ascii-reference-candidate-not-runtime-read"})
         instructions.append({"addressHex":hex(instruction.address),"bytes":instruction.bytes.hex(),"mnemonic":instruction.mnemonic,"operands":instruction.op_str,"directCallCandidates":calls})
         decoded+=instruction.size
-    return {"engine":"capstone","engineVersion":importlib.metadata.version("capstone"),"architecture":method["architecture"],"references":references,"strings":strings,"callees":callees[:128],"indirectCalls":indirect_calls,"relationsTruncated":len(callees)>128 or len(references)>=128 or len(strings)>=64,"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
+    return {"engine":"capstone","engineVersion":importlib.metadata.version("capstone"),"architecture":method["architecture"],"references":references,"strings":strings,"callees":callees[:128],"indirectCalls":indirect_calls,"relationsTruncated":len(callees)>128 or len(indirect_calls)>=128 or len(references)>=128 or len(strings)>=64,"status":"completed" if decoded==method["size"] else "partial","instructions":instructions,"requestedBytes":count,"decodedBytes":decoded,"byteFingerprint":hashlib.sha256(data[offset:offset+count]).hexdigest(),"coverage":"bounded-linear-disassembly-not-a-CFG-or-runtime-trace"}
 
 
 def selected_dex_code(data, selector, limit):
@@ -362,6 +364,68 @@ def selected_dex_code(data, selector, limit):
     return {"engine":"androguard","engineVersion":importlib.metadata.version("androguard"),"methods":results,"coverage":"selected-defined-method-bytecode-not-recovered-source-or-runtime-execution"}
 
 
+def native_call_budget(options):
+    defaults={"max_depth":2,"max_functions":16,"max_edges":128,"max_total_bytes":32768}
+    caps={"max_depth":4,"max_functions":32,"max_edges":256,"max_total_bytes":65536}
+    if not isinstance(options,dict) or set(options)-set(defaults):raise ValueError("Invalid native_calls budget fields")
+    result=dict(defaults)
+    for key,value in options.items():
+        if type(value) is not int or not (0 if key=="max_depth" else 1)<=value<=caps[key]:raise ValueError("Invalid native_calls budget")
+        result[key]=value
+    return result
+
+
+def native_call_traversal(data, root, root_body, functions, meta, budget, per_function):
+    # One immutable byte buffer and one LIEF parse. Exact entries only; never guess extents.
+    entries={}
+    def entry(method):
+        value=int(method["addressHex"],16)
+        return value & ~1 if method["architecture"]=="thumb" else value
+    for method in functions:entries.setdefault(entry(method),[]).append(method)
+    queue=[(root,0,root_body)];scheduled={root["id"]};nodes=[];edges=[];reasons=set();charged=0
+    while queue:
+        method,depth,body=queue.pop(0)
+        if body is None:
+            maximum=min(per_function,budget["max_total_bytes"]-charged)
+            if maximum<=0:
+                body={"status":"blocked","reason":"Total instruction-byte budget exhausted"};reasons.add("max_total_bytes")
+            else:
+                try:body=disassemble_selected(data,method,maximum,None if meta["segmentsTruncated"] else meta["segments"])
+                except ImportError:body={"status":"blocked","reason":"Capstone is not installed"}
+        charged+=body.get("requestedBytes",0)
+        node={key:method[key] for key in ("id","name","addressHex","architecture","size","rangeValidation")}
+        node.update(depth=depth,status=body["status"],requestedBytes=body.get("requestedBytes",0),decodedBytes=body.get("decodedBytes",0),byteFingerprint=body.get("byteFingerprint"),reason=body.get("reason"))
+        nodes.append(node)
+        if body["status"]!="completed":reasons.add("partial-or-blocked-function")
+        if body.get("relationsTruncated"):reasons.add("function-relations-truncated")
+        calls=[dict(call,kind="direct") for call in body.get("callees",[]) if call.get("confidence")=="decoded-direct-call-candidate"]
+        calls.extend(dict(call,kind="indirect") for call in body.get("indirectCalls",[]))
+        for call in calls:
+            if len(edges)>=budget["max_edges"]:
+                reasons.add("max_edges");break
+            edge={"fromNodeId":method["id"],"fromAddressHex":call["fromAddressHex"],"kind":call["kind"],"confidence":"static-candidate-not-observed-execution"}
+            if "targetAddressHex" in call:edge["targetAddressHex"]=call["targetAddressHex"]
+            edges.append(edge)
+            if call["kind"]=="indirect":
+                edge["resolution"]="indirect-not-followed";edge["targetEvidence"]=call.get("resolution","unknown");continue
+            target=int(call["targetAddressHex"],16)
+            # ARM BLX can change instruction set. The declared symbol determines decoding mode.
+            candidates=entries.get(target,[])
+            if method["architecture"] in ("arm","thumb") and not candidates:candidates=entries.get(target & ~1,[])
+            if len(candidates)!=1:
+                edge["resolution"]="ambiguous-entry" if candidates else "no-exact-symbol-entry";edge["matchCount"]=len(candidates);continue
+            candidate=candidates[0];edge["toNodeId"]=candidate["id"]
+            if candidate["id"] in scheduled:edge["resolution"]="already-scheduled-or-visited";continue
+            if depth>=budget["max_depth"]:edge["resolution"]="depth-limit";reasons.add("max_depth");continue
+            if len(scheduled)>=budget["max_functions"]:edge["resolution"]="function-limit";reasons.add("max_functions");continue
+            if charged>=budget["max_total_bytes"]:edge["resolution"]="byte-limit";reasons.add("max_total_bytes");continue
+            edge["resolution"]="exact-entry-scheduled";scheduled.add(candidate["id"]);queue.append((candidate,depth+1,None))
+    node_status={node["id"]:node["status"] for node in nodes}
+    for edge in edges:
+        if edge.get("toNodeId") in node_status:edge["targetStatus"]=node_status[edge["toNodeId"]]
+    return {"protocol":"cline-native-call-graph/v1","status":"partial","observedExecution":False,"rootNodeId":root["id"],"budgets":dict(budget,max_function_bytes=per_function),"usage":{"functions":len(nodes),"edges":len(edges),"requestedBytes":charged},"nodes":nodes,"edges":edges,"coverage":{"limitsReached":sorted(reasons),"metadataRowsTruncated":meta["functionsTruncated"],"symbolIndexCount":len(functions)},"limitations":["Bounded breadth-first ELF symbol-entry traversal of linear decoded direct-call candidates only; not a complete CFG, caller graph, tail-call analysis or proof of reachable/runtime behavior.","Indirect calls (including constant-register candidates), missing symbols, aliases and ambiguous mappings are not followed. PLT/imports and stripped code are not resolved. Per-function instruction/relationship and global budgets can leave paths unknown.","Every address is ELF link-time virtual, not an observed load address. No target code, debugger, shell or device is executed."]}
+
+
 def native_selection(request):
     with open(request["target"],"rb") as file:data=file.read(MAX_INPUT+1)
     if len(data)>MAX_INPUT:raise ValueError("Native input limit")
@@ -372,12 +436,21 @@ def native_selection(request):
     meta,functions=native_metadata(data,artifact,max(1,min(request.get("limit",200),1000)))
     address=int(str(selector["address"]),0) if selector.get("address") else None
     matches=[m for m in functions if m["name"]==selector.get("symbol") or (address is not None and int(m["addressHex"],16)==address)]
+    traversal_options=(request.get("options") or {}).get("native_calls")
+    budget=native_call_budget(traversal_options) if traversal_options is not None else None
+    maximum=selector.get("max_bytes",4096)
+    if type(maximum) is not int or not 1<=maximum<=65536:raise ValueError("Invalid native function byte budget")
     selections=[]
-    for method in matches[:20]:
-        try:body=disassemble_selected(data,method,selector.get("max_bytes",4096),None if meta["segmentsTruncated"] else meta["segments"])
+    selected_matches=matches[:20] if budget is None else (matches if len(matches)==1 else [])
+    for method in selected_matches:
+        try:body=disassemble_selected(data,method,min(maximum,budget["max_total_bytes"]) if budget else maximum,None if meta["segmentsTruncated"] else meta["segments"])
         except ImportError:body={"status":"blocked","reason":"Capstone is not installed"}
         selections.append(dict(method,image=meta["image"],disassembly=body,references=body.get("references","unknown"),strings=body.get("strings","unknown"),callees=body.get("callees","unknown"),indirectCalls=body.get("indirectCalls","unknown")))
-    return {"protocol":"cline-advanced-analysis/v1","status":"completed" if len(matches)==1 and selections[0]["disassembly"]["status"]=="completed" and not meta["functionsTruncated"] else "partial","engine":"android-static","engineVersion":VERSION,"input":{"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data),"format":"elf"},"evidence":{"schemaVersion":1,"artifacts":[{"id":artifact,"sha256":hashlib.sha256(data).hexdigest(),"format":"elf","validation":"LIEF-parsed-bounded-file-mappings","native":meta}],"relationships":[],"selectedFunctions":selections,"matchCount":len(matches),"ambiguous":len(matches)>1,"coverage":{"truncated":len(matches)>20 or meta["functionsTruncated"]}},"limitations":["Static bounded ELF symbol analysis only; not function discovery in stripped/virtualized code, runtime execution, JNI registration proof or semantic equivalence.","Capstone output is linear range disassembly, not a complete CFG; direct calls and x86_64 RIP-relative ASCII references are static candidates, not runtime accesses. Preferred ELF base is link-time metadata, not ASLR/load-base proof. Addresses are preserved as hexadecimal strings."]}
+    graph=None
+    if budget:
+        if len(matches)==1:graph=native_call_traversal(data,matches[0],selections[0]["disassembly"],functions,meta,budget,maximum)
+        else:graph={"protocol":"cline-native-call-graph/v1","status":"partial","observedExecution":False,"nodes":[],"edges":[],"reason":"Root selector must match exactly one symbol; no traversal performed","matchCount":len(matches),"budgets":budget}
+    return {"protocol":"cline-advanced-analysis/v1","status":"completed" if not budget and len(matches)==1 and selections[0]["disassembly"]["status"]=="completed" and not meta["functionsTruncated"] else "partial","engine":"android-static","engineVersion":VERSION,"input":{"sha256":hashlib.sha256(data).hexdigest(),"bytes":len(data),"format":"elf"},"evidence":{"schemaVersion":1,"artifacts":[{"id":artifact,"sha256":hashlib.sha256(data).hexdigest(),"format":"elf","validation":"LIEF-parsed-bounded-file-mappings","native":meta}],**({"callGraph":graph} if graph is not None else {}),"relationships":[],"selectedFunctions":selections,"matchCount":len(matches),"ambiguous":len(matches)>1,"coverage":{"truncated":len(matches)>20 or meta["functionsTruncated"]}},"limitations":["Static bounded ELF symbol analysis only; not function discovery in stripped/virtualized code, runtime execution, JNI registration proof or semantic equivalence.","Capstone output is linear range disassembly, not a complete CFG; direct calls and x86_64 RIP-relative ASCII references are static candidates, not runtime accesses. Preferred ELF base is link-time metadata, not ASLR/load-base proof. Addresses are preserved as hexadecimal strings."]}
 
 
 def analysis_readiness():
