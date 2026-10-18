@@ -300,7 +300,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "run_device_smoke_test",
 		scope: "partial",
 		limitations:
-			"Existing separately approved Android worker/device flows; unified command and live hardware validation pending.",
+			"Unified AI adapter over existing separately approved Android launch/incident workflow: exact installed base APK identity, selected device, bounded package-scoped observations, owning status/cancel, mode/profile cancellation. No install/root/UI automation or automatic force-stop; no-crash is not a passing regression. Live hardware and split identity remain unverified.",
 	},
 	{
 		group: "runtime",

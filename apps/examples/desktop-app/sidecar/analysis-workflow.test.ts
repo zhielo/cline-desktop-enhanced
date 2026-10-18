@@ -345,3 +345,14 @@ it("correlates owning saved static/runtime evidence in Off without invoking tool
   expect(ports.invoke).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();
  } finally {await rm(root,{recursive:true,force:true});}
 });
+
+it("device front door binds immutable artifact and denies Static while preserving Off cleanup",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"device-workflow-")),scope={sessionId:"owned",workspace:root},store=new AnalysisWorkflowStore(join(root,"workflow.sqlite"));
+ const deviceSmoke=vi.fn(async()=>({status:"prepared"})),ports={invoke:vi.fn(),staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn(),deviceSmoke};
+ try{await writeFile(join(root,"owned.apk"),"owned fixture");const artifact=await store.open(scope,"owned.apk"),input={action:"start",artifactId:artifact.id,deviceSerial:"owned-device",packageName:"com.example.app",purpose:"Owned observation"};
+ await expect(handleAnalysisWorkflow("run_device_smoke_test",input,scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("Static");expect(deviceSmoke).not.toHaveBeenCalled();
+ await handleAnalysisWorkflow("run_device_smoke_test",input,scope,{trusted:true,idle:true,mode:"runtime"},store,ports);expect(deviceSmoke).toHaveBeenCalledWith(expect.objectContaining({phase:"prepare",request:expect.objectContaining({target:artifact.path,expected_sha256:artifact.sha256,durationSeconds:10})}));
+ await expect(handleAnalysisWorkflow("run_device_smoke_test",input,{...scope,sessionId:"other"},{trusted:true,idle:true,mode:"runtime"},store,ports)).rejects.toThrow("unavailable");
+ await handleAnalysisWorkflow("run_device_smoke_test",{action:"cancel",taskId:artifact.id},scope,{trusted:true,idle:false,mode:"off"},store,ports);expect(deviceSmoke).toHaveBeenLastCalledWith({request:{action:"cancel",taskId:artifact.id}});
+ }finally{store.close();await rm(root,{recursive:true,force:true});}
+});

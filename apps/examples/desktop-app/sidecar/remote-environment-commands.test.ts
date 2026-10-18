@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
 	mkdirSync,
 	mkdtempSync,
@@ -16,6 +16,83 @@ import type {
 } from "@cline/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionRuntimeBinding, SidecarContext } from "./types";
+
+/** Owned POSIX fixture only: wait for close, and terminate descendants on failure.
+ * A five-second synchronous sh timeout killed only the shell on Windows, leaving
+ * git/find children holding the fixture directory. Never retry the assertions.
+ */
+async function runOwnedShell(
+	command: string,
+	args: string[],
+	cwd: string,
+	timeoutMs = 30_000,
+) {
+	return await new Promise<string>((resolve, reject) => {
+		const child = spawn(command, args, {
+			cwd,
+			windowsHide: true,
+			detached: process.platform !== "win32",
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const stdout: Buffer[] = [];
+		let bytes = 0;
+		let failure: Error | undefined;
+		let killer: Promise<void> | undefined;
+		const stop = (reason: string) => {
+			if (failure) return;
+			failure = new Error(reason);
+			if (!child.pid) return;
+			if (process.platform === "win32") {
+				killer = new Promise<void>((done) => {
+					const kill = spawn(
+						join(
+							process.env.SystemRoot ?? "C:\\Windows",
+							"System32",
+							"taskkill.exe",
+						),
+						["/PID", String(child.pid), "/T", "/F"],
+						{ windowsHide: true, stdio: "ignore", timeout: 5000 },
+					);
+					kill.once("error", done);
+					kill.once("close", () => done());
+				});
+			} else {
+				try {
+					process.kill(-child.pid, "SIGKILL");
+				} catch {
+					child.kill("SIGKILL");
+				}
+			}
+		};
+		const timer = setTimeout(
+			() =>
+				stop(`Owned shell fixture exceeded its ${timeoutMs}ms process budget`),
+			timeoutMs,
+		);
+		child.stdout.on("data", (data: Buffer) => {
+			bytes += data.length;
+			if (bytes > 512 * 1024)
+				stop("Owned shell fixture output budget exceeded");
+			else stdout.push(data);
+		});
+		child.stderr.on("data", (data: Buffer) => {
+			bytes += data.length;
+			if (bytes > 512 * 1024)
+				stop("Owned shell fixture output budget exceeded");
+		});
+		child.once("error", (error) => {
+			failure ??= error;
+		});
+		child.once("close", async (code) => {
+			clearTimeout(timer);
+			await killer;
+			if (failure) reject(failure);
+			else if (code !== 0)
+				reject(new Error(`Owned shell fixture exited ${code}`));
+			else resolve(Buffer.concat(stdout).toString("utf8"));
+		});
+	});
+}
 
 const coreCreateMock = vi.hoisted(() => vi.fn());
 const hubClientConstructorMock = vi.hoisted(() => vi.fn());
@@ -738,6 +815,30 @@ describe("remote environment command routing", () => {
 		});
 	});
 
+	it("does not turn owned fixture process failures, overflow or timeout into passing output", async () => {
+		await expect(
+			runOwnedShell(process.execPath, ["-e", "process.exit(7)"], process.cwd()),
+		).rejects.toThrow("exited 7");
+		await expect(
+			runOwnedShell(
+				process.execPath,
+				[
+					"-e",
+					"process.stdout.write('x'.repeat(1024 * 1024)); setInterval(()=>{},1000)",
+				],
+				process.cwd(),
+			),
+		).rejects.toThrow("output budget");
+		await expect(
+			runOwnedShell(
+				process.execPath,
+				["-e", "setInterval(()=>{},1000)"],
+				process.cwd(),
+				1000,
+			),
+		).rejects.toThrow("process budget");
+	});
+
 	it("bounds remote search output before transfer and drops a truncated filename", async () => {
 		const { handleCommand } = await import("./commands");
 		const { createSidecarContext } = await import("./context");
@@ -763,15 +864,10 @@ describe("remote environment command routing", () => {
 			fake.run.mockImplementation(async (_id, input) => {
 				expect(input.command).toBe("sh");
 				expect(input.args[0]).toBe("-c");
-				const stdout = execFileSync(
+				const stdout = await runOwnedShell(
 					input.command,
 					["-c", `find() { cat owned-listing.txt; }; ${input.args[1]}`],
-					{
-						cwd: input.cwd,
-						encoding: "utf8",
-						timeout: 5000,
-						maxBuffer: 512 * 1024,
-					},
+					input.cwd,
 				);
 				transferredBytes = Buffer.byteLength(stdout);
 				transferredOutput = stdout;
@@ -802,9 +898,14 @@ describe("remote environment command routing", () => {
 				}),
 			).resolves.toEqual([]);
 		} finally {
-			rmSync(root, { recursive: true, force: true });
+			rmSync(root, {
+				recursive: true,
+				force: true,
+				maxRetries: 10,
+				retryDelay: 100,
+			});
 		}
-	});
+	}, 90_000);
 
 	it("walks real remote files and prunes dependency directories with the production shell script", async () => {
 		const { handleCommand } = await import("./commands");
@@ -824,12 +925,7 @@ describe("remote environment command routing", () => {
 				createExistingRemoteBinding(profile.id),
 			);
 			fake.run.mockImplementation(async (_id, input) => ({
-				stdout: execFileSync(input.command, input.args, {
-					cwd: input.cwd,
-					encoding: "utf8",
-					timeout: 5000,
-					maxBuffer: 512 * 1024,
-				}),
+				stdout: await runOwnedShell(input.command, input.args, input.cwd),
 				stderr: "",
 				exitCode: 0,
 			}));
@@ -841,9 +937,14 @@ describe("remote environment command routing", () => {
 				}),
 			).resolves.toEqual(["README.md", "src/owned.ts"]);
 		} finally {
-			rmSync(root, { recursive: true, force: true });
+			rmSync(root, {
+				recursive: true,
+				force: true,
+				maxRetries: 10,
+				retryDelay: 100,
+			});
 		}
-	});
+	}, 90_000);
 
 	it("lists and bounds local workspace directories through the local binding", async () => {
 		const { handleCommand } = await import("./commands");

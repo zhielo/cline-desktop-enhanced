@@ -386,3 +386,10 @@ it("managed stop is cleanup without manufacturing a new approval",async()=>{
  const p=ports();await runModelInvestigation("stop_runtime_session",{runtimeSessionId:id},p);
  expect(p.review).not.toHaveBeenCalled();expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();
 });
+
+it("device launch requires independent Execute review; status/cancel never manufacture approval",async()=>{
+ const input={action:"start",artifactId:id,deviceSerial:"owned-device",packageName:"com.example.app",purpose:"Owned observation"};
+ const ok=ports(),result=await runModelInvestigation("run_device_smoke_test",input,ok);expect(ok.review).toHaveBeenCalledOnce();expect(ok.invoke).toHaveBeenLastCalledWith("run_device_smoke_test",expect.objectContaining({phase:"run",executionToken:"private-one-use"}));expect(result).not.toContain("private-one-use");
+ const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation("run_device_smoke_test",input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();
+ for(const action of ["status","cancel"]){const p=ports();await runModelInvestigation("run_device_smoke_test",{action,taskId:id},p);expect(p.review).not.toHaveBeenCalled();expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();}
+});

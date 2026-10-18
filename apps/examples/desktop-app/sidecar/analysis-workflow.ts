@@ -13,6 +13,7 @@ const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
  ...BATCH_WORKFLOW_COMMANDS,
+ "run_device_smoke_test",
 	"attach_debug_session",
  "set_scoped_breakpoints",
  "capture_execution_trace",
@@ -40,6 +41,7 @@ export interface WorkflowPorts {
 	browsers?: () => unknown;
  managedSession?: (id:string)=>{target:string;expected_sha256:string;hybrid?:unknown};
  managedRuntime?: (command:string,input:unknown)=>Promise<unknown>;
+ deviceSmoke?: (input: unknown) => Promise<unknown>;
  runtimeCapture?: (command: string, input: unknown) => Promise<unknown>;
  batch?: (command: string, input: unknown) => Promise<unknown>;
 }
@@ -110,6 +112,19 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
+ if(command === "run_device_smoke_test") {
+  if(!options.trusted || !ports.deviceSmoke) throw new Error("Trusted owning device host required");
+  const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().min(1).max(512).optional()}).passthrough().parse(input);
+  const {phase,planId,executionToken,...publicInput}=envelope;
+  const params=InvestigationSchemas.run_device_smoke_test.parse(publicInput);
+  if(params.action!=="start") return ports.deviceSmoke({request:params});
+  if(!runtimeAnalysisEnabled(options.mode) || (!options.idle && options.actor!=="model")) throw new Error("Device launch requires an owning Runtime/Hybrid session; Static never executes targets");
+  const artifact=await store.verify(scope,params.artifactId);
+  const {artifactId:_id,hybridProposal,...request}=params;
+  if(options.mode!=="hybrid" && hybridProposal) throw new Error("Hybrid proposal requires Hybrid mode");
+  const hybrid=options.mode==="hybrid"?await bindHybridObservation(hybridProposal,scope,{receipt:ports.staticReceipt,task:(id)=>(ports.taskBundle(id) as {providerSnapshot?:unknown})?.providerSnapshot},artifact.path):undefined;
+  return ports.deviceSmoke({phase,planId,executionToken,request:{...request,target:artifact.path,expected_sha256:artifact.sha256,...(hybrid?{hybrid}:{})}});
+ }
  if (command === "stop_runtime_session") {
   if (!options.trusted || !ports.managedRuntime) throw new Error("Trusted owning cleanup host required");
   return ports.managedRuntime(command,InvestigationSchemas.stop_runtime_session.parse(input));

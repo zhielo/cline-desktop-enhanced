@@ -1,3 +1,4 @@
+import { handleDeviceSmoke } from "./device-smoke";
 import { handleManagedRuntime, managedInspectorSessions } from "./managed-runtime";
 import { handleRuntimeCapture } from "./runtime-capture";
 import { handleBatchInvestigation } from "./batch-investigation";
@@ -3020,6 +3021,10 @@ export async function handleCommand(
        const active=ctx.liveSessions.get(id),currentProfile=active?.config.permissionProfile??active?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";
        if(!active||currentProfile!=="full-access")throw new Error("Managed debugger permission profile or attached scope changed");
       });
+     },
+     deviceSmoke: async (input)=>{
+      const assertProfile=()=>{const active=ctx.liveSessions.get(id),profile=active?.config.permissionProfile??active?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";if(!active||profile!=="full-access")throw new Error("Device launch requires an attached Full Access local session; restricted profiles are not widened");};
+      return handleDeviceSmoke(input,{sessionId:id,workspace:root},desktopAnalysisTaskOrchestrator,incidents(),assertProfile);
      },
      runtimeCapture: async (captureCommand,input) => {
       const profile = live?.config.permissionProfile ?? live?.config.permission_profile ?? readGlobalSettings().permissionProfile ?? "full-access";

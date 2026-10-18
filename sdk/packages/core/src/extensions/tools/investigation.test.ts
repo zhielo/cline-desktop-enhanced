@@ -131,3 +131,11 @@ it("accepts bounded source and saved-graph reads, not runtime or output authorit
 		}),
 	).toThrow();
 });
+
+it("device smoke requires an explicit device/artifact, bounds and no self-consent",()=>{
+ const input={action:"start",artifactId:"11111111-1111-4111-8111-111111111111",deviceSerial:"owned-device",packageName:"com.example.app",purpose:"Owned launch observation"};
+ expect(InvestigationSchemas.run_device_smoke_test.parse(input)).toMatchObject({durationSeconds:10});
+ for(const extra of [{executionToken:"forged"},{owner_session_id:"other"},{target:"arbitrary.apk"},{forceStop:true},{install:true},{durationSeconds:121}])expect(()=>InvestigationSchemas.run_device_smoke_test.parse({...input,...extra})).toThrow();
+ expect(()=>InvestigationSchemas.run_device_smoke_test.parse({...input,deviceSerial:""})).toThrow();
+ expect(()=>InvestigationSchemas.run_device_smoke_test.parse({action:"status",taskId:input.artifactId,artifactId:input.artifactId})).toThrow();
+});

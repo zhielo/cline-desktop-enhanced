@@ -235,6 +235,7 @@ export function analysisCommandCatalog() {
 				limitations:
 					"Desktop managed Node Inspector only. Independent Execute approval for new work, exact process/source identity, 1–120-second session lifetime and bounded cleanup. Activation/disconnect may pause/resume. CPU sampling is NOT a complete trace; no universal debugger parity.",
 			})),
+   {command:"run_device_smoke_test",effect:"runtime-execution",availability:"implemented-bounded",limitations:"Unified approved Android launch/incident adapter; explicit device and exact installed base APK hash, 2–120 second observation, owning status/cancel. Runtime/Hybrid and attached Full Access only. Does not install, stop the app, prove split identity, health or regression; live hardware remains unverified."},
 			...["capture_process_tree", "capture_file_activity"].map((command) => ({
 				command,
 				effect: "runtime-metadata",

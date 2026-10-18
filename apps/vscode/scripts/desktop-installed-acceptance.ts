@@ -1091,6 +1091,22 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(!expandedResumeDenied)throw new Error("Installed partial dependency replayed");
     stages.push("installed-structured-batch-draft-partial-independent-reads-passed");
 
+    // Preparation is deliberately offline: no ADB/device execution or physical-hardware claim.
+    const smokeArtifact=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:join(workspace,"owned-project-candidate.apk")}});
+    const smokeInput={action:"start",artifactId:smokeArtifact.id,deviceSerial:"owned-offline-no-device",packageName:"com.cline.owned",durationSeconds:2,purpose:"Installed approval routing only, never execute device work"};
+    let staticSmokeDenied=false;try{await rpc(page,"run_device_smoke_test",{...triageScope,input:smokeInput});}catch{staticSmokeDenied=true;}if(!staticSmokeDenied)throw new Error("Installed Static mode allowed device launch preparation");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
+    const smokePlan=await rpc<{id:string;permission:string;requirements:string[];request:{target_sha256:string;owner_session_id:string}}>(page,"run_device_smoke_test",{...triageScope,input:smokeInput});
+    if(smokePlan.permission!=="Execute"||!smokePlan.requirements.includes("app-may-remain-running-no-automatic-force-stop")||smokePlan.request.owner_session_id!==triageSession.sessionId||smokePlan.request.target_sha256!==createHash("sha256").update(await readFile(join(workspace,"owned-project-candidate.apk"))).digest("hex"))throw new Error("Installed device smoke plan lost exact identity or independent Execute requirements");
+    let unapprovedSmokeDenied=false;try{await rpc(page,"run_device_smoke_test",{...triageScope,input:{...smokeInput,phase:"run",planId:smokePlan.id}});}catch{unapprovedSmokeDenied=true;}if(!unapprovedSmokeDenied)throw new Error("Installed device smoke ran without independent approval");
+    let foreignSmokeDenied=false;try{await rpc(page,"run_device_smoke_test",{...analysisArgs,input:{action:"status",taskId:smokePlan.id}});}catch{foreignSmokeDenied=true;}if(!foreignSmokeDenied)throw new Error("Installed device smoke status crossed owning sessions");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"off"});
+    const smokeCancelled=await rpc<{taskStatus:string;cleanupConfirmed:boolean}>(page,"run_device_smoke_test",{...triageScope,input:{action:"cancel",taskId:smokePlan.id}});
+    const smokeStatus=await rpc<{taskStatus:string;observationStatus:string}>(page,"run_device_smoke_test",{...triageScope,input:{action:"status",taskId:smokePlan.id}});
+    if(smokeCancelled.taskStatus!=="cancelled"||!smokeCancelled.cleanupConfirmed||smokeStatus.taskStatus!=="cancelled"||smokeStatus.observationStatus!=="not-started")throw new Error("Installed device smoke cleanup/status replayed work or failed after Off");
+    stages.push("installed-device-smoke-exact-plan-static-denial-off-cleanup-no-hardware-passed");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+
     const candidateValidationHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:ownedWorkflowSource}});
     const candidateReviewHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:batchManifest}});
     for(const [command,input] of [

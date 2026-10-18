@@ -243,6 +243,7 @@ function requirementsFor(
 			requirements.add("reviewed-project-modification");
 	}
 	if (kind === "device") {
+  if(operation==="launch_apk"&&request?.owner_session_id){requirements.add("independent-selected-device-launch-and-logs");requirements.add("app-may-remain-running-no-automatic-force-stop");}
 		requirements.add("authorized-target");
 		requirements.add("sensitive-device-logs");
 		requirements.add("captured-artifact-write");
