@@ -131,6 +131,7 @@ export interface AdvancedRequest {
 			max_depth?: number;
 			max_artifacts?: number;
 			inspect_native?: boolean;
+            identify_formats?: boolean;
 		};
 		function?: { symbol?: string; address?: string; max_bytes?: number };
 		method?: { class_descriptor: string; name: string; descriptor: string };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 /** These commands have fixed implementations, not model-generated shell recipes. */
 export const INVESTIGATION_COMMANDS = [
+	"identify_artifact",
 	"map_dotnet_interop",
 	"map_attack_surface",
 	"trace_electron_ipc",
@@ -22,7 +23,7 @@ export const INVESTIGATION_COMMANDS = [
 	"explain_decompiler_disagreement",
 	"annotate_analysis_project",
 	"build_android_candidate",
- "preview_android_candidate",
+	"preview_android_candidate",
 	"verify_android_candidate",
 	"plan_runtime_observation",
 	"validate_candidate",
@@ -100,11 +101,23 @@ export const EvidenceArchiveManifestSchema = z
 	.strict();
 
 /** Checks are explicitly selected, never inferred from an untrusted filename. */
-export const CandidateValidationSchema = z.object({
- expected_sha256: z.string().regex(/^[a-f0-9]{64}$/),
- kind: z.enum(["javascript", "typescript", "dex", "apk"]),
-}).strict();
-export const CandidateReviewSchema = z.object({
- manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
- scope: z.enum(["recipe", "project-files", "project-inventory"]).optional(),
-}).strict();
+export const CandidateValidationSchema = z
+	.object({
+		expected_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+		kind: z.enum(["javascript", "typescript", "dex", "apk"]),
+	})
+	.strict();
+export const CandidateReviewSchema = z
+	.object({
+		manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+		scope: z.enum(["recipe", "project-files", "project-inventory"]).optional(),
+	})
+	.strict();
+
+/** Fixed static traversal only; budgets are approved with the exact request. */
+export const ArtifactDiscoveryOptionsSchema = z
+	.object({
+		max_depth: z.number().int().min(0).max(4).default(3),
+		max_artifacts: z.number().int().min(1).max(500).default(200),
+	})
+	.strict();

@@ -1344,6 +1344,18 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const nativeLimited=nativeGraph(await runOwnedAdvanced({...nativeTraceRequest,advanced_options:{native_calls:{max_depth:0,max_functions:3,max_edges:4,max_total_bytes:32}}})).stages[0]?.result.result.evidence.callGraph;
     if(nativeLimited?.nodes.length!==1||nativeLimited.edges[0]?.resolution!=="depth-limit"||!nativeLimited.coverage.limitsReached.includes("max_depth")||!(await readFile(nativeTarget)).equals(nativeBytes))throw new Error("Installed native traversal escaped its depth budget or changed the target");
     stages.push("installed-native-direct-call-transitive-budget-cycle-no-execution-passed");
+    const discoveryFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-artifact-discovery-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string};
+    const discoveryBytes=Buffer.from(discoveryFixture.base64,"base64"),discoveryTarget=join(workspace,"owned-misleading-artifact.exe");
+    if(createHash("sha256").update(discoveryBytes).digest("hex")!==discoveryFixture.sha256)throw new Error("Owned discovery fixture digest mismatch");
+    await writeFile(discoveryTarget,discoveryBytes);
+    type OwnedDiscovery={status:string;observedExecution:boolean;stages:{result:{result:{input:{sha256:string};evidence:{identification:{protocol:string;unknownCount:number;ambiguousCount:number;observedExecution:boolean};artifacts:{format:string;origin:string;identification:{status:string;filenameTrusted:boolean}}[];coverage:{truncated:boolean}}}}}[]};
+    const discovered=(await runOwnedAdvanced({operation:"identify_artifact",target:discoveryTarget,artifact_discovery:{max_depth:3,max_artifacts:8},timeout_ms:120000})).result as unknown as OwnedDiscovery;
+    const discoveredWorker=discovered.stages[0]?.result.result,discoveredEvidence=discoveredWorker?.evidence;
+    if(discovered.status!=="partial"||discovered.observedExecution!==false||discoveredWorker?.input.sha256!==discoveryFixture.sha256||discoveredEvidence?.identification.protocol!=="cline-artifact-identification/v1"||discoveredEvidence.identification.unknownCount!==1||discoveredEvidence.identification.ambiguousCount!==1||discoveredEvidence.identification.observedExecution!==false||discoveredEvidence.artifacts.map(a=>a.format).join(",")!=="zip,gzip,dex,opaque,opaque"||discoveredEvidence.artifacts[2]?.origin!=="gzip-expansion"||discoveredEvidence.artifacts.some(a=>a.identification.filenameTrusted!==false))throw new Error("Installed nested content/ambiguous/unknown artifact identification failed");
+    const discoveryLimited=(await runOwnedAdvanced({operation:"identify_artifact",target:discoveryTarget,artifact_discovery:{max_depth:0,max_artifacts:8},timeout_ms:120000})).result as unknown as OwnedDiscovery;
+    if(discoveryLimited.status!=="partial"||discoveryLimited.stages[0]?.result.result.evidence.artifacts.length!==1||!discoveryLimited.stages[0].result.result.evidence.coverage.truncated||!(await readFile(discoveryTarget)).equals(discoveryBytes))throw new Error("Installed discovery escaped depth budget or changed input");
+    stages.push("installed-content-artifact-discovery-nesting-ambiguity-budgets-no-execution-passed");
+
 
 
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });

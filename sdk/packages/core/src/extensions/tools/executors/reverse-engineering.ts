@@ -2486,6 +2486,8 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+ if(input.operation === "identify_artifact" && (input.advanced_action || input.advanced_options)) throw new Error("identify_artifact accepts only artifact_discovery budgets, not advanced overrides");
+ if(input.artifact_discovery && input.operation !== "identify_artifact") throw new Error("artifact_discovery is accepted only by identify_artifact");
  if (input.runtime_observation_plan && input.operation !== "plan_runtime_observation") throw new Error("runtime_observation_plan is only accepted by plan_runtime_observation");
  if (input.operation === "plan_runtime_observation") return JSON.stringify(await planRuntimeObservation(input, context.signal));
   if (input.candidate_validation && input.operation !== "validate_candidate") throw new Error("candidate_validation is only accepted by validate_candidate");

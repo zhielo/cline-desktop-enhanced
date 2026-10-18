@@ -11,7 +11,7 @@ import sys
 import zipfile
 import zlib
 
-VERSION = "android-static/v4"
+VERSION = "android-static/v5"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -475,6 +475,27 @@ def analysis_readiness():
     return {"protocol":"cline-advanced-analysis/v1","status":"completed" if all(c["status"]=="completed" for c in checks) else "partial","engine":"android-static-readiness","engineVersion":VERSION,"evidence":{"checks":checks,"fixtureHashes":{"dex":hashlib.sha256(dex).hexdigest(),"elf":hashlib.sha256(elf).hexdigest()}},"limitations":["Owned static fixture checks are not target-wide correctness, external decompiler validation, OS sandboxing, runtime-worker provisioning or license verification."]}
 
 
+def content_candidates(data):
+    """Bounded signature hints, never a universal type or parser-validity oracle."""
+    candidates=[]
+    def add(fmt, reason):
+        candidates.append({"format":fmt,"evidence":reason,"validation":"signature-only-candidate"})
+    if data.startswith(b"dex\n") or data.startswith(b"cdex"):add("dex","DEX-family prefix at offset zero; validation is separate")
+    if data.startswith(b"\x7fELF"):add("elf","ELF magic at offset zero; not structural validation")
+    if data.startswith(b"MZ"):add("pe","DOS MZ prefix; not proof of a PE executable")
+    if data.startswith(b"\xca\xfe\xba\xbe"):
+        add("jvm-class","CAFEBABE can denote a Java class or a Mach-O fat container")
+        add("macho-fat","CAFEBABE is shared; no language or architecture inferred")
+    if data[:4] in (b"\xce\xfa\xed\xfe",b"\xcf\xfa\xed\xfe",b"\xfe\xed\xfa\xce",b"\xfe\xed\xfa\xcf",b"\xbe\xba\xfe\xca",b"\xbf\xba\xfe\xca",b"\xca\xfe\xba\xbf"):add("macho","Mach-O-family magic; no load-command validation")
+    if data.startswith(b"\x00asm"):add("wasm","WebAssembly magic; no version/module validation")
+    if data.startswith(b"\x1f\x8b"):add("gzip","gzip prefix; bounded decompression is separate")
+    elif len(data)>=2 and data[0]&15==8 and int.from_bytes(data[:2],"big")%31==0:add("zlib","zlib-compatible header; bounded decompression is separate")
+    # is_zipfile inspects the bounded EOCD tail. Parsing/members still pass the existing strict traversal.
+    if data.startswith((b"PK\x03\x04",b"PK\x05\x06")) or zipfile.is_zipfile(io.BytesIO(data)):
+        add("zip","ZIP prefix or end-directory candidate; strict central-directory/member checks are separate")
+    return candidates
+
+
 def investigate(request):
     target = request["target"]
     with open(target, "rb") as handle:
@@ -486,6 +507,7 @@ def investigate(request):
     config = options.get("discovery") or {}
     max_depth = min(max(int(config.get("max_depth", 3)), 0), 4)
     artifact_limit = min(max(int(config.get("max_artifacts", 200)), 1), MAX_RECORDS)
+    identify_formats = config.get("identify_formats") is True
     records, warnings, dexes = [], [], []
     native_artifacts = []
     dex_data = []
@@ -506,7 +528,11 @@ def investigate(request):
         record = {"id": identity, "parentId": parent, "logicalPath": label[:1024], "offsetInParent": offset,
                   "origin": origin, "sha256": sha, "bytes": len(data), "format": "opaque", "validation": "unclassified"}
         records.append(record)
-        if data.startswith(b"dex\n") or data.startswith(b"cdex"):
+        candidates = content_candidates(data) if identify_formats else []
+        zip_candidate = any(c["format"] == "zip" for c in candidates)
+        if identify_formats:
+            record["identification"] = {"candidates":candidates,"ambiguous":len(candidates)>1,"status":"candidate" if candidates else "unknown","filenameTrusted":False}
+        if not zip_candidate and (data.startswith(b"dex\n") or data.startswith(b"cdex")):
             record["format"] = "dex"
             try:
                 if method_work[0] + u32(data, 88) > MAX_TOTAL_METHODS:
@@ -524,7 +550,7 @@ def investigate(request):
                 if request["action"]=="android_method_code":dex_data.append((identity,data))
             except (ValueError, struct.error, UnicodeError) as exc:
                 record.update(validation="candidate-rejected-or-unsupported", reason=str(exc))
-        elif data.startswith(b"\x7fELF"):
+        elif not zip_candidate and data.startswith(b"\x7fELF"):
             record["format"] = "elf"
             record["validation"] = "signature-only-candidate"
             record["reason"] = "Use native_inventory for LIEF structural evidence; no ELF execution"
@@ -539,7 +565,7 @@ def investigate(request):
                 except ImportError:record["reason"]="LIEF missing; ELF remains an unverified signature candidate"
                 except (ValueError,RuntimeError) as exc:record["reason"]=str(exc)
 
-        elif data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"):
+        elif zip_candidate or data.startswith(b"PK\x03\x04") or data.startswith(b"PK\x05\x06"):
             record["format"] = "zip"
             record["validation"] = "container-candidate"
             if depth >= max_depth:
@@ -586,6 +612,13 @@ def investigate(request):
                 scan(child, "decompressed", identity, None, depth+1, record["format"] + "-expansion")
             except (zlib.error, ValueError) as exc:
                 record.update(validation="compression-rejected", reason=str(exc))
+        if identify_formats:
+            # A parsed ZIP says nothing about another candidate format in the same bytes.
+            ident=record["identification"]
+            ident["status"] = "ambiguous" if ident["ambiguous"] else "unknown" if not candidates else "bounded-validated" if record["validation"] in ("integrity-and-bounded-structure","central-directory-checked","bounded-decompression") else "candidate"
+            if record["format"] == "opaque" and len(candidates)==1:
+                record["format"]=candidates[0]["format"]
+                record["validation"]="signature-only-candidate"
         if record["format"] == "opaque":
             sample = data[:1048576]
             counts = [0]*256
@@ -594,7 +627,7 @@ def investigate(request):
             record["sampleEntropy"] = -sum((c/len(sample))*math.log2(c/len(sample)) for c in counts if c) if sample else 0
             record["entropyInterpretation"] = "Not evidence of encryption; compressed/random data can also have high entropy"
         # Carve standard DEX candidates from otherwise opaque/native payloads, bounded.
-        if record["format"] in ("opaque", "elf") and depth < max_depth:
+        if record["format"] in ("opaque", "elf", "pe", "macho", "wasm") and depth < max_depth:
             hits = 0
             for match in re.finditer(rb"dex\n0(?:3[5-9]|40)\x00", data):
                 hits += 1
@@ -609,7 +642,7 @@ def investigate(request):
                     scan(data[pos:pos+size], "embedded-dex@%x" % pos, identity, pos, depth+1, "carved")
                 else:
                     warnings.append("DEX signature at %d has invalid/truncated declared size" % pos)
-        elif record["format"] in ("opaque", "elf") and depth >= max_depth:
+        elif record["format"] in ("opaque", "elf", "pe", "macho", "wasm") and depth >= max_depth:
             truncated[0] = True
     scan(root, "input")
     selected = []
@@ -655,7 +688,13 @@ def investigate(request):
                    "DEX validation covers integrity and bounded structures, not full bytecode verification. Modified/unsupported DEX remains a candidate.",
                    "Loader references are pool references, not proven executed calls. JNI names are candidates, not observed RegisterNatives bindings.",
                    "ELF without LIEF remains a signature candidate; LIEF export/name matches remain static candidates, not RegisterNatives observations. Nested inspection is bounded."]
-    status = "partial" if truncated[0] or warnings or any("rejected" in r["validation"] or "candidate" in r["validation"] for r in records) else "completed"
+    if identify_formats:
+        evidence["identification"]={"protocol":"cline-artifact-identification/v1","contentBased":True,"observedExecution":False,"supportedCandidates":["dex","elf","zip","gzip","zlib","pe","jvm-class","macho-fat","macho","wasm"],"unknownCount":sum(r["identification"]["status"]=="unknown" for r in records),"ambiguousCount":sum(r["identification"]["ambiguous"] for r in records),"candidateCount":sum(r["identification"]["status"]=="candidate" for r in records)}
+        if any(r["identification"]["status"] != "bounded-validated" for r in records):truncated_identification=True
+        else:truncated_identification=False
+        limitations.append("Content signatures are candidates, not full PE/JVM/Mach-O/Wasm verification or proof all embedded formats were found. Conflicts are preserved; ZIP structure does not validate another candidate. Filenames are untrusted labels; unknown bytes are not a successful identification.")
+    else:truncated_identification=False
+    status = "partial" if truncated_identification or truncated[0] or warnings or any("rejected" in r["validation"] or "candidate" in r["validation"] for r in records) else "completed"
     if request["action"] in ("android_method","android_method_code"):
         evidence["selectedMethods"] = selected[:limit]
         if selected_code:evidence["selectedCode"]=selected_code
