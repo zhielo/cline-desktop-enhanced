@@ -325,3 +325,9 @@ test("installed acceptance retains managed Node Execute approval, sampling limit
  const driver=readFileSync(new URL('../apps/vscode/scripts/desktop-installed-acceptance.ts',import.meta.url),'utf8');
  for(const text of ['installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed','debugger-activation-cleanup-may-pause-or-resume','v8-cpu-sampling-selected-script','managed-runtime-fixture-cleanup','Managed stop crossed owning sessions','Static enabled managed debugger'])assert.ok(driver.includes(text),text);
 });
+
+
+test("installed managed fixtures launch through a trusted canonical root, not Windows 8.3 aliases",()=>{
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.ok(driver.includes('const root = realpathSync.native(await mkdtemp(join(tmpdir(), "cline-installed-ui-")))'));
+});

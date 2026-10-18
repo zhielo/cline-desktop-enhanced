@@ -6,7 +6,7 @@ import { gunzipSync } from "node:zlib";
 
 import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA256} from "../../../sdk/packages/core/scripts/owned-managed-fixture.mjs";
 import { createHash,randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { appendFile, mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -237,7 +237,9 @@ export async function main() {
     throw new Error(
       "Absolute installed sidecar path required for isolated Hub bootstrap",
     );
-  const root = await mkdtemp(join(tmpdir(), "cline-installed-ui-"));
+  // Resolve only the trusted newly created fixture root before launching owned Node.
+  // Inspector labels remain lexical; never resolve paths supplied by a target.
+  const root = realpathSync.native(await mkdtemp(join(tmpdir(), "cline-installed-ui-")));
   const workspace = join(root, "owned-workspace");
   const evidence = join(process.cwd(), "dist", "installed-ui-evidence");
   await mkdir(workspace);
