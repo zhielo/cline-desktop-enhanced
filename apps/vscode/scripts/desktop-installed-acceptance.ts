@@ -89,6 +89,90 @@ export async function stopOwnedApplication(
     throw new AggregateError(failures, "Owned application termination and disconnect failed");
 }
 
+/** A single taskkill can report a WebView child already exiting as an error.
+ * Neither its exit code nor CDP disconnect proves cleanup. Capture creation-time
+ * identities first, issue one native tree stop, then require a fresh CIM snapshot
+ * with every observed identity absent. Observation errors/survivors fail closed;
+ * PID reuse is never grounds for killing an additional process. */
+export const OWNED_WINDOWS_TREE_STOP = String.raw`
+$ErrorActionPreference = 'Stop'
+$rootPid = [int]$env:ACCEPTANCE_STOP_PID
+if ($rootPid -le 0) { throw 'Invalid owned root PID' }
+$known = @{}
+function Add-OwnedTree($rows) {
+  $expanded = $true
+  while ($expanded) {
+    $expanded = $false
+    foreach ($row in $rows) {
+      $key = [string]$row.ProcessId
+      if ($known.ContainsKey($key)) { continue }
+      $parent = $known[[string]$row.ParentProcessId]
+      if ($null -ne $parent -and $row.CreationDate -ge $parent.CreationDate) {
+        if ($known.Count -ge 256) { throw 'Owned tree identity budget exceeded' }
+        $known[$key] = $row
+        $expanded = $true
+      }
+    }
+  }
+}
+$rows = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+$root = @($rows | Where-Object { $_.ProcessId -eq $rootPid })
+if ($root.Count -ne 1) { throw 'Owned root identity unavailable before stop' }
+$known[[string]$rootPid] = $root[0]
+Add-OwnedTree $rows
+$taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+# Capture the native diagnostic without interpreting localized error strings.
+# A nonzero status is accepted only after independent identity absence proof.
+$ErrorActionPreference = 'Continue'
+try { $nativeDiagnostic = (& $taskkill /PID $rootPid /T /F 2>&1 | Out-String); $nativeExit = $LASTEXITCODE }
+finally { $ErrorActionPreference = 'Stop' }
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+  $rows = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+  Add-OwnedTree $rows
+  $survivors = @($rows | Where-Object {
+    $previous = $known[[string]$_.ProcessId]
+    $null -ne $previous -and $_.CreationDate -eq $previous.CreationDate
+  })
+  if ($survivors.Count -eq 0) {
+    [Console]::Write((ConvertTo-Json -Compress -InputObject @{
+      schema = 'cline-owned-tree-stop/v1'; confirmed = $true;
+      taskkillExitCode = $nativeExit; observedIdentities = $known.Count;
+      remainingIdentities = 0
+    }))
+    exit 0
+  }
+  Start-Sleep -Milliseconds 100
+}
+throw 'Owned process-tree identity absence not confirmed'
+`;
+
+export function verifyOwnedTreeStopReceipt(value: unknown) {
+  const row = value as Record<string, unknown> | null;
+  if (!row || row.schema !== "cline-owned-tree-stop/v1" || row.confirmed !== true ||
+      !Number.isInteger(row.taskkillExitCode) || !Number.isInteger(row.observedIdentities) ||
+      (row.observedIdentities as number) < 1 || (row.observedIdentities as number) > 256 ||
+      row.remainingIdentities !== 0)
+    throw new Error("Owned process-tree cleanup receipt unavailable or invalid");
+}
+
+export async function stopOwnedWindowsTree(pid: number, cwd: string, env: NodeJS.ProcessEnv) {
+  if (process.platform !== "win32" || !Number.isSafeInteger(pid) || pid <= 0)
+    throw new Error("Owned Windows process PID required");
+  const powershell = join(process.env.SystemRoot ?? "C:\\Windows", "System32",
+    "WindowsPowerShell", "v1.0", "powershell.exe");
+  const probe = startAcceptanceProcess(powershell,
+    ["-NoProfile", "-NonInteractive", "-Command", OWNED_WINDOWS_TREE_STOP], cwd,
+    {...env, ACCEPTANCE_STOP_PID: String(pid)});
+  const code = await withInstalledActionDeadline("owned-process-tree-stop", () => probe.exited, 30_000)
+    .catch(error => { probe.child.kill(); throw error; });
+  await withInstalledActionDeadline("owned-process-tree-stop-output", () => probe.closed, 5_000);
+  if (code !== 0) throw new Error(`Owned process-tree cleanup was not confirmed (probe exit ${code})`);
+  let receipt: unknown;
+  try { receipt = JSON.parse(probe.diagnostics.stdoutTail); }
+  catch { throw new Error("Owned process-tree cleanup receipt unavailable or invalid"); }
+  verifyOwnedTreeStopReceipt(receipt);
+}
+
 /** Node-owned deadline: renderer timers can stop while a WebView/IPC call is stuck.
  * Timeout fails acceptance, never retries or claims a submitted operation was undone. */
 export async function withInstalledActionDeadline<T>(
@@ -321,28 +405,9 @@ export async function main() {
   const startupSamples: number[] = [];
   const appWorkingSetSamples: number[] = [];
   const transcriptScrollSamples: number[] = [];
-  const taskkill = join(
-    process.env.SystemRoot ?? "C:\\Windows",
-    "System32",
-    "taskkill.exe",
-  );
-
-	async function killOwnedProcess(pid: number) {
-    const killer = startAcceptanceProcess(
-      taskkill,
-      ["/PID", String(pid), "/T", "/F"],
-      workspace,
-      environment,
-    );
-    const code = await withInstalledActionDeadline("owned-process-tree-stop", () => killer.exited, 10_000).catch((error) => { killer.child.kill(); throw error; });
-    if (code !== 0)
-      throw new Error(
-        `Owned process-tree cleanup was not confirmed (taskkill exit ${code}): ${
-          redactedLaunchText(killer.diagnostics.stderrTail || killer.diagnostics.stdoutTail ||
-            killer.diagnostics.launchError).slice(-1200)
-        }`,
-      );
-	}
+  async function killOwnedProcess(pid: number) {
+    await stopOwnedWindowsTree(pid, workspace, environment);
+  }
 
   async function retainLaunchReceipt(
     lastConnectionError: string,

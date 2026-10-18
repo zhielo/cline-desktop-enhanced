@@ -11,6 +11,9 @@ import {
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	stopOwnedApplication,
+ stopOwnedWindowsTree,
+ verifyOwnedTreeStopReceipt,
+ OWNED_WINDOWS_TREE_STOP,
 	verifyRestartInstructions,
 	verifyRecoveredHubSession,
 	waitForInstalledBackendEndpoint,
@@ -347,4 +350,31 @@ test("evidence exhaustion fails acceptance without gating owned native cleanup",
  const cleanup = driver.slice(driver.indexOf("async function stop()"), driver.indexOf("async function stop()") + 1000);
  assert.ok(cleanup.includes("stopOwnedApplication("));
  assert.ok(!cleanup.includes("acceptanceAction("));
+});
+
+
+test("owned tree stop accepts native race errors only with identity-absence proof", () => {
+ const receipt={schema:"cline-owned-tree-stop/v1",confirmed:true,taskkillExitCode:128,observedIdentities:4,remainingIdentities:0};
+ verifyOwnedTreeStopReceipt(receipt);
+ verifyOwnedTreeStopReceipt({...receipt,taskkillExitCode:0});
+ for(const bad of [null,{}, {...receipt,confirmed:false}, {...receipt,remainingIdentities:1},
+  {...receipt,observedIdentities:0},{...receipt,observedIdentities:257},
+  {...receipt,taskkillExitCode:null}]) assert.throws(()=>verifyOwnedTreeStopReceipt(bad),/receipt/);
+ assert.equal((OWNED_WINDOWS_TREE_STOP.match(/& \$taskkill \/PID/g)||[]).length,1);
+ for(const text of ["Get-CimInstance Win32_Process -ErrorAction Stop", "CreationDate -eq $previous.CreationDate",
+  "Owned root identity unavailable", "Owned tree identity budget exceeded", "$attempt -lt 20"])
+  assert.ok(OWNED_WINDOWS_TREE_STOP.includes(text),text);
+});
+
+test("Windows owned tree cleanup confirms an actual Node root and child exited", {skip:process.platform!=="win32",timeout:45000}, async () => {
+ const root=startAcceptanceProcess(process.execPath,["-e",
+  'const {spawn}=require("node:child_process");const c=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"});console.log(c.pid);setInterval(()=>{},1000);'],process.cwd(),process.env);
+ try {
+  await withInstalledActionDeadline("owned-test-child-ready",async()=>{
+   while(!/^\d+\s*$/.test(root.diagnostics.stdoutTail)) await new Promise(r=>setTimeout(r,25));
+  },10000);
+  await stopOwnedWindowsTree(root.child.pid,process.cwd(),process.env);
+  await withInstalledActionDeadline("owned-test-root-exit",()=>root.exited,5000);
+  assert.notEqual(root.child.exitCode,null);
+ } finally { if(root.child.exitCode===null && root.child.pid) await stopOwnedWindowsTree(root.child.pid,process.cwd(),process.env); }
 });
