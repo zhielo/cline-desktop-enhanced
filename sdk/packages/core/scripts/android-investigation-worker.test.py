@@ -100,6 +100,39 @@ class AndroidTests(unittest.TestCase):
         src=(HERE.parent/'src/extensions/tools/executors/android-investigation-worker.ts').read_text()
         embedded=json.loads(src.split('export const ANDROID_INVESTIGATION_WORKER = ',1)[1].strip().removesuffix(';'))
         self.assertEqual(embedded,(HERE/'android-investigation-worker.py').read_text())
+    def identify(self,data,**budgets):
+        return self.run_action(data,options={'discovery':{'identify_formats':True,**budgets}})
+    def test_identify_owned_nested_fixture_hashes_origins_and_unknown(self):
+        import base64
+        fixture=json.loads((HERE/'owned-artifact-discovery-fixture.json').read_text())
+        data=base64.b64decode(fixture['base64']);r=self.identify(data);e=r['evidence']
+        self.assertEqual(r['input']['sha256'],fixture['sha256']);self.assertEqual(r['status'],'partial')
+        self.assertEqual([a['format'] for a in e['artifacts']],['zip','gzip','dex','opaque','opaque'])
+        self.assertEqual(e['identification']['ambiguousCount'],1);self.assertEqual(e['identification']['unknownCount'],1)
+        self.assertFalse(e['identification']['observedExecution']);self.assertEqual(e['artifacts'][1]['logicalPath'],'payload.exe')
+        self.assertEqual(e['artifacts'][2]['origin'],'gzip-expansion')
+        for a in e['artifacts'][1:]:self.assertIn(a['parentId'],[n['id'] for n in e['artifacts']])
+        self.assertEqual(len(list(self.path.parent.iterdir())),1);self.assertEqual(self.path.read_bytes(),data)
+    def test_identify_mz_prefixed_zip_preserves_conflicting_candidates(self):
+        r=self.identify(b'MZ'+b'\0'*62+archive([('owned',dex_fixture())]));a=r['evidence']['artifacts'][0]
+        self.assertEqual(a['format'],'zip');self.assertTrue(a['identification']['ambiguous'])
+        self.assertEqual([c['format'] for c in a['identification']['candidates']],['pe','zip'])
+        self.assertEqual(a['identification']['status'],'ambiguous');self.assertEqual(r['status'],'partial')
+        self.assertTrue(any(a['format']=='dex' for a in r['evidence']['artifacts']))
+    def test_identify_signatures_unknown_and_empty_never_completed(self):
+        for data in [b'',b'unknown',b'MZ',b'\x00asm',b'\xcf\xfa\xed\xfe',b'\xca\xfe\xba\xbe']:
+            with self.subTest(data=data):self.assertEqual(self.identify(data)['status'],'partial')
+        self.assertEqual(self.identify(b'\xca\xfe\xba\xbe')['evidence']['artifacts'][0]['identification']['status'],'ambiguous')
+    def test_identify_valid_dex_has_bounded_validation_not_runtime_claim(self):
+        r=self.identify(dex_fixture())
+        self.assertEqual(r['status'],'completed');self.assertEqual(r['evidence']['artifacts'][0]['identification']['status'],'bounded-validated')
+        self.assertFalse(r['evidence']['identification']['observedExecution'])
+    def test_identify_limits_and_rejection_never_completed(self):
+        data=archive([('owned',dex_fixture())])
+        for budgets in [{'max_depth':0},{'max_artifacts':1}]:
+            r=self.identify(data,**budgets);self.assertEqual(r['status'],'partial');self.assertEqual(len(r['evidence']['artifacts']),1)
+        self.assertEqual(self.identify(archive([('../escape',b'x')]))['status'],'partial')
+        self.assertEqual(self.identify(b'PK\x03\x04bad')['status'],'partial')
     def test_integrity_and_native_lookup(self):
         result=self.run_action(dex_fixture(),'android_method',options={'method':{'class_descriptor':'LFixture;','name':'native_work','descriptor':'()V'}})
         e=result['evidence'];self.assertEqual(e['selectedMethods'][0]['native'],True)

@@ -27,6 +27,8 @@ type Catalog = {
 };
 function template(command: string) {
 	const base: Record<string, unknown> = { target: "", timeout_ms: 120000 };
+	if (command === "identify_artifact")
+		base.artifact_discovery = { max_depth: 3, max_artifacts: 200 };
 	if (
 		[
 			"preview_binary_patch",

@@ -7,7 +7,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
 | `plan_investigation` | partial | Fixed recipes plus explicit typed objectives and schema-validated read-only batch drafts; no arbitrary natural-language goal synthesis or executed engine preflight. |
-| `identify_artifact` | partial | Existing format inspection; nested or ambiguous containers require separate inspection. |
+| `identify_artifact` | partial | Content-based bounded ZIP/gzip/zlib traversal, DEX carving, hashes/origins and conflicting/unknown signatures. PE/JVM/Mach-O/Wasm remain candidates; no universal identification or full format validation. |
 | `map_attack_surface` | partial | JS/TS syntax and APK manifest evidence; no universal entrypoint inventory. |
 | `trace_data_flow` | partial | Declared saved-report edges only; unresolved whole-program paths are not inferred. |
 | `trace_cross_language` | partial | Saved validated graph paths; no universal JNI or Electron resolver. |

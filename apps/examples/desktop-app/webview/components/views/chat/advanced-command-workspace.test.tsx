@@ -239,3 +239,14 @@ it("host-only workflows never submit malformed legacy static requests", async ()
 		expect(onPrepare).not.toHaveBeenCalled();
 	}
 });
+it("exposes artifact traversal budgets in a fresh default request without running it", async () => {
+	const { onPrepare } = await mount();
+	const request = JSON.parse(
+		(container.querySelector("textarea") as HTMLTextAreaElement).value,
+	);
+	expect(request.artifact_discovery).toEqual({
+		max_depth: 3,
+		max_artifacts: 200,
+	});
+	expect(onPrepare).not.toHaveBeenCalled();
+});

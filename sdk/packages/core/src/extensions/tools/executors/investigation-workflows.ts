@@ -1,5 +1,8 @@
 import { inspectManagedPE } from "../../../analysis/dotnet";
-import { HypothesisSchema } from "../investigation-workflows-schema";
+import {
+	ArtifactDiscoveryOptionsSchema,
+	HypothesisSchema,
+} from "../investigation-workflows-schema";
 import type { ReverseEngineeringInput } from "../schemas";
 import { prepareNotebook } from "./analysis-notebook";
 import { inspectBinaryMitigations } from "./binary-mitigations";
@@ -127,6 +130,23 @@ export async function investigationWorkflow(
 		observedExecution: false,
 	});
 
+	if (input.operation === "identify_artifact") {
+		const discovery = ArtifactDiscoveryOptionsSchema.parse(
+			input.artifact_discovery ?? {},
+		);
+		await stage("content-artifact-discovery", {
+			operation: "advanced_analysis",
+			advanced_action: "artifact_discovery",
+			target: input.target,
+			max_results: input.max_results ?? 200,
+			advanced_options: { discovery: { ...discovery, identify_formats: true } },
+		});
+		return envelope([
+			"Single bounded input read; static content evidence, not filename trust or target execution. No target extraction or downloads.",
+			"Recognizes only listed signatures and supported ZIP/gzip/zlib nesting or standard DEX carving. Unknown, conflicting and signature-only formats remain partial; no universal polyglot detector or full PE/JVM/Mach-O/Wasm validation.",
+			"64 MiB input, 16 MiB child, 128 MiB aggregate traversal, 100:1 expansion, 10000 ZIP entries, 50000 parsed DEX methods and 900000-byte worker result ceiling. Budget refusal is not successful identification.",
+		]);
+	}
 	if (
 		sourceCommands.has(input.operation) ||
 		(input.operation === "map_attack_surface" &&

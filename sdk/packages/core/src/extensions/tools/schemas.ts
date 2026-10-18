@@ -3,6 +3,7 @@ import { AndroidProjectPatchSchema } from "./android-project-schema";
 import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
 import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
+	ArtifactDiscoveryOptionsSchema,
 	CandidateValidationSchema,
 	CandidateReviewSchema,
 	HypothesisSchema,
@@ -183,6 +184,7 @@ export const ReverseEngineeringInputSchema = z.object({
 					max_depth: z.number().int().min(0).max(4).optional(),
 					max_artifacts: z.number().int().min(1).max(500).optional(),
 					inspect_native: z.boolean().optional(),
+                    identify_formats: z.boolean().optional(),
 				})
 				.strict()
 				.optional(),
@@ -315,6 +317,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	candidate_validation: CandidateValidationSchema.optional(),
 	candidate_review: CandidateReviewSchema.optional(),
 	workflow_query: WorkflowQuerySchema.optional(),
+	artifact_discovery: ArtifactDiscoveryOptionsSchema.optional(),
 	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
 	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
 	android_project_patch: AndroidProjectPatchSchema.optional(),

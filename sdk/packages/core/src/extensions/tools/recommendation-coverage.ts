@@ -12,7 +12,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "identify_artifact",
 		scope: "partial",
 		limitations:
-			"Existing format inspection; nested or ambiguous containers require separate inspection.",
+			"Content-based bounded ZIP/gzip/zlib nesting, DEX carving and conflicting/unknown signatures. PE/JVM/Mach-O/Wasm remain candidates; no universal identification or full validation.",
 	},
 	{
 		group: "cross-tool",

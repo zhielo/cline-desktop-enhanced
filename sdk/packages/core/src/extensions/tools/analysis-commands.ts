@@ -11,7 +11,6 @@ export const ANALYSIS_COMMAND_ALIASES = {
 	recompile_smali: { operation: "assemble_smali" },
 	build_apk: { operation: "rebuild_apk" },
 	validate_smali_project: { operation: "assemble_smali" },
-	identify_artifact: { operation: "inspect" },
 	inspect_binary: { operation: "inspect" },
 	decompile_function: { operation: "decompile" },
 	inspect_asar: { operation: "javascript_analysis" },
@@ -207,7 +206,15 @@ const notes: Record<string, string> = {
 		"With evidence_archive: hash-bound selected text/JSON provenance container in new .json.gz, redaction and no overwrite. Without it: legacy forensic report. Unknown secrets and producer authenticity remain unverified.",
 };
 const HOST_ONLY_COMMANDS = new Set([
- "check_release_gate", "correlate_static_runtime", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "stop_runtime_session", "run_device_smoke_test", "capture_process_tree", "capture_file_activity",
+	"check_release_gate",
+	"correlate_static_runtime",
+	"attach_debug_session",
+	"set_scoped_breakpoints",
+	"capture_execution_trace",
+	"stop_runtime_session",
+	"run_device_smoke_test",
+	"capture_process_tree",
+	"capture_file_activity",
 ]);
 export function analysisCommandCatalog() {
 	return {
@@ -216,7 +223,13 @@ export function analysisCommandCatalog() {
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
-   {command:"check_release_gate",effect:"approved-public-network-read",availability:"implemented-bounded",limitations:"AI workflow only; fixed public repository, exact-head CI + authenticated receipts + Windows installer/installed cleanup policy. Independent Inspect approval, bounded credential-free network; never merges, reruns CI, executes installers or certifies complete behavior. Saved read/cancel after Off does not recheck GitHub."},
+			{
+				command: "check_release_gate",
+				effect: "approved-public-network-read",
+				availability: "implemented-bounded",
+				limitations:
+					"AI workflow only; fixed public repository, exact-head CI + authenticated receipts + Windows installer/installed cleanup policy. Independent Inspect approval, bounded credential-free network; never merges, reruns CI, executes installers or certifies complete behavior. Saved read/cancel after Off does not recheck GitHub.",
+			},
 			{
 				command: "correlate_static_runtime",
 				effect: "saved-evidence-read",
@@ -239,7 +252,13 @@ export function analysisCommandCatalog() {
 				limitations:
 					"Desktop managed Node Inspector only. Independent Execute approval for new work, exact process/source identity, 1–120-second session lifetime and bounded cleanup. Activation/disconnect may pause/resume. CPU sampling is NOT a complete trace; no universal debugger parity.",
 			})),
-   {command:"run_device_smoke_test",effect:"runtime-execution",availability:"implemented-bounded",limitations:"Unified approved Android launch/incident adapter; explicit device and exact installed base APK hash, 2–120 second observation, owning status/cancel. Runtime/Hybrid and attached Full Access only. Does not install, stop the app, prove split identity, health or regression; live hardware remains unverified."},
+			{
+				command: "run_device_smoke_test",
+				effect: "runtime-execution",
+				availability: "implemented-bounded",
+				limitations:
+					"Unified approved Android launch/incident adapter; explicit device and exact installed base APK hash, 2–120 second observation, owning status/cancel. Runtime/Hybrid and attached Full Access only. Does not install, stop the app, prove split identity, health or regression; live hardware remains unverified.",
+			},
 			...["capture_process_tree", "capture_file_activity"].map((command) => ({
 				command,
 				effect: "runtime-metadata",
@@ -262,21 +281,23 @@ export function analysisCommandCatalog() {
 						: "read",
 				availability: "implemented-bounded",
 				limitations:
-					command === "plan_runtime_observation"
-						? "Plan only: exact live local Node Inspector PID/birth/listener and hash-bound source, no socket connection or target execution. Fresh Runtime/Hybrid Debug approval and identity recheck remain mandatory. No persistent session or other runtime commands."
-						: command === "validate_candidate"
-							? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass."
-							: command === "review_candidate_changes"
-								? "Default exact-recipe audit; optional project-inventory produces an unapproved full-file inventory/change draft. project-files requires exact full inventory hashes and the complete allowed changes; undeclared edits/additions/deletions never pass. No metadata, hostile-race or behavior proof."
-								: command === "annotate_analysis_project"
-									? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
-									: command === "build_android_candidate"
-										? "Optional preview-bound exact-method patch project snapshot, all Smali roots assembled, existing Apktool rebuild and bounded output checks before no-overwrite publication. Legacy unpatched rebuild retained. No signing/install/device proof."
-										: command === "preview_android_candidate"
-											? "Hash-bound exact-method diffs for a confined decoded Apktool project; engine readiness not probed, no final output or automatic write approval."
-											: command === "preview_batch"
-												? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
-												: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
+					command === "identify_artifact"
+						? "Content-based bounded ZIP/gzip/zlib traversal and standard DEX carving, hashes/origins, conflicting signatures and unknowns. PE/JVM/Mach-O/Wasm remain signature candidates; no execution, extraction, universal format detection or full validation. Requires the managed Python interpreter."
+						: command === "plan_runtime_observation"
+							? "Plan only: exact live local Node Inspector PID/birth/listener and hash-bound source, no socket connection or target execution. Fresh Runtime/Hybrid Debug approval and identity recheck remain mandatory. No persistent session or other runtime commands."
+							: command === "validate_candidate"
+								? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass."
+								: command === "review_candidate_changes"
+									? "Default exact-recipe audit; optional project-inventory produces an unapproved full-file inventory/change draft. project-files requires exact full inventory hashes and the complete allowed changes; undeclared edits/additions/deletions never pass. No metadata, hostile-race or behavior proof."
+									: command === "annotate_analysis_project"
+										? "Reuses isolated exact-state project_edit preview/apply/rollback; explicit Ghidra/IDA selector and owning session required. No target binary rewriting."
+										: command === "build_android_candidate"
+											? "Optional preview-bound exact-method patch project snapshot, all Smali roots assembled, existing Apktool rebuild and bounded output checks before no-overwrite publication. Legacy unpatched rebuild retained. No signing/install/device proof."
+											: command === "preview_android_candidate"
+												? "Hash-bound exact-method diffs for a confined decoded Apktool project; engine readiness not probed, no final output or automatic write approval."
+												: command === "preview_batch"
+													? "Previews existing confined static notebook DAG. No writes/runtime, downloads or automatic approvals."
+													: "Bounded scoped workflow; inspect returned stage statuses, evidence, truncation and limitations. Source adapter: JS/TS only. Native selection: ELF only. Availability is not engine readiness or complete coverage.",
 			})),
 			...CANDIDATE_COMMANDS.map((command) => ({
 				command,
@@ -400,7 +421,12 @@ export function analysisCommandCatalog() {
 				limitations:
 					"Alias for plan_investigation. Use validate_batch/run_batch for a reviewed static notebook.",
 			},
-		].map(entry => ({...entry, route: HOST_ONLY_COMMANDS.has(entry.command) ? "ai-workflow" as const : "static-review" as const})),
+		].map((entry) => ({
+			...entry,
+			route: HOST_ONLY_COMMANDS.has(entry.command)
+				? ("ai-workflow" as const)
+				: ("static-review" as const),
+		})),
 		unavailable: [
 			"universal_cross_language_resolution",
 			"whole_program_taint_analysis",

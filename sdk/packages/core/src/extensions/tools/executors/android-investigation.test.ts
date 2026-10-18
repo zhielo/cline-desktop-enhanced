@@ -192,3 +192,53 @@ describe("fixed Android investigation worker", () => {
 			).toBe(false);
 	});
 });
+
+it("identifies nested content through the public command, preserves input and refuses over-depth completion", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "identify-public-"));
+	vi.stubEnv("CLINE_RE_CACHE_DIR", join(dir, "cache"));
+	try {
+		const fixture = JSON.parse(
+				await readFile(
+					join(scripts, "owned-artifact-discovery-fixture.json"),
+					"utf8",
+				),
+			),
+			bytes = Buffer.from(fixture.base64, "base64"),
+			target = join(dir, "misleading.exe");
+		await writeFile(target, bytes);
+		const execute = async (artifact_discovery?: unknown) =>
+			JSON.parse(
+				await createReverseEngineeringExecutor()(
+					ReverseEngineeringInputSchema.parse({
+						operation: "identify_artifact",
+						target,
+						artifact_discovery,
+					}),
+					{} as never,
+				),
+			);
+		const r = await execute();
+		expect(r).toMatchObject({ status: "partial", observedExecution: false });
+		const worker = r.stages[0].result.result;
+		expect(worker.input.sha256).toBe(fixture.sha256);
+		expect(worker.evidence.identification).toMatchObject({
+			protocol: "cline-artifact-identification/v1",
+			unknownCount: 1,
+			ambiguousCount: 1,
+			observedExecution: false,
+		});
+		expect(
+			worker.evidence.artifacts.map((a: { format: string }) => a.format),
+		).toEqual(["zip", "gzip", "dex", "opaque", "opaque"]);
+		const limited = await execute({ max_depth: 0, max_artifacts: 5 });
+		expect(limited.status).toBe("partial");
+		expect(limited.stages[0].result.result.evidence.artifacts).toHaveLength(1);
+		expect(await readFile(target)).toEqual(bytes);
+		expect(
+			(globalThis as Record<string, unknown>).__artifactShouldNotExecute,
+		).toBeUndefined();
+	} finally {
+		vi.unstubAllEnvs();
+		await rm(dir, { recursive: true, force: true });
+	}
+});

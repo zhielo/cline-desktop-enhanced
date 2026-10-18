@@ -740,3 +740,104 @@ it.each([
 		}),
 	).toThrow();
 });
+
+it("routes identify_artifact to one bounded content worker and preserves its partial evidence", async () => {
+	const runner = vi
+		.fn<InvestigationRunner>()
+		.mockResolvedValue({
+			schemaVersion: 1,
+			result: {
+				protocol: "cline-advanced-analysis/v1",
+				status: "partial",
+				input: { sha256: "a".repeat(64) },
+				evidence: { identification: { ambiguousCount: 1 } },
+			},
+		});
+	const result = await investigationWorkflow(
+		ReverseEngineeringInputSchema.parse({
+			operation: "identify_artifact",
+			target: "/owned/misleading.exe",
+			artifact_discovery: { max_depth: 2, max_artifacts: 9 },
+		}),
+		runner,
+	);
+	expect(runner).toHaveBeenCalledTimes(1);
+	expect(runner.mock.calls[0]?.[0]).toMatchObject({
+		operation: "advanced_analysis",
+		advanced_action: "artifact_discovery",
+		target: "/owned/misleading.exe",
+		advanced_options: {
+			discovery: { max_depth: 2, max_artifacts: 9, identify_formats: true },
+		},
+	});
+	expect(result).toMatchObject({
+		status: "partial",
+		effect: "read",
+		observedExecution: false,
+		stages: [
+			{
+				id: "content-artifact-discovery",
+				result: {
+					result: { evidence: { identification: { ambiguousCount: 1 } } },
+				},
+			},
+		],
+	});
+	expect(isAnalysisWriteOperation("identify_artifact")).toBe(false);
+});
+it("rejects invalid discovery budgets and options on unrelated operations", async () => {
+	for (const artifact_discovery of [
+		{ max_depth: 5 },
+		{ max_depth: -1 },
+		{ max_artifacts: 0 },
+		{ max_artifacts: 501 },
+		{ max_artifacts: 1.5 },
+		{ inspect_native: true },
+	])
+		expect(() =>
+			ReverseEngineeringInputSchema.parse({
+				operation: "identify_artifact",
+				artifact_discovery,
+			}),
+		).toThrow();
+	await expect(
+		execute({ operation: "inspect", artifact_discovery: { max_depth: 0 } }),
+	).rejects.toThrow("only by identify_artifact");
+});
+it("retains blocked/failed/cancelled artifact discovery without a successful fallback", async () => {
+	for (const status of ["blocked", "failed", "cancelled"]) {
+		const runner = vi
+			.fn<InvestigationRunner>()
+			.mockResolvedValue({
+				schemaVersion: 1,
+				result: {
+					protocol: "cline-advanced-analysis/v1",
+					status,
+					evidence: { reason: "owned refusal" },
+				},
+			});
+		const r = await investigationWorkflow(
+			ReverseEngineeringInputSchema.parse({
+				operation: "identify_artifact",
+				target: "/owned",
+			}),
+			runner,
+		);
+		expect(r.status).toBe(status);
+		expect(runner).toHaveBeenCalledTimes(1);
+	}
+	const controller = new AbortController();
+	controller.abort();
+	const runner = vi.fn<InvestigationRunner>();
+	await expect(
+		investigationWorkflow(
+			ReverseEngineeringInputSchema.parse({
+				operation: "identify_artifact",
+				target: "/owned",
+			}),
+			runner,
+			controller.signal,
+		),
+	).rejects.toThrow();
+	expect(runner).not.toHaveBeenCalled();
+});
