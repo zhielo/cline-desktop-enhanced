@@ -104,3 +104,5 @@ export {
 	ScenarioExpectationSchema,
 	reconcileProcessScenario,
 } from "./scenario";
+
+export { correlateSavedEvidence } from "./correlation";

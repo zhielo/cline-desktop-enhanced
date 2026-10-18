@@ -293,7 +293,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "correlate_static_runtime",
 		scope: "partial",
 		limitations:
-			"Existing Android investigation evidence correlation, not a unified command.",
+			"Owning-session hash-checked saved static/task evidence reconciliation, selected Node sample definition-line candidates and supported native module/RVA observations. No new runtime work, causality proof or universal cross-domain mapping.",
 	},
 	{
 		group: "runtime",

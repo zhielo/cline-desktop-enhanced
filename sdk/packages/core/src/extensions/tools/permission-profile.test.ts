@@ -269,6 +269,7 @@ it("keeps investigation tools behind the external-tool permission profile", asyn
 		"capture_browser_scenario",
  "capture_network_metadata",
 		"get_evidence_bundle",
+ "correlate_static_runtime",
 		"plan_batch",
 		"preview_batch",
 		"run_batch",

@@ -1144,13 +1144,16 @@ ConvertTo-Json -InputObject @($rows) -Compress
       const attachInput={artifactId:handle.id,pid:managedChild.child.pid,endpoint,lifetimeMs:120000};
       let denied=false;try{await rpc(page,"attach_debug_session",{...triageScope,input:{...attachInput,phase:"prepare"}});}catch{denied=true;}if(!denied)throw new Error("Static enabled managed debugger");
       await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
+      let sampleTaskId:string|undefined;
       const approvedManaged=async(command:string,input:Record<string,unknown>)=>{
        const plan=await rpc<{id:string;permission:string;requestHash:string;requirements:string[]}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
        if(plan.permission!=="Execute"||!plan.requirements.includes("debugger-activation-cleanup-may-pause-or-resume"))throw new Error("Managed Inspector omitted Execute/debug-control approval");
        const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-       const result=await rpc<{result:{status:string;provider:string;runtimeSessionId?:string;activeBreakpoints?:number}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+       const result=await rpc<{evidenceWarning?:string;result:{status:string;provider:string;runtimeSessionId?:string;activeBreakpoints?:number}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+       if(result.evidenceWarning)throw new Error("Managed runtime evidence persistence failed; do not replay observation");
        if(result.result.status!=="partial")throw new Error("Managed Inspector overclaimed coverage");
        let replayDenied=false;try{await rpc(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});}catch{replayDenied=true;}if(!replayDenied)throw new Error("Managed runtime approval replay succeeded");
+       if(command==="capture_execution_trace")sampleTaskId=plan.id;
        return result.result;
       };
       managedSessionId=(await approvedManaged("attach_debug_session",attachInput)).runtimeSessionId;
@@ -1165,6 +1168,15 @@ ConvertTo-Json -InputObject @($rows) -Compress
       if(!stopped.transportClosed||!stopped.protocolCleanupConfirmed)throw new Error("Installed managed transport/profiler cleanup unconfirmed");
       if(await readFile(managedSource,"utf8")!==managedText||managedChild.child.exitCode!==null)throw new Error("Managed debugger changed source or killed owned process");
       stages.push("installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed");
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+      const staticManaged=await rpc<{id:string}>(page,"first_party_analysis_run",{...triageScope,input:{target:managedSource}});
+      if(!sampleTaskId)throw new Error("Managed sample task receipt missing");
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"off"});
+      const correlated=await rpc<{protocol:string;effect:string;verifiedBehavior:boolean;sampling:Array<{sourceIdentity:string;verifiedExecutionPath:boolean}>}>(page,"correlate_static_runtime",{...triageScope,input:{receiptId:staticManaged.id,taskIds:[sampleTaskId]}});
+      if(correlated.protocol!=="cline-static-runtime-correlation/v1"||correlated.effect!=="saved-evidence-read"||correlated.verifiedBehavior!==false||correlated.sampling.length!==1||correlated.sampling[0].sourceIdentity!=="exact-byte-match"||correlated.sampling[0].verifiedExecutionPath!==false)throw new Error("Installed saved correlation identity or limitation failed");
+      let correlationCrossed=false;try{await rpc(page,"correlate_static_runtime",{...analysisArgs,input:{receiptId:staticManaged.id,taskIds:[sampleTaskId]}});}catch{correlationCrossed=true;}if(!correlationCrossed)throw new Error("Saved correlation crossed owning sessions");
+      if(managedChild.child.exitCode!==null||await readFile(managedSource,"utf8")!==managedText)throw new Error("Saved correlation changed or killed owned target");
+      stages.push("installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed");
     } finally {
       if(managedSessionId)await rpc(page,"stop_runtime_session",{...triageScope,input:{runtimeSessionId:managedSessionId}}).catch(()=>{});
       if(managedChild.child.exitCode===null&&managedChild.child.signalCode===null)managedChild.child.kill();

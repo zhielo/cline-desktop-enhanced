@@ -192,12 +192,12 @@ export async function handleRuntimeCapture(
 					);
 		signal.throwIfAborted();
 		assertCurrent();
-		tasks.complete(plan.id, result, "bounded-runtime-metadata/1");
+		const completed = tasks.complete(plan.id, result, "bounded-runtime-metadata/1");
 		try {
 			recordFirstPartyTaskEvidence(
 				scope.sessionId,
 				scope.workspace,
-				plan,
+				completed,
 				result,
 			);
 		} catch {
