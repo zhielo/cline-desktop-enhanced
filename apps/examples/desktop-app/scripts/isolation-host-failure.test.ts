@@ -1,3 +1,7 @@
+import {
+	ISOLATION_BUILD_BUDGET,
+	isolationCompileFailure,
+} from "./build-javascript-isolation";
 import { test, expect } from "bun:test";
 import { isolationHostFailureMessage } from "../sidecar/isolation-host-failure";
 const owned = {
@@ -255,4 +259,40 @@ test("native controller EOF cancels without exposing its pipe to the target", ()
 	expect(native.indexOf("// Do not delete a live target")).toBeLessThan(
 		native.indexOf("if(profile && DeleteAppContainerProfile(name)!=0)"),
 	);
+});
+
+test("build-only compiler budgets remain bounded inside the owned setup deadline", () => {
+	expect(ISOLATION_BUILD_BUDGET.hostMs).toBe(90000);
+	expect(ISOLATION_BUILD_BUDGET.runtimeMs).toBe(120000);
+	expect(
+		ISOLATION_BUILD_BUDGET.hostMs + ISOLATION_BUILD_BUDGET.runtimeMs,
+	).toBeLessThan(ISOLATION_BUILD_BUDGET.totalMs);
+	expect(ISOLATION_BUILD_BUDGET.totalMs).toBeLessThanOrEqual(240000);
+});
+test("compiler failures preserve bounded timeout, exit and signal diagnostics without raw exceptions", () => {
+	const timeout = isolationCompileFailure("host", {
+		status: null,
+		signal: "SIGTERM",
+		error: { code: "ETIMEDOUT" },
+		stdout: null,
+		stderr: null,
+	});
+	expect(timeout.message).toContain("status=none signal=SIGTERM timedOut=true");
+	const failed = isolationCompileFailure("runtime", {
+		status: 2,
+		signal: null,
+		stdout: "a".repeat(10000),
+		stderr: "b".repeat(10000),
+	});
+	expect(failed.message).toContain("status=2 signal=none timedOut=false");
+	expect(failed.message.length).toBeLessThan(5200);
+	const launch = isolationCompileFailure("host", {
+		status: null,
+		signal: "PRIVATE",
+		error: { code: "ENOENT" },
+		stdout: null,
+		stderr: null,
+	});
+	expect(launch.message).not.toContain("PRIVATE");
+	expect(launch.message).toContain("timedOut=false");
 });
