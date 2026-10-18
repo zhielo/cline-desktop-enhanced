@@ -304,7 +304,7 @@ it("managed debugger front door binds immutable artifacts, denies Static and per
   const input={artifactId:artifact.id,pid:123,endpoint:"ws://127.0.0.1:9229/11111111-1111-4111-8111-111111111111"};
   await expect(handleAnalysisWorkflow("attach_debug_session",input,scope,{trusted:true,idle:true,mode:"static"},store,ports)).rejects.toThrow("Runtime/Hybrid");
   await handleAnalysisWorkflow("attach_debug_session",input,scope,{trusted:true,idle:true,mode:"runtime"},store,ports);
-  expect(managedRuntime).toHaveBeenCalledWith("attach_debug_session",expect.objectContaining({request:expect.objectContaining({target:join(root,"owned.js"),expected_sha256:artifact.sha256})}));
+  expect(managedRuntime).toHaveBeenCalledWith("attach_debug_session",expect.objectContaining({request:expect.objectContaining({target:realpathSync.native(join(root,"owned.js")),expected_sha256:artifact.sha256})}));
   await handleAnalysisWorkflow("set_scoped_breakpoints",{runtimeSessionId:artifact.id,locations:[{line:1}]},scope,{trusted:true,idle:true,mode:"runtime"},store,ports);
   expect(ports.managedSession).toHaveBeenCalledWith(artifact.id);
   await handleAnalysisWorkflow("stop_runtime_session",{runtimeSessionId:artifact.id},scope,{trusted:true,idle:false,mode:"off"},store,ports);
