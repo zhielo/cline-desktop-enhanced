@@ -109,6 +109,8 @@ export const RELEASE_GATE_POLICY = {
 		"installed-full-pack-exact-range-dual-decoder-passed",
 		"installed-native-direct-call-transitive-budget-cycle-no-execution-passed",
         "installed-content-artifact-discovery-nesting-ambiguity-budgets-no-execution-passed",
+        "installed-fresh-android-jni-native-candidates-no-binding-or-execution-passed",
+        "installed-fresh-electron-renderer-preload-main-channel-candidates-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
 		"hub-restart-saved-session-reattached-without-prompt-replay",
@@ -122,8 +124,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"51082500104fe4edac15bee2e1ff796cab96d4157e06c0d1a131e6c50669c7f4",
+			"d9474943fcc969290b05414aafbf85a0f5c637d67d109477ec72e94da2ec3303",
 		"scripts/validate-advanced-build.mjs":
-			"81a19ad70f031eda34e9f180169a8578470f2fcce351f7789f204adffaaea55f",
+			"70beee0016d53713b736d3ac3990dc70cc09e70abc71159b0caf6e42c46c9326",
 	},
 } as const;

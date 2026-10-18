@@ -33,7 +33,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "trace_cross_language",
 		scope: "partial",
 		limitations:
-			"Saved validated graph paths; no universal JNI or Electron resolver.",
+			"Fresh exact DEX-native/JNI export-name candidates plus bounded ELF call graph, or fresh literal Electron renderer/preload/main candidates; saved graph paths retained. No dynamic registration, IPC delivery, observed flow or universal resolver.",
 	},
 	{
 		group: "cross-tool",

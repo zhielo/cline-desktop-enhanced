@@ -4,6 +4,7 @@ import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
 import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
 	ArtifactDiscoveryOptionsSchema,
+	CrossLanguageOptionsSchema,
 	CandidateValidationSchema,
 	CandidateReviewSchema,
 	HypothesisSchema,
@@ -179,6 +180,7 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional(),
 	advanced_options: z
 		.object({
+			jni_trace: CrossLanguageOptionsSchema.options[0].omit({kind:true,method:true}).optional(),
 			discovery: z
 				.object({
 					max_depth: z.number().int().min(0).max(4).optional(),
@@ -318,6 +320,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	candidate_review: CandidateReviewSchema.optional(),
 	workflow_query: WorkflowQuerySchema.optional(),
 	artifact_discovery: ArtifactDiscoveryOptionsSchema.optional(),
+	cross_language: CrossLanguageOptionsSchema.optional(),
 	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
 	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
 	android_project_patch: AndroidProjectPatchSchema.optional(),

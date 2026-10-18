@@ -121,3 +121,50 @@ export const ArtifactDiscoveryOptionsSchema = z
 		max_artifacts: z.number().int().min(1).max(500).default(200),
 	})
 	.strict();
+
+/** Fresh static adapters; imported graph tracing stays a separate explicit mode. */
+export const CrossLanguageOptionsSchema = z.discriminatedUnion("kind", [
+	z
+		.object({
+			kind: z.literal("android-jni"),
+			method: z
+				.object({
+					class_descriptor: z
+						.string()
+						.regex(/^L[^\s;]+;$/)
+						.max(4096),
+					name: z.string().min(1).max(4096),
+					descriptor: z
+						.string()
+						.regex(/^\(.*\).+$/)
+						.max(4096),
+				})
+				.strict(),
+			native_artifact: z.string().min(1).max(1024).optional(),
+			max_candidates: z.number().int().min(1).max(64).default(16),
+			native_calls: z
+				.object({
+					max_depth: z.number().int().min(0).max(4).default(2),
+					max_functions: z.number().int().min(1).max(32).default(16),
+					max_edges: z.number().int().min(1).max(256).default(128),
+					max_total_bytes: z.number().int().min(1).max(65536).default(32768),
+				})
+				.strict()
+				.default({
+					max_depth: 2,
+					max_functions: 16,
+					max_edges: 128,
+					max_total_bytes: 32768,
+				}),
+		})
+		.strict(),
+	z
+		.object({
+			kind: z.literal("electron-ipc"),
+			channel: z.string().min(1).max(256),
+			max_depth: z.number().int().min(0).max(8).default(4),
+			max_nodes: z.number().int().min(1).max(200).default(100),
+			max_edges: z.number().int().min(1).max(400).default(200),
+		})
+		.strict(),
+]);

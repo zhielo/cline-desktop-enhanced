@@ -330,7 +330,7 @@ export function analysisCommandCatalog() {
 				effect: "read",
 				availability: "implemented",
 				limitations:
-					"Saved validated static/evidence graph only; bounded declared paths, NOT universal cross-language resolution or observed call chains.",
+					"Optional fresh exact Android/JNI export-name candidates with bounded ELF direct-call graph, or fresh literal Electron renderer/preload/main candidates. Legacy saved graph tracing retained. Always static candidates, not observed bindings/call chains or universal resolution.",
 			},
 			{
 				command: "trace_data_flow",
