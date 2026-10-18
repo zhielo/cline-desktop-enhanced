@@ -13,7 +13,7 @@ export function isolationCompileFailure(
 	result: {
 		status: number | null;
 		signal: string | null;
-		error?: { code?: string };
+		error?: unknown;
 		stdout?: string | null;
 		stderr?: string | null;
 	},
@@ -26,7 +26,11 @@ export function isolationCompileFailure(
 	)
 		? result.signal
 		: "none";
-	const timedOut = result.error?.code === "ETIMEDOUT";
+	const timedOut =
+		typeof result.error === "object" &&
+		result.error !== null &&
+		"code" in result.error &&
+		result.error.code === "ETIMEDOUT";
 	const output = (value: unknown, limit: number) =>
 		typeof value === "string" ? value.slice(0, limit) : "";
 	return new Error(
