@@ -344,13 +344,15 @@ export async function handleAnalysisWorkflow(
   const req = z.object({
    artifactId: Id,
    kind: z.enum(["javascript", "typescript", "dex", "apk"]).optional(),
+   scope: z.enum(["recipe", "project-files", "project-inventory"]).optional(),
    phase: z.enum(["prepare", "run"]).default("prepare"),
    planId: Id.optional(), executionToken: z.string().max(512).optional(),
   }).strict().parse(input);
   if ((command === "validate_candidate") !== !!req.kind) throw new Error("Only validate_candidate requires a validation kind");
+  if(command === "validate_candidate" && req.scope) throw new Error("Project review scope is only accepted by review_candidate_changes");
   const artifact = await store.verify(scope, req.artifactId);
   const request = {operation: command, target: artifact.path, timeout_ms: 120000,
-   ...(command === "validate_candidate" ? {candidate_validation: {expected_sha256: artifact.sha256, kind: req.kind}} : {candidate_review: {manifest_sha256: artifact.sha256}})};
+   ...(command === "validate_candidate" ? {candidate_validation: {expected_sha256: artifact.sha256, kind: req.kind}} : {candidate_review: {manifest_sha256: artifact.sha256, ...(req.scope ? {scope:req.scope} : {})}})};
   if (req.phase === "prepare") return ports.invoke("prepare_analysis_task", {kind: "static", request});
   if (!req.planId || !req.executionToken) throw new Error("A separately approved one-use plan is required");
   return ports.invoke("run_static_analysis", {input: request, planId: req.planId, executionToken: req.executionToken});

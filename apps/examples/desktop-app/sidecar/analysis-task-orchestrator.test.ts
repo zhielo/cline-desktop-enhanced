@@ -692,3 +692,9 @@ it("keeps Android project preview Inspect and binds a separately approved build 
 		}),
 	).rejects.toThrow("exact request envelope");
 });
+
+it("project-file review exposes broad read scope and exact inventories without enabling writes or network",async()=>{
+ const root=workspace(),target=join(root,"manifest.json");writeFileSync(target,"{}");const tasks=new AnalysisTaskOrchestrator();
+ const plan=await tasks.prepare({workspaceRoot:root,kind:"static",request:{operation:"review_candidate_changes",target,candidate_review:{manifest_sha256:"a".repeat(64),scope:"project-files"}}});
+ expect(plan.permission).toBe("Inspect");expect(plan.budget.network).toBe("disabled");expect(plan.requirements).toContain("all-regular-files-in-disjoint-manifest-child-roots-no-ignore-rules");expect(plan.requirements).toContain("exact-full-inventory-hashes-and-complete-file-change-allowlist");
+});

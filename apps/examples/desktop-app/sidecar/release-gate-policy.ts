@@ -113,14 +113,15 @@ export const RELEASE_GATE_POLICY = {
 		"full-to-core-rollback-preserved-owned-session",
 		"installed-device-smoke-exact-plan-static-denial-off-cleanup-no-hardware-passed",
 		"installed-release-gate-exact-head-inspect-off-cleanup-no-network-passed",
+		"installed-project-file-inventories-approved-scope-undeclared-change-denial-passed",
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"da1e30e4285723d9b6afc775232e921d650953e9f30d9f98e9f12b5bac0b944b",
+			"32f503f158bc7d81c50799b56ca827a5afb41bf2f6e393dcc7cd3fe387dd8a4f",
 		"scripts/validate-advanced-build.mjs":
-			"672ad5311773de5a3d272a32b30b1f164d3c929ea26095dbbe285dc76f98b9f2",
+			"81a19ad70f031eda34e9f180169a8578470f2fcce351f7789f204adffaaea55f",
 	},
 } as const;

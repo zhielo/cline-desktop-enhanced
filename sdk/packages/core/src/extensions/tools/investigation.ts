@@ -134,7 +134,7 @@ export const InvestigationSchemas = {
 			kind: z.enum(["javascript", "typescript", "dex", "apk"]),
 		})
 		.strict(),
-	review_candidate_changes: z.object({ artifactId: Id }).strict(),
+	review_candidate_changes: z.object({ artifactId: Id, scope: z.enum(["recipe", "project-files", "project-inventory"]).optional() }).strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
 	analyze_function: z
 		.object({
@@ -201,7 +201,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 	validate_candidate:
 		"Request hash-bound candidate checks after independent human approval: JS/TS syntax, DEX header/checksum/table bounds, or APK structure and signature. Results declare their exact coverage, failures and unavailable checks; no execution, signing, build, install or semantic-equivalence claim.",
 	review_candidate_changes:
-		"Request read-only exact-recipe audit of an immutable candidate batch manifest after independent human approval. Verifies declared source hashes and candidate bytes using existing patch implementations; missing/mismatched/unverified outputs never pass. Only declared files, not a whole-project change review; cannot authorize writes or replay stages.",
+		"Request independent Inspect-approved read-only candidate review. Default recipe mode audits immutable source/output recipes. Explicit project-inventory mode inventories all regular files under two disjoint manifest-child roots and returns a proposed hash-bound allowlist, never approval or a write. Explicit project-files mode requires exact complete inventories and approved before/after hashes; undeclared edits/additions/deletions never pass. No ignore rules, shell, writes, replay or runtime/metadata correctness claim. See docs/PROJECT_FILE_REVIEW.md.",
 	open_binary:
 		"Create an immutable workspace-confined artifact handle; does not execute or decompile the binary. Analysis mode must be enabled.",
 	analyze_function:

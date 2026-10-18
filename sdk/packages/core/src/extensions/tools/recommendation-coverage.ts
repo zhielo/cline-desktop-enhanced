@@ -362,7 +362,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "review_candidate_changes",
 		scope: "partial",
 		limitations:
-			"Unified approved exact-recipe audit with immutable receipt hash; missing/mismatched/unverified candidates do not pass. Only manifest-declared files; no undeclared-file baseline or whole-project scope review.",
+			"Unified approved exact-recipe audit with immutable receipt hash; missing/mismatched/unverified candidates do not pass. Recipe mode audits declared pairs; project-inventory proposes an unapproved draft; project-files mode checks two exact full inventories and the complete change allowlist. Empty-directory, metadata, hostile-race and behavioral verification remain outside scope.",
 	},
 	{
 		group: "bulk",

@@ -106,4 +106,5 @@ export const CandidateValidationSchema = z.object({
 }).strict();
 export const CandidateReviewSchema = z.object({
  manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+ scope: z.enum(["recipe", "project-files", "project-inventory"]).optional(),
 }).strict();

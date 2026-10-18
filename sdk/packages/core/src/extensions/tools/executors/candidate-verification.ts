@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { reviewProjectFiles } from "./project-review";
 import { createHash } from "node:crypto";
 import { canonical } from "../../../analysis/contracts";
 import {
@@ -104,6 +105,14 @@ export async function verifyCandidate(
 		const options = CandidateReviewSchema.parse(input.candidate_review);
 		if (hash !== options.manifest_sha256)
 			throw new Error("Candidate manifest hash changed");
+
+  if (options.scope === "project-files" || options.scope === "project-inventory") {
+   const manifest=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+   const audit=await reviewProjectFiles(input.target,manifest,combined,options.scope === "project-inventory");
+   checks.push({id:options.scope === "project-inventory"?"full-project-file-inventory-draft":"full-project-file-scope",...audit});
+   status=audit.status === "completed"?"completed":audit.status === "failed"?"failed":"partial";
+   limitations.push(...audit.limitations);
+  } else {
 		const audit = await candidateBatch(
 			{ operation: "audit_candidate_batch", target: input.target },
 			combined,
@@ -122,6 +131,7 @@ export async function verifyCandidate(
 			"Scope is only manifest-declared source/output pairs. No filesystem baseline exists for undeclared files; whole-project changes are NOT reviewed. Manifest hashes bind a recipe, not human approval of that recipe.",
 			...audit.limitations,
 		);
+  }
 	} else if (input.operation === "validate_candidate") {
 		const options = CandidateValidationSchema.parse(input.candidate_validation);
 		if (hash !== options.expected_sha256)
