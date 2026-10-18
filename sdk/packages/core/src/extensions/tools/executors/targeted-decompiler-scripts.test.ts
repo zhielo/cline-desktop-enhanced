@@ -97,7 +97,8 @@ it("executes the generated IDA adapter against API doubles, not a licensed decom
 	const { mkdtemp, writeFile, readFile, rm } = await import("node:fs/promises");
 	const { join } = await import("node:path");
 	const { tmpdir } = await import("node:os");
-	const { execFileSync } = await import("node:child_process");
+	const { execFile } = await import("node:child_process");
+	const { promisify } = await import("node:util");
 	const { TargetedIdaEvidenceSchema } = await import(
 		"./targeted-native-evidence"
 	);
@@ -111,11 +112,36 @@ it("executes the generated IDA adapter against API doubles, not a licensed decom
 			harnessPath = join(root, "harness.py");
 		await writeFile(scriptPath, script);
 		await writeFile(harnessPath, harness);
-		execFileSync(
+		const progressPath = join(root, "ida-script-progress.jsonl");
+		// This owned fixture needs only Python's standard library. Do not import
+		// runner/user site packages or PYTHONPATH while starting the fake API host.
+		// Keep the child asynchronous so Vitest's worker heartbeat stays live.
+		// The deadline is a hang guard, not an adapter performance assertion.
+		await promisify(execFile)(
 			process.platform === "win32" ? "python" : "python3",
-			[harnessPath, scriptPath],
-			{ timeout: 10000 },
+			["-I", "-S", "-u", harnessPath, scriptPath],
+			{
+				timeout: 30_000,
+				maxBuffer: 1024 * 1024,
+				windowsHide: true,
+				env: { ...process.env, CLINE_IDA_PROGRESS_PATH: progressPath },
+			},
 		);
+		const phases = (await readFile(progressPath, "utf8"))
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line).phase);
+		expect(phases).toEqual([
+			"input-loaded",
+			"decompiler-initialized",
+			"auto-analysis-waiting",
+			"analysis-complete",
+			"decompilation-started",
+			"output-written",
+			"database-saving",
+			"database-saved",
+			"script-exiting",
+		]);
 		const value = TargetedIdaEvidenceSchema.parse(
 			JSON.parse(await readFile(output + ".native.json", "utf8")),
 		);
@@ -133,4 +159,4 @@ it("executes the generated IDA adapter against API doubles, not a licensed decom
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
-});
+}, 40_000);

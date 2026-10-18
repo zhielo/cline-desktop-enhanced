@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { desktopClient } from "@/lib/desktop-client";
 
 type Entry = {
+ route?: "static-review" | "ai-workflow";
 	command: string;
 	effect: string;
 	availability: string;
@@ -223,6 +224,10 @@ export function AdvancedCommandWorkspace({
 	}, [environmentId, local]);
 	async function prepare() {
 		setError("");
+  if (catalog?.entries.find(entry => entry.command === command)?.route === "ai-workflow") {
+   setError("This command requires the owning AI investigation workflow, not a legacy static task.");
+   return;
+  }
 		setBusy(true);
 		try {
 			const parsed: unknown = JSON.parse(request);
@@ -240,6 +245,7 @@ export function AdvancedCommandWorkspace({
 		}
 	}
 	const entry = catalog?.entries.find((value) => value.command === command);
+ const hostOnly = entry?.route === "ai-workflow";
 	return (
 		<section aria-label="Advanced AI commands" className="space-y-3">
 			<h3 className="font-semibold">Advanced AI commands</h3>
@@ -288,6 +294,7 @@ export function AdvancedCommandWorkspace({
 				))}
 			</select>
 			{entry && <p className="text-xs">{entry.limitations}</p>}
+   {hostOnly && <output className="block text-xs">Ask the chat agent to use {command} through the owning AI investigation workflow. It gathers exact inputs and requests any independent human approval. This static JSON form cannot start it; selecting it runs nothing.</output>}
 			<label htmlFor={`${prefix}-request`}>
 				Exact command parameters (JSON)
 			</label>
@@ -295,7 +302,7 @@ export function AdvancedCommandWorkspace({
 				id={`${prefix}-request`}
 				className="min-h-48 w-full rounded border bg-background p-2 font-mono text-xs"
 				value={request}
-				disabled={!local || busy}
+				disabled={!local || busy || hostOnly}
 				maxLength={150000}
 				onChange={(event) => setRequest(event.target.value)}
 			/>
@@ -308,10 +315,10 @@ export function AdvancedCommandWorkspace({
 				tree before rebuilding.
 			</p>
 			<Button
-				disabled={!local || !entry || busy}
+				disabled={!local || !entry || busy || hostOnly}
 				onClick={() => void prepare()}
 			>
-				{busy ? "Preparing…" : "Prepare advanced command for review"}
+				{hostOnly ? "Use the AI investigation workflow" : busy ? "Preparing…" : "Prepare advanced command for review"}
 			</Button>
 			{error && <p role="alert">{error}</p>}
 			{catalog && (

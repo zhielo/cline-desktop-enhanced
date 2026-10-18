@@ -316,9 +316,9 @@ test("Windows browser creation is async and acceptance writes bounded action evi
 
 
 test("expanded installed workload retains a finite fail-closed action evidence budget", () => {
- assert.equal(INSTALLED_ACTION_LIMIT,384);
- for(const sequence of [1,256,257,384]) assert.doesNotThrow(()=>assertInstalledActionSequence(sequence));
- for(const sequence of [0,-1,1.5,385,Infinity,NaN,Number.MAX_SAFE_INTEGER+1]) assert.throws(()=>assertInstalledActionSequence(sequence),/evidence budget reached/);
+ assert.equal(INSTALLED_ACTION_LIMIT,768);
+ for(const sequence of [1,256,257,384,385,512,768]) assert.doesNotThrow(()=>assertInstalledActionSequence(sequence));
+ for(const sequence of [0,-1,1.5,769,Infinity,NaN,Number.MAX_SAFE_INTEGER+1]) assert.throws(()=>assertInstalledActionSequence(sequence),/evidence budget reached/);
 });
 
 test("installed acceptance retains managed Node Execute approval, sampling limits and Off cleanup",()=>{
@@ -335,4 +335,16 @@ test("installed managed fixtures launch through a trusted canonical root, not Wi
 test("installed saved correlation keeps identity, owner and no-rerun boundaries",()=>{
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
  for(const text of ["installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed","Saved correlation crossed owning sessions","saved-evidence-read","verifiedExecutionPath"])assert.ok(driver.includes(text),text);
+});
+
+
+test("evidence exhaustion fails acceptance without gating owned native cleanup", async () => {
+ let terminated = false, disconnected = false;
+ assert.throws(() => assertInstalledActionSequence(INSTALLED_ACTION_LIMIT + 1), /evidence budget reached/);
+ await stopOwnedApplication(async () => { terminated = true; }, async () => { disconnected = true; });
+ assert.equal(terminated, true); assert.equal(disconnected, true);
+ const driver = readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts", import.meta.url), "utf8");
+ const cleanup = driver.slice(driver.indexOf("async function stop()"), driver.indexOf("async function stop()") + 1000);
+ assert.ok(cleanup.includes("stopOwnedApplication("));
+ assert.ok(!cleanup.includes("acceptanceAction("));
 });

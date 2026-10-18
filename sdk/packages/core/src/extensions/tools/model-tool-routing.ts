@@ -57,6 +57,7 @@ const TOOL_NAME_TO_FLAG: Record<
  set_scoped_breakpoints: "enableReverseEngineering",
  capture_execution_trace: "enableReverseEngineering",
  stop_runtime_session: "enableReverseEngineering",
+ check_release_gate: "enableReverseEngineering",
  run_device_smoke_test: "enableReverseEngineering",
  capture_process_tree: "enableReverseEngineering",
  capture_file_activity: "enableReverseEngineering",

@@ -393,3 +393,11 @@ it("device launch requires independent Execute review; status/cancel never manuf
  const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation("run_device_smoke_test",input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();
  for(const action of ["status","cancel"]){const p=ports();await runModelInvestigation("run_device_smoke_test",{action,taskId:id},p);expect(p.review).not.toHaveBeenCalled();expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();}
 });
+
+it("release verification requires independent Inspect review; saved read/cleanup cannot issue approvals",async()=>{
+ const input={action:"check",pullNumber:133,expectedHead:"a".repeat(40)},p=ports();
+ await runModelInvestigation("check_release_gate",input,p);
+ expect(p.review).toHaveBeenCalledOnce();expect(p.approve).toHaveBeenCalledOnce();expect(p.invoke).toHaveBeenLastCalledWith("check_release_gate",expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
+ const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation("check_release_gate",input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();
+ for(const action of ["read","cancel"]){const saved=ports();await runModelInvestigation("check_release_gate",{action,taskId:id},saved);expect(saved.review).not.toHaveBeenCalled();expect(saved.approve).not.toHaveBeenCalled();expect(saved.invoke).toHaveBeenCalledOnce();}
+});

@@ -352,12 +352,29 @@ describe("mcp client request timeout", () => {
 				initDelayMs: 10_000,
 			}),
 		);
-		const startedAt = Date.now();
+		// Keep the real child/stdio boundary, but assert both exact requested
+		// initialize budgets rather than a 500ms wall-clock margin around two
+		// 2s attempts. Windows runner scheduling is not the timeout contract.
+		const requests = vi.spyOn(
+			client as unknown as {
+				request(
+					method: string,
+					params?: unknown,
+					timeoutMs?: number,
+				): Promise<unknown>;
+			},
+			"request",
+		);
 		try {
 			await expect(client.connect()).rejects.toThrow(/after 2s/);
-			expect(Date.now() - startedAt).toBeLessThan(4_500);
+			expect(
+				requests.mock.calls
+					.filter(([method]) => method === "initialize")
+					.map(([, , timeoutMs]) => timeoutMs),
+			).toEqual([2_000, 2_000]);
 		} finally {
 			await client.disconnect();
+			requests.mockRestore();
 		}
 	}, 30_000);
 

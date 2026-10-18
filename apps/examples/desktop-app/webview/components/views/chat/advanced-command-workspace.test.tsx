@@ -16,6 +16,8 @@ const catalog = {
 		},
 	],
 	entries: [
+ {command:"check_release_gate",route:"ai-workflow",effect:"approved-public-network-read",availability:"implemented-bounded",limitations:"Fixed public release policy only"},
+ {command:"run_device_smoke_test",route:"ai-workflow",effect:"runtime-execution",availability:"implemented-bounded",limitations:"Owning approved Android workflow only"},
 		{
 			command: "identify_artifact",
 			effect: "static-analysis",
@@ -206,4 +208,12 @@ it("shows unresolved original recommendations without certifying release", async
 	expect(container.textContent).toContain("attach_debug_session");
 	expect(container.textContent).toContain("not-implemented");
 	expect(container.textContent).toContain("not complete workflow coverage");
+});
+
+it("host-only workflows never submit malformed legacy static requests",async()=>{
+ const {onPrepare}=await mount();
+ for(const command of ["check_release_gate","run_device_smoke_test"]){
+  await act(async()=>{const select=container.querySelector("select")!;select.value=command;select.dispatchEvent(new Event("change",{bubbles:true}));});
+  expect(container.querySelector("button")!.disabled).toBe(true);expect(container.querySelector("textarea")!.disabled).toBe(true);expect(container.textContent).toContain("owning AI investigation workflow");await click();expect(onPrepare).not.toHaveBeenCalled();
+ }
 });

@@ -184,6 +184,11 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
+ if(operation === "check_release_gate") {
+  requirements.add("public-github-exact-head-read-only-evidence");
+  requirements.add("recorded-network-30-requests-90-seconds-18MiB");
+  requirements.add("no-credentials-installer-execution-ci-rerun-or-merge");
+ }
 	if (
 		kind === "static" &&
 		!["project_edit", "annotate_analysis_project"].includes(operation) &&
@@ -440,6 +445,7 @@ export class AnalysisTaskOrchestrator {
 		const request = normalizeRequestPaths(input.request, workspaceRoot);
 		const operation = String(request.operation ?? "").trim();
 		if (!operation) throw new Error("Analysis request operation is required.");
+		if(operation === "check_release_gate" && input.kind !== "static") throw new Error("Release verification requires a read-only Inspect task");
 		if (operation === "js_isolated_execute" && input.kind !== "execution")
 			throw new Error(
 				"Active JavaScript requires independent Execute task kind",
@@ -503,7 +509,7 @@ export class AnalysisTaskOrchestrator {
 				network:
 					operation === "js_isolated_execute"
 						? "disabled"
-						: ["device", "execution"].includes(input.kind)
+						: operation === "check_release_gate" || ["device", "execution"].includes(input.kind)
 							? "recorded"
 							: "disabled",
 			},

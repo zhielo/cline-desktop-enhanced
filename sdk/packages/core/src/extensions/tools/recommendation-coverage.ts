@@ -376,6 +376,6 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "check_release_gate",
 		scope: "partial",
 		limitations:
-			"Existing exact-head CI/installed checks; no AI command or immutable gate receipt.",
+			"Unified independently approved public-GitHub exact-head verifier with authenticated bounded evidence artifacts and owning immutable receipts. Finite pinned policy only; no signatures, expired/private evidence fallback, automatic merge or universal release correctness.",
 	},
 ] as const;
