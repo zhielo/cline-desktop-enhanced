@@ -47,6 +47,10 @@ export const IncidentRequest = z
 		rollback_case_id: z.string().uuid().optional(),
 		target_sha256: Hash.optional(),
 		candidate_sha256: Hash.optional(),
+		// Host-bound AI adapter identity. Not exposed by the model's public schema.
+		owner_session_id: z.string().min(1).max(200).optional(),
+		analysis_mode: z.enum(["runtime", "hybrid"]).optional(),
+		hybrid: z.unknown().optional(),
 	})
 	.strict();
 type Request = z.infer<typeof IncidentRequest>;
@@ -185,6 +189,7 @@ export class ApkIncidentService {
 	private db?: SqliteDb;
 	private readonly owner = randomUUID();
 	private readonly active = new Set<string>();
+	private readonly lifecycleChecks = new Map<string, () => void>();
 	constructor(
 		private options: {
 			dbPath: string;
@@ -269,6 +274,14 @@ export class ApkIncidentService {
 				};
 			});
 	}
+	byPlan(root: string, planId: string) {
+		const row = this.database()
+			.prepare(
+				"SELECT id FROM apk_incidents WHERE workspace=? AND json_extract(body,'$.planId')=? LIMIT 1",
+			)
+			.get(realpathSync(root), planId);
+		return row ? this.get(root, String(row.id)) : undefined;
+	}
 	private checkpoint(c: IncidentCase, stage: string) {
 		const previous = c.revision;
 		c.revision++;
@@ -334,12 +347,29 @@ export class ApkIncidentService {
 			maxOutputBytes: 1024 * 1024,
 		});
 	}
-	async start(root: string, planId: string, token: string) {
+	async start(
+		root: string,
+		planId: string,
+		token: string,
+		lifecycle?: {
+			assertCurrent: () => void;
+			completed?: (
+				plan: ReturnType<AnalysisTaskOrchestrator["complete"]>,
+				result: IncidentCase,
+			) => void;
+			finished?: () => void;
+		},
+	) {
+		lifecycle?.assertCurrent();
 		const plan = this.options.tasks
 			.list(root)
 			.find((p) => p.id === planId && p.kind === "device");
 		if (!plan) throw new Error("Device incident plan not found");
 		const request = IncidentRequest.parse(plan.request);
+		if (request.owner_session_id && !lifecycle)
+			throw new Error(
+				"Owning AI device plans require their scoped smoke host; legacy start cannot bypass mode/profile checks",
+			);
 		// consume revalidates original target; independently bind the secondary candidate too.
 		if (
 			request.compare_target &&
@@ -377,13 +407,32 @@ export class ApkIncidentService {
 			};
 			this.save(c);
 			this.active.add(c.id);
+			if (lifecycle) this.lifecycleChecks.set(c.id, lifecycle.assertCurrent);
 		} catch (error) {
 			this.options.tasks.fail(planId, error);
 			throw error;
 		}
-		void this.run(c).catch(() => {
-			/* run persists all terminal failures; never replay from a status read. */
-		});
+		let watch: ReturnType<typeof setInterval> | undefined;
+		if (lifecycle)
+			watch = setInterval(() => {
+				try {
+					lifecycle.assertCurrent();
+				} catch {
+					try {
+						this.options.tasks.cancel(planId);
+					} catch {
+						/* already terminal */
+					}
+				}
+			}, 100);
+		void this.run(c, lifecycle)
+			.catch(() => {
+				/* run persists all terminal failures; never replay from a status read. */
+			})
+			.finally(() => {
+				clearInterval(watch);
+				lifecycle?.finished?.();
+			});
 		return {
 			accepted: true,
 			id: c.id,
@@ -393,6 +442,7 @@ export class ApkIncidentService {
 		};
 	}
 	private async call(c: IncidentCase, operation: string, extra: Result = {}) {
+		this.lifecycleChecks.get(c.id)?.();
 		const signal = this.options.tasks.signal(c.planId);
 		signal.throwIfAborted();
 		const result = await this.options.android(
@@ -406,6 +456,7 @@ export class ApkIncidentService {
 			signal,
 		);
 		if (
+			result.succeeded === false ||
 			result.cancelled ||
 			result.timedOut ||
 			(result.exitCode !== undefined && result.exitCode !== 0)
@@ -468,8 +519,29 @@ export class ApkIncidentService {
 			await rm(snapshot, { force: true });
 		}
 	}
-	private async run(c: IncidentCase) {
+	private async run(
+		c: IncidentCase,
+		lifecycle?: {
+			assertCurrent: () => void;
+			completed?: (
+				plan: ReturnType<AnalysisTaskOrchestrator["complete"]>,
+				result: IncidentCase,
+			) => void;
+		},
+	) {
+		const finish = (tool: string) => {
+			lifecycle?.assertCurrent();
+			this.options.tasks.signal(c.planId).throwIfAborted();
+			const completed = this.options.tasks.complete(c.planId, c, tool);
+			// Snapshot storage failure cannot retroactively change a completed device operation or replay it.
+			try {
+				lifecycle?.completed?.(completed, c);
+			} catch {
+				/* task/incident evidence remains authoritative; no automatic retry */
+			}
+		};
 		try {
+			lifecycle?.assertCurrent();
 			c.status = "running";
 			this.checkpoint(c, "device-preflight");
 			c.observations.push({
@@ -570,7 +642,7 @@ export class ApkIncidentService {
 				c.result =
 					"Selected diagnostic reports collected as package-scoped observations. Age, root cause and absence of failures are not proven.";
 				this.checkpoint(c, "diagnostic-report-completed");
-				this.options.tasks.complete(c.planId, c, "apk-diagnostic-reports");
+				finish("apk-diagnostic-reports");
 				return;
 			}
 
@@ -604,7 +676,7 @@ export class ApkIncidentService {
 					c.result =
 						"Original base APK restored. App data and regression behavior not verified.";
 					this.checkpoint(c, "rollback-completed");
-					this.options.tasks.complete(c.planId, c, "apk-incident-rollback");
+					finish("apk-incident-rollback");
 					return;
 				}
 			}
@@ -736,7 +808,7 @@ export class ApkIncidentService {
 				? "Matching failure evidence observed; review classification and correlation."
 				: "No new matching failure observed in the bounded window. Not a verified fix; confirm reproduction and regression manually.";
 			this.checkpoint(c, "capture-completed");
-			this.options.tasks.complete(c.planId, c, "apk-incident-capture");
+			finish("apk-incident-capture");
 		} catch (error) {
 			c.status = "incomplete";
 			c.error = redact(error instanceof Error ? error.message : String(error));
@@ -750,6 +822,7 @@ export class ApkIncidentService {
 			}
 		} finally {
 			this.active.delete(c.id);
+			this.lifecycleChecks.delete(c.id);
 		}
 	}
 	async diagnosticReport(root: string, id: string, hash: string) {

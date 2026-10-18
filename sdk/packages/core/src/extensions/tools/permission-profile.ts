@@ -83,6 +83,7 @@ const EXTERNAL_TOOLS = new Set([
  "set_scoped_breakpoints",
  "capture_execution_trace",
  "stop_runtime_session",
+ "run_device_smoke_test",
  "capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",

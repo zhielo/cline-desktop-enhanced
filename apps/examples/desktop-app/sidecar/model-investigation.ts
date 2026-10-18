@@ -72,7 +72,9 @@ export async function runModelInvestigation(
 			),
 		);
 	}
-	if (!["attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "analyze_function", "capture_process_tree", "capture_file_activity", "plan_runtime_observation", "validate_candidate", "review_candidate_changes", "run_batch", "resume_investigation"].includes(name))
+	if (name === "run_device_smoke_test" && (input as {action:string}).action !== "start")
+  return JSON.stringify(sanitizeEvidence(await ports.invoke(name,input)));
+ if (!["run_device_smoke_test", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "analyze_function", "capture_process_tree", "capture_file_activity", "plan_runtime_observation", "validate_candidate", "review_candidate_changes", "run_batch", "resume_investigation"].includes(name))
 		return JSON.stringify(sanitizeEvidence(await ports.invoke(name, input)));
 	const plan = (await ports.invoke(name, { ...input, phase: "prepare" })) as {
 		id: string;

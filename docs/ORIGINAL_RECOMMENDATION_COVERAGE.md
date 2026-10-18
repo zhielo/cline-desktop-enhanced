@@ -69,7 +69,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `capture_file_activity` | partial | Freshly approved exact-file OS notifications, maximum 5 seconds/128 events, cancellation/mode-change cleanup. No contents, recursive watch, syscall or PID attribution; missed/coalesced notifications prevent completeness claims. |
 | `capture_network_metadata` | partial | Explicit built-in browser scenario metadata only; not arbitrary process interception. |
 | `correlate_static_runtime` | partial | Owning-session hash-checked saved static/task evidence reconciliation, selected Node sample definition-line candidates and supported native module/RVA observations. No new runtime work, causality proof or universal cross-domain mapping. |
-| `run_device_smoke_test` | partial | Existing separately approved Android worker/device flows; unified command and live hardware validation pending. |
+| `run_device_smoke_test` | partial | Unified AI adapter over approved Android launch/incident workflow with exact base APK identity and owning status/cancel. No install/root/UI automation/automatic force-stop. Live hardware, splits and regression success remain unverified. |
 | `stop_runtime_session` | partial | Owning managed Node connection only, including after Analysis Off. Bounded best-effort owned profiler/debugger cleanup and transport closure; no process kill. Disconnect may resume target; uncertainty stays partial. Not a universal backend stop. |
 
 ## bulk

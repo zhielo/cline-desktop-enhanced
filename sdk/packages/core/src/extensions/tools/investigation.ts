@@ -55,6 +55,10 @@ const BatchRequest = z
 	.strict();
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
+ run_device_smoke_test: z.discriminatedUnion("action", [
+  z.object({action:z.literal("start"),artifactId:Id,deviceSerial:z.string().trim().min(1).max(200),packageName:z.string().regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/),durationSeconds:z.number().int().min(2).max(120).default(10),purpose:z.string().trim().min(1).max(2000),hybridProposal:HybridProposalSchema.optional()}).strict(),
+  z.object({action:z.enum(["status","cancel"]),taskId:Id}).strict(),
+ ]),
 	correlate_static_runtime: z
 		.object({ receiptId: Id, taskIds: z.array(Id).min(1).max(10) })
 		.strict(),
@@ -160,6 +164,7 @@ export type InvestigationExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 const descriptions: Record<InvestigationToolName, string> = {
+ run_device_smoke_test: "Request a separately human-approved launch and bounded 2–120 second process/crash-log observation on one explicitly selected authorized Android device. Uses an immutable workspace APK; installed base APK hash and manifest package must match before launch and after observation. Runtime/Hybrid, attached Full Access only; Hybrid requires real static evidence. No install, uninstall, root, Frida, UI interaction or automatic force-stop. Launch can leave the app running and change its data/network state. Start returns an asynchronous task, not a pass; status/cancel are owning-session reads/cleanup available after Analysis Off. No observed crash does not prove health, regression success or split APK identity. Never claim physical-device validation from fixtures.",
 	correlate_static_runtime:
 		"Reconcile one exact owning-session saved static receipt with up to ten saved approved task snapshots (at least one runtime task). Hash/scope checks, exact artifact identity, selected Node CPU-sample function-definition-line candidates and supported native module/RVA observations only. Read-only: no attachment, execution, downloads, approval grant or automatic rerun. Shared lines, sampled locations and byte identity never prove causal execution paths or behavior. Unmatched identities stay unresolved.",
 	plan_batch:
