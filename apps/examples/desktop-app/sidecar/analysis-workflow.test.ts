@@ -372,3 +372,14 @@ it("release gate is a trusted Inspect workflow; saved reads and cleanup route af
   expect(ports.invoke).not.toHaveBeenCalled();expect(ports.capture).not.toHaveBeenCalled();
  }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+
+it("project-file review carries exact scope into Inspect approval, never validation or unbound execution",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"project-review-workflow-")),scope={sessionId:"owned",workspace:root},store=new AnalysisWorkflowStore(join(root,"workflow.sqlite"));
+ const invoke=vi.fn(async()=>({id:"plan"})),ports={invoke,staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn()};
+ try {await writeFile(join(root,"manifest.json"),"{}");const artifact=await store.open(scope,"manifest.json"),input={artifactId:artifact.id,scope:"project-files"},options={trusted:true,idle:true,mode:"static"};
+ await handleAnalysisWorkflow("review_candidate_changes",input,scope,options,store,ports);expect(invoke).toHaveBeenCalledWith("prepare_analysis_task",expect.objectContaining({kind:"static",request:expect.objectContaining({candidate_review:{manifest_sha256:artifact.sha256,scope:"project-files"}})}));
+ await handleAnalysisWorkflow("review_candidate_changes",{...input,scope:"project-inventory"},scope,options,store,ports);expect(invoke).toHaveBeenLastCalledWith("prepare_analysis_task",expect.objectContaining({request:expect.objectContaining({candidate_review:{manifest_sha256:artifact.sha256,scope:"project-inventory"}})}));
+ await expect(handleAnalysisWorkflow("review_candidate_changes",{...input,phase:"run"},scope,options,store,ports)).rejects.toThrow("one-use");
+ await expect(handleAnalysisWorkflow("validate_candidate",{...input,kind:"typescript"},scope,options,store,ports)).rejects.toThrow("only accepted");
+ }finally{store.close();await rm(root,{recursive:true,force:true});}
+});

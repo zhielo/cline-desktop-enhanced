@@ -184,6 +184,13 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
+ const candidateReview=request?.candidate_review;
+ const reviewScope=candidateReview&&typeof candidateReview === "object"&&"scope" in candidateReview?candidateReview.scope:undefined;
+ if(operation === "review_candidate_changes" && typeof reviewScope === "string" && ["project-files","project-inventory"].includes(reviewScope)) {
+  requirements.add("all-regular-files-in-disjoint-manifest-child-roots-no-ignore-rules");
+  requirements.add("exact-full-inventory-hashes-and-complete-file-change-allowlist");
+  requirements.add("4096-entries-16MiB-file-64MiB-input-per-pass-two-passes-no-writes");
+ }
  if(operation === "check_release_gate") {
   requirements.add("public-github-exact-head-read-only-evidence");
   requirements.add("recorded-network-30-requests-90-seconds-18MiB");

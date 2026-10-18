@@ -308,3 +308,21 @@ it("JavaScript syntax rejects TypeScript-only grammar and never resolves imports
 		(await verifyCandidate(request(target, js, "javascript"), vi.fn())).status,
 	).toBe("completed");
 });
+
+it("project-files review binds complete inventories and rejects undeclared files without changing the recipe default",async()=>{
+ const {root}=await fixture();const {mkdir}=await import("node:fs/promises"),{projectInventoryHash}=await import("./project-review");
+ await mkdir(join(root,"before"));await mkdir(join(root,"after"));await writeFile(join(root,"before/a.ts"),"export const a=1;");await writeFile(join(root,"after/a.ts"),"export const a=2;");
+ const before="export const a=1;",after="export const a=2;",body=JSON.stringify({protocol:"cline-project-review/v1",baseline:{directory:"before",inventory_sha256:projectInventoryHash([{path:"a.ts",bytes:Buffer.byteLength(before),sha256:candidateHash(before)}])},candidate:{directory:"after",inventory_sha256:projectInventoryHash([{path:"a.ts",bytes:Buffer.byteLength(after),sha256:candidateHash(after)}])},approved_changes:[{path:"a.ts",before_sha256:candidateHash(before),after_sha256:candidateHash(after)}]});
+ const target=join(root,"project-review.json");await writeFile(target,body);
+ const req={operation:"review_candidate_changes",target,candidate_review:{manifest_sha256:candidateHash(body),scope:"project-files"}};
+ const pass=await execute(req);expect(pass.status).toBe("completed");expect(pass.checks[0]).toMatchObject({id:"full-project-file-scope",changedFiles:1,unexpectedChanges:0,passes:2});expect(pass.limitations.join(" ")).toContain("no ignore rules");
+ const {receiptSha256,...receipt}=pass;expect(receiptSha256).toBe(candidateHash(canonical(receipt)));
+ await writeFile(join(root,"after/undeclared"),"unexpected");await expect(execute(req)).rejects.toThrow("inventory fingerprint");
+ for(const extra of [{url:"https://invalid.example"},{executionToken:"fake"},{ignore:["undeclared"]}])expect(()=>InvestigationSchemas.review_candidate_changes.parse({artifactId:"11111111-1111-4111-8111-111111111111",scope:"project-files",...extra})).toThrow();
+ expect(await readFile(join(root,"before/a.ts"),"utf8")).toBe(before);
+});
+
+it("public inventory mode returns partial preview evidence, never a passing candidate",async()=>{
+ const {root}=await fixture();const {mkdir}=await import("node:fs/promises");await mkdir(join(root,"before"));await mkdir(join(root,"after"));await writeFile(join(root,"after/owned.ts"),"owned");const body=JSON.stringify({protocol:"cline-project-inventory-request/v1",baseline_directory:"before",candidate_directory:"after"}),target=join(root,"inventory.json");await writeFile(target,body);
+ const result=await execute({operation:"review_candidate_changes",target,candidate_review:{manifest_sha256:candidateHash(body),scope:"project-inventory"}});expect(result.status).toBe("partial");expect(result.checks[0]).toMatchObject({id:"full-project-file-inventory-draft",status:"previewed-not-approved",changedFiles:1,published:false});
+});
