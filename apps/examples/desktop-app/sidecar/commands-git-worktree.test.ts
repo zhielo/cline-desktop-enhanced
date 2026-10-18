@@ -21,7 +21,7 @@ function git(cwd: string, ...args: string[]): string {
 	return execFileSync(
 		"git",
 		["-c", "user.name=test", "-c", "user.email=test@example.com", ...args],
-		{ cwd, encoding: "utf8" },
+		{ cwd, encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024 },
 	).trim();
 }
 
@@ -51,7 +51,10 @@ beforeEach(() => {
 	git(repo, "config", "user.email", "test@example.com");
 	git(repo, "commit", "-q", "--allow-empty", "-m", "init");
 	vi.stubEnv("CLINE_DIR", join(sandbox, "cline-dir"));
-});
+// Four separately bounded Git processes can exceed Vitest's default 10s hook
+// on a cold, contended Windows runner. Keep setup finite without weakening
+// any worktree assertions or extending production command deadlines.
+}, 45_000);
 
 afterEach(() => {
 	vi.unstubAllEnvs();
