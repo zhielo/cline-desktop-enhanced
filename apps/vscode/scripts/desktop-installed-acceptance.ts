@@ -1149,7 +1149,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
        const plan=await rpc<{id:string;permission:string;requestHash:string;requirements:string[]}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
        if(plan.permission!=="Execute"||!plan.requirements.includes("debugger-activation-cleanup-may-pause-or-resume"))throw new Error("Managed Inspector omitted Execute/debug-control approval");
        const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-       const result=await rpc<{result:{status:string;provider:string;runtimeSessionId?:string;activeBreakpoints?:number}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+       const result=await rpc<{evidenceWarning?:string;result:{status:string;provider:string;runtimeSessionId?:string;activeBreakpoints?:number}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+       if(result.evidenceWarning)throw new Error("Managed runtime evidence persistence failed; do not replay observation");
        if(result.result.status!=="partial")throw new Error("Managed Inspector overclaimed coverage");
        let replayDenied=false;try{await rpc(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});}catch{replayDenied=true;}if(!replayDenied)throw new Error("Managed runtime approval replay succeeded");
        if(command==="capture_execution_trace")sampleTaskId=plan.id;

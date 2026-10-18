@@ -32,8 +32,8 @@ const roots: string[] = [];
 afterEach(async () => {
 	state.mode = "runtime";
 	state.receipt = undefined;
-	state.bind.mockClear();
-	state.record.mockClear();
+	state.bind.mockReset();
+	state.record.mockReset();
 	for (const root of roots) await rm(root, { recursive: true, force: true });
 	roots.length = 0;
 });
@@ -205,4 +205,20 @@ it("Hybrid binds an exact owning static basis and rejects stale evidence before 
 	).rejects.toThrow("intact result hash");
 	expect(state.record).not.toHaveBeenCalled();
 	f.tasks.cancel(plan.id);
+});
+
+it("persists completed metadata capture into the real owning ledger without replay",async()=>{
+ const {UnifiedEvidenceStore}=await import("@cline/core");
+ const f=await fixture(),ledger=new UnifiedEvidenceStore(join(f.root,"evidence.sqlite"));
+ state.bind.mockImplementation((sessionId,workspace,plan)=>ledger.bind(sessionId,workspace,plan));
+ state.record.mockImplementation((sessionId,workspace,plan,result)=>ledger.record(sessionId,workspace,plan,result));
+ try{
+  const plan=await f.prepare(),{executionToken}=f.tasks.approve(plan.id,plan.requirements,plan.requestHash);
+  const input={phase:"run",request:f.request,planId:plan.id,executionToken};
+  const output=await f.call(input) as {result:unknown;evidenceWarning?:string};
+  expect(output.evidenceWarning).toBeUndefined();
+  expect(state.record.mock.calls[0][2]).toMatchObject({id:plan.id,status:"completed",evidence:{tool:"bounded-runtime-metadata/1",resultHash:digest(output.result)}});
+  expect(ledger.list("owned",f.root)).toMatchObject([{taskId:plan.id,resultHash:digest(output.result)}]);expect(ledger.list("other",f.root)).toEqual([]);
+  await expect(f.call(input)).rejects.toThrow("approval");expect(ledger.list("owned",f.root)).toHaveLength(1);
+ }finally{ledger.close();}
 });

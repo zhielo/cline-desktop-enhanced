@@ -238,12 +238,12 @@ export async function handleManagedRuntime(
 			attachedId = (result as { runtimeSessionId?: string }).runtimeSessionId;
 		signal.throwIfAborted();
 		assertCurrent();
-		tasks.complete(plan.id, result, "managed-node-inspector/1");
+		const completed = tasks.complete(plan.id, result, "managed-node-inspector/1");
 		try {
 			recordFirstPartyTaskEvidence(
 				scope.sessionId,
 				scope.workspace,
-				plan,
+				completed,
 				result,
 			);
 		} catch {

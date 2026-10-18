@@ -10,13 +10,14 @@ const state = vi.hoisted(() => ({
 	mode: "runtime",
 	workspace: "",
 	record: vi.fn(),
+ bind: vi.fn(),
 }));
 vi.mock("./first-party-analysis", () => ({
 	firstPartyStore: () => ({
 		session: () => ({ mode: state.mode, workspace: state.workspace }),
 		get: () => undefined,
 	}),
-	bindFirstPartyTaskEvidence: vi.fn(),
+	bindFirstPartyTaskEvidence: state.bind,
 	recordFirstPartyTaskEvidence: state.record,
 	sessionTaskSnapshots: () => [],
 }));
@@ -32,6 +33,7 @@ const roots: string[] = [];
 afterEach(async () => {
 	state.mode = "runtime";
 	state.record.mockReset();
+ state.bind.mockReset();
 	for (const root of roots.splice(0))
 		await rm(root, { recursive: true, force: true });
 });
@@ -250,4 +252,22 @@ it("missing Hybrid basis cannot reach managed runtime control", async () => {
 		f.call({ phase: "prepare", request: f.request }),
 	).rejects.toThrow();
 	expect(f.manager.attach).not.toHaveBeenCalled();
+});
+
+it("persists the returned completed plan into the real owning evidence ledger without replay",async()=>{
+ const {UnifiedEvidenceStore,digest}=await import("@cline/core");
+ const f=await fixture(),ledger=new UnifiedEvidenceStore(join(f.root,"evidence.sqlite"));
+ state.bind.mockImplementation((sessionId,workspace,plan)=>ledger.bind(sessionId,workspace,plan));
+ state.record.mockImplementation((sessionId,workspace,plan,result)=>ledger.record(sessionId,workspace,plan,result));
+ try{
+  const plan=await f.call({phase:"prepare",request:f.request}) as AnalysisTaskPlan;
+  const {executionToken}=f.tasks.approve(plan.id,plan.requirements,plan.requestHash);
+  const input={phase:"run",request:f.request,planId:plan.id,executionToken};
+  const output=await f.call(input) as {result:unknown;evidenceWarning?:string};
+  expect(output.evidenceWarning).toBeUndefined();
+  expect(state.record.mock.calls[0][2]).toMatchObject({id:plan.id,status:"completed",evidence:{tool:"managed-node-inspector/1",resultHash:digest(output.result)}});
+  const saved=ledger.list("owned",f.root);expect(saved).toHaveLength(1);expect(saved[0]).toMatchObject({taskId:plan.id,tool:"managed-node-inspector/1",resultHash:digest(output.result)});
+  expect(ledger.list("other",f.root)).toEqual([]);
+  await expect(f.call(input)).rejects.toThrow("approval");expect(f.manager.attach).toHaveBeenCalledOnce();expect(ledger.list("owned",f.root)).toHaveLength(1);
+ }finally{ledger.close();}
 });
