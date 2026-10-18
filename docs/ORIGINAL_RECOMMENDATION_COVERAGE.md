@@ -8,7 +8,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | --- | --- | --- |
 | `plan_investigation` | partial | Fixed recipes plus explicit typed objectives and schema-validated read-only batch drafts; no arbitrary natural-language goal synthesis or executed engine preflight. |
 | `identify_artifact` | partial | Content-based bounded ZIP/gzip/zlib traversal, DEX carving, hashes/origins and conflicting/unknown signatures. PE/JVM/Mach-O/Wasm remain candidates; no universal identification or full format validation. |
-| `map_attack_surface` | partial | JS/TS syntax and APK manifest evidence; no universal entrypoint inventory. |
+| `map_attack_surface` | partial | JS/TS syntax plus APK manifest/exact DEX callback candidates with bounded superclass search; no universal entrypoint inventory or observed dispatch. |
 | `trace_data_flow` | partial | Declared saved-report edges only; unresolved whole-program paths are not inferred. |
 | `trace_cross_language` | partial | Fresh exact DEX-native/JNI export-name candidates plus bounded ELF call graph, or fresh literal Electron renderer/preload/main candidates; saved graph paths retained. No dynamic registration, IPC delivery, observed flow or universal resolver. |
 | `explain_behavior` | partial | Exact JS/TS function evidence and relationships; no generated behavioral verdict. |
@@ -21,13 +21,13 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
 | `index_multidex` | bounded | Existing bounded DEX index adapter retains DEX origin; engine readiness separate. |
-| `find_android_entrypoints` | partial | Manifest components only; lifecycle/callback expansion unresolved. |
+| `find_android_entrypoints` | partial | Fresh standard root multidex classes plus manifest Application/Activity/Service/Receiver/Provider and alias targets, fixed exact callback signatures and bounded superclass candidates. Dynamic listeners, framework/OEM dispatch and whole-program reachability remain unresolved. |
 | `trace_android_method` | partial | Exact method code and reference candidates; no full dispatch/call graph. |
 | `map_jni_bindings` | partial | JNI-name and relationship candidates; unresolved dynamic registration is not invented. |
 | `preview_smali_patch` | bounded | Exact hash-bound single-method/single-file preview. |
 | `patch_smali_method` | bounded | Approved preview publishes one new file; project integration is separate. |
 | `validate_smali_project` | bounded | Existing assembler over supported inputs with new output; no ART/device proof. |
-| `diff_android_resources` | partial | ZIP-entry size/CRC comparison; no decoded resource semantic diff. |
+| `diff_android_resources` | partial | Actual covered ZIP-member SHA256 differences, category counts and optional namespace-expanded XML structural fingerprints. No resources.arsc/configuration resolution, semantic equivalence, signature or device proof. |
 | `build_android_candidate` | bounded | Preview-bound decoded-project snapshot, exact-method patches, all Smali roots assembled, unsigned Apktool rebuild and hash/structure validation before new-file publication. No signing/install/device proof. |
 | `verify_android_candidate` | partial | Structure, signature and optional ZIP comparison; build receipts/device checks remain separate. |
 

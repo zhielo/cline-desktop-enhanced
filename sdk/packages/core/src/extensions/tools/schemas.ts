@@ -171,6 +171,8 @@ export const ReverseEngineeringInputSchema = z.object({
 			"decrypt_blob",
 			"artifact_discovery",
 			"android_relationships",
+			"android_entrypoints",
+			"android_resources",
 			"android_method",
 			"investigation_query",
 			"android_method_code",
@@ -181,6 +183,11 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional(),
 	advanced_options: z
 		.object({
+			entrypoints: z.object({
+                max_depth:z.number().int().min(0).max(16).optional(),
+                max_components:z.number().int().min(1).max(128).optional(),
+                max_dex_files:z.number().int().min(1).max(32).optional(),
+            }).strict().optional(),
 			jni_trace: CrossLanguageOptionsSchema.options[0].omit({kind:true,method:true}).optional(),
 			discovery: z
 				.object({

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import zipfile
 import zlib
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -96,6 +97,104 @@ class AndroidTests(unittest.TestCase):
     def tearDown(self):self.temp.cleanup()
     def run_action(self,data,action='artifact_discovery',**kwargs):
         self.path.write_bytes(data);return w.investigate(dict(action=action,target=str(self.path),**kwargs))
+    def entrypoint_fixture(self,with_code=True):
+        raw=dex_fixture(with_code).replace(b'LFixture;',b'Lapp/Xxx;').replace(b'native_work',b'onTerminate')
+        return reseal(raw)
+    def manifest(self,body='<application android:name=".Xxx"/>'):
+        return ('<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="app">'+body+'</manifest>').encode()
+    def entrypoints(self,entries,**options):
+        self.path.write_bytes(archive(entries))
+        return w.android_entrypoints(dict(action='android_entrypoints',target=str(self.path),options={'entrypoints':options}))
+    def resources(self,left,right,limit=200):
+        self.path.write_bytes(archive(left));other=self.path.parent/'right.apk';other.write_bytes(archive(right))
+        return w.android_resources(dict(action='android_resources',target=str(self.path),compare_target=str(other),limit=limit))
+    def test_entrypoints_exact_defined_callback_and_owned_fixture(self):
+        manifest=self.manifest();dex=self.entrypoint_fixture()
+        r=self.entrypoints([('AndroidManifest.xml',manifest),('classes.dex',dex)])
+        e=r['evidence'];self.assertEqual(r['status'],'partial');self.assertEqual(e['candidateCount'],1)
+        c=e['candidates'][0];self.assertEqual((c['declaringClass'],c['name'],c['descriptor']),('Lapp/Xxx;','onTerminate','()V'))
+        self.assertEqual(c['artifactSha256'],hashlib.sha256(dex).hexdigest());self.assertFalse(c['dispatchVerified']);self.assertFalse(c['executionObserved'])
+        self.assertFalse(c['native']);self.assertTrue(c['byteFingerprint']);self.assertEqual(e['components'][0]['searchStopped'],'hierarchy-root-reached')
+        import base64
+        fixture=json.loads((HERE/'owned-android-entrypoints-fixture.json').read_text());blob=base64.b64decode(fixture['base64'])
+        self.assertEqual(hashlib.sha256(blob).hexdigest(),fixture['sha256'])
+        self.path.write_bytes(blob);actual=w.android_entrypoints({'target':str(self.path),'action':'android_entrypoints'})
+        self.assertEqual(actual['evidence']['candidateCount'],1)
+    def test_entrypoints_inheritance_aliases_exact_signatures_and_no_static_override(self):
+        root,_enc,_nodes=w.workflow_xml(self.manifest('<application><activity android:name=".Xxx"/><activity-alias android:name=".Alias" android:targetActivity=".Xxx" android:exported="true"/></application>'))
+        _pkg,components=w.manifest_components(root)
+        classes=[{'descriptor':'Lapp/Xxx;','superclass':'Lapp/Base;','artifactId':'a','artifactSha256':'a'*64}, {'descriptor':'Lapp/Base;','superclass':None,'artifactId':'b','artifactSha256':'b'*64}]
+        methods=[{'artifactId':'a','classDescriptor':'Lapp/Xxx;','name':'onStart','descriptor':'()V','defined':True,'accessFlags':9,'methodIndex':0},
+                 {'artifactId':'a','classDescriptor':'Lapp/Xxx;','name':'onStart','descriptor':'(I)V','defined':True,'accessFlags':1,'methodIndex':1},
+                 {'artifactId':'b','classDescriptor':'Lapp/Base;','name':'onStart','descriptor':'()V','defined':True,'accessFlags':1,'methodIndex':2}]
+        r=w.entrypoint_candidates(components,classes,methods,8,64,200)
+        self.assertEqual(r['candidateCount'],2);self.assertTrue(all(c['inheritedDepth']==1 for c in r['candidates']))
+        self.assertEqual(r['components'][1]['kind'],'activity-alias');self.assertEqual(r['components'][1]['exportedDeclared'],'true')
+    def test_entrypoints_duplicate_multidex_class_is_never_silently_selected(self):
+        dex=self.entrypoint_fixture();r=self.entrypoints([('AndroidManifest.xml',self.manifest()),('classes.dex',dex),('classes2.dex',dex)])
+        self.assertEqual(r['evidence']['candidateCount'],0);self.assertEqual(r['evidence']['components'][0]['searchStopped'],'ambiguous-class')
+        r=self.entrypoints([('AndroidManifest.xml',self.manifest()),('classes.dex',dex),('classes2.dex',dex)],max_dex_files=1)
+        self.assertTrue(r['evidence']['coverage']['dexTruncated']);self.assertFalse(r['evidence']['dispatchVerified'])
+    def test_entrypoints_nondefinitions_invalid_dex_unknown_names_disabled_declarations(self):
+        r=self.entrypoints([('AndroidManifest.xml',self.manifest('<application android:enabled="false" android:name="@string/app"><receiver android:name=".Missing" android:enabled="false"/></application>')),('classes.dex',b'dex\n035\0broken')])
+        e=r['evidence'];self.assertEqual(e['candidateCount'],0);self.assertEqual(len(e['rejectedDex']),1)
+        self.assertIsNone(e['components'][0]['classDescriptor']);self.assertEqual(e['components'][1]['enabledDeclared'],'false')
+        self.assertEqual(e['components'][1]['applicationEnabledDeclared'],'false')
+    def test_entrypoints_budget_cycle_and_unrelated_options_fail_closed(self):
+        root,*_=w.workflow_xml(self.manifest());_,components=w.manifest_components(root)
+        classes=[{'descriptor':'Lapp/Xxx;','superclass':'Lapp/Xxx;','artifactId':'a','artifactSha256':'a'*64}]
+        r=w.entrypoint_candidates(components,classes,[],8,1,1);self.assertEqual(r['components'][0]['searchStopped'],'hierarchy-cycle')
+        r=w.entrypoint_candidates(components,classes,[],0,1,1);self.assertEqual(r['components'][0]['searchStopped'],'max-depth')
+        for opts in [{'max_depth':-1},{'max_depth':True},{'max_components':129},{'max_dex_files':0},{'unknown':1}]:
+            with self.assertRaises(ValueError):self.entrypoints([('AndroidManifest.xml',self.manifest())],**opts)
+        with self.assertRaises(ValueError):w.android_entrypoints({'options':{'method':{}},'target':str(self.path)})
+    def test_entrypoints_component_and_candidate_details_have_full_counts(self):
+        dex=self.entrypoint_fixture();body='<application android:name=".Xxx">'+''.join('<service android:name=".Missing%d"/>'%i for i in range(3))+'</application>'
+        r=self.entrypoints([('AndroidManifest.xml',self.manifest(body)),('classes.dex',dex)],max_components=1)
+        e=r['evidence'];self.assertTrue(e['componentsTruncated']);self.assertEqual(e['componentCount'],4);self.assertEqual(len(e['components']),1)
+    def test_android_xml_dtd_entities_utf16_invalid_and_depth_are_rejected(self):
+        for data in [b'<!DOCTYPE a [<!ENTITY x "owned">]><a>&x;</a>',b'<a>\x00</a>','<a/>'.encode('utf-16'),b'<a>',b'<a>'*66+b'</a>'*66,b'<a/>'*2]:
+            with self.assertRaises((ValueError,ET.ParseError,UnicodeError)):w.workflow_xml(data)
+        with self.assertRaises(ValueError):w.workflow_xml(b'x'*(1024*1024+1))
+    def test_android_resources_reads_real_sha256_and_all_categories_with_xml_structure(self):
+        a=b'<resources xmlns:x="urn:x" x:a="1" b="2"><string name="x">A</string></resources>'
+        b=b'<resources b="2" xmlns:y="urn:x" y:a="1"><string name="x">A</string></resources>'
+        left=[('AndroidManifest.xml',self.manifest()),('res/values/strings.xml',a),('assets/x',b'old'),('classes.dex',b'old'),('lib/x/x.so',b'old'),('removed',b'x')]
+        right=[('AndroidManifest.xml',self.manifest('<application/>')),('res/values/strings.xml',b),('assets/x',b'new'),('classes.dex',b'new'),('lib/x/x.so',b'new'),('added',b'x')]
+        r=self.resources(left,right);e=r['evidence'];self.assertEqual(r['status'],'partial');self.assertEqual(e['changedFiles'],7)
+        self.assertEqual(e['categoryCounts'],{'manifest':1,'resources':1,'assets':1,'dex':1,'native':1,'other':2})
+        row=next(c for c in e['changes'] if c['category']=='resources');self.assertTrue(row['parsedXmlStructureEqual']);self.assertNotEqual(row['before']['sha256'],row['after']['sha256'])
+        self.assertEqual(row['before']['sha256'],hashlib.sha256(a).hexdigest());self.assertFalse(e['observedExecution']);self.assertFalse(e['published'])
+    def test_android_resources_equal_bytes_and_detail_budget(self):
+        pairs=[('assets/a',b'a'),('assets/b',b'b')];self.assertTrue(self.resources(pairs,pairs)['evidence']['identicalEntryBytes'])
+        e=self.resources(pairs,[('assets/a',b'c'),('assets/b',b'd')],1)['evidence']
+        self.assertEqual(e['changedFiles'],2);self.assertEqual(len(e['changes']),1);self.assertTrue(e['changesTruncated']);self.assertEqual(len(e['changeSetSha256']),64)
+    def test_android_resources_xml_unavailable_does_not_claim_equal_or_ignore_bytes(self):
+        e=self.resources([('res/a.xml',b'<a>')],[('res/a.xml',b'<a/>')])['evidence'];row=e['changes'][0]
+        self.assertEqual(row['before']['xmlStructure']['status'],'unavailable');self.assertNotIn('parsedXmlStructureEqual',row)
+        self.assertNotEqual(w.xml_structure_hash(b'<a> A </a>')['sha256'],w.xml_structure_hash(b'<a>A</a>')['sha256'])
+    def test_android_zip_duplicate_case_alias_traversal_and_special_entries_rejected(self):
+        for pairs in [[('a',b'a'),('A',b'b')],[('../a',b'a')],[('a\\b',b'a')]]:
+            with self.assertRaises(ValueError):self.resources(pairs,[])
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,'w') as z:
+            e=zipfile.ZipInfo('link');e.external_attr=0o120777<<16;z.writestr(e,'target')
+        self.path.write_bytes(buf.getvalue())
+        with self.assertRaises(ValueError):w.workflow_zip(str(self.path),[0])
+    def test_android_zip_central_directory_forged_count_and_trailing_payload_rejected(self):
+        blob=bytearray(archive([('a',b'a')]));end=blob.rfind(b'PK\x05\x06');struct.pack_into('<HH',blob,end+8,0,0)
+        for data in [bytes(blob),archive([('a',b'a')])+b'payload',b'PK\x03\x04invalid']:
+            self.path.write_bytes(data)
+            with self.assertRaises(ValueError):w.workflow_zip(str(self.path),[0])
+    def test_android_zip_expansion_and_cross_archive_aggregate_budget_fail_closed(self):
+        self.path.write_bytes(archive([('a',b'a'*100000)],True))
+        data,z,entries=w.workflow_zip(str(self.path),[0])
+        with z:
+            with self.assertRaises(ValueError):w.workflow_member(z,entries[0],[0])
+        self.path.write_bytes(archive([('a',b'x')]))
+        data,z,entries=w.workflow_zip(str(self.path),[0])
+        with z:
+            with self.assertRaises(ValueError):w.workflow_member(z,entries[0],[w.MAX_WORK])
     def test_generated_source_parity(self):
         src=(HERE.parent/'src/extensions/tools/executors/android-investigation-worker.ts').read_text()
         embedded=json.loads(src.split('export const ANDROID_INVESTIGATION_WORKER = ',1)[1].strip().removesuffix(';'))

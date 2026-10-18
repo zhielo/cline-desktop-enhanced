@@ -17,6 +17,7 @@ const hash = (value: string) =>
 	createHash("sha256").update(value).digest("hex");
 const Options = z
 	.object({
+        entrypoints:z.object({max_depth:z.number().int().min(0).max(16).optional(),max_components:z.number().int().min(1).max(128).optional(),max_dex_files:z.number().int().min(1).max(32).optional()}).strict().optional(),
 		discovery: z
 			.object({
 				max_depth: z.number().int().min(0).max(4).optional(),
@@ -72,6 +73,8 @@ const Cell = z
 		action: z.enum([
 			"artifact_discovery",
 			"android_relationships",
+			"android_entrypoints",
+			"android_resources",
 			"android_method",
 			"android_method_code",
 			"native_function",
@@ -242,8 +245,9 @@ export function validateNotebook(document: unknown) {
 	for (const cell of notebook.cells) {
 		if (new Set(cell.dependsOn).size !== cell.dependsOn.length)
 			throw new Error("Duplicate dependency");
-		if (cell.action === "match_native_functions" && !cell.compareTarget)
-			throw new Error("Matching requires compareTarget");
+		if (["match_native_functions","android_resources"].includes(cell.action) && !cell.compareTarget)
+			throw new Error("Matching/resource comparison requires compareTarget");
+        if(cell.options?.entrypoints && cell.action!=="android_entrypoints")throw new Error("entrypoints budgets require android_entrypoints");
 		visit(cell.id);
 	}
 	return notebook;

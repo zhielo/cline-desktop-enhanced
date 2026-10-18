@@ -10,8 +10,9 @@ import struct
 import sys
 import zipfile
 import zlib
+import xml.etree.ElementTree as ET
 
-VERSION = "android-static/v6"
+VERSION = "android-static/v7"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -62,7 +63,7 @@ def dex_string(data, offset):
     return value
 
 
-def dex_metadata(data, limit):
+def dex_metadata(data, limit, include_classes=False):
     """Validate header integrity + bounded pool/class-data/code-item ranges.
     This is not full Dalvik instruction, verifier, debug-info or try-handler validation.
     """
@@ -149,6 +150,7 @@ def dex_metadata(data, limit):
         if cls >= len(types) or proto >= len(protos) or name >= len(strings):
             raise ValueError("DEX method index")
         methods.append({"methodIndex": i, "classDescriptor": types[cls], "name": strings[name], "descriptor": protos[proto], "defined": False})
+    classes = []
     defined = set()
     work = 0
     for i in range(pools[5][0]):
@@ -156,6 +158,11 @@ def dex_metadata(data, limit):
         cls, offset = u32(data, base), u32(data, base+24)
         if cls >= len(types):
             raise ValueError("DEX class index")
+        if include_classes:
+            super_index = u32(data, base+8)
+            if super_index != 0xffffffff and super_index >= len(types):
+                raise ValueError("DEX superclass index")
+            classes.append({"descriptor":types[cls], "superclass":None if super_index == 0xffffffff else types[super_index], "classIndex":i})
         if not offset:
             continue
         if offset < data_offset:
@@ -205,7 +212,7 @@ def dex_metadata(data, limit):
     ordered = sorted(methods, key=lambda m: (not m.get("native", False), m["methodIndex"]))
     return {"validation": "integrity-and-bounded-structure", "methodCount": len(methods), "definedMethodCount": len(defined),
             "methods": ordered[:limit], "loaderReferences": [dict(m, referenceOnly=True, executionObserved=False) for m in references[:limit]], "methodsTruncated": len(methods) > limit,
-            "loaderReferencesTruncated": len(references) > limit}, methods
+            "loaderReferencesTruncated": len(references) > limit, **({"classes":classes} if include_classes else {})}, methods
 
 
 def jni_escape(value):
@@ -743,12 +750,274 @@ def investigate(request):
             "input": {"sha256": hashlib.sha256(root).hexdigest(), "bytes": len(root), "format": records[0]["format"]}, "evidence": evidence, "limitations": limitations}
 
 
+# Fixed framework signatures, not user-supplied executable recipes. These are
+# declaration candidates only; OEM/framework dispatch and registration are outside scope.
+CALLBACKS = {
+    'application': [('onCreate','()V'),('onTerminate','()V'),('onLowMemory','()V'),('onTrimMemory','(I)V'),('onConfigurationChanged','(Landroid/content/res/Configuration;)V')],
+    'activity': [('onCreate','(Landroid/os/Bundle;)V'),('onCreate','(Landroid/os/Bundle;Landroid/os/PersistableBundle;)V'),('onStart','()V'),('onResume','()V'),('onPause','()V'),('onStop','()V'),('onDestroy','()V'),('onRestart','()V'),('onNewIntent','(Landroid/content/Intent;)V'),('onActivityResult','(IILandroid/content/Intent;)V'),('onRequestPermissionsResult','(I[Ljava/lang/String;[I)V'),('onSaveInstanceState','(Landroid/os/Bundle;)V')],
+    'service': [('onCreate','()V'),('onDestroy','()V'),('onStartCommand','(Landroid/content/Intent;II)I'),('onBind','(Landroid/content/Intent;)Landroid/os/IBinder;'),('onUnbind','(Landroid/content/Intent;)Z'),('onRebind','(Landroid/content/Intent;)V'),('onTaskRemoved','(Landroid/content/Intent;)V')],
+    'receiver': [('onReceive','(Landroid/content/Context;Landroid/content/Intent;)V')],
+    'provider': [('onCreate','()Z'),('query','(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;'),('insert','(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;'),('update','(Landroid/net/Uri;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I'),('delete','(Landroid/net/Uri;Ljava/lang/String;[Ljava/lang/String;)I'),('getType','(Landroid/net/Uri;)Ljava/lang/String;')],
+}
+ANDROID_NS = '{http://schemas.android.com/apk/res/android}'
+
+
+def workflow_zip(target, budget):
+    with open(target, 'rb') as f:
+        data = f.read(MAX_INPUT+1)
+    if len(data)>MAX_INPUT: raise ValueError('Android workflow input exceeds 64 MiB')
+    # Preflight central-directory framing before ZipFile allocates entry objects.
+    # Ordinary single-disk ZIP only; no ZIP64, multi-volume or appended payloads.
+    end=data.rfind(b'PK\x05\x06',max(0,len(data)-65557))
+    if end<0 or end+22>len(data):raise ValueError('Android ZIP end record required')
+    disk,cd_disk,disk_count,total,cd_size,cd_offset,comment=struct.unpack_from('<4H2IH',data,end+4)
+    if disk or cd_disk or disk_count!=total or total>10000 or end+22+comment!=len(data) or cd_offset+cd_size!=end:
+        raise ValueError('Unsupported or oversized Android ZIP central directory')
+    cursor=cd_offset;count=0
+    while cursor<end:
+        count+=1
+        if count>10000 or cursor+46>end or data[cursor:cursor+4]!=b'PK\x01\x02':raise ValueError('Android ZIP central entry budget/framing')
+        name_size,extra_size,comment_size=struct.unpack_from('<3H',data,cursor+28)
+        if name_size>4096:raise ValueError('Android ZIP encoded name exceeds budget')
+        cursor+=46+name_size+extra_size+comment_size
+    if cursor!=end or count!=total:raise ValueError('Android ZIP central entry count/framing mismatch')
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    entries = archive.infolist()
+    if len(entries)>10000: raise ValueError('Android ZIP entry budget exceeded')
+    names = set()
+    for e in entries:
+        if len(e.filename)>1024 or '\\' in e.filename or e.filename.startswith('/') or any(p in ('','.', '..') for p in e.filename.rstrip('/').split('/')):
+            raise ValueError('Noncanonical Android ZIP path')
+        key=e.filename.casefold()
+        if key in names: raise ValueError('Duplicate or case-aliased Android ZIP member')
+        names.add(key)
+        if e.flag_bits & 1: raise ValueError('Encrypted Android ZIP entries unsupported')
+        mode = (e.external_attr >> 16) & 0xf000
+        if mode not in (0, 0x4000, 0x8000): raise ValueError('Android ZIP special entries unsupported')
+    return data,archive,entries
+
+
+def workflow_member(archive, entry, budget, maximum=MAX_CHILD):
+    if entry.file_size>maximum or entry.file_size>max(1,entry.compress_size)*100:
+        raise ValueError('Android ZIP member size or expansion budget exceeded')
+    if budget[0]+entry.file_size>MAX_WORK: raise ValueError('Android aggregate expanded byte budget exceeded')
+    with archive.open(entry) as f: data=f.read(maximum+1)
+    if len(data)!=entry.file_size or len(data)>maximum: raise ValueError('Android ZIP member size changed')
+    budget[0]+=len(data)
+    return data
+
+
+def workflow_xml(data):
+    if len(data)>1024*1024: raise ValueError('Android XML exceeds 1 MiB parse budget')
+    encoding='utf8-text'
+    if data[:4]==b'\x03\x00\x08\x00':
+        from androguard.core.axml import AXMLPrinter
+        printer=AXMLPrinter(data)
+        if not printer.is_valid(): raise ValueError('Android binary XML rejected by decoder')
+        data=printer.get_xml()
+        encoding='androguard-binary-xml'
+        if not isinstance(data,bytes) or len(data)>1024*1024: raise ValueError('Decoded Android XML exceeds byte budget')
+    # Reject DTD/entities before a standard XML parser. Decode UTF-8 strictly so
+    # UTF-16/interleaved-NUL declarations cannot bypass this policy.
+    text=data.decode('utf-8-sig',errors='strict')
+    if '\x00' in text or re.search(r'<!\s*(?:DOCTYPE|ENTITY)',text,re.I):
+        raise ValueError('Android XML DTD/entities/NULs are not supported')
+    declaration=re.match(r'\s*<\?xml\s+[^?]*encoding\s*=\s*[\"\x27]([^\"\x27]+)',text,re.I)
+    if declaration and declaration[1].lower() not in ('utf-8','utf8','us-ascii'):
+        raise ValueError('Only UTF-8 Android XML supported')
+    root=ET.fromstring(text)
+    stack=[(root,0)];count=0
+    while stack:
+        node,depth=stack.pop();count+=1
+        if count>20000 or depth>64: raise ValueError('Android XML node/depth budget exceeded')
+        stack.extend((child,depth+1) for child in node)
+    return root,encoding,count
+
+
+def normalized_android_class(package, name):
+    if not isinstance(name,str) or not name: return None
+    value=package+name if name.startswith('.') else name if '.' in name else package+'.'+name
+    if len(value)>1000 or not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*',value): return None
+    return 'L'+value.replace('.','/')+';'
+
+
+def manifest_components(root):
+    if root.tag!='manifest': raise ValueError('Android manifest root required')
+    package=root.get('package','')
+    if not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*',package): raise ValueError('Literal manifest package required')
+    applications=root.findall('application')
+    if len(applications)!=1: raise ValueError('Exactly one manifest application required')
+    app=applications[0];rows=[]
+    for node in [app]+list(app):
+        kind=node.tag
+        if kind not in set(CALLBACKS)|{'activity-alias'}: continue
+        name=node.get(ANDROID_NS+'name')
+        if kind=='application' and name is None: continue  # framework default, not an app-defined class
+        selected=node.get(ANDROID_NS+'targetActivity') if kind=='activity-alias' else name
+        rows.append({'componentIndex':len(rows),'kind':kind,'declaredName':(name or '')[:1000],
+          'classDescriptor':normalized_android_class(package,selected),'aliasTarget':(selected or '')[:1000] if kind=='activity-alias' else None,
+          'enabledDeclared':node.get(ANDROID_NS+'enabled'),'applicationEnabledDeclared':app.get(ANDROID_NS+'enabled'),
+          'exportedDeclared':node.get(ANDROID_NS+'exported'),'permissionDeclared':node.get(ANDROID_NS+'permission'),
+          'intentFilterCount':len(node.findall('intent-filter'))})
+    return package,rows
+
+
+def entrypoint_candidates(components, classes, methods, maximum_depth, maximum_components, maximum_results):
+    by_class={};by_method={}
+    for c in classes:by_class.setdefault(c['descriptor'],[]).append(c)
+    for m in methods:
+        if m.get('defined'):by_method.setdefault((m['artifactId'],m['classDescriptor'],m['name'],m['descriptor']),[]).append(m)
+    details=[];candidates=[];reasons={}
+    for component in components[:maximum_components]:
+        row=dict(component);kind='activity' if row['kind']=='activity-alias' else row['kind']
+        pending=set(CALLBACKS[kind]);current=row['classDescriptor'];seen=set();row['candidateCount']=0;row['hierarchy']=[];row['ambiguousMethodCount']=0
+        reason='class-name-unresolved'
+        for depth in range(maximum_depth+1):
+            if not current:break
+            if current in seen:reason='hierarchy-cycle';break
+            seen.add(current)
+            definitions=by_class.get(current,[])
+            if len(definitions)!=1:reason='ambiguous-class' if definitions else 'class-outside-covered-dex';break
+            cls=definitions[0];row['hierarchy'].append({'classDescriptor':current,'artifactId':cls['artifactId'],'depth':depth})
+            for signature in sorted(pending):
+                matches=by_method.get((cls['artifactId'],current,*signature),[])
+                if len(matches)>1:row['ambiguousMethodCount']+=1;pending.remove(signature);continue
+                if not matches:continue
+                method=matches[0];flags=method.get('accessFlags',0)
+                # Static/private declarations do not override a framework callback.
+                if flags & (0x2|0x8):continue
+                pending.remove(signature)
+                if flags & 0x400:continue  # abstract declaration is not a concrete handler
+                row['candidateCount']+=1
+                candidates.append({'componentIndex':row['componentIndex'],'componentKind':row['kind'],
+                    'declaredClass':row['classDescriptor'],'declaringClass':current,'name':signature[0],'descriptor':signature[1],
+                    'methodIndex':method['methodIndex'],'artifactId':cls['artifactId'],'artifactSha256':cls['artifactSha256'],
+                    'inheritedDepth':depth,'native':method.get('native',False),'codeOffset':method.get('codeOffset',0),
+                    'byteFingerprint':method.get('byteFingerprint'),'confidence':'manifest-and-exact-defined-signature-candidate',
+                    'dispatchVerified':False,'executionObserved':False})
+            current=cls['superclass']
+            reason='hierarchy-root-reached' if current is None else 'max-depth' if depth==maximum_depth else 'class-outside-covered-dex'
+        row['searchStopped']=reason;row['unmatchedCatalogSignatures']=len(pending)
+        reasons[reason]=reasons.get(reason,0)+1;details.append(row)
+    full_hash=hashlib.sha256(json.dumps(candidates,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    selected=[];used=0
+    for candidate in candidates[:maximum_results]:
+        size=len(json.dumps(candidate,ensure_ascii=True).encode())
+        if used+size>98304:break
+        selected.append(candidate);used+=size
+    return {'components':details,'componentCount':len(components),'componentsTruncated':len(components)>maximum_components,
+        'candidates':selected,'candidateCount':len(candidates),'candidatesTruncated':len(selected)<len(candidates),
+        'candidateSetSha256':full_hash,'searchStopCounts':reasons,'catalog':CALLBACKS}
+
+
+def android_entrypoints(request):
+    opts=request.get('options') or {}
+    if set(opts)-{'entrypoints'}: raise ValueError('Android entrypoints rejects unrelated options')
+    opts=opts.get('entrypoints') or {}
+    if set(opts)-{'max_depth','max_components','max_dex_files'}: raise ValueError('Unknown entrypoint budget')
+    def budget(name,default,minimum,maximum):
+        v=opts.get(name,default)
+        if type(v) is not int or not minimum<=v<=maximum:raise ValueError('Invalid Android entrypoint '+name)
+        return v
+    depth=budget('max_depth',8,0,16);component_limit=budget('max_components',64,1,128);dex_limit=budget('max_dex_files',32,1,32)
+    limit=request.get('limit',200)
+    if type(limit) is not int or not 1<=limit<=1000:raise ValueError('Invalid Android candidate limit')
+    limit=min(limit,200);work=[0]
+    data,archive,entries=workflow_zip(request['target'],work)
+    with archive:
+        manifest=[e for e in entries if e.filename=='AndroidManifest.xml' and not e.is_dir()]
+        if len(manifest)!=1:raise ValueError('Exact AndroidManifest.xml member required')
+        manifest_data=workflow_member(archive,manifest[0],work,1024*1024)
+        root,encoding,nodes=workflow_xml(manifest_data);package,components=manifest_components(root)
+        dex_entries=sorted([e for e in entries if re.fullmatch(r'classes(?:[2-9]|[1-9][0-9]+)?\.dex',e.filename) and not e.is_dir()],key=lambda e:e.filename)
+        classes=[];methods=[];artifacts=[];errors=[];method_count=0
+        for entry in dex_entries[:dex_limit]:
+            raw=workflow_member(archive,entry,work)
+            try:
+                if method_count+u32(raw,88)>MAX_TOTAL_METHODS:raise ValueError('Aggregate DEX method budget exceeded')
+                meta,parsed=dex_metadata(raw,1,True)
+                if len(classes)+len(meta['classes'])>50000:raise ValueError('Aggregate DEX class budget exceeded')
+                method_count+=len(parsed);sha=hashlib.sha256(raw).hexdigest();identity=stable(entry.filename,sha)
+                artifacts.append({'id':identity,'logicalPath':entry.filename,'sha256':sha,'bytes':len(raw),'definedClasses':len(meta['classes']),'methods':len(parsed)})
+                classes.extend(dict(c,artifactId=identity,artifactSha256=sha) for c in meta['classes'])
+                methods.extend(dict(m,artifactId=identity) for m in parsed)
+            except (ValueError,struct.error,UnicodeError) as exc:
+                errors.append({'logicalPath':entry.filename,'sha256':hashlib.sha256(raw).hexdigest(),'reason':str(exc)[:200]})
+        result=entrypoint_candidates(components,classes,methods,depth,component_limit,limit)
+        result.update(protocol='cline-android-entrypoints/v1',package=package,manifestSha256=hashlib.sha256(manifest_data).hexdigest(),manifestEncoding=encoding,
+            manifestNodes=nodes,artifacts=artifacts,rejectedDex=errors,observedExecution=False,dispatchVerified=False,
+            coverage={'dexMembers':len(dex_entries),'parsedDexMembers':len(artifacts),'dexTruncated':len(dex_entries)>dex_limit,'parsedMethods':method_count,'parsedClasses':len(classes),
+                      'expandedBytes':work[0],'standardRootDexOnly':True,'ignoredNonstandardDexMembers':sum(e.filename.endswith('.dex') and e not in dex_entries for e in entries),'maxDepth':depth,'maxComponents':component_limit,'maxCandidates':limit})
+    output={'protocol':'cline-advanced-analysis/v1','status':'partial','engine':'android-static','engineVersion':VERSION,
+        'input':{'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'format':'apk-zip'},'evidence':result,
+        'limitations':['Manifest declarations plus supported exact DEX signatures and bounded superclass search only; not whole-program reachability, dispatch or observed execution.',
+        'Application/Activity/Service/Receiver/Provider fixed callback catalog; aliases resolve their declared target. Listeners, fragments, dynamic receivers, Compose, reflection, native registration and framework/OEM-specific callbacks remain unresolved.',
+        'Exported/enabled/permission values are untrusted declarations, not effective permission or SDK-default conclusions. Resource-referenced names remain unresolved. Missing, duplicate, rejected and budget-excluded DEX classes can hide or invalidate candidates.',
+        'Superclass paths do not establish Android framework type compatibility or runtime dispatch. Exact candidates do not imply full bytecode validation, valid APK, signature verification or device compatibility. No extraction, signing, installation or execution.']}
+    if len(json.dumps(output,ensure_ascii=True).encode())>262144:raise ValueError('Android entrypoint output exceeds 256 KiB; narrow component budget')
+    return output
+
+
+def xml_structure_hash(data):
+    root,encoding,count=workflow_xml(data)
+    def tree(node):return [node.tag,sorted(node.attrib.items()),node.text,node.tail,[tree(child) for child in node]]
+    return {'sha256':hashlib.sha256(json.dumps(tree(root),ensure_ascii=True,separators=(',',':')).encode()).hexdigest(),'encoding':encoding,'nodes':count,
+            'model':'namespace-expanded-element-attribute-sorted-child-order-text-tail-preserved-comments-omitted/v1'}
+
+
+def android_resources(request):
+    if request.get('options'):raise ValueError('Android resource comparison rejects unrelated options')
+    limit=request.get('limit',200)
+    if type(limit) is not int or not 1<=limit<=1000:raise ValueError('Invalid resource detail limit')
+    limit=min(limit,200);work=[0];inventories=[];inputs=[]
+    for target in [request['target'],request['compare_target']]:
+        data,archive,entries=workflow_zip(target,work);inputs.append({'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'format':'apk-zip'})
+        inventory={}
+        with archive:
+            for entry in entries:
+                if entry.is_dir():continue
+                raw=workflow_member(archive,entry,work)
+                row={'sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw)}
+                if entry.filename=='AndroidManifest.xml' or entry.filename.startswith('res/') and entry.filename.endswith('.xml'):
+                    try:row['xmlStructure']=xml_structure_hash(raw)
+                    except (ImportError,ValueError,ET.ParseError,UnicodeError,RuntimeError) as exc:row['xmlStructure']={'status':'unavailable','reason':str(exc)[:160]}
+                inventory[entry.filename]=row
+        inventories.append(inventory)
+    left,right=inventories;changes=[];counts={}
+    for name in sorted(set(left)|set(right)):
+        a,b=left.get(name),right.get(name)
+        if a and b and a['sha256']==b['sha256']:continue
+        category='manifest' if name=='AndroidManifest.xml' else 'resources' if name.startswith('res/') or name=='resources.arsc' else 'assets' if name.startswith('assets/') else 'dex' if re.fullmatch(r'classes(?:[2-9]|[1-9][0-9]+)?\.dex',name) else 'native' if name.startswith('lib/') and name.endswith('.so') else 'other'
+        kind='added' if a is None else 'removed' if b is None else 'changed';counts[category]=counts.get(category,0)+1
+        row={'path':name,'kind':kind,'category':category,'before':a,'after':b}
+        if a and b and a.get('xmlStructure',{}).get('sha256') and b.get('xmlStructure',{}).get('sha256'):
+            row['parsedXmlStructureEqual']=a['xmlStructure']['sha256']==b['xmlStructure']['sha256']
+        changes.append(row)
+    selected=[];used=0
+    for row in changes[:limit]:
+        size=len(json.dumps(row,ensure_ascii=True).encode())
+        if used+size>131072:break
+        selected.append(row);used+=size
+    hashes=[hashlib.sha256(json.dumps(inv,sort_keys=True,separators=(',',':')).encode()).hexdigest() for inv in inventories]
+    return {'protocol':'cline-advanced-analysis/v1','status':'partial','engine':'android-static','engineVersion':VERSION,'input':inputs[0],
+        'evidence':{'protocol':'cline-android-resource-comparison/v1','compareInput':inputs[1],'effect':'read','observedExecution':False,'published':False,
+            'baselineFiles':len(left),'candidateFiles':len(right),'baselineInventorySha256':hashes[0],'candidateInventorySha256':hashes[1],
+            'identicalEntryBytes':all(left.get(k,{}).get('sha256')==right.get(k,{}).get('sha256') for k in set(left)|set(right)),
+            'changedFiles':len(changes),'categoryCounts':counts,'changes':selected,'changesTruncated':len(selected)<len(changes),
+            'changeSetSha256':hashlib.sha256(json.dumps(changes,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+            'expandedBytes':work[0],'maxDetailRows':limit},
+        'limitations':['Every covered regular ZIP member is read and SHA256-hashed, not compared by ZIP CRC alone; duplicate/case-aliased, encrypted, oversized, over-expanded or special entries fail closed. No extraction or execution.',
+            'Optional XML structural fingerprints expand namespaces and sort attributes, retaining element/child order and text/tails, omitting comments. Binary XML requires Androguard; unsupported XML remains byte-only with a reason. This is not Android resource-table/configuration resolution or semantic equivalence.',
+            'Ordinary single-disk ZIP only, not ZIP64 or appended payloads. 64 MiB per archive, 10000 entries per archive, 16 MiB per entry, 100:1 expansion and 128 MiB expanded aggregate across both; XML 1 MiB/20000 nodes/depth 64; details 200 rows/128 KiB. Missing detail is explicit; counts/hash retain the bounded change set.',
+            'ZIP metadata/directory/order/signature validity, resources.arsc semantics, DEX/native API/ABI, behavioral equivalence and device compatibility are not verified. Targets are read once; not an atomic filesystem snapshot.']}
+
+
 def main():
     try:
         request = json.loads(sys.argv[1])
-        if request["action"] not in ("artifact_discovery", "android_relationships", "android_method", "android_method_code", "native_function", "analysis_readiness"):
+        if request["action"] not in ("artifact_discovery", "android_relationships", "android_method", "android_method_code", "native_function", "analysis_readiness", "android_entrypoints", "android_resources"):
             raise ValueError("Unsupported Android investigation action")
-        result = analysis_readiness() if request["action"]=="analysis_readiness" else native_selection(request) if request["action"]=="native_function" else investigate(request)
+        result = analysis_readiness() if request["action"]=="analysis_readiness" else native_selection(request) if request["action"]=="native_function" else android_entrypoints(request) if request["action"]=="android_entrypoints" else android_resources(request) if request["action"]=="android_resources" else investigate(request)
         output = json.dumps(result, ensure_ascii=True, separators=(",", ":"))
         if len(output.encode()) > 900000:
             raise ValueError("Android evidence exceeds bounded output; reduce max_artifacts/limit")

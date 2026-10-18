@@ -43,7 +43,9 @@ const catalog = {
 			limitations: "Exact-method candidate only",
 		},
 		...[
-			"explain_behavior",
+			"find_android_entrypoints",
+            "diff_android_resources",
+            "explain_behavior",
 			"trace_android_method",
 			"trace_native_calls",
 			"decompile_function_bundle",
@@ -194,6 +196,8 @@ it.each([
 
 it.each([
 	["explain_behavior", "workflow_query"],
+ ["find_android_entrypoints", "advanced_options"],
+ ["diff_android_resources", "compare_target"],
 	["trace_android_method", "advanced_options"],
 	["trace_native_calls", "advanced_options"],
 	["decompile_function_bundle", "function_selector"],
@@ -251,4 +255,13 @@ it("exposes artifact traversal budgets in a fresh default request without runnin
 		max_artifacts: 200,
 	});
 	expect(onPrepare).not.toHaveBeenCalled();
+});
+
+it("offers bounded Android callback budgets before preparing a command", async () => {
+ const {onPrepare}=await mount();
+ await act(async()=>{const select=container.querySelector("select")!;select.value="find_android_entrypoints";select.dispatchEvent(new Event("change",{bubbles:true}));});
+ const value=JSON.parse(container.querySelector("textarea")!.value);
+ expect(value.advanced_options.entrypoints).toEqual({max_depth:8,max_components:64,max_dex_files:32});
+ expect(onPrepare).not.toHaveBeenCalled();await click();
+ expect(onPrepare.mock.calls[0][0]).toMatchObject({operation:"find_android_entrypoints",advanced_options:{entrypoints:{max_depth:8}}});
 });
