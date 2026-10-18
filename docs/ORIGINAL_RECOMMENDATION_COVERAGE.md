@@ -65,8 +65,8 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `attach_debug_session` | not-implemented | Existing one-shot debugger attach is not a persistent managed session. |
 | `set_scoped_breakpoints` | not-implemented | Persistent session-scoped breakpoint lifecycle not implemented. |
 | `capture_execution_trace` | not-implemented | No unified supervised execution-trace command. |
-| `capture_process_tree` | not-implemented | No bounded target-owned process-tree command. |
-| `capture_file_activity` | not-implemented | No unified target-scoped file activity capture command. |
+| `capture_process_tree` | partial | Freshly approved Linux /proc or Windows CIM ancestry snapshot with exact root PID/birth rechecks and bounded output. Non-atomic, not execution tracing or artifact/process execution proof. |
+| `capture_file_activity` | partial | Freshly approved exact-file OS notifications, maximum 5 seconds/128 events, cancellation/mode-change cleanup. No contents, recursive watch, syscall or PID attribution; missed/coalesced notifications prevent completeness claims. |
 | `capture_network_metadata` | partial | Explicit built-in browser scenario metadata only; not arbitrary process interception. |
 | `correlate_static_runtime` | partial | Existing Android investigation evidence correlation, not a unified command. |
 | `run_device_smoke_test` | partial | Existing separately approved Android worker/device flows; unified command and live hardware validation pending. |
@@ -90,3 +90,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 ## Release contract
 
 Local unit/fixture tests do not establish installed-engine compatibility. Only merge the exact proposed head after all applicable required CI, Windows setup.exe build, installed-binary smoke and installed WebView acceptance pass. Every later commit invalidates earlier-head release checks. Live debugger/device flows need their own authorized environment acceptance; never infer it from a command name or fixture.
+
+### Runtime metadata increment
+
+`capture_process_tree` now has a bounded Linux/Windows independently approved desktop AI implementation (exact root birth identity, non-atomic ancestry metadata only). `capture_file_activity` now has exact-file bounded OS-notification capture with cancellation/mode-change cleanup, not process-attributed syscall tracing. Both remain **partial** against the original broader recommendation. The original 55-command ledger remains the source of scope; no overall completion or release certification is implied.

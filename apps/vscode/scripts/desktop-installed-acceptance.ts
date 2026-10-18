@@ -1103,6 +1103,26 @@ ConvertTo-Json -InputObject @($rows) -Compress
       let markerCreated=true;try{await readFile(runtimePlanMarker);}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;markerCreated=false;}if(markerCreated)throw new Error("Runtime planner executed owned target");
       let crossScopeDenied=false;try{await rpc(page,"plan_runtime_observation",{...analysisArgs,input:{...planInput,phase:"prepare"}});}catch{crossScopeDenied=true;}if(!crossScopeDenied)throw new Error("Runtime plan artifact handle crossed sessions");
       stages.push("installed-runtime-plan-owned-identity-no-attach-no-execute-passed");
+      let staticCaptureDenied=false;try{await rpc(page,"capture_process_tree",{...triageScope,input:{artifactId:sourceHandle.id,pid:runtimePlanChild.child.pid,phase:"prepare"}});}catch{staticCaptureDenied=true;}if(!staticCaptureDenied)throw new Error("Static enabled runtime metadata capture");
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
+      const captureInputs=[
+       ["capture_process_tree",{artifactId:sourceHandle.id,pid:runtimePlanChild.child.pid,maxProcesses:4}],
+       ["capture_file_activity",{artifactId:sourceHandle.id,durationMs:200,maxEvents:4}],
+      ] as const;
+      for(const [command,input] of captureInputs){
+       const capturePlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
+       if(!capturePlan.requirements.includes("independent-runtime-metadata-approval"))throw new Error("Runtime capture missing independent approval requirement");
+       const consent=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:capturePlan.id,requestHash:capturePlan.requestHash,requirements:capturePlan.requirements});
+       const captured=await rpc<{result:{status:string;provider:string;processes?:{pid:number}[];events?:unknown[];stopReason?:string}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:capturePlan.id,executionToken:consent.executionToken}});
+       if(captured.result.status!=="partial")throw new Error("Metadata capture overclaimed completeness");
+       if(command==="capture_process_tree"?(captured.result.processes?.[0]?.pid!==runtimePlanChild.child.pid||captured.result.provider!=="windows-cim-process-metadata"):(captured.result.provider!=="node-fs-watch-exact-file"||captured.result.stopReason!=="deadline"))throw new Error("Installed runtime metadata scope mismatch");
+       let reused=false;try{await rpc(page,command,{...triageScope,input:{...input,phase:"run",planId:capturePlan.id,executionToken:consent.executionToken}});}catch{reused=true;}if(!reused)throw new Error("Runtime approval replay succeeded");
+      }
+      if(runtimePlanChild.diagnostics.stderrTail.includes("Debugger attached")||await readFile(runtimePlanSource,"utf8")!==runtimePlanText)throw new Error("Metadata capture attached or modified target");
+      let captureExecutedTarget=true;try{await readFile(runtimePlanMarker);}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;captureExecutedTarget=false;}if(captureExecutedTarget)throw new Error("Runtime metadata capture executed target");
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+      stages.push("installed-runtime-process-file-capture-approval-no-attach-passed");
+
     } finally {
       if(runtimePlanChild.child.exitCode===null&&runtimePlanChild.child.signalCode===null)runtimePlanChild.child.kill();
       await withInstalledActionDeadline("runtime-plan-fixture-cleanup",()=>runtimePlanChild.closed,10000);

@@ -53,7 +53,9 @@ const TOOL_NAME_TO_FLAG: Record<
 		| "enableSubmitAndExit"
 	>
 > = {
-	plan_runtime_observation: "enableReverseEngineering",
+	capture_process_tree: "enableReverseEngineering",
+ capture_file_activity: "enableReverseEngineering",
+ plan_runtime_observation: "enableReverseEngineering",
 	validate_candidate: "enableReverseEngineering",
  review_candidate_changes: "enableReverseEngineering",
  open_binary: "enableReverseEngineering",

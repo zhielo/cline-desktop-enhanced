@@ -1,3 +1,4 @@
+import { handleRuntimeCapture } from "./runtime-capture";
 import { handleBatchInvestigation } from "./batch-investigation";
 import { analysisCommandCatalog, isAnalysisWriteOperation } from "@cline/core";
 import {androidToolchainStatus,testOwnedAndroidToolchain} from "./android-toolchain-readiness";
@@ -3010,6 +3011,11 @@ export async function handleCommand(
 							{ ...payload, sessionId: id, cwd: root, environmentId: "local" },
 							options,
 						),
+     runtimeCapture: async (captureCommand,input) => {
+      const profile = live?.config.permissionProfile ?? live?.config.permission_profile ?? readGlobalSettings().permissionProfile ?? "full-access";
+      if (!live || profile !== "full-access") throw new Error("Runtime metadata capture requires an attached Full Access local session; restricted profiles are not widened");
+      return handleRuntimeCapture(captureCommand,input,{sessionId:id,workspace:root},desktopAnalysisTaskOrchestrator);
+     },
      batch: async (batchCommand, input) => {
       const profile = live?.config.permissionProfile ?? live?.config.permission_profile ?? readGlobalSettings().permissionProfile ?? "full-access";
       if (!live || profile !== "full-access") throw new Error("AI batch requires an attached Full Access local session; restricted profiles are not widened");

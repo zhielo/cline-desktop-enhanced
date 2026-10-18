@@ -282,6 +282,11 @@ function requirementsFor(
 		requirements.add("candidate-pointer-change-not-gui-replacement");
 	}
 	if (kind === "debugger") requirements.add("authorized-target");
+	if (["capture_process_tree", "capture_file_activity"].includes(operation)) {
+		requirements.add("independent-runtime-metadata-approval");
+		requirements.add("private-evidence-write");
+		requirements.add(operation === "capture_process_tree" ? "exact-process-birth-and-descendant-metadata" : "exact-file-notification-metadata-no-process-attribution");
+	}
 	if (operation === "native_module_observe") {
 		requirements.add("exact-process-memory-read");
 		requirements.add("sensitive-memory-hash-retention");

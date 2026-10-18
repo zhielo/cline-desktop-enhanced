@@ -74,6 +74,18 @@ export const InvestigationSchemas = {
 	resume_investigation: z
 		.object({ receiptId: Id, revision: z.number().int().min(0) })
 		.strict(),
+	capture_process_tree: z.object({
+		artifactId: Id,
+		pid: z.number().int().positive().max(4294967295),
+		maxProcesses: z.number().int().min(1).max(128).default(64),
+		hybridProposal: HybridProposalSchema.optional(),
+	}).strict(),
+	capture_file_activity: z.object({
+		artifactId: Id,
+		durationMs: z.number().int().min(200).max(5000).default(1000),
+		maxEvents: z.number().int().min(1).max(128).default(64),
+		hybridProposal: HybridProposalSchema.optional(),
+	}).strict(),
 	plan_runtime_observation: z.object({artifactId: Id, observation: RuntimeObservationOptionsSchema}).strict(),
 	validate_candidate: z.object({artifactId: Id, kind: z.enum(["javascript", "typescript", "dex", "apk"])}).strict(),
  review_candidate_changes: z.object({artifactId: Id}).strict(),
@@ -122,6 +134,8 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Cancel only this owning-session AI batch through the existing supervised runner. Read its checkpoint to confirm terminal outcome; never replays stages. Available after Analysis is disabled.",
 	resume_investigation:
 		"Request a freshly approved continuation of never-started built-in static stages from an exact terminal checkpoint revision. Revalidates every input hash, implementation fingerprint and reused result. Never retries failed/started stages or replays writes/runtime; unresolved dependencies block continuation.",
+	capture_process_tree: "Request a fresh independently approved Runtime/Hybrid snapshot of one exact OS PID/birth identity and bounded descendants. Linux /proc or Windows CIM only; no command lines, environment, memory, process launch or execution control. Artifact is the immutable evidence basis, NOT proof it runs in that process. Host binds PID birth identity at prepare and rechecks before/after capture. Hybrid requires a real static basis. Non-atomic metadata, not an execution trace.",
+	capture_file_activity: "Request fresh independently approved Runtime/Hybrid fs.watch metadata on exactly one immutable opened workspace file for 200–5000 ms, maximum 128 events. No contents, filenames from sibling files, recursive directory watch or process attribution. OS notifications may be coalesced/missed; zero events never proves no access. Rename/replacement ends observation as partial. Hybrid requires a real static basis. Existing task cancellation closes the watcher.",
 	plan_runtime_observation: "Prepare an independently approved read-only plan for an immutable source and an exact live local Node Inspector PID/birth identity/listener. No socket connection, attachment or target execution. Plan is NOT runtime consent: use the existing Runtime/Hybrid workbench with fresh human Debug approval and, in Hybrid, static evidence. Linux/Windows only; not a persistent debugger or trace command.",
 	validate_candidate: "Request hash-bound candidate checks after independent human approval: JS/TS syntax, DEX header/checksum/table bounds, or APK structure and signature. Results declare their exact coverage, failures and unavailable checks; no execution, signing, build, install or semantic-equivalence claim.",
  review_candidate_changes: "Request read-only exact-recipe audit of an immutable candidate batch manifest after independent human approval. Verifies declared source hashes and candidate bytes using existing patch implementations; missing/mismatched/unverified outputs never pass. Only declared files, not a whole-project change review; cannot authorize writes or replay stages.",

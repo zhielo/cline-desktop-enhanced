@@ -195,6 +195,7 @@ export function analysisCommandCatalog() {
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
+   ...["capture_process_tree","capture_file_activity"].map(command=>({command,effect:"runtime-metadata",availability:"implemented-bounded",limitations:command==="capture_process_tree"?"Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, Linux /proc or Windows CIM exact root PID/birth metadata. Not an execution trace or proof of artifact execution.":"Desktop AI workflow only: Runtime/Hybrid and fresh one-use approval, exact-file notifications (5 seconds/128 events), no PID attribution, contents, recursive watch or completeness claim."})),
 			...INVESTIGATION_COMMANDS.map((command) => ({
 				command,
 				effect: isAnalysisWriteOperation(command)

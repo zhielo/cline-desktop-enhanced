@@ -72,7 +72,7 @@ export async function runModelInvestigation(
 			),
 		);
 	}
-	if (!["analyze_function", "plan_runtime_observation", "validate_candidate", "review_candidate_changes", "run_batch", "resume_investigation"].includes(name))
+	if (!["analyze_function", "capture_process_tree", "capture_file_activity", "plan_runtime_observation", "validate_candidate", "review_candidate_changes", "run_batch", "resume_investigation"].includes(name))
 		return JSON.stringify(sanitizeEvidence(await ports.invoke(name, input)));
 	const plan = (await ports.invoke(name, { ...input, phase: "prepare" })) as {
 		id: string;
