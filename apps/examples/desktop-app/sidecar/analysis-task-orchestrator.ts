@@ -173,7 +173,7 @@ function permissionFor(
 				? "Modify"
 				: "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
-	if (["launch", "continue", "step"].includes(operation)) return "Execute";
+	if (["launch", "continue", "step", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace"].includes(operation)) return "Execute";
 	return "Debug";
 }
 
@@ -287,7 +287,13 @@ function requirementsFor(
 		requirements.add("private-evidence-write");
 		requirements.add(operation === "capture_process_tree" ? "exact-process-birth-and-descendant-metadata" : "exact-file-notification-metadata-no-process-attribution");
 	}
-	if (operation === "native_module_observe") {
+	if (["attach_debug_session","set_scoped_breakpoints","capture_execution_trace"].includes(operation)) {
+  requirements.add("independent-managed-runtime-execute-approval");
+  requirements.add("debugger-activation-cleanup-may-pause-or-resume");
+  requirements.add("exact-loaded-source-and-process-birth");
+  requirements.add("bounded-managed-lifetime-and-private-evidence");
+ }
+ if (operation === "native_module_observe") {
 		requirements.add("exact-process-memory-read");
 		requirements.add("sensitive-memory-hash-retention");
 	}
@@ -302,7 +308,7 @@ function requirementsFor(
 	if (
 		kind === "gui" ||
 		kind === "dynamic" ||
-		["launch", "continue", "step"].includes(operation)
+		["launch", "continue", "step", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace"].includes(operation)
 	) {
 		requirements.add("execution-control");
 	}

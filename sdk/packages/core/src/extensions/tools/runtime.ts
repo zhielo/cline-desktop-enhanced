@@ -42,7 +42,11 @@ type RuntimeToolCatalogEntry = Omit<ToolCatalogEntry, "defaultEnabled">;
 
 const BASE_TOOL_CATALOG: readonly RuntimeToolCatalogEntry[] = [
 	...[
-		"capture_process_tree",
+		"attach_debug_session",
+ "set_scoped_breakpoints",
+ "capture_execution_trace",
+ "stop_runtime_session",
+ "capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",
 		"validate_candidate",
@@ -204,7 +208,11 @@ const TOOL_NAME_TO_FLAG: Partial<
 		>
 	>
 > = {
-	capture_process_tree: "enableReverseEngineering",
+	attach_debug_session: "enableReverseEngineering",
+ set_scoped_breakpoints: "enableReverseEngineering",
+ capture_execution_trace: "enableReverseEngineering",
+ stop_runtime_session: "enableReverseEngineering",
+ capture_process_tree: "enableReverseEngineering",
  capture_file_activity: "enableReverseEngineering",
  plan_runtime_observation: "enableReverseEngineering",
 	validate_candidate: "enableReverseEngineering",

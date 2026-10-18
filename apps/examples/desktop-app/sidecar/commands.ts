@@ -1,3 +1,4 @@
+import { handleManagedRuntime, managedInspectorSessions } from "./managed-runtime";
 import { handleRuntimeCapture } from "./runtime-capture";
 import { handleBatchInvestigation } from "./batch-investigation";
 import { analysisCommandCatalog, isAnalysisWriteOperation } from "@cline/core";
@@ -3011,6 +3012,15 @@ export async function handleCommand(
 							{ ...payload, sessionId: id, cwd: root, environmentId: "local" },
 							options,
 						),
+     managedSession: (sessionId)=>managedInspectorSessions.describe({sessionId:id,workspace:root},sessionId),
+     managedRuntime: async (runtimeCommand,input)=>{
+      const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";
+      if(runtimeCommand!=="stop_runtime_session"&&(!live||profile!=="full-access"))throw new Error("Managed debugger requires an attached Full Access local session; restricted profiles are not widened");
+      return handleManagedRuntime(runtimeCommand,input,{sessionId:id,workspace:root},desktopAnalysisTaskOrchestrator,managedInspectorSessions,()=>{
+       const active=ctx.liveSessions.get(id),currentProfile=active?.config.permissionProfile??active?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";
+       if(!active||currentProfile!=="full-access")throw new Error("Managed debugger permission profile or attached scope changed");
+      });
+     },
      runtimeCapture: async (captureCommand,input) => {
       const profile = live?.config.permissionProfile ?? live?.config.permission_profile ?? readGlobalSettings().permissionProfile ?? "full-access";
       if (!live || profile !== "full-access") throw new Error("Runtime metadata capture requires an attached Full Access local session; restricted profiles are not widened");

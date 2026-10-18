@@ -1129,6 +1129,47 @@ ConvertTo-Json -InputObject @($rows) -Compress
     }
 
 
+    // Harness launches an explicitly running trusted fixture; the product never launches/resumes it.
+    const managedSource=join(workspace,"owned-managed-runtime.js"),managedText="function neverCalled(){ return 7; }\nsetInterval(()=>{let sum=0;for(let i=0;i<100000;i++)sum+=i;},5);\n";
+    await writeFile(managedSource,managedText);
+    const managedChild=startAcceptanceProcess(process.execPath,["--inspect=127.0.0.1:0",managedSource],workspace,process.env);
+    let managedSessionId:string|undefined;
+    try {
+      let endpoint:string|undefined;
+      for(let attempt=0;attempt<200;attempt++){endpoint=/ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9-]+/.exec(managedChild.diagnostics.stderrTail)?.[0];if(endpoint)break;await delay(50);}
+      if(!endpoint||!managedChild.child.pid)throw new Error("Owned managed Inspector fixture unavailable");
+      const handle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:managedSource}});
+      const attachInput={artifactId:handle.id,pid:managedChild.child.pid,endpoint,lifetimeMs:120000};
+      let denied=false;try{await rpc(page,"attach_debug_session",{...triageScope,input:{...attachInput,phase:"prepare"}});}catch{denied=true;}if(!denied)throw new Error("Static enabled managed debugger");
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
+      const approvedManaged=async(command:string,input:Record<string,unknown>)=>{
+       const plan=await rpc<{id:string;permission:string;requestHash:string;requirements:string[]}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
+       if(plan.permission!=="Execute"||!plan.requirements.includes("debugger-activation-cleanup-may-pause-or-resume"))throw new Error("Managed Inspector omitted Execute/debug-control approval");
+       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
+       const result=await rpc<{result:{status:string;provider:string;runtimeSessionId?:string;activeBreakpoints?:number}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+       if(result.result.status!=="partial")throw new Error("Managed Inspector overclaimed coverage");
+       let replayDenied=false;try{await rpc(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});}catch{replayDenied=true;}if(!replayDenied)throw new Error("Managed runtime approval replay succeeded");
+       return result.result;
+      };
+      managedSessionId=(await approvedManaged("attach_debug_session",attachInput)).runtimeSessionId;
+      if(!managedSessionId)throw new Error("Installed managed attachment missing session identity");
+      let crossed=false;try{await rpc(page,"stop_runtime_session",{...analysisArgs,input:{runtimeSessionId:managedSessionId}});}catch{crossed=true;}if(!crossed)throw new Error("Managed stop crossed owning sessions");
+      const bp=await approvedManaged("set_scoped_breakpoints",{runtimeSessionId:managedSessionId,locations:[{line:0,column:24}]});
+      if(bp.activeBreakpoints!==1)throw new Error("Installed scoped breakpoint not registered");
+      const sampled=await approvedManaged("capture_execution_trace",{runtimeSessionId:managedSessionId,durationMs:200});
+      if(sampled.provider!=="v8-cpu-sampling-selected-script")throw new Error("Installed runtime trace did not declare sampling limitation");
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"off"});
+      const stopped=await rpc<{transportClosed:boolean;protocolCleanupConfirmed:boolean}>(page,"stop_runtime_session",{...triageScope,input:{runtimeSessionId:managedSessionId}});
+      if(!stopped.transportClosed||!stopped.protocolCleanupConfirmed)throw new Error("Installed managed transport/profiler cleanup unconfirmed");
+      if(await readFile(managedSource,"utf8")!==managedText||managedChild.child.exitCode!==null)throw new Error("Managed debugger changed source or killed owned process");
+      stages.push("installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed");
+    } finally {
+      if(managedSessionId)await rpc(page,"stop_runtime_session",{...triageScope,input:{runtimeSessionId:managedSessionId}}).catch(()=>{});
+      if(managedChild.child.exitCode===null&&managedChild.child.signalCode===null)managedChild.child.kill();
+      await withInstalledActionDeadline("managed-runtime-fixture-cleanup",()=>managedChild.closed,10000);
+      await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+    }
+
     const triageRequestId=randomUUID();
     const triageReceipt=await rpc<{id:string;status:string;resultHash:string;evidence:{data:unknown}}>(page,"binary_triage_run",{...triageScope,confirmed:true,requestId:triageRequestId,input:triageInput});
     if(triageReceipt.status!=="completed"||!JSON.stringify(triageReceipt.evidence.data).includes("cline_owned_fixture")||!/^[a-f0-9]{64}$/.test(triageReceipt.resultHash))throw new Error("Installed owned YARA target receipt failed");

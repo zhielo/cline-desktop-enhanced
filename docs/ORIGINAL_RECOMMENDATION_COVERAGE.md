@@ -62,15 +62,15 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | Command | Scope | Remaining boundary |
 | --- | --- | --- |
 | `plan_runtime_observation` | partial | Approved read-only immutable-source plan for live local Node Inspector PID/birth/listener, Linux/Windows; no socket connection, attachment or execution. Fresh Runtime/Hybrid Debug approval remains separate. Native/JVM/Android planning and persistent sessions remain incomplete. |
-| `attach_debug_session` | not-implemented | Existing one-shot debugger attach is not a persistent managed session. |
-| `set_scoped_breakpoints` | not-implemented | Persistent session-scoped breakpoint lifecycle not implemented. |
-| `capture_execution_trace` | not-implemented | No unified supervised execution-trace command. |
+| `attach_debug_session` | partial | Independently Execute-approved 1–120-second managed local Node Inspector session, exact PID/birth/listener and loaded-source hash. Debugger activation/cleanup may pause/resume. No evaluate/launch/step/explicit resume, exclusive ownership or native/JVM/Android parity. |
+| `set_scoped_breakpoints` | partial | Fresh Execute approval for up to eight unconditional zero-based locations in one exact hash-matched managed Node script. Can pause target; no conditions/logpoints/evaluation or automatic continuation. |
+| `capture_execution_trace` | partial | Fresh Execute approval for 200–2000 ms selected-script V8 CPU sampling, not a full execution trace. 128 selected nodes/256 samples; names hashed, unrelated script metadata excluded. Missing samples do not prove no execution. |
 | `capture_process_tree` | partial | Freshly approved Linux /proc or Windows CIM ancestry snapshot with exact root PID/birth rechecks and bounded output. Non-atomic, not execution tracing or artifact/process execution proof. |
 | `capture_file_activity` | partial | Freshly approved exact-file OS notifications, maximum 5 seconds/128 events, cancellation/mode-change cleanup. No contents, recursive watch, syscall or PID attribution; missed/coalesced notifications prevent completeness claims. |
 | `capture_network_metadata` | partial | Explicit built-in browser scenario metadata only; not arbitrary process interception. |
 | `correlate_static_runtime` | partial | Existing Android investigation evidence correlation, not a unified command. |
 | `run_device_smoke_test` | partial | Existing separately approved Android worker/device flows; unified command and live hardware validation pending. |
-| `stop_runtime_session` | not-implemented | Existing backend-specific cancellation; no unified persistent runtime session lifecycle. |
+| `stop_runtime_session` | partial | Owning managed Node connection only, including after Analysis Off. Bounded best-effort owned profiler/debugger cleanup and transport closure; no process kill. Disconnect may resume target; uncertainty stays partial. Not a universal backend stop. |
 
 ## bulk
 

@@ -64,3 +64,15 @@ it("runtime metadata commands reject model authority and unsafe resource budgets
  expect(()=>InvestigationSchemas.capture_file_activity.parse({artifactId,durationMs:5001})).toThrow();
  expect(()=>InvestigationSchemas.capture_process_tree.parse({artifactId,pid:123,maxProcesses:129})).toThrow();
 });
+it("managed runtime schemas bind narrow requests without model approval authority",()=>{
+ const artifactId="11111111-1111-4111-8111-111111111111",endpoint="ws://127.0.0.1:9229/11111111-1111-4111-8111-111111111111";
+ const inputs={attach_debug_session:{artifactId,pid:123,endpoint},set_scoped_breakpoints:{runtimeSessionId:artifactId,locations:[{line:1}]},capture_execution_trace:{runtimeSessionId:artifactId},stop_runtime_session:{runtimeSessionId:artifactId}};
+ for(const [name,input] of Object.entries(inputs)){
+  const schema=InvestigationSchemas[name as keyof typeof inputs];expect(schema.parse(input)).toBeTruthy();
+  for(const key of ["executionToken","processToken","owner_session_id","confirmRecord","mode","target","phase"])
+   expect(()=>schema.parse({...input,[key]:"forged"})).toThrow();
+ }
+ expect(()=>InvestigationSchemas.attach_debug_session.parse({...inputs.attach_debug_session,endpoint:endpoint.replace("127.0.0.1","localhost")})).toThrow();
+ expect(()=>InvestigationSchemas.capture_execution_trace.parse({runtimeSessionId:artifactId,durationMs:2001})).toThrow();
+ expect(()=>InvestigationSchemas.set_scoped_breakpoints.parse({runtimeSessionId:artifactId,locations:[{line:1,condition:"x"}]})).toThrow();
+});
