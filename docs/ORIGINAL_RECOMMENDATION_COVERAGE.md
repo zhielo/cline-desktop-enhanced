@@ -12,7 +12,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | `trace_data_flow` | partial | Declared saved-report edges only; unresolved whole-program paths are not inferred. |
 | `trace_cross_language` | partial | Fresh exact DEX-native/JNI export-name candidates plus bounded ELF call graph, or fresh literal Electron renderer/preload/main candidates; saved graph paths retained. No dynamic registration, IPC delivery, observed flow or universal resolver. |
 | `explain_behavior` | partial | Exact JS/TS function evidence and relationships; no generated behavioral verdict. |
-| `compare_versions` | partial | APK ZIP-entry or bounded byte comparison; not a combined semantic/API report. |
+| `compare_versions` | partial | Explicit sibling-project mode combines repeated full regular-file SHA256 inventories, path categories and JS/TS explicit API syntax changes. Legacy APK ZIP-entry and file-byte modes remain; no semantic resource/native/ABI or behavioral equivalence claim. |
 | `query_investigation` | bounded | Existing bounded saved investigation query adapter; no automatic reruns. |
 | `verify_hypothesis` | bounded | Exact node/edge predicates in a selected untrusted report; unknown endpoints remain inconclusive. |
 

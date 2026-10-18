@@ -252,7 +252,7 @@ function declarationSignature(node: ts.Node, file: ts.SourceFile): string {
 	else shape = { kind: ts.SyntaxKind[node.kind], unsupportedSignature: true };
 	return JSON.stringify(shape);
 }
-function publicDeclarations(sources: SourceArtifact[]) {
+function publicDeclarations(sources: SourceArtifact[], entryAlias = true) {
 	const declarations: {
 		key: string;
 		path: string;
@@ -298,7 +298,7 @@ function publicDeclarations(sources: SourceArtifact[]) {
 				if (declarations.length >= 8000 || name.length > 4096)
 					throw new Error("Public declaration budget exceeded");
 				declarations.push({
-					key: `${sources.length === 1 ? "<entry>" : source.path}:${name}`,
+					key: `${entryAlias && sources.length === 1 ? "<entry>" : source.path}:${name}`,
 					path: source.path,
 					line:
 						file.getLineAndCharacterOfPosition(statement.getStart(file)).line +
@@ -347,6 +347,61 @@ function functionSelection(sources: SourceArtifact[], symbol: string) {
 		truncated: text.length > 16384,
 	};
 }
+/** Exact explicit syntax signatures only; project mode keeps relative-path keys stable across file-count changes. */
+export function comparePublicDeclarations(
+	left: SourceArtifact[],
+	right: SourceArtifact[],
+	maximum = 100,
+	entryAlias = true,
+) {
+	const leftDeclarations = publicDeclarations(left, entryAlias),
+		rightDeclarations = publicDeclarations(right, entryAlias);
+	const a = new Set(leftDeclarations.map((d) => d.key)),
+		b = new Set(rightDeclarations.map((d) => d.key)),
+		added = [...b].filter((x) => !a.has(x)),
+		removed = [...a].filter((x) => !b.has(x));
+	const signatures = (rows: typeof leftDeclarations) => {
+		const grouped = new Map<string, string[]>();
+		for (const row of rows) {
+			const values = grouped.get(row.key) ?? [];
+			values.push(row.signatureSha256);
+			grouped.set(row.key, values);
+		}
+		return new Map(
+			[...grouped].map(([key, values]) => [
+				key,
+				candidateHash(JSON.stringify(values.sort())),
+			]),
+		);
+	};
+	const leftSignatures = signatures(leftDeclarations),
+		rightSignatures = signatures(rightDeclarations);
+	const changed = [...a].filter(
+		(key) => b.has(key) && leftSignatures.get(key) !== rightSignatures.get(key),
+	);
+	return {
+		changed: changed.slice(0, maximum),
+		counts: {
+			added: added.length,
+			removed: removed.length,
+			changed: changed.length,
+			leftDeclarations: leftDeclarations.length,
+			rightDeclarations: rightDeclarations.length,
+		},
+		signatureModel:
+			"explicit-js-ts-syntax/v1; inferred types and resolved reexports excluded",
+		added: added.slice(0, maximum),
+		removed: removed.slice(0, maximum),
+		truncated:
+			added.length > maximum ||
+			removed.length > maximum ||
+			changed.length > maximum ||
+			leftDeclarations.length > maximum ||
+			rightDeclarations.length > maximum,
+		leftDeclarations: leftDeclarations.slice(0, maximum),
+		rightDeclarations: rightDeclarations.slice(0, maximum),
+	};
+}
 export async function sourceInvestigation(
 	input: {
 		operation: string;
@@ -373,46 +428,12 @@ export async function sourceInvestigation(
 		signal?.throwIfAborted();
 		const right = analyzeSources(second.sources, second.limitations),
 			q = WorkflowQuerySchema.parse(input.workflow_query ?? {});
-		const leftDeclarations = publicDeclarations(inventory.sources),
-			rightDeclarations = publicDeclarations(second.sources);
-		const a = new Set(leftDeclarations.map((d) => d.key)),
-			b = new Set(rightDeclarations.map((d) => d.key)),
-			added = [...b].filter((x) => !a.has(x)),
-			removed = [...a].filter((x) => !b.has(x));
-		const signatures = (rows: typeof leftDeclarations) => {
-			const grouped = new Map<string, string[]>();
-			for (const row of rows) {
-				const values = grouped.get(row.key) ?? [];
-				values.push(row.signatureSha256);
-				grouped.set(row.key, values);
-			}
-			return new Map(
-				[...grouped].map(([key, values]) => [
-					key,
-					candidateHash(JSON.stringify(values.sort())),
-				]),
-			);
-		};
-		const leftSignatures = signatures(leftDeclarations),
-			rightSignatures = signatures(rightDeclarations);
-		const changed = [...a].filter(
-			(key) =>
-				b.has(key) && leftSignatures.get(key) !== rightSignatures.get(key),
-		);
 		comparison = {
-			changed: changed.slice(0, q.max_results),
-			signatureModel:
-				"explicit-js-ts-syntax/v1; inferred types and resolved reexports excluded",
-			added: added.slice(0, q.max_results),
-			removed: removed.slice(0, q.max_results),
-			truncated:
-				added.length > q.max_results ||
-				removed.length > q.max_results ||
-				changed.length > q.max_results ||
-				leftDeclarations.length > q.max_results ||
-				rightDeclarations.length > q.max_results,
-			leftDeclarations: leftDeclarations.slice(0, q.max_results),
-			rightDeclarations: rightDeclarations.slice(0, q.max_results),
+			...comparePublicDeclarations(
+				inventory.sources,
+				second.sources,
+				q.max_results,
+			),
 			rightArtifacts: right.artifacts,
 			rightLimitations: right.limitations,
 		};

@@ -168,3 +168,10 @@ export const CrossLanguageOptionsSchema = z.discriminatedUnion("kind", [
 		})
 		.strict(),
 ]);
+
+export const VersionComparisonSchema = z
+	.object({
+		kind: z.literal("project"),
+		max_results: z.number().int().min(1).max(200).default(100),
+	})
+	.strict();

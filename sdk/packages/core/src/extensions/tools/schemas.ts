@@ -4,6 +4,7 @@ import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
 import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
 	ArtifactDiscoveryOptionsSchema,
+ VersionComparisonSchema,
 	CrossLanguageOptionsSchema,
 	CandidateValidationSchema,
 	CandidateReviewSchema,
@@ -320,6 +321,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	candidate_review: CandidateReviewSchema.optional(),
 	workflow_query: WorkflowQuerySchema.optional(),
 	artifact_discovery: ArtifactDiscoveryOptionsSchema.optional(),
+ version_comparison: VersionComparisonSchema.optional(),
 	cross_language: CrossLanguageOptionsSchema.optional(),
 	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
 	evidence_archive: EvidenceArchiveOptionsSchema.optional(),

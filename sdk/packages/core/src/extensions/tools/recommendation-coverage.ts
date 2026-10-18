@@ -47,7 +47,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "compare_versions",
 		scope: "partial",
 		limitations:
-			"APK ZIP-entry or bounded byte comparison; not a combined semantic/API report.",
+			"Explicit sibling-project mode combines repeated full regular-file SHA256 inventories, path categories and JS/TS explicit API syntax changes. Legacy APK ZIP-entry and file-byte modes remain; no semantic resource/native/ABI or behavioral equivalence claim.",
 	},
 	{
 		group: "cross-tool",
