@@ -151,7 +151,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "trace_native_calls",
 		scope: "partial",
 		limitations:
-			"Selected direct/indirect call candidates; no transitive call traversal.",
+			"Bounded breadth-first direct-call ELF symbol-entry traversal with explicit unresolved edges and budgets; no complete CFG, tail-call/import resolution, caller discovery or runtime path.",
 	},
 	{
 		group: "native",
@@ -255,31 +255,36 @@ export const RECOMMENDATION_COVERAGE = [
 		group: "runtime",
 		command: "attach_debug_session",
 		scope: "partial",
-		limitations: "Independently Execute-approved 1–120-second managed local Node Inspector session, exact PID/birth/listener and loaded-source hash. Debugger activation/cleanup may pause/resume. No evaluate/launch/step/explicit resume, exclusive ownership or native/JVM/Android parity.",
+		limitations:
+			"Independently Execute-approved 1–120-second managed local Node Inspector session, exact PID/birth/listener and loaded-source hash. Debugger activation/cleanup may pause/resume. No evaluate/launch/step/explicit resume, exclusive ownership or native/JVM/Android parity.",
 	},
 	{
 		group: "runtime",
 		command: "set_scoped_breakpoints",
 		scope: "partial",
-		limitations: "Fresh Execute approval for up to eight unconditional zero-based locations in one exact hash-matched managed Node script. Can pause target; no conditions/logpoints/evaluation or automatic continuation.",
+		limitations:
+			"Fresh Execute approval for up to eight unconditional zero-based locations in one exact hash-matched managed Node script. Can pause target; no conditions/logpoints/evaluation or automatic continuation.",
 	},
 	{
 		group: "runtime",
 		command: "capture_execution_trace",
 		scope: "partial",
-		limitations: "Fresh Execute approval for 200–2000 ms selected-script V8 CPU sampling, not a full execution trace. 128 selected nodes/256 samples; names hashed, unrelated script metadata excluded. Missing samples do not prove no execution.",
+		limitations:
+			"Fresh Execute approval for 200–2000 ms selected-script V8 CPU sampling, not a full execution trace. 128 selected nodes/256 samples; names hashed, unrelated script metadata excluded. Missing samples do not prove no execution.",
 	},
 	{
 		group: "runtime",
 		command: "capture_process_tree",
 		scope: "partial",
-		limitations: "Independently approved Runtime/Hybrid Linux /proc or Windows CIM ancestry snapshot, exact root PID/birth checks and 128-process output cap. Non-atomic metadata only; not an execution trace or proof the basis artifact ran in the selected process.",
+		limitations:
+			"Independently approved Runtime/Hybrid Linux /proc or Windows CIM ancestry snapshot, exact root PID/birth checks and 128-process output cap. Non-atomic metadata only; not an execution trace or proof the basis artifact ran in the selected process.",
 	},
 	{
 		group: "runtime",
 		command: "capture_file_activity",
 		scope: "partial",
-		limitations: "Independently approved Runtime/Hybrid exact-file fs.watch notifications, 5-second/128-event caps, cancellation and mode-change cleanup. No recursive, syscall or PID-attributed tracing; coalesced/missing notifications prevent completeness claims.",
+		limitations:
+			"Independently approved Runtime/Hybrid exact-file fs.watch notifications, 5-second/128-event caps, cancellation and mode-change cleanup. No recursive, syscall or PID-attributed tracing; coalesced/missing notifications prevent completeness claims.",
 	},
 	{
 		group: "runtime",
@@ -306,7 +311,8 @@ export const RECOMMENDATION_COVERAGE = [
 		group: "runtime",
 		command: "stop_runtime_session",
 		scope: "partial",
-		limitations: "Owning managed Node connection only, including after Analysis Off. Bounded best-effort owned profiler/debugger cleanup and transport closure; no process kill. Disconnect may resume target; uncertainty stays partial. Not a universal backend stop.",
+		limitations:
+			"Owning managed Node connection only, including after Analysis Off. Bounded best-effort owned profiler/debugger cleanup and transport closure; no process kill. Disconnect may resume target; uncertainty stays partial. Not a universal backend stop.",
 	},
 	{
 		group: "bulk",

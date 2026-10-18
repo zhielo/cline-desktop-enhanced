@@ -8,7 +8,10 @@ import { probeProcessStartTokenAsync } from "@cline/core";
 import { observeNativeModule } from "../sidecar/native-module-observation";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildJavaScriptIsolation } from "./build-javascript-isolation";
+import {
+	buildJavaScriptIsolation,
+	ISOLATION_BUILD_BUDGET,
+} from "./build-javascript-isolation";
 import { runIsolatedJavaScript } from "../sidecar/javascript-isolation";
 const sha = (v: string) => createHash("sha256").update(v).digest("hex");
 const execFileAsync = promisify(execFile);
@@ -23,7 +26,7 @@ describe.skipIf(!windows)(
 				root: join(root, "resources"),
 				manifestDigest: buildJavaScriptIsolation(join(root, "resources")),
 			};
-		}, 180000);
+		}, ISOLATION_BUILD_BUDGET.totalMs);
 		afterAll(() =>
 			rmSync(root, {
 				recursive: true,

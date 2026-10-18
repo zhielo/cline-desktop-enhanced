@@ -62,15 +62,19 @@ def archive(entries, compressed=False):
     return buf.getvalue()
 
 
-def elf_fixture(machine=62, code=b"\x90\xc3"):
+def elf_fixture(machine=62, code=b"\x90\xc3", entries=None):
     base=0x400000
     text=192
     data=bytearray(text)+code
-    names=b'\0Java_Fixture_native_1work\0'
+    entries=entries or [('Java_Fixture_native_1work',0,len(code))]
+    names=b'\0';symbol_rows=[]
+    for name,offset,size in entries:
+        symbol_rows.append((len(names),offset,size));names+=name.encode()+b'\0'
     strings=len(data);data+=names
     while len(data)%8:data+=b'\0'
-    symbols=len(data);data+=bytes(24)+struct.pack('<IBBHQQ',1,0x12,0,1,base+text,len(code))
-    hashes=len(data);data+=struct.pack('<IIIII',1,2,1,0,0)
+    symbols=len(data);data+=bytes(24)
+    for name,offset,size in symbol_rows:data+=struct.pack('<IBBHQQ',name,0x12,0,1,base+text+offset,size)
+    hashes=len(data);data+=struct.pack('<III',1,len(entries)+1,1)+b''.join(struct.pack('<I',i+1 if 0<i<len(entries) else 0) for i in range(len(entries)+1))
     while len(data)%8:data+=b'\0'
     dynamic=len(data)
     for tag,value in [(5,base+strings),(10,len(names)),(6,base+symbols),(11,24),(4,base+hashes),(0,0)]:data+=struct.pack('<QQ',tag,value)
@@ -78,7 +82,7 @@ def elf_fixture(machine=62, code=b"\x90\xc3"):
     stringtable=len(data);data+=shnames
     while len(data)%8:data+=b'\0'
     sectionoff=len(data);data+=bytes(64)
-    for name,kind,flags,address,offset,size,link,align,entsize in [(1,1,6,base+text,text,len(code),0,16,0),(7,3,2,base+strings,strings,len(names),0,1,0),(15,11,2,base+symbols,symbols,48,2,8,24),(23,5,2,base+hashes,hashes,20,3,4,4),(29,6,3,base+dynamic,dynamic,96,2,8,16),(38,3,0,0,stringtable,len(shnames),0,1,0)]:
+    for name,kind,flags,address,offset,size,link,align,entsize in [(1,1,6,base+text,text,len(code),0,16,0),(7,3,2,base+strings,strings,len(names),0,1,0),(15,11,2,base+symbols,symbols,24*(len(entries)+1),2,8,24),(23,5,2,base+hashes,hashes,12+4*(len(entries)+1),3,4,4),(29,6,3,base+dynamic,dynamic,96,2,8,16),(38,3,0,0,stringtable,len(shnames),0,1,0)]:
         data+=struct.pack('<IIQQQQIIQQ',name,kind,flags,address,offset,size,link,0,align,entsize)
     data[:16]=b'\x7fELF\x02\x01\x01'+bytes(9)
     struct.pack_into('<HHIQQQIHHHHHH',data,16,3,machine,1,0,64,sectionoff,0,64,56,2,64,7,6)
@@ -273,5 +277,83 @@ class AndroidTests(unittest.TestCase):
     def test_readiness_never_confuses_missing_engine_with_verified_execution(self):
         result=w.analysis_readiness()
         for check in result['evidence']['checks']:self.assertEqual(check['executionVerified'],check['status']=='completed')
+
+class NativeCallTraversalTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.path=Path(self.temp.name)/'owned.so'
+    def tearDown(self):self.temp.cleanup()
+    def test_shared_installed_fixture_matches_owned_generator(self):
+        import base64
+        fixture=json.loads((HERE/'owned-native-call-fixture.json').read_text())
+        expected=elf_fixture(62,bytes.fromhex('e801000000c3e801000000c3e8efffffffc3'),[('owned_root',0,6),('owned_child',6,6),('owned_leaf',12,6)])
+        self.assertEqual(base64.b64decode(fixture['base64']),expected)
+        self.assertEqual(hashlib.sha256(expected).hexdigest(),fixture['sha256'])
+    def test_budget_rejects_unknown_boolean_fraction_and_excess(self):
+        for budget in ({'shell':True},{'max_depth':True},{'max_depth':5},{'max_functions':0},{'max_edges':257},{'max_total_bytes':65537},{'max_depth':1.5},[]):
+            with self.subTest(budget=budget),self.assertRaises(ValueError):w.native_call_budget(budget)
+        self.assertEqual(w.native_call_budget({'max_depth':0})['max_depth'],0)
+    def test_graph_caps_work_and_does_not_follow_heuristic_indirects(self):
+        # Deterministic stdlib-only helper exercise; real engine tests below are separate.
+        from unittest.mock import patch
+        methods=[dict(id=str(i),name=str(i),addressHex=hex(100+i*10),architecture='x86_64',size=1,rangeValidation='mapped-file-backed-range') for i in range(4)]
+        body={'status':'completed','requestedBytes':1,'decodedBytes':1,'byteFingerprint':'a'*64,'callees':[{'fromAddressHex':'0x64','targetAddressHex':m['addressHex'],'confidence':'decoded-direct-call-candidate'} for m in methods], 'indirectCalls':[{'fromAddressHex':'0x65','targetAddressHex':methods[3]['addressHex'],'resolution':'constant-register-static-candidate'}]}
+        meta={'functionsTruncated':False,'segmentsTruncated':False,'segments':[]}
+        with patch.object(w,'disassemble_selected',return_value={'status':'completed','requestedBytes':1,'decodedBytes':1}) as decode:
+            result=w.native_call_traversal(b'',methods[0],body,methods,meta,w.native_call_budget({'max_functions':2}),1)
+            self.assertEqual(decode.call_count,1);self.assertEqual(len(result['nodes']),2)
+            self.assertIn('max_functions',result['coverage']['limitsReached'])
+            self.assertEqual(result['edges'][-1]['resolution'],'indirect-not-followed')
+            self.assertFalse(result['observedExecution']);self.assertEqual(result['status'],'partial')
+            blocked=w.native_call_traversal(b'',methods[0],body,methods,meta,w.native_call_budget({'max_total_bytes':1}),1)
+            self.assertEqual(len(blocked['nodes']),1);self.assertIn('max_total_bytes',blocked['coverage']['limitsReached'])
+        # Multiple declared names at a target are ambiguous, not silently preferred.
+        alias=dict(methods[1],id='alias',name='alias')
+        graph=w.native_call_traversal(b'',methods[0],body,methods+[alias],meta,w.native_call_budget({'max_depth':0}),1)
+        self.assertEqual(graph['edges'][1]['resolution'],'ambiguous-entry')
+        self.assertEqual(graph['edges'][1]['matchCount'],2)
+    def test_ambiguous_root_does_not_decode_outside_global_budget(self):
+        from unittest.mock import patch
+        self.path.write_bytes(b'owned')
+        methods=[dict(id=str(i),name='duplicate',addressHex=hex(100+i*10)) for i in range(2)]
+        meta={'segmentsTruncated':False,'segments':[],'functionsTruncated':False,'image':{}}
+        with patch.object(w,'native_metadata',return_value=(meta,methods)),patch.object(w,'disassemble_selected') as decode:
+            result=w.native_selection({'target':str(self.path),'options':{'function':{'symbol':'duplicate'},'native_calls':{'max_total_bytes':1}}})
+            self.assertEqual(result['evidence']['callGraph']['matchCount'],2)
+            self.assertEqual(result['evidence']['selectedFunctions'],[]);decode.assert_not_called()
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_real_multihop_cycle_and_all_global_budgets(self):
+        # root -> child -> leaf -> root; each exact symbol owns six bytes.
+        code=bytes.fromhex('e801000000c3e801000000c3e8efffffffc3')
+        data=elf_fixture(62,code,[('owned_root',0,6),('owned_child',6,6),('owned_leaf',12,6)])
+        self.path.write_bytes(data)
+        def trace(budget=None,maximum=4096,selector=None):
+            return w.native_selection({'target':str(self.path),'limit':1,'options':{'function':dict(selector or {'symbol':'owned_root'},max_bytes=maximum),'native_calls':budget or {}}})
+        result=trace();graph=result['evidence']['callGraph']
+        self.assertEqual([n['name'] for n in graph['nodes']],['owned_root','owned_child','owned_leaf'])
+        self.assertEqual([n['depth'] for n in graph['nodes']],[0,1,2]);self.assertEqual(graph['usage']['requestedBytes'],18)
+        self.assertEqual(graph['edges'][-1]['resolution'],'already-scheduled-or-visited')
+        self.assertEqual(graph['coverage']['limitsReached'],[]);self.assertTrue(graph['coverage']['metadataRowsTruncated'])
+        self.assertEqual(trace({'max_depth':0})['evidence']['callGraph']['edges'][0]['resolution'],'depth-limit')
+        limited=trace({'max_total_bytes':7})['evidence']['callGraph']
+        self.assertLessEqual(limited['usage']['requestedBytes'],7);self.assertIn('partial-or-blocked-function',limited['coverage']['limitsReached'])
+        self.assertEqual(trace({'max_functions':1})['evidence']['callGraph']['edges'][0]['resolution'],'function-limit')
+        edge_limited=trace({'max_edges':1})['evidence']['callGraph']
+        self.assertEqual(len(edge_limited['edges']),1);self.assertIn('max_edges',edge_limited['coverage']['limitsReached'])
+        self.assertEqual(trace(maximum=1)['evidence']['callGraph']['nodes'][0]['decodedBytes'],0)
+        missing=trace(selector={'symbol':'absent'})['evidence']['callGraph'];self.assertEqual(missing['nodes'],[])
+        self.assertEqual(self.path.read_bytes(),data)
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_real_unmapped_indirect_and_blocked_extent_remain_explicit(self):
+        fixtures=[(bytes.fromhex('e801000000c3c3'),[('root',0,6),('zero',6,0)],'exact-entry-scheduled'),(bytes.fromhex('e87b000000c3'),[('root',0,6)],'no-exact-symbol-entry'),(bytes.fromhex('48b8c000400000000000ffd0c3'),[('root',0,13)],'indirect-not-followed'),(bytes.fromhex('e801000000c3c3'),[('root',0,6),('one',6,1),('alias',6,1)],'ambiguous-entry')]
+        for code,entries,resolution in fixtures:
+            self.path.write_bytes(elf_fixture(62,code,entries));graph=w.native_selection({'target':str(self.path),'options':{'function':{'symbol':'root'},'native_calls':{}}})['evidence']['callGraph']
+            self.assertEqual(graph['edges'][0]['resolution'],resolution)
+            if entries[-1][0]=='zero':self.assertEqual(graph['nodes'][1]['status'],'blocked')
+    @unittest.skipUnless(importlib.util.find_spec('lief') and importlib.util.find_spec('capstone'),'optional real engines not configured')
+    def test_real_arm64_indirect_is_retained_without_following(self):
+        self.path.write_bytes(elf_fixture(183,bytes.fromhex('00003fd6c0035fd6')))
+        graph=w.native_selection({'target':str(self.path),'options':{'function':{'address':'0x4000c0'},'native_calls':{}}})['evidence']['callGraph']
+        self.assertEqual(len(graph['nodes']),1);self.assertEqual(graph['edges'][0]['resolution'],'indirect-not-followed')
+
 
 if __name__=='__main__':unittest.main()

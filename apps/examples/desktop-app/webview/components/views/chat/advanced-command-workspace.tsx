@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { desktopClient } from "@/lib/desktop-client";
 
 type Entry = {
- route?: "static-review" | "ai-workflow";
+	route?: "static-review" | "ai-workflow";
 	command: string;
 	effect: string;
 	availability: string;
@@ -172,18 +172,44 @@ function template(command: string) {
 		].includes(command)
 	)
 		base.function_selector = { symbol: "" };
+	if (command === "trace_native_calls")
+		base.advanced_options = {
+			native_calls: {
+				max_depth: 2,
+				max_functions: 16,
+				max_edges: 128,
+				max_total_bytes: 32768,
+			},
+		};
 	if (command === "decompile_function_bundle") base.engine = "ghidra";
-	if (["preview_android_candidate", "build_android_candidate"].includes(command)) {
+	if (
+		["preview_android_candidate", "build_android_candidate"].includes(command)
+	) {
 		base.output_file = "";
 		base.acknowledge_external_output = false;
 	}
-	if (["preview_android_candidate", "build_android_candidate"].includes(command)) {
-  base.android_project_patch = {
-   ...(command === "build_android_candidate" ? {expected_project_sha256:"", preview_sha256:""} : {}),
-   patches:[{path:"smali/example/Owned.smali",patch:{expected_sha256:"",class_descriptor:"Lexample/Owned;",method_signature:"value()I",expected_method:"",replacement_method:""}}],
-  };
- }
- if (command === "annotate_analysis_project") {
+	if (
+		["preview_android_candidate", "build_android_candidate"].includes(command)
+	) {
+		base.android_project_patch = {
+			...(command === "build_android_candidate"
+				? { expected_project_sha256: "", preview_sha256: "" }
+				: {}),
+			patches: [
+				{
+					path: "smali/example/Owned.smali",
+					patch: {
+						expected_sha256: "",
+						class_descriptor: "Lexample/Owned;",
+						method_signature: "value()I",
+						expected_method: "",
+						replacement_method: "",
+					},
+				},
+			],
+		};
+	}
+	if (command === "annotate_analysis_project") {
 		base.engine = "ghidra";
 		base.function_selector = { symbol: "" };
 		base.project_edit = { mode: "preview" };
@@ -224,10 +250,15 @@ export function AdvancedCommandWorkspace({
 	}, [environmentId, local]);
 	async function prepare() {
 		setError("");
-  if (catalog?.entries.find(entry => entry.command === command)?.route === "ai-workflow") {
-   setError("This command requires the owning AI investigation workflow, not a legacy static task.");
-   return;
-  }
+		if (
+			catalog?.entries.find((entry) => entry.command === command)?.route ===
+			"ai-workflow"
+		) {
+			setError(
+				"This command requires the owning AI investigation workflow, not a legacy static task.",
+			);
+			return;
+		}
 		setBusy(true);
 		try {
 			const parsed: unknown = JSON.parse(request);
@@ -245,7 +276,7 @@ export function AdvancedCommandWorkspace({
 		}
 	}
 	const entry = catalog?.entries.find((value) => value.command === command);
- const hostOnly = entry?.route === "ai-workflow";
+	const hostOnly = entry?.route === "ai-workflow";
 	return (
 		<section aria-label="Advanced AI commands" className="space-y-3">
 			<h3 className="font-semibold">Advanced AI commands</h3>
@@ -294,7 +325,14 @@ export function AdvancedCommandWorkspace({
 				))}
 			</select>
 			{entry && <p className="text-xs">{entry.limitations}</p>}
-   {hostOnly && <output className="block text-xs">Ask the chat agent to use {command} through the owning AI investigation workflow. It gathers exact inputs and requests any independent human approval. This static JSON form cannot start it; selecting it runs nothing.</output>}
+			{hostOnly && (
+				<output className="block text-xs">
+					Ask the chat agent to use {command} through the owning AI
+					investigation workflow. It gathers exact inputs and requests any
+					independent human approval. This static JSON form cannot start it;
+					selecting it runs nothing.
+				</output>
+			)}
 			<label htmlFor={`${prefix}-request`}>
 				Exact command parameters (JSON)
 			</label>
@@ -318,7 +356,11 @@ export function AdvancedCommandWorkspace({
 				disabled={!local || !entry || busy || hostOnly}
 				onClick={() => void prepare()}
 			>
-				{hostOnly ? "Use the AI investigation workflow" : busy ? "Preparing…" : "Prepare advanced command for review"}
+				{hostOnly
+					? "Use the AI investigation workflow"
+					: busy
+						? "Preparing…"
+						: "Prepare advanced command for review"}
 			</Button>
 			{error && <p role="alert">{error}</p>}
 			{catalog && (

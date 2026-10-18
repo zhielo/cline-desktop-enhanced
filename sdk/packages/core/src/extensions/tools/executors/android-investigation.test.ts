@@ -103,6 +103,66 @@ describe("fixed Android investigation worker", () => {
 			checks.every((c) => c.executionVerified === (c.status === "completed")),
 		).toBe(true);
 	});
+	it("retains bounded native traversal evidence through the public executor", async () => {
+		const fixture = JSON.parse(
+			await readFile(join(scripts, "owned-native-call-fixture.json"), "utf8"),
+		);
+		const dir = await mkdtemp(join(tmpdir(), "native-traversal-"));
+		vi.stubEnv("CLINE_RE_CACHE_DIR", join(dir, "cache"));
+		try {
+			const target = join(dir, "owned.so");
+			const bytes = Buffer.from(fixture.base64, "base64");
+			await writeFile(target, bytes);
+			const result = JSON.parse(
+				await createReverseEngineeringExecutor()(
+					ReverseEngineeringInputSchema.parse({
+						operation: "trace_native_calls",
+						target,
+						function_selector: { symbol: "owned_root" },
+						advanced_options: {
+							native_calls: {
+								max_depth: 2,
+								max_functions: 3,
+								max_edges: 4,
+								max_total_bytes: 32,
+							},
+						},
+					}),
+					{} as never,
+				),
+			);
+			expect(result.observedExecution).toBe(false);
+			const worker = result.stages[0].result.result;
+			if (worker.status === "blocked") {
+				expect(result.status).toBe("blocked");
+				expect(worker.evidence.callGraph).toBeUndefined();
+				return;
+			}
+			const graph = worker.evidence.callGraph;
+			expect(result.status).toBe("partial");
+			expect(graph.observedExecution).toBe(false);
+			// Capstone may be absent on a stdlib-only developer machine; never fabricate a decoded descendant.
+			if (graph.nodes[0].status === "blocked") {
+				expect(graph.nodes).toHaveLength(1);
+				expect(graph.coverage.limitsReached).toContain(
+					"partial-or-blocked-function",
+				);
+				return;
+			}
+			expect(worker.input.sha256).toBe(fixture.sha256);
+			expect(graph.nodes.map((n: { name: string }) => n.name)).toEqual([
+				"owned_root",
+				"owned_child",
+				"owned_leaf",
+			]);
+			expect(graph.edges[2].resolution).toBe("already-scheduled-or-visited");
+			expect(graph.usage.requestedBytes).toBe(18);
+			expect(await readFile(target)).toEqual(bytes);
+		} finally {
+			vi.unstubAllEnvs();
+			await rm(dir, { recursive: true, force: true });
+		}
+	});
 	it("requires a precise bounded selector and rejects unrecognized options", () => {
 		expect(
 			ReverseEngineeringInputSchema.safeParse({

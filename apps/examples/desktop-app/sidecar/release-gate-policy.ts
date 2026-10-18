@@ -107,6 +107,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-tracked-full-setup-job-passed",
 		"installed-full-eleven-engine-owned-fixtures-passed",
 		"installed-full-pack-exact-range-dual-decoder-passed",
+		"installed-native-direct-call-transitive-budget-cycle-no-execution-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
 		"hub-restart-saved-session-reattached-without-prompt-replay",
@@ -120,7 +121,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"32f503f158bc7d81c50799b56ca827a5afb41bf2f6e393dcc7cd3fe387dd8a4f",
+			"745f1edf4ec09a9fe3dcaa6c81cab37a356881c57d0294b6631c390154f75741",
 		"scripts/validate-advanced-build.mjs":
 			"81a19ad70f031eda34e9f180169a8578470f2fcce351f7789f204adffaaea55f",
 	},

@@ -186,6 +186,15 @@ export const ReverseEngineeringInputSchema = z.object({
 				})
 				.strict()
 				.optional(),
+			native_calls: z
+				.object({
+					max_depth: z.number().int().min(0).max(4).optional(),
+					max_functions: z.number().int().min(1).max(32).optional(),
+					max_edges: z.number().int().min(1).max(256).optional(),
+					max_total_bytes: z.number().int().min(1).max(65536).optional(),
+				})
+				.strict()
+				.optional(),
 			function: z
 				.object({
 					symbol: z.string().min(1).max(4096).optional(),
@@ -308,7 +317,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	workflow_query: WorkflowQuerySchema.optional(),
 	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
 	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
- android_project_patch: AndroidProjectPatchSchema.optional(),
+	android_project_patch: AndroidProjectPatchSchema.optional(),
 	hypothesis: HypothesisSchema.optional(),
 	candidate: CandidateSchema.optional(),
 	evidence_trace: EvidenceTraceSchema.optional(),

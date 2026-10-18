@@ -37,7 +37,7 @@ This is the exact original 55-command checklist, not a statement that all recomm
 | --- | --- | --- |
 | `resolve_native_symbol` | partial | Selected bounded ELF function evidence; not every binary format or symbol kind. |
 | `decompile_function_bundle` | partial | Selected native evidence and explicit Ghidra/IDA output; caller discovery remains incomplete. |
-| `trace_native_calls` | partial | Selected direct/indirect call candidates; no transitive call traversal. |
+| `trace_native_calls` | partial | Bounded breadth-first direct-call ELF symbol-entry traversal, cycle deduplication, explicit unresolved/indirect/ambiguous edges and depth/function/edge/byte budgets. No complete CFG, tail-call/import resolution, caller discovery or observed runtime path. |
 | `compare_native_functions` | partial | Same exact selector in both images; no inferred semantic match confidence. |
 | `inspect_binary_mitigations` | bounded | Bounded PE/ELF header declarations only; no mitigation enforcement claim. |
 | `annotate_analysis_project` | bounded | Existing isolated exact-state project preview/candidate/rollback; no executable rewriting. |
