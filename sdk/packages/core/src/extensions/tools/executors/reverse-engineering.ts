@@ -1,3 +1,4 @@
+import { compareProjectVersions } from "./project-versions";
 import { planRuntimeObservation } from "./runtime-observation-plan";
 import { verifyCandidate, validateDexBytes } from "./candidate-verification";
 import { sha256Directory } from "./android-project-files";
@@ -2487,6 +2488,12 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+ if(input.version_comparison && input.operation !== "compare_versions")throw new Error("version_comparison is accepted only by compare_versions");
+ if(input.operation === "compare_versions" && input.version_comparison){
+  const allowed=new Set(["operation","target","compare_target","version_comparison","timeout_ms","engine","report_format","discovery_depth"]);
+  if(Object.entries(input).some(([key,value])=>value!==undefined&&!allowed.has(key)) || input.engine!=="auto" || input.report_format!=="json" || input.discovery_depth!=="fast")throw new Error("Project version comparison rejects legacy overrides and unrelated options");
+  return JSON.stringify(await compareProjectVersions(input,context.signal));
+ }
  if(input.cross_language && input.operation !== "trace_cross_language")throw new Error("cross_language is accepted only by trace_cross_language");
  if(input.advanced_options?.jni_trace && (input.operation!=="advanced_analysis"||input.advanced_action!=="android_relationships"))throw new Error("jni_trace requires the fixed android_relationships action");
  if(input.operation === "trace_cross_language" && input.cross_language){

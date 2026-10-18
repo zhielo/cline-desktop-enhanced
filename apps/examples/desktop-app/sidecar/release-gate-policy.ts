@@ -111,6 +111,7 @@ export const RELEASE_GATE_POLICY = {
         "installed-content-artifact-discovery-nesting-ambiguity-budgets-no-execution-passed",
         "installed-fresh-android-jni-native-candidates-no-binding-or-execution-passed",
         "installed-fresh-electron-renderer-preload-main-channel-candidates-passed",
+ "installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
 		"hub-restart-saved-session-reattached-without-prompt-replay",
@@ -124,8 +125,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"d9474943fcc969290b05414aafbf85a0f5c637d67d109477ec72e94da2ec3303",
+			"fad28a900916ece7da81567cc5deafb75474d996ce9763cec6abd2aca913fa0a",
 		"scripts/validate-advanced-build.mjs":
-			"70beee0016d53713b736d3ac3990dc70cc09e70abc71159b0caf6e42c46c9326",
+			"bb14ef48ca3d0aa09aa1d5863bede9c8e60b6ca98cf53492fe170bad15e7a89e",
 	},
 } as const;

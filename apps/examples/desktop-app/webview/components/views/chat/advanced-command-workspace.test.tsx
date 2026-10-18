@@ -50,6 +50,7 @@ const catalog = {
 			"annotate_analysis_project",
 			"verify_hypothesis",
 			"compare_public_api",
+			"compare_versions",
 			"build_android_candidate",
 			"preview_batch",
 			"patch_binary",
@@ -172,6 +173,7 @@ it.each([
 	["audit_candidate_batch", "target"],
 	["trace_cross_language", "cross_language"],
 	["trace_data_flow", "evidence_trace"],
+ ["compare_versions", "version_comparison"],
 	["decompile_dotnet_method", "managed_method"],
 	["read_jvm_method", "jvm_method"],
 ])("prepares %s explicitly without executing on selection", async (command, key) => {

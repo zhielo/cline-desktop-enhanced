@@ -1377,6 +1377,18 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(missingElectron.status!=="partial"||missingElectron.selection.status!=="not-found-in-covered-sources"||missingElectron.nodes.length!==0)throw new Error("Installed missing IPC channel invented a path");
     for(const [name,source]of Object.entries(electronSources))if(await readFile(join(electronRoot,name),"utf8")!==source||!electronResult.artifacts.some(a=>a.path===name&&a.sha256===createHash("sha256").update(source).digest("hex")))throw new Error("Installed fresh Electron input/provenance changed");
     stages.push("installed-fresh-electron-renderer-preload-main-channel-candidates-passed");
+    const versionBefore=join(workspace,"owned-version-before"),versionAfter=join(workspace,"owned-version-after");
+    const versionSources={before:{"api.ts":"export function read(x:string):string{return x}","package.json":'{"version":1}',"assets/a":"old","lib/owned.so":"old",".hidden":"keep"},after:{"api.ts":"export function read(x:number):number{return x};globalThis.__versionMustNotRun=true;","package.json":'{"version":2}',"assets/a":"new","lib/owned.so":"new",".hidden":"keep"}};
+    for(const [side,files]of Object.entries(versionSources)){const root=side==="before"?versionBefore:versionAfter;await mkdir(root);for(const [file,value]of Object.entries(files)){await mkdir(join(root,file,".."),{recursive:true});await writeFile(join(root,file),value);}}
+    type OwnedVersion={status:string;published:boolean;observedExecution:boolean;changedFiles:number;baselineInventorySha256:string;candidateInventorySha256:string;categoryCounts:Record<string,number>;changes:{path:string;before_sha256:string;after_sha256:string}[];changesTruncated:boolean;publicApi:{changed:string[];removed:string[]};coverage:{inventoryPasses:number}};
+    const versionRequest={operation:"compare_versions",target:versionBefore,compare_target:versionAfter,version_comparison:{kind:"project",max_results:100},timeout_ms:120000};
+    const versionResult=(await runOwnedAdvanced(versionRequest)).result as unknown as OwnedVersion;
+    if(versionResult.status!=="partial"||versionResult.published!==false||versionResult.observedExecution!==false||versionResult.changedFiles!==4||versionResult.coverage.inventoryPasses!==4||versionResult.categoryCounts.source!==1||versionResult.categoryCounts.manifest!==1||versionResult.categoryCounts["resources-assets"]!==1||versionResult.categoryCounts["native-binary"]!==1||versionResult.publicApi.changed.join(",")!=="api.ts:read"||versionResult.publicApi.removed.length!==0||versionResult.changes.length!==4||versionResult.baselineInventorySha256===versionResult.candidateInventorySha256)throw new Error("Installed combined project version inventory/API evidence failed or claimed full semantic equivalence");
+    const versionLimited=(await runOwnedAdvanced({...versionRequest,version_comparison:{kind:"project",max_results:1}})).result as unknown as OwnedVersion;
+    if(versionLimited.status!=="partial"||versionLimited.changedFiles!==4||versionLimited.changes.length!==1||!versionLimited.changesTruncated)throw new Error("Installed project comparison detail cap lost total counts");
+    for(const [side,files]of Object.entries(versionSources)){const root=side==="before"?versionBefore:versionAfter;for(const [file,value]of Object.entries(files))if(await readFile(join(root,file),"utf8")!==value)throw new Error("Installed version comparison modified input");}
+    stages.push("installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed");
+
 
 
 
