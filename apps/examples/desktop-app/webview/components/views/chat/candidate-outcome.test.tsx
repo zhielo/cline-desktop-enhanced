@@ -1,0 +1,128 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { desktopClient } from "@/lib/desktop-client";
+import type { CandidateOutcome } from "../../../../shared/candidate-outcome";
+import { AnalysisWorkbench } from "./analysis-workbench";
+import { CandidateOutcomeCard } from "./candidate-outcome";
+
+let container: HTMLDivElement, root: Root;
+beforeEach(() => {
+	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	container = document.createElement("div");
+	document.body.append(container);
+	root = createRoot(container);
+});
+afterEach(async () => {
+	await act(async () => root.unmount());
+	container.remove();
+	vi.restoreAllMocks();
+});
+const outcome = (evidence: CandidateOutcome["evidence"]): CandidateOutcome => ({
+	version: "candidate-outcome/v1",
+	evidence,
+	operation: "validate_candidate",
+	scope: "typescript",
+	inputSha256: "a".repeat(64),
+	receiptSha256: "b".repeat(64),
+	checks: [
+		{
+			id: "source-syntax",
+			status: evidence === "failed" ? "failed" : "blocked",
+		},
+	],
+	limitations: [
+		"Retained metadata only; not current identity, execution proof or approval.",
+		"<script>NEVER_EXECUTE</script>",
+	],
+});
+it.each([
+	"failed",
+	"partial",
+	"unavailable",
+	"bounded-checks-passed",
+] as const)("displays %s without inferring task success or rendering markup", async (evidence) => {
+	const invoke = vi.spyOn(desktopClient, "invoke");
+	await act(async () =>
+		root.render(
+			<CandidateOutcomeCard status="completed" outcome={outcome(evidence)} />,
+		),
+	);
+	expect(container.textContent).toContain("Task status: completed");
+	expect(container.textContent).toContain(`Evidence outcome: ${evidence}`);
+	expect(container.textContent).toContain("not current identity");
+	expect(container.querySelector("script")).toBeNull();
+	expect(container.textContent).toContain("<script>");
+	expect(invoke).not.toHaveBeenCalled();
+	expect(container.querySelector("button")).toBeNull();
+});
+it("does not invent an outcome for legacy records", async () => {
+	await act(async () =>
+		root.render(<CandidateOutcomeCard status="completed" />),
+	);
+	expect(container.textContent).toBe("");
+});
+it("shows retained failed evidence in the ledger and exports only on explicit click", async () => {
+	const saved = {
+		id: "failed-plan",
+		operation: "validate_candidate",
+		status: "failed",
+		requestHash: "c".repeat(64),
+		candidateOutcome: outcome("failed"),
+		evidence: {
+			tool: "reverse-engineering",
+			resultHash: "d".repeat(64),
+			outputPaths: [],
+		},
+	};
+	const invoke = vi
+		.spyOn(desktopClient, "invoke")
+		.mockImplementation(async (command: string) => {
+			if (command === "list_analysis_tasks") return [saved];
+			if (
+				command === "discover_analysis_tools" ||
+				command === "get_analysis_diagnostics"
+			)
+				return {};
+			if (command === "export_analysis_evidence")
+				return {
+					outputPath: "/owned/evidence.json",
+					bundleHash: "e".repeat(64),
+				};
+			throw Error(`Unexpected RPC ${command}`);
+		});
+	await act(async () => {
+		root.render(<AnalysisWorkbench cwd="/owned" environmentId="local" />);
+		await Promise.resolve();
+	});
+	const evidence = [...container.querySelectorAll("button")].find(
+		(b) => b.textContent?.trim() === "Evidence",
+	);
+	expect(evidence).toBeDefined();
+	await act(async () => evidence?.click());
+	expect(
+		container.querySelector('[aria-label="Candidate verification outcome"]')
+			?.textContent,
+	).toContain("Task status: failed");
+	expect(
+		invoke.mock.calls.some(([name]) => name === "export_analysis_evidence"),
+	).toBe(false);
+	const exportButton = [...container.querySelectorAll("button")].find(
+		(b) => b.textContent?.trim() === "Export evidence bundle",
+	);
+	await act(async () => {
+		exportButton?.click();
+		await Promise.resolve();
+	});
+	expect(invoke).toHaveBeenCalledWith("export_analysis_evidence", {
+		environmentId: "local",
+		cwd: "/owned",
+		planId: "failed-plan",
+	});
+	expect(
+		invoke.mock.calls.some(([name]) =>
+			/prepare|approve|run_static|execute/.test(name),
+		),
+	).toBe(false);
+});

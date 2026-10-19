@@ -934,6 +934,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
     await selectedSource.getByText(`Saved SHA256: ${createHash("sha256").update(sourceSelectionText).digest("hex")}`,{exact:true}).waitFor();
     await selectedSource.getByLabel("Bounded source snapshot",{exact:true}).getByText("NEVER_EXECUTE_SOURCE_SELECTION",{exact:false}).waitFor();
+    // Normal hit-tested click must remain reachable after a large selection preview.
+    // Never force clicks or hide the composer to mask a real overflow regression.
     await sourceWorkspace.getByRole("button",{name:"findings",exact:true}).click();
     await inspectSaved.first().waitFor({timeout:30000});
     await inspectSaved.first().click();
@@ -1284,12 +1286,30 @@ ConvertTo-Json -InputObject @($rows) -Compress
     ] as const){
       const plan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      const result=await rpc<{result:{protocol:string;status:string;receiptSha256:string;published:boolean}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+      const result=await rpc<{plan:{status:string;candidateOutcome?:{evidence:string;receiptSha256:string}};result:{protocol:string;status:string;receiptSha256:string;published:boolean}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
       if(result.result.protocol!=="cline-candidate-verification/v1"||result.result.status!=="completed"||result.result.published!==false||!/^[a-f0-9]{64}$/.test(result.result.receiptSha256))throw new Error("Installed hash-bound candidate verification failed");
+      if(result.plan.status!=="completed"||result.plan.candidateOutcome?.evidence!=="bounded-checks-passed"||result.plan.candidateOutcome.receiptSha256!==result.result.receiptSha256)throw new Error("Installed candidate summary lost bounded check identity");
       let denied=false;try{await rpc(page,command,{...analysisArgs,input:{...input,phase:"prepare"}});}catch{denied=true;}if(!denied)throw new Error("Installed candidate handle crossed session boundary");
     }
     if(await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText||!(await readFile(batchBinary)).equals(batchBinaryBefore)||await readFile(batchAst,"utf8")!==batchAstBefore)throw new Error("Installed candidate verification changed originals");
     stages.push("installed-candidate-validation-review-hash-scope-preservation-passed");
+    // Syntax failure is retained evidence, never successful completion or build/device proof.
+    const failedCandidatePath=join(workspace,"owned-invalid-candidate.ts"),failedCandidateText="export const = ;";
+    await writeFile(failedCandidatePath,failedCandidateText);
+    const failedCandidateHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:failedCandidatePath}});
+    const failedCandidateInput={artifactId:failedCandidateHandle.id,kind:"typescript"};
+    const failedCandidatePlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"validate_candidate",{...triageScope,input:failedCandidateInput});
+    const failedCandidateApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:failedCandidatePlan.id,requestHash:failedCandidatePlan.requestHash,requirements:failedCandidatePlan.requirements});
+    const failedCandidate=await rpc<{plan:{status:string;candidateOutcome?:{evidence:string;inputSha256:string;receiptSha256:string};evidence?:{resultHash:string;outputPaths:string[]}};result:{status:string;receiptSha256:string}}>(page,"validate_candidate",{...triageScope,input:{...failedCandidateInput,phase:"run",planId:failedCandidatePlan.id,executionToken:failedCandidateApproval.executionToken}});
+    if(failedCandidate.plan.status!=="failed"||failedCandidate.result.status!=="failed"||failedCandidate.plan.candidateOutcome?.evidence!=="failed"||failedCandidate.plan.candidateOutcome.receiptSha256!==failedCandidate.result.receiptSha256||failedCandidate.plan.candidateOutcome.inputSha256!==createHash("sha256").update(failedCandidateText).digest("hex")||!/^[a-f0-9]{64}$/.test(failedCandidate.plan.evidence?.resultHash??"")||failedCandidate.plan.evidence?.outputPaths.length!==0)throw new Error("Installed failed candidate lost exact retained evidence or became a success");
+    const retainedCandidates=await rpc<Array<{id:string;status:string;candidateOutcome?:{evidence:string}}>>(page,"list_analysis_tasks",{...triageScope,cwd:workspace});
+    if(!retainedCandidates.some(task=>task.id===failedCandidatePlan.id&&task.status==="failed"&&task.candidateOutcome?.evidence==="failed"))throw new Error("Installed failed candidate missing from task ledger");
+    const failedCandidateExport=await rpc<{outputPath:string}>(page,"export_analysis_evidence",{...triageScope,cwd:workspace,planId:failedCandidatePlan.id});
+    const failedCandidateBundle=JSON.parse(await readFile(failedCandidateExport.outputPath,"utf8"));
+    if(failedCandidateBundle.payload?.task?.status!=="failed"||failedCandidateBundle.payload?.task?.candidateOutcome?.evidence!=="failed"||await readFile(failedCandidatePath,"utf8")!==failedCandidateText)throw new Error("Installed failed evidence export changed status or original");
+    let failedCandidateReplayDenied=false;try{await rpc(page,"validate_candidate",{...triageScope,input:{...failedCandidateInput,phase:"run",planId:failedCandidatePlan.id,executionToken:failedCandidateApproval.executionToken}});}catch{failedCandidateReplayDenied=true;}
+    if(!failedCandidateReplayDenied)throw new Error("Installed failed candidate replayed consumed approval");
+    stages.push("installed-candidate-outcomes-failed-retention-explicit-export-no-replay-passed");
     const projectBeforeFiles={"main.ts":"export const value=1;","removed.txt":"remove",".owned-config":"EMPTY"},projectAfterFiles={"main.ts":"export const value=2;","added.txt":"add",".owned-config":"EMPTY"};
     for(const [directory,files] of [["owned-project-before",projectBeforeFiles],["owned-project-after",projectAfterFiles]] as const){await mkdir(join(workspace,directory),{recursive:true});for(const [name,text] of Object.entries(files))await writeFile(join(workspace,directory,name),text);}
     const projectInventory=(files:Record<string,string>)=>createHash("sha256").update(JSON.stringify({protocol:"cline-project-inventory/v1",files:Object.entries(files).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([path,text])=>({path,bytes:Buffer.byteLength(text),sha256:createHash("sha256").update(text).digest("hex")}))})).digest("hex");

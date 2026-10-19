@@ -103,6 +103,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-fresh-source-flow-exact-locations-no-execution-passed",
 		"installed-structured-batch-draft-partial-independent-reads-passed",
 		"installed-candidate-validation-review-hash-scope-preservation-passed",
+		"installed-candidate-outcomes-failed-retention-explicit-export-no-replay-passed",
 		"installed-runtime-plan-owned-identity-no-attach-no-execute-passed",
 		"installed-runtime-process-file-capture-approval-no-attach-passed",
 		"installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed",
@@ -131,7 +132,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"7cdec649ab0efed781ae4b4a6d83f66c03ca5bd9ce9d7b5278a6b58f96ab54d1",
+			"12f72515b73c5a2b5ff0999717160f01d79227bbe752af30d2d8615d41fe1ed7",
 		"scripts/validate-advanced-build.mjs":
 			"f62f8aee7a14c76bac688c83d568dd219e1552b2b91ed83af772ab37d14c609b",
 	},

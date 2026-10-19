@@ -6261,8 +6261,10 @@ export async function handleCommand(
 			if (
 				(["blocked", "failed", "cancelled"].includes(parsed?.status) || (input.operation === "apply_candidate_batch" && parsed?.status === "partial")) || ["blocked", "failed", "cancelled"].includes(parsed?.result?.status) || parsed?.succeeded === false || parsed?.verified === false || parsed?.validated === false || (typeof parsed?.exitCode === "number" && parsed.exitCode !== 0) || parsed?.timedOut === true || parsed?.cancelled === true || parsed?.outputDrainTimedOut === true
 			) {
-				const plan = desktopAnalysisTaskOrchestrator.fail(
+				const plan = desktopAnalysisTaskOrchestrator.failWithEvidence(
 					planId,
+					parsed,
+					"reverse-engineering",
 					`Analysis ${parsed?.result?.status ?? parsed?.status ?? "failed validation"}; inspect evidence for details.`,
 				);
 				return { kind: "reverse-engineering", result: parsed, plan };

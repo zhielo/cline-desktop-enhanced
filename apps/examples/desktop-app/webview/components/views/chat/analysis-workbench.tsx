@@ -1,4 +1,6 @@
 "use client";
+import { CandidateOutcomeCard } from "./candidate-outcome";
+import type { CandidateOutcome } from "../../../../shared/candidate-outcome";
 import { SharedSourceEvidencePanel } from "./source-evidence-selection";
 import { AnalysisProjectSelectionProvider, analysisProjectScope, SharedArtifactSelection, useAnalysisProjectTarget } from "./analysis-project-selection";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
@@ -59,6 +61,7 @@ type TaskKind =
 	| "device"
 	| "execution";
 type TaskPlan = {
+	candidateOutcome?: CandidateOutcome;
 	id: string;
 	kind: TaskKind;
 	operation: string;
@@ -484,8 +487,8 @@ function AnalysisWorkbenchContent({
 	);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 py-2">
+		<section aria-label="Analysis workbench" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+			<div className="flex max-h-[25%] shrink-0 flex-wrap items-center gap-1 overflow-auto border-b border-border px-3 py-2">
 				{modes.map((item) => (
 					<button
 						className={cn(
@@ -514,8 +517,10 @@ function AnalysisWorkbenchContent({
 					/>
 				</button>
 			</div>
-			<SharedArtifactSelection />
-			<SharedSourceEvidencePanel sessionId={sessionId} environmentId={environmentId} />
+			<section aria-label="Analysis selection details" className="max-h-[40%] min-h-0 shrink-0 overflow-auto">
+				<SharedArtifactSelection />
+				<SharedSourceEvidencePanel sessionId={sessionId} environmentId={environmentId} />
+			</section>
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
 					{(mode === "notebook" || mode === "graph") && (
@@ -1147,6 +1152,7 @@ function AnalysisWorkbenchContent({
                                             aria-label={`Select target from evidence ${task.id}`}
                                             onClick={()=>{if (!task.target) return;setTarget(task.target);setResult(task);setMode("analyze");}}
                                         >Select task target in Analyze (identity not rechecked)</button>}
+                                        <CandidateOutcomeCard outcome={task.candidateOutcome} status={task.status} />
 										{task.evidence?.outputPaths.map((path) => (
 											<button
 												className="block max-w-full truncate text-left text-primary hover:underline"
@@ -1175,6 +1181,7 @@ function AnalysisWorkbenchContent({
 						<Activity className="h-3.5 w-3.5" />
 						Supervised output
 					</div>
+                    {result && typeof result === "object" && "plan" in result && result.plan && typeof result.plan === "object" && "candidateOutcome" in result.plan ? <CandidateOutcomeCard outcome={(result.plan as TaskPlan).candidateOutcome} status={(result.plan as TaskPlan).status} /> : null}
 					<pre className="min-h-48 whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-4 font-mono text-xs leading-5">
 						{busy
 							? "Running bounded operation…"
@@ -1184,6 +1191,6 @@ function AnalysisWorkbenchContent({
 					</pre>
 				</div>
 			</div>
-		</div>
+		</section>
 	);
 }

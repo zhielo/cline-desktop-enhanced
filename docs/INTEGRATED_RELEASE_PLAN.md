@@ -9,7 +9,7 @@ Keep the existing Tauri/WebView → sidecar → shared Hub/SDK authority. Reuse 
 | Requirement | Deliverable | Current branch increment | Still required for product acceptance |
 | --- | --- | --- | --- |
 | R01 Workspace | Shared project/artifact/selection navigation across Code, Investigate, Compare, Validate | Existing panes now share optional scoped path metadata across Guide/Analyze/Android/App analysis; explicit AI JSON transfer, optional local remember/clear and scope-bound remount; receipt-bound source snapshots survive pane switches | Full cross-domain structured-selection read model and complete restart journey |
-| R02 Verification | Plan → inspect → approve → modify → validate → review with honest outcomes | Exact AI schemas shared with catalog; partial producer results cannot unlock graph consumers | Connected candidate/build/verification summaries and distinct operational/evidence outcomes |
+| R02 Verification | Plan → inspect → approve → modify → validate → review with honest outcomes | Exact AI schemas shared with catalog; partial producer results cannot unlock graph consumers; host-derived bounded candidate outcome summaries retain failed checks independently of task completion | Connected candidate/build/verification summaries and distinct operational/evidence outcomes |
 | R03 Evidence explorer | Precise source/Smali/native/resource selections and linked provenance | Fresh JS/TS flow uses exact hash-backed fact locations; graph consumers retain producer/result/document identities; retained source fact/artifact selection checks exact SHA256 and displays stale/missing/blocked states | Smali/native/resource/virtual-member identity adapters, broader cross-domain navigation and restart selection policy |
 | R04 Android | Multidex → entrypoint → method → JNI → preview → rebuild → verify | Previous bounded Android/candidate implementations preserved | Bounded caller/callee traversal, supported dynamic-registration analysis, resource-table semantics and unified build/signature/device summary |
 | R05 Native | Function dossiers, callers/callees, cross-version matches, engine disagreement, candidate annotations | Previous bounded native and isolated project candidate implementations preserved | Caller discovery, confidence-backed matching and real-engine dossier/comparison acceptance |
@@ -93,7 +93,7 @@ Fresh source flow is always partial: it is not a general taint solver, arbitrary
 - Fresh exact-location source flow in the installed app without target execution.
 - Malformed refs, wrong producers/consumers, cycles, omitted dependencies, injected paths, partial/truncated/malformed outputs, cancelled consumers and exact-checkpoint continuation.
 
-The installed release policy now requires 56 stages, including these two new named journeys. Local test results are not installed Windows results. Engine/device acceptance must name its actual authorized environment and cannot be replaced by catalog presence or owned static fixtures.
+The installed release policy now requires 57 stages, including these two new named journeys. Local test results are not installed Windows results. Engine/device acceptance must name its actual authorized environment and cannot be replaced by catalog presence or owned static fixtures.
 
 
 ## Shared artifact navigation increment
@@ -121,3 +121,19 @@ Supported real JS/TS/JSON/map files must be confined relative workspace members 
 Selection survives workbench pane switches but is memory-only, clears on path change, explicit clear, workspace/environment/chat changes and remount, and is not included in remembered path storage. **Use source path in analysis panes** is an explicit matched-only metadata transfer, not a verified future read or a change to AI JSON. The UI rejects mismatched response receipt/session/fact/path identities and ignores late responses after scope/selection changes.
 
 This is a bounded first-party source viewer, not a full editor, universal source-map resolver, virtual archive reader, Smali/native/resource adapter or complete R01/R03 acceptance. The installed policy adds an actual saved-receipt source selection, hash match, stale/no-preview, restore/recheck and cross-pane clear journey with Analysis Off. That Windows journey is required for the exact release commit; local tests do not claim it passed.
+
+
+## Retained candidate verification outcomes
+
+`validate_candidate` and `review_candidate_changes` now display task completion separately from bounded check outcomes. The host interprets only the first-party verification receipt with its canonical SHA256, operation, exact prepared input hash and required check set. Partial, failed, unavailable and bounded-checks-passed are distinct. Unsupported or mismatched receipts never infer a pass. Retained summaries include bounded check identifiers/statuses, hashes and limitations, not raw diagnostics or engine output.
+
+Failed static command results can retain a result fingerprint with no output paths. They remain failed, do not unlock graph dependencies, cannot reuse consumed approval tokens and may be explicitly exported from the evidence ledger. Exception-only failures without a result do not invent evidence. Older records without summaries remain unassessed. Retention survives host restart but is not a current filesystem recheck, authenticated producer identity, build/sign/install/device result, behavioral equivalence or execution proof. Failed task summaries are not automatically promoted into the completed-only unified investigation store.
+
+A new mandatory installed journey checks real invalid TypeScript through the installed command route, exact failed receipt/input identity, retained task listing, explicit metadata export, original preservation and replay denial. Existing installed verification checks also require bounded passing summaries. Local regression tests additionally exercise partial/blocked receipts, integrity/scope mismatches, restart retention, UI escaping and absence of automatic execution. The installed journey is a release requirement, not a claim that Windows acceptance has already passed for this change.
+
+R02 remains open for connected producer/candidate/build/verification/device workflows and broader artifact adapters; these summaries do not close the entire product scope.
+
+
+### Workspace overflow regression
+
+The preceding Windows run built and smoke-tested the NSIS installer but failed installed-WebView acceptance: the persistent composer intercepted the findings-tab click after source selection expanded. Selection details now have a bounded, independently scrollable area; the mode bar is bounded and the workbench clips overflow while preserving space for pane controls. The installed test continues to use a normal hit-tested click, not forced clicks, hidden composer controls or a larger timeout. This fixes the observed layout cause; only a new successful installed Windows run can establish regression acceptance.

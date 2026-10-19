@@ -1,3 +1,5 @@
+import { summarizeCandidateOutcome } from "./candidate-outcome";
+import type { CandidateOutcome } from "../shared/candidate-outcome";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
 	chmodSync,
@@ -48,6 +50,7 @@ type TargetIdentity = {
 };
 
 export interface AnalysisTaskPlan {
+	candidateOutcome?: CandidateOutcome;
 	id: string;
 	workspaceRoot: string;
 	kind: AnalysisTaskKind;
@@ -652,6 +655,7 @@ export class AnalysisTaskOrchestrator {
 		if (plan.status !== "running") {
 			throw new Error("Only a running analysis task can be completed.");
 		}
+		plan.candidateOutcome = summarizeCandidateOutcome(plan, result);
 		plan.status = "completed";
 		plan.completedAt = new Date(this.now()).toISOString();
 		plan.evidence = {
@@ -663,6 +667,22 @@ export class AnalysisTaskOrchestrator {
 		this.clearActive(planId);
 		this.persist();
 		return publicPlan(plan);
+	}
+
+
+	/** Retain failed-result metadata without successful completion or replay authority. */
+	failWithEvidence(planId: string, result: unknown, tool: string, error: unknown): AnalysisTaskPlan {
+		const plan = this.require(planId);
+		if (plan.status === "cancelled" || plan.status === "failed") return publicPlan(plan);
+		if (plan.status !== "running") throw new Error("Only a running analysis task can retain a failed result.");
+		plan.candidateOutcome = summarizeCandidateOutcome(plan, result);
+		plan.evidence = {
+			resultHash: sha256(canonicalJson(result)),
+			requestHash: plan.requestHash,
+			tool,
+			outputPaths: [],
+		};
+		return this.fail(planId, error);
 	}
 
 	fail(planId: string, error: unknown): AnalysisTaskPlan {
@@ -712,8 +732,8 @@ export class AnalysisTaskOrchestrator {
 		if (plan.workspaceRoot !== canonicalWorkspaceRoot(workspaceRoot)) {
 			throw new Error("Analysis task does not belong to this workspace.");
 		}
-		if (plan.status !== "completed" || !plan.evidence) {
-			throw new Error("Only a completed task with evidence can be exported.");
+		if (!["completed", "failed"].includes(plan.status) || !plan.evidence) {
+			throw new Error("Only a completed or failed task with retained evidence can be exported.");
 		}
 		const task = publicPlan(plan);
 		const payload = {

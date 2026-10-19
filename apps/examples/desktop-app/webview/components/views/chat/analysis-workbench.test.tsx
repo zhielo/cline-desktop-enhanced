@@ -398,3 +398,16 @@ it("navigates from saved evidence to its task target without replay or identity 
  expect(container.textContent).toContain(saved.evidence.resultHash);
  expect(invoke.mock.calls.some(([command])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|open_artifact)$/.test(command))).toBe(false);
 });
+
+
+it("confines selection details so long source snapshots cannot push pane controls below the composer", async () => {
+ vi.spyOn(desktopClient,"invoke").mockImplementation(async command=> command === "list_analysis_tasks" ? [] : {});
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/bounded-layout" environmentId="local"/>));
+ const workbench=container.querySelector('[aria-label="Analysis workbench"]');
+ expect(workbench?.classList.contains("min-h-0")).toBe(true);
+ expect(workbench?.classList.contains("overflow-hidden")).toBe(true);
+ const selection=container.querySelector('[aria-label="Analysis selection details"]');
+ expect(selection?.classList.contains("max-h-[40%]")).toBe(true);
+ expect(selection?.classList.contains("overflow-auto")).toBe(true);
+ expect(selection?.querySelector('[aria-label="Shared analysis artifact"]')).not.toBeNull();
+});
