@@ -36,9 +36,26 @@ type JobRecord = {
 	endedAt?: string;
 	timeoutPhase?: string;
 	phaseDeadlineAt?: string;
+	elapsedMs?: number;
+	phaseRemainingMs?: number;
+	autoAnalysisElapsedMs?: number;
+	autoAnalysisRemainingMs?: number;
+	autoAnalysisState?: "pending" | "running" | "finished";
+	timedOut?: boolean;
 };
-export const DEFAULT_IDA_TIMEOUT_MS = 60 * 60 * 1000;
-export const DEFAULT_IDA_PHASE_TIMEOUT_MS = DEFAULT_IDA_TIMEOUT_MS;
+// A complete analysis hour plus bounded startup/decompile/save/export headroom.
+export const DEFAULT_IDA_TIMEOUT_MS = 75 * 60 * 1000;
+export const DEFAULT_IDA_PHASE_TIMEOUT_MS = 60 * 60 * 1000;
+export const IDA_STOP_GRACE_MS = 5_000;
+const activeClocks = new Map<
+	string,
+	{
+		started: number;
+		phaseStarted: number;
+		autoStarted?: number;
+		autoElapsed?: number;
+	}
+>();
 
 const jobs = new Map<string, JobRecord>();
 
@@ -89,13 +106,60 @@ function readScriptPhases(job: JobRecord) {
 export function describeObservedIdaJob(job: JobRecord, now = Date.now()) {
 	const { phases, lastPhaseAt } = readScriptPhases(job);
 	const started = Date.parse(job.startedAt);
-	const ended = job.endedAt ? Date.parse(job.endedAt) : now;
+	const clock = activeClocks.get(job.id);
+	const ended = Date.parse(
+		job.endedAt ?? job.lastHostUpdateAt ?? job.startedAt,
+	);
 	const elapsedMs =
-		Number.isFinite(started) && Number.isFinite(ended)
-			? Math.max(0, ended - started)
-			: 0;
+		job.endedAt && job.elapsedMs !== undefined
+			? job.elapsedMs
+			: clock
+				? Math.max(0, performance.now() - clock.started)
+				: (job.elapsedMs ??
+					(Number.isFinite(started) && Number.isFinite(ended)
+						? Math.max(0, ended - started)
+						: 0));
+	const remainingMs =
+		typeof job.timeoutMs === "number" && Number.isFinite(job.timeoutMs)
+			? Math.max(0, job.timeoutMs - elapsedMs)
+			: null;
+	const autoElapsed =
+		clock?.autoStarted === undefined
+			? job.autoAnalysisElapsedMs
+			: (clock.autoElapsed ??
+				Math.max(0, performance.now() - clock.autoStarted));
 	return {
 		...job,
+		observedAt: clock
+			? new Date(now).toISOString()
+			: (job.lastHostUpdateAt ?? job.endedAt ?? job.startedAt),
+		clockSource: clock ? "live-host-monotonic" : "recorded-host-snapshot",
+		phaseRemainingMs:
+			clock && job.phaseDeadlineAt
+				? Math.min(
+						remainingMs ?? 0,
+						Math.max(
+							0,
+							(job.phaseTimeoutMs ?? 0) -
+								(performance.now() - clock.phaseStarted),
+						),
+					)
+				: (job.phaseRemainingMs ?? null),
+		autoAnalysisElapsedMs: autoElapsed ?? null,
+		autoAnalysisRemainingMs:
+			autoElapsed === undefined
+				? null
+				: Math.min(
+						remainingMs ?? 0,
+						Math.max(
+							0,
+							(job.phaseTimeoutMs ?? DEFAULT_IDA_PHASE_TIMEOUT_MS) -
+								autoElapsed,
+						),
+					),
+		resultLabel: job.timedOut
+			? "Timed out — partial results; database save is not guaranteed"
+			: undefined,
 		phases,
 		lastPhaseAt,
 		lastPhase:
@@ -104,15 +168,12 @@ export function describeObservedIdaJob(job: JobRecord, now = Date.now()) {
 				? "Script phase monitoring not supported; overall deadline enforced"
 				: "No script phase observed"),
 		elapsedMs,
-		remainingMs:
-			typeof job.timeoutMs === "number" && Number.isFinite(job.timeoutMs)
-				? Math.max(0, job.timeoutMs - elapsedMs)
-				: null,
+		remainingMs,
 		deadlineAt:
 			typeof job.timeoutMs === "number" &&
 			Number.isFinite(job.timeoutMs) &&
 			job.timeoutMs > 0 &&
-			job.timeoutMs <= 3_600_000 &&
+			job.timeoutMs <= DEFAULT_IDA_TIMEOUT_MS &&
 			Number.isFinite(started)
 				? new Date(started + job.timeoutMs).toISOString()
 				: null,
@@ -129,13 +190,15 @@ export function formatIdaProgress(
 		job.remainingMs === null
 			? "unknown"
 			: `${Math.ceil(job.remainingMs / 1000)}s`;
-	const phaseDeadline = job.phaseDeadlineAt
-		? Date.parse(job.phaseDeadlineAt)
-		: NaN;
-	const phaseRemaining = Number.isFinite(phaseDeadline)
-		? Math.max(0, Math.ceil((phaseDeadline - Date.now()) / 1000))
-		: null;
-	return `[IDA progress] ${job.status}; PID ${job.pid ?? "not launched"}; phase: ${job.lastPhase}; elapsed ${seconds}s; deadline remaining ${remaining}; phase budget remaining ${phaseRemaining ?? "unknown"}s; job ${job.id}`;
+	const phaseRemaining =
+		job.phaseRemainingMs === null
+			? "unknown"
+			: `${Math.ceil(job.phaseRemainingMs / 1000)}s`;
+	const autoRemaining =
+		job.autoAnalysisRemainingMs === null
+			? "not started"
+			: `${Math.ceil(job.autoAnalysisRemainingMs / 1000)}s`;
+	return `[IDA progress] ${job.status}; PID ${job.pid ?? "not launched"}; phase: ${job.lastPhase}; elapsed ${seconds}s; deadline remaining ${remaining}; phase budget remaining ${phaseRemaining}; auto-analysis budget remaining ${autoRemaining} (${job.autoAnalysisState ?? "pending"}); ${job.resultLabel ?? "completion percentage unavailable"}; job ${job.id}`;
 }
 
 /** Host-written PID receipts, not process-name polling or CPU-as-progress. */
@@ -151,13 +214,17 @@ export async function runObservedIda(
 		onProgress?: (job: ReturnType<typeof describeObservedIdaJob>) => void;
 	} = {},
 ) {
-	const phaseTimeoutMs = Math.min(options.phaseTimeoutMs ?? DEFAULT_IDA_PHASE_TIMEOUT_MS, timeoutMs);
+	const phaseTimeoutMs = Math.min(
+		options.phaseTimeoutMs ?? DEFAULT_IDA_PHASE_TIMEOUT_MS,
+		timeoutMs,
+	);
 	if (
 		!Number.isFinite(timeoutMs) ||
 		timeoutMs <= 0 ||
-		timeoutMs > 3_600_000 ||
+		timeoutMs > DEFAULT_IDA_TIMEOUT_MS ||
 		!Number.isFinite(phaseTimeoutMs) ||
-		phaseTimeoutMs <= 0
+		phaseTimeoutMs <= 0 ||
+		(options.phaseTimeoutMs ?? phaseTimeoutMs) > DEFAULT_IDA_PHASE_TIMEOUT_MS
 	)
 		throw new Error("Invalid IDA execution deadline");
 	const secretValues = prepareProcessEnvironment().secretValues;
@@ -172,7 +239,8 @@ export async function runObservedIda(
 	const id = randomUUID();
 	const receiptPath = join(outputDir, `ida-job-${id}.jsonl`);
 	const scriptProgressPath = join(outputDir, `ida-script-progress-${id}.jsonl`);
-	const job = {
+	const stopPath = join(outputDir, `ida-stop-${id}.json`);
+	const job: JobRecord = {
 		id,
 		pid: null as number | null,
 		status: "starting",
@@ -182,6 +250,7 @@ export async function runObservedIda(
 		scriptProgressPath,
 		timeoutMs,
 		phaseTimeoutMs,
+		autoAnalysisState: "pending",
 		scriptPhasesExpected: options.scriptPhasesExpected !== false,
 		lastHostUpdateAt: new Date().toISOString(),
 		endedAt: undefined as string | undefined,
@@ -218,7 +287,30 @@ export async function runObservedIda(
 	if (signal?.aborted) forwardAbort();
 	else signal?.addEventListener("abort", forwardAbort, { once: true });
 	let observedPhase = "No script phase observed";
-	let phaseStarted = Date.now();
+	const clock: {
+		started: number;
+		phaseStarted: number;
+		autoStarted?: number;
+		autoElapsed?: number;
+	} = {
+		started: performance.now(),
+		phaseStarted: performance.now(),
+	};
+	activeClocks.set(id, clock);
+	let stopTimer: ReturnType<typeof setTimeout> | undefined;
+	const requestPhaseStop = () => {
+		// Fixed owned scripts can save if they reach a cancellation boundary in time.
+		// auto_wait itself may not return; the grace never promises a saved database.
+		try {
+			writeFileSync(stopPath, JSON.stringify({ stop: true }), {
+				flag: "wx",
+				mode: 0o600,
+			});
+		} catch {
+			/* Deadline still enforced. */
+		}
+		stopTimer = setTimeout(() => phaseAbort.abort(), IDA_STOP_GRACE_MS);
+	};
 	let lastPublished = 0;
 	let phaseTimedOut = false;
 	const publishProgress = () => {
@@ -226,22 +318,51 @@ export async function runObservedIda(
 		const changed = snapshot.lastPhase !== observedPhase;
 		if (changed) {
 			observedPhase = snapshot.lastPhase;
-			phaseStarted = Date.now();
+			clock.phaseStarted = performance.now();
 			if (options.scriptPhasesExpected !== false)
 				job.phaseDeadlineAt = new Date(
-					phaseStarted + phaseTimeoutMs,
+					Date.now() +
+						Math.min(phaseTimeoutMs, snapshot.remainingMs ?? phaseTimeoutMs),
 				).toISOString();
+			if (
+				observedPhase === "auto-analysis-waiting" &&
+				clock.autoStarted === undefined
+			) {
+				clock.autoStarted = performance.now();
+				job.autoAnalysisState = "running";
+			} else if (
+				observedPhase !== "auto-analysis-waiting" &&
+				clock.autoStarted !== undefined &&
+				clock.autoElapsed === undefined
+			) {
+				clock.autoElapsed = Math.max(0, performance.now() - clock.autoStarted);
+				job.autoAnalysisState = "finished";
+			}
 			try {
 				record({ phase: "script-phase-observed", scriptPhase: observedPhase });
 			} catch {
 				/* Journal I/O must not crash the host's timer callback. */
 			}
 		}
-		if (changed || Date.now() - lastPublished >= 30_000) {
-			lastPublished = Date.now();
+		const current = describeObservedIdaJob(job);
+		job.elapsedMs = current.elapsedMs;
+		job.phaseRemainingMs = current.phaseRemainingMs ?? undefined;
+		job.autoAnalysisElapsedMs = current.autoAnalysisElapsedMs ?? undefined;
+		job.autoAnalysisRemainingMs = current.autoAnalysisRemainingMs ?? undefined;
+		if (changed || performance.now() - lastPublished >= 30_000) {
+			lastPublished = performance.now();
+			try {
+				record({
+					phase: "budget-snapshot",
+					elapsedMs: current.elapsedMs,
+					autoAnalysisRemainingMs: current.autoAnalysisRemainingMs,
+				});
+			} catch {
+				/* Snapshot storage cannot alter the supervised job. */
+			}
 			try {
 				options.onProgress?.({
-					...snapshot,
+					...current,
 					phaseDeadlineAt: job.phaseDeadlineAt,
 				});
 			} catch {
@@ -251,7 +372,12 @@ export async function runObservedIda(
 		if (
 			options.scriptPhasesExpected !== false &&
 			job.status === "running" &&
-			Date.now() - phaseStarted >= phaseTimeoutMs &&
+			performance.now() -
+				(observedPhase === "auto-analysis-waiting"
+					? (clock.autoStarted ?? clock.phaseStarted)
+					: clock.phaseStarted) >=
+				phaseTimeoutMs &&
+			!phaseTimedOut &&
 			!phaseAbort.signal.aborted
 		) {
 			phaseTimedOut = true;
@@ -265,7 +391,7 @@ export async function runObservedIda(
 			} catch {
 				/* The deadline remains enforced even if diagnostic storage fails. */
 			} finally {
-				phaseAbort.abort();
+				requestPhaseStop();
 			}
 		}
 	};
@@ -290,11 +416,14 @@ export async function runObservedIda(
 				job.pid = pid;
 				job.status = "running";
 				record({ phase: "launched", id, pid });
-				phaseStarted = Date.now();
+				clock.phaseStarted = performance.now();
 				lastPublished = 0;
 				publishProgress();
 			},
-			{ CLINE_IDA_PROGRESS_PATH: scriptProgressPath },
+			{
+				CLINE_IDA_PROGRESS_PATH: scriptProgressPath,
+				CLINE_IDA_STOP_PATH: stopPath,
+			},
 		);
 		if (phaseTimedOut) {
 			result.timedOut = true;
@@ -302,6 +431,8 @@ export async function runObservedIda(
 		}
 		result.stderr = redactSensitiveText(result.stderr, secretValues);
 		result.stdout = redactSensitiveText(result.stdout, secretValues);
+		job.timedOut = result.timedOut;
+		if (result.timedOut && !job.timeoutPhase) job.timeoutPhase = observedPhase;
 		job.status = result.outputDrainTimedOut
 			? "termination-unconfirmed"
 			: result.cancelled
@@ -309,6 +440,16 @@ export async function runObservedIda(
 				: result.timedOut || result.exitCode !== 0
 					? "failed"
 					: "process-exited";
+		// Freeze completed snapshots; a desktop restart must never invent a live countdown.
+		const finalSnapshot = describeObservedIdaJob(job);
+		job.elapsedMs = finalSnapshot.elapsedMs;
+		clock.autoElapsed = finalSnapshot.autoAnalysisElapsedMs ?? undefined;
+		job.autoAnalysisElapsedMs =
+			finalSnapshot.autoAnalysisElapsedMs ?? undefined;
+		job.autoAnalysisRemainingMs =
+			finalSnapshot.autoAnalysisRemainingMs ?? undefined;
+		job.phaseRemainingMs = finalSnapshot.phaseRemainingMs ?? undefined;
+		if (clock.autoStarted !== undefined) job.autoAnalysisState = "finished";
 		Object.assign(job, {
 			endedAt: new Date().toISOString(),
 			exitCode: result.exitCode,
@@ -360,6 +501,8 @@ export async function runObservedIda(
 		);
 	} finally {
 		clearInterval(progressTimer);
+		clearTimeout(stopTimer);
+		activeClocks.delete(id);
 		signal?.removeEventListener("abort", forwardAbort);
 	}
 }
@@ -424,6 +567,17 @@ export function listObservedIdaJobs() {
 export function idaProgressPrelude(outputDir: string) {
 	return `import json, datetime, os
 PROGRESS_PATH = os.environ.get("CLINE_IDA_PROGRESS_PATH", ${JSON.stringify(join(outputDir, "ida-script-progress.jsonl"))})
+def cline_check_stop():
+    stop_path = os.environ.get("CLINE_IDA_STOP_PATH")
+    if not stop_path or not os.path.isfile(stop_path):
+        return
+    # No arbitrary script or path from the request; only this owned database.
+    import ida_loader, idc
+    cline_phase("database-saving")
+    if ida_loader.save_database(idc.get_idb_path(), ida_loader.DBFL_COMP):
+        cline_phase("database-saved")
+    # The fixed outer handler records failure and qexit(1), never success.
+    raise RuntimeError("IDA analysis deadline exceeded; partial database only")
 def cline_phase(phase):
     try:
         with open(PROGRESS_PATH, "a", encoding="utf-8") as progress:

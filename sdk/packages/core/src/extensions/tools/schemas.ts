@@ -454,7 +454,8 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional(),
 	script_path: z.string().min(1).optional(),
 	script_args: z.array(z.string()).optional(),
-	timeout_ms: z.number().int().positive().max(3_600_000).optional(),
+	timeout_ms: z.number().int().positive().max(4_500_000).optional()
+        .describe("Overall deadline; IDA defaults to 75 minutes including a separate 60-minute auto-analysis phase. Explicit shorter limits cap that phase."),
 	ida_phase_timeout_ms: z.number().int().min(1000).max(3_600_000).optional(),
 	output_directory: z.string().min(1).optional(),
 	output_file: z
@@ -581,6 +582,9 @@ export const ReverseEngineeringInputSchema = z.object({
 	jadx_no_resources: z.boolean().optional(),
 	jadx_no_sources: z.boolean().optional(),
 	jadx_mappings_path: z.string().min(1).optional(),
+}).refine(input => !input.timeout_ms || input.timeout_ms <= 3_600_000 || input.engine === "ida", {
+  message: "Overall deadlines above one hour require the explicit IDA engine",
+  path: ["timeout_ms"],
 });
 
 /** Only debugger locations that cannot introduce an additional GDB/LLDB command. */
