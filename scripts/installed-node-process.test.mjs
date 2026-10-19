@@ -11,6 +11,7 @@ import {
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	stopOwnedApplication,
+ quitOwnedApplicationForRestart,
  stopOwnedWindowsTree,
  verifyOwnedTreeStopReceipt,
  OWNED_WINDOWS_TREE_STOP,
@@ -411,4 +412,35 @@ test("restart source reference check never injects or accepts lost or changed de
  assert.ok(driver.indexOf('"owned-source-reference-after-restart"') < driver.indexOf('const restoredSource='));
  assert.ok(driver.includes('join(evidence,"failure.png")'));
  assert.ok(driver.includes('projectApplied.plan.candidateOutcome'));
+});
+
+test("normal native restart requests quit once and waits for clean exit before disconnect", async () => {
+ const order=[];let finish;
+ const exit=new Promise(resolve=>{finish=resolve;});
+ const pending=quitOwnedApplicationForRestart(async()=>{order.push("quit");},()=>exit,async()=>{order.push("disconnect");},1000);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(order,["quit"]);
+ finish(0);await pending;
+ assert.deepEqual(order,["quit","disconnect"]);
+ // Native exit may destroy the renderer before its invoke response arrives.
+ await quitOwnedApplicationForRestart(async()=>{throw new Error("renderer closed");},async()=>0,async()=>{},1000);
+ await quitOwnedApplicationForRestart(()=>new Promise(()=>{}),async()=>0,async()=>{},1000);
+});
+
+test("normal restart never converts nonzero, missing or timed-out native exit into a pass", async () => {
+ for(const code of [1,null]){
+  let quits=0,disconnects=0;
+  await assert.rejects(quitOwnedApplicationForRestart(async()=>{quits++;},async()=>code,async()=>{disconnects++;},1000),/confirmed native exit code zero/);
+  assert.equal(quits,1);assert.equal(disconnects,0);
+ }
+ let quits=0,disconnects=0;
+ await assert.rejects(quitOwnedApplicationForRestart(async()=>{quits++;},()=>new Promise(()=>{}),async()=>{disconnects++;},10),/owned-native-quit-exit; no replay/);
+ assert.equal(quits,1);assert.equal(disconnects,0);
+ await assert.rejects(quitOwnedApplicationForRestart(async()=>{},async()=>0,async()=>{throw new Error("disconnect failed");},1000),/disconnect failed/);
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ const restart=driver.slice(driver.indexOf("async function quitForRestart"),driver.indexOf("\n\ttry {",driver.indexOf("async function quitForRestart")));
+ assert.ok(restart.includes('.invoke("quit_app")'));
+ assert.ok(!restart.includes("killOwnedProcess")&&!restart.includes("localStorage"));
+ assert.ok(driver.includes('acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000)'));
+ assert.ok(driver.includes("await stopOwnedApplication("),"forced failure cleanup remains separate");
 });

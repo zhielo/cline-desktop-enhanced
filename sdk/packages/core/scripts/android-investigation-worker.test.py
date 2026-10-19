@@ -56,6 +56,37 @@ def reseal(data):
     data=bytearray(data);data[12:32]=hashlib.sha1(data[32:]).digest();struct.pack_into('<I',data,8,zlib.adler32(data[12:])&0xffffffff);return bytes(data)
 
 
+def calls_fixture(root_code=b'\x71\x00\x01\x00\x00\x00\x0e\x00'):
+    """Owned two-method DEX: root invokes caller; caller invokes root. Never executed."""
+    strings=['LCalls;','V','root','caller']
+    data=bytearray(196);string_offsets=[]
+    for value in strings:
+        string_offsets.append(len(data));data+=bytes([len(value)])+value.encode()+b'\0'
+    while len(data)%4:data+=b'\0'
+    code_offsets=[]
+    for body in [root_code,b'\x71\x00\x00\x00\x00\x00\x0e\x00']:
+        assert len(body)%2==0
+        code_offsets.append(len(data));data+=struct.pack('<HHHHII',0,0,0,0,0,len(body)//2)+body
+        while len(data)%4:data+=b'\0'
+    classdata=len(data);data+=b'\0\0\x02\0'
+    for delta,offset in zip([0,1],code_offsets):
+        data+=bytes([delta,9]);value=offset
+        while value>=128:data+=bytes([(value&127)|128]);value>>=7
+        data+=bytes([value])
+    while len(data)%4:data+=b'\0'
+    mapoff=len(data)
+    entries=[(0,1,0),(1,4,112),(2,2,128),(3,1,136),(5,2,148),(6,1,164),(0x2002,4,196),(0x2001,2,code_offsets[0]),(0x2000,1,classdata),(0x1000,1,mapoff)]
+    data+=struct.pack('<I',len(entries))
+    for kind,count,offset in entries:data+=struct.pack('<HHII',kind,0,count,offset)
+    data[:8]=b'dex\n035\0'
+    struct.pack_into('<20I',data,32,len(data),112,0x12345678,0,0,mapoff,4,112,2,128,1,136,0,0,2,148,1,164,len(data)-196,196)
+    for i,offset in enumerate(string_offsets):struct.pack_into('<I',data,112+4*i,offset)
+    struct.pack_into('<II',data,128,0,1);struct.pack_into('<III',data,136,1,1,0)
+    struct.pack_into('<HHI',data,148,0,0,2);struct.pack_into('<HHI',data,156,0,0,3)
+    struct.pack_into('<8I',data,164,0,1,0xffffffff,0,0xffffffff,0,classdata,0)
+    return reseal(data)
+
+
 def archive(entries, compressed=False):
     buf=io.BytesIO()
     with zipfile.ZipFile(buf,'w',compression=zipfile.ZIP_DEFLATED if compressed else zipfile.ZIP_STORED) as z:
@@ -417,6 +448,67 @@ class AndroidTests(unittest.TestCase):
     def test_native_budget_and_invalid_extent_do_not_execute(self):
         data=bytearray(elf_fixture());struct.pack_into('<Q',data,64+32,len(data)+100)
         with self.assertRaises(ValueError):w.native_metadata(bytes(data),'owned',20)
+    def test_owned_method_call_fixture_matches_generator(self):
+        import base64
+        f=json.loads((HERE/'owned-android-method-calls-fixture.json').read_text())
+        data=calls_fixture();self.assertEqual(base64.b64decode(f['base64']),data)
+        self.assertEqual(f['sha256'],hashlib.sha256(data).hexdigest())
+        ambiguous=base64.b64decode(f['ambiguousBase64'])
+        self.assertEqual(f['ambiguousSha256'],hashlib.sha256(ambiguous).hexdigest())
+        with zipfile.ZipFile(io.BytesIO(ambiguous)) as z:
+            self.assertEqual(z.namelist(),['classes.dex','classes2.dex'])
+            self.assertEqual(z.read('classes.dex'),data);self.assertEqual(z.read('classes2.dex'),data)
+
+    def test_method_calls_missing_engine_is_explicit_and_partial(self):
+        from unittest.mock import patch
+        with patch.object(w, 'android_method_calls', side_effect=ImportError('owned missing engine')):
+            result=self.run_action(calls_fixture(),'android_method',options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'}})
+        self.assertEqual(result['status'],'partial')
+        self.assertEqual(result['evidence']['methodCalls']['status'],'blocked')
+        self.assertFalse(result['evidence']['methodCalls']['observedExecution'])
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_bounded_real_method_call_references_keep_exact_origin_and_offsets(self):
+        data=calls_fixture();self.path.write_bytes(data)
+        result=self.run_action(data,'android_method',options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'}})
+        calls=result['evidence']['methodCalls'];self.assertEqual(calls['selectionStatus'],'defined')
+        self.assertEqual(calls['referenceCount'],2);self.assertEqual(len(calls['references']),2)
+        self.assertEqual({r['relativeToSelection'] for r in calls['references']},{'caller','callee'})
+        self.assertEqual(calls['coverage']['methods'],2);self.assertEqual(calls['coverage']['instructions'],4)
+        for row in calls['references']:
+            self.assertEqual(row['bytecodeOffset'],0);self.assertEqual(row['artifactSha256'],hashlib.sha256(data).hexdigest())
+            self.assertEqual(row['opcode'],'invoke-static');self.assertEqual(row['definitionCandidateCount'],1)
+            self.assertFalse(row['dispatchVerified']);self.assertFalse(row['executionObserved'])
+            self.assertEqual(len(row['caller']['byteFingerprint']),64)
+        self.assertEqual(self.path.read_bytes(),data);self.assertEqual(result['status'],'partial')
+        limited=self.run_action(data,'android_method',limit=1,options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'}})['evidence']['methodCalls']
+        self.assertEqual(limited['referenceCount'],2);self.assertEqual(len(limited['references']),1)
+        self.assertTrue(limited['referencesTruncated']);self.assertIn('reference-budget',limited['coverage']['limitsReached'])
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_method_calls_preserve_ambiguous_definitions_and_reject_bad_operands(self):
+        options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'}}
+        duplicate=self.run_action(archive([('classes.dex',calls_fixture()),('classes2.dex',calls_fixture())]),'android_method',options=options)['evidence']['methodCalls']
+        self.assertEqual(duplicate['selectionStatus'],'ambiguous-definition');self.assertEqual(duplicate['references'],[])
+        bad=self.run_action(calls_fixture(b'\x71\x00\xff\xff\x00\x00\x0e\x00'),'android_method',options=options)['evidence']['methodCalls']
+        self.assertGreater(bad['coverage']['decodeFailures'],0)
+        self.assertFalse(any(r['relativeToSelection']=='callee' for r in bad['references']))
+        missing=self.run_action(calls_fixture(),'android_method',options={'method':{'class_descriptor':'LCalls;','name':'missing','descriptor':'()V'}})['evidence']['methodCalls']
+        self.assertEqual(missing['selectionStatus'],'no-covered-definition');self.assertEqual(missing['references'],[])
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_method_calls_enforce_instruction_code_and_dex_budgets(self):
+        options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'}}
+        many=self.run_action(calls_fixture(b'\x00\x00'*100001+b'\x0e\x00'),'android_method',options=options)['evidence']['methodCalls']
+        self.assertEqual(many['coverage']['instructions'],100000)
+        self.assertIn('instruction-budget',many['coverage']['limitsReached'])
+        large=self.run_action(calls_fixture(b'\x00\x00'*524289+b'\x0e\x00'),'android_method',options=options)['evidence']['methodCalls']
+        self.assertIn('code-byte-budget',large['coverage']['limitsReached']);self.assertLessEqual(large['coverage']['codeBytes'],1048576)
+        entries=[('classes%d.dex'%i,reseal(calls_fixture().replace(b'LCalls;',('LCall%d;'%i).encode()))) for i in range(9)]
+        bounded=self.run_action(archive(entries),'android_method',options={'method':{'class_descriptor':'LCall0;','name':'root','descriptor':'()V'}})['evidence']['methodCalls']
+        self.assertEqual(bounded['coverage']['dexFiles'],8);self.assertIn('dex-budget',bounded['coverage']['limitsReached'])
+        self.assertEqual(bounded['selectedDefinitionCount'],1)
+
     @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
     def test_exact_defined_dex_bytecode(self):
         result=self.run_action(dex_fixture(True),'android_method_code',options={'method':{'class_descriptor':'LFixture;','name':'native_work','descriptor':'()V'}})

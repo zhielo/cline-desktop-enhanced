@@ -108,6 +108,29 @@ export async function stopOwnedApplication(
     throw new AggregateError(failures, "Owned application termination and disconnect failed");
 }
 
+/** Normal restart is not a crash test. Ask the existing native Quit command once,
+ * then require clean exit of the exact launched child before disconnecting CDP.
+ * An exit can close the invoke transport before its response: the native exit,
+ * not that response, is authoritative. A timeout/nonzero exit fails; no force-kill
+ * fallback may turn it into a successful restart. Failure cleanup stays separate. */
+export async function quitOwnedApplicationForRestart(
+  requestQuit: () => Promise<unknown>,
+  waitForExit: () => Promise<number | null>,
+  disconnect: () => Promise<void>,
+  timeoutMs = 30_000,
+) {
+  const request = Promise.resolve().then(requestQuit).then(
+    () => "acknowledged" as const,
+    () => "transport-closed-or-rejected" as const,
+  );
+  const code = await withInstalledActionDeadline("owned-native-quit-exit", waitForExit, timeoutMs);
+  if (code !== 0) throw new Error("Owned normal restart requires confirmed native exit code zero");
+  await withInstalledActionDeadline("owned-native-quit-disconnect", disconnect, timeoutMs);
+  // The request can be pending after exit if its renderer was destroyed. Do not
+  // wait on it or replay it; it has a rejection handler and grants no authority.
+  void request;
+}
+
 /** A single taskkill can report a WebView child already exiting as an error.
  * Neither its exit code nor CDP disconnect proves cleanup. Capture creation-time
  * identities first, issue one native tree stop, then require a fresh CIM snapshot
@@ -690,6 +713,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
       app = undefined;
     }
 	}
+	async function quitForRestart(page: Page) {
+    const ownedBrowser=browser,ownedApp=app;
+    if(!ownedBrowser||!ownedApp||ownedApp.child.exitCode!==null)
+      throw new Error("Owned live application required for normal restart");
+    await quitOwnedApplicationForRestart(
+      () => page.evaluate(() => (window as unknown as {
+        __TAURI_INTERNALS__: {invoke:(name:string)=>Promise<unknown>}
+      }).__TAURI_INTERNALS__.invoke("quit_app")),
+      () => ownedApp.exited,
+      async () => {
+        await ownedApp.closed;
+        await ownedBrowser.close();
+      },
+    );
+    browser=undefined;
+    app=undefined;
+  }
 
 	try {
 		// Use the installed sidecar to bootstrap an isolated Hub on an OS-assigned port.
@@ -1593,6 +1633,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(missingElectron.status!=="partial"||missingElectron.selection.status!=="not-found-in-covered-sources"||missingElectron.nodes.length!==0)throw new Error("Installed missing IPC channel invented a path");
     for(const [name,source]of Object.entries(electronSources))if(await readFile(join(electronRoot,name),"utf8")!==source||!electronResult.artifacts.some(a=>a.path===name&&a.sha256===createHash("sha256").update(source).digest("hex")))throw new Error("Installed fresh Electron input/provenance changed");
     stages.push("installed-fresh-electron-renderer-preload-main-channel-candidates-passed");
+    const methodCallsFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-android-method-calls-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string;ambiguousBase64:string;ambiguousSha256:string};
+    const methodCallsTarget=join(workspace,"owned-method-calls.dex"),ambiguousMethodCallsTarget=join(workspace,"owned-method-calls-ambiguous.apk");
+    for(const f of [{path:methodCallsTarget,base64:methodCallsFixture.base64,sha256:methodCallsFixture.sha256},{path:ambiguousMethodCallsTarget,base64:methodCallsFixture.ambiguousBase64,sha256:methodCallsFixture.ambiguousSha256}]){
+      const bytes=Buffer.from(f.base64,"base64");if(createHash("sha256").update(bytes).digest("hex")!==f.sha256)throw new Error("Owned method-call fixture digest mismatch");await writeFile(f.path,bytes);
+    }
+    type OwnedMethodCalls={status:string;observedExecution:boolean;stages:{result:{result:{input:{sha256:string};evidence:{methodCalls:{protocol:string;status:string;selectionStatus:string;selectedDefinitionCount:number;referenceCount:number;referencesTruncated:boolean;dispatchVerified:boolean;observedExecution:boolean;coverage:{methods:number;instructions:number};references:{artifactSha256:string;relativeToSelection:string;bytecodeOffset:number;opcode:string;dispatchVerified:boolean;executionObserved:boolean;caller:{byteFingerprint:string}}[]}}}}}[]};
+    const methodCallsRequest={operation:"trace_android_method",target:methodCallsTarget,advanced_options:{method:{class_descriptor:"LCalls;",name:"root",descriptor:"()V"}},timeout_ms:120000};
+    const methodCallsResult=(await runOwnedAdvanced(methodCallsRequest)).result as unknown as OwnedMethodCalls,methodCallsWorker=methodCallsResult.stages[1]?.result.result,methodCalls=methodCallsWorker?.evidence.methodCalls;
+    if(methodCallsResult.status!=="partial"||methodCallsResult.observedExecution!==false||methodCallsWorker?.input.sha256!==methodCallsFixture.sha256||methodCalls?.protocol!=="cline-android-method-calls/v1"||methodCalls.status!=="partial"||methodCalls.selectionStatus!=="defined"||methodCalls.selectedDefinitionCount!==1||methodCalls.referenceCount!==2||methodCalls.references.length!==2||methodCalls.references.map(r=>r.relativeToSelection).sort().join(",")!=="callee,caller"||methodCalls.dispatchVerified!==false||methodCalls.observedExecution!==false||methodCalls.coverage.methods!==2||methodCalls.coverage.instructions!==4||methodCalls.references.some(r=>r.artifactSha256!==methodCallsFixture.sha256||r.bytecodeOffset!==0||r.opcode!=="invoke-static"||r.dispatchVerified!==false||r.executionObserved!==false||!/^[a-f0-9]{64}$/.test(r.caller.byteFingerprint)))throw new Error("Installed exact method-call references lost origin, limits or static-only status");
+    const limitedMethodCalls=(await runOwnedAdvanced({...methodCallsRequest,max_results:1})).result as unknown as OwnedMethodCalls;
+    const limitedMethodEvidence=limitedMethodCalls.stages[1]?.result.result.evidence.methodCalls;
+    if(limitedMethodCalls.status!=="partial"||limitedMethodEvidence?.referenceCount!==2||limitedMethodEvidence.references.length!==1||limitedMethodEvidence.referencesTruncated!==true)throw new Error("Installed method-call detail budget lost coverage counts");
+    const ambiguousMethodCalls=(await runOwnedAdvanced({...methodCallsRequest,target:ambiguousMethodCallsTarget})).result as unknown as OwnedMethodCalls;
+    const ambiguousMethodEvidence=ambiguousMethodCalls.stages[1]?.result.result.evidence.methodCalls;
+    if(ambiguousMethodCalls.status!=="partial"||ambiguousMethodEvidence?.selectionStatus!=="ambiguous-definition"||ambiguousMethodEvidence.selectedDefinitionCount!==2||ambiguousMethodEvidence.references.length!==0)throw new Error("Installed method tracing selected an ambiguous DEX definition");
+    if(!(await readFile(methodCallsTarget)).equals(Buffer.from(methodCallsFixture.base64,"base64"))||!(await readFile(ambiguousMethodCallsTarget)).equals(Buffer.from(methodCallsFixture.ambiguousBase64,"base64")))throw new Error("Installed method-call tracing modified its input");
+    stages.push("installed-android-method-call-references-origin-budgets-ambiguity-no-execution-passed");
     const callbackFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-android-entrypoints-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string;comparisonBase64:string;comparisonSha256:string;ambiguousBase64:string;ambiguousSha256:string;dexSha256:string};
     const callbackTarget=join(workspace,"owned-callback.apk"),callbackOther=join(workspace,"owned-callback-after.apk"),callbackAmbiguous=join(workspace,"owned-callback-ambiguous.apk");
     const callbackInputs=[{path:callbackTarget,base64:callbackFixture.base64,sha256:callbackFixture.sha256},{path:callbackOther,base64:callbackFixture.comparisonBase64,sha256:callbackFixture.comparisonSha256},{path:callbackAmbiguous,base64:callbackFixture.ambiguousBase64,sha256:callbackFixture.ambiguousSha256}];
@@ -1655,7 +1712,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       savedSourceReference[0].value.selection.selector.kind!=="artifact"||Object.keys(savedSourceReference[0].value.selection.selector).sort().join(",")!=="kind,path")
       throw new Error("Installed remembered source reference retained extra data or wrong selector");
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
-    await stop();
+    await acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000);
     page = await launch();
     const restartedSourceReference = await acceptanceAction("owned-source-reference-after-restart", () =>
       page.evaluate((key) => localStorage.getItem(key), savedSourceReference[0].key), 30000);

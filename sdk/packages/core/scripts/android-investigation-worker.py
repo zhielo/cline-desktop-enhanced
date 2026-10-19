@@ -12,7 +12,7 @@ import zipfile
 import zlib
 import xml.etree.ElementTree as ET
 
-VERSION = "android-static/v7"
+VERSION = "android-static/v8"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -371,6 +371,102 @@ def selected_dex_code(data, selector, limit):
     return {"engine":"androguard","engineVersion":importlib.metadata.version("androguard"),"methods":results,"coverage":"selected-defined-method-bytecode-not-recovered-source-or-runtime-execution"}
 
 
+def android_method_calls(dexes, dex_data, selector, limit):
+    """One-hop encoded invoke references only; never infer dynamic dispatch."""
+    import importlib.metadata
+    from androguard.core.dex import DEX
+    from loguru import logger
+    logger.disable("androguard")
+    signature = lambda m: (m["classDescriptor"], m["name"], m["descriptor"])
+    wanted = (selector["class_descriptor"], selector["name"], selector["descriptor"])
+    definitions = {}
+    for artifact, methods in dexes:
+        for method in methods:
+            if method.get("defined"):
+                definitions.setdefault(signature(method), []).append((artifact, method))
+    selected = definitions.get(wanted, [])
+    report = {"protocol":"cline-android-method-calls/v1", "engine":"androguard",
+        "engineVersion":importlib.metadata.version("androguard"), "status":"partial",
+        "observedExecution":False, "dispatchVerified":False,
+        "selectionStatus":"defined" if len(selected)==1 else "ambiguous-definition" if selected else "no-covered-definition",
+        "selectedDefinitionCount":len(selected), "references":[], "referenceCount":0,
+        "coverage":{"scope":"bounded-one-hop-encoded-invokes-not-call-graph-or-reachability",
+            "maxDexFiles":8,"maxMethods":256,"maxInstructions":100000,"maxCodeBytes":1048576,
+            "maxDexBytes":33554432,"maxReferences":min(limit,200),
+            "dexFiles":0,"methods":0,"instructions":0,"codeBytes":0,"dexBytes":0,
+            "limitsReached":[],"decodeFailures":0,"unsupportedInvokes":0}}
+    if len(selected)!=1:
+        return report
+    selected_id = selected[0][1]["id"]
+    report["selectedMethodId"] = selected_id
+    coverage = report["coverage"]
+    def reached(reason):
+        if reason not in coverage["limitsReached"]: coverage["limitsReached"].append(reason)
+    # Decode the selected artifact first; callers in excluded artifacts remain unknown.
+    ordered = sorted(dexes, key=lambda item: item[0]["id"] != selected[0][0]["id"])
+    for artifact, methods in ordered:
+        data = dex_data.get(artifact["id"])
+        if data is None: reached("unavailable-dex-bytes"); continue
+        if coverage["dexFiles"]>=coverage["maxDexFiles"] or coverage["dexBytes"]+len(data)>coverage["maxDexBytes"]:
+            reached("dex-budget"); continue
+        coverage["dexFiles"]+=1;coverage["dexBytes"]+=len(data)
+        try:
+            dex = DEX(data)
+            encoded = {m.get_method_idx():m for cls in dex.get_classes() for m in cls.get_methods()}
+        except Exception:
+            coverage["decodeFailures"]+=1;continue
+        for method in sorted(methods, key=lambda m:m["id"]!=selected_id):
+            if not method.get("defined") or not method.get("codeOffset"): continue
+            if coverage["methods"]>=coverage["maxMethods"]:
+                reached("method-budget"); break
+            if coverage["codeBytes"]+method["instructionBytes"]>coverage["maxCodeBytes"]:
+                reached("code-byte-budget"); continue
+            coverage["methods"]+=1;coverage["codeBytes"]+=method["instructionBytes"]
+            position=0
+            try:
+                decoded=encoded.get(method["methodIndex"])
+                if decoded is None or decoded.get_code() is None: raise ValueError("missing code")
+                for instruction in decoded.get_code().get_bc().get_instructions():
+                    if coverage["instructions"]>=coverage["maxInstructions"]:
+                        reached("instruction-budget"); break
+                    size=instruction.get_length()
+                    if size<=0 or position+size>method["instructionBytes"]: raise ValueError("instruction bounds")
+                    coverage["instructions"]+=1
+                    opcode=instruction.get_op_value()
+                    if opcode in (0xfa,0xfb,0xfc,0xfd):
+                        # Polymorphic/custom operands are not ordinary method-id bindings.
+                        coverage["unsupportedInvokes"]+=1
+                    if opcode in (0x6e,0x6f,0x70,0x71,0x72,0x74,0x75,0x76,0x77,0x78):
+                        index=instruction.get_ref_kind()
+                        if type(index) is not int or not 0<=index<len(methods): raise ValueError("method reference bounds")
+                        target=methods[index]
+                        if method["id"]==selected_id or signature(target)==wanted:
+                            report["referenceCount"]+=1
+                            if len(report["references"])<coverage["maxReferences"]:
+                                candidates=definitions.get(signature(target),[])
+                                report["references"].append({"id":stable(artifact["id"],method["methodIndex"],position,"invoke"),
+                                    "artifactId":artifact["id"],"artifactSha256":artifact["sha256"],"callerMethodId":method["id"],
+                                    "caller":{k:method[k] for k in ("classDescriptor","name","descriptor","byteFingerprint")},
+                                    "bytecodeOffset":position,"opcode":instruction.get_name()[:64],
+                                    "referencedMethod":{k:target[k] for k in ("id","methodIndex","classDescriptor","name","descriptor")},
+                                    "relativeToSelection":"caller-and-callee" if method["id"]==selected_id and signature(target)==wanted else "callee" if method["id"]==selected_id else "caller",
+                                    "definitionCandidateCount":len(candidates),
+                                    "definitionCandidates":[{"methodId":m["id"],"artifactId":a["id"],"artifactSha256":a["sha256"]} for a,m in candidates[:4]],
+                                    "definitionCandidatesTruncated":len(candidates)>4,
+                                    "binding":"encoded-method-reference-only", "dispatchVerified":False,"executionObserved":False})
+                            else: reached("reference-budget")
+                    position+=size
+                if position<method["instructionBytes"]: reached("incomplete-method-decode")
+            except Exception:
+                coverage["decodeFailures"]+=1
+            if "instruction-budget" in coverage["limitsReached"]: break
+        if "instruction-budget" in coverage["limitsReached"]: break
+    report["referencesTruncated"] = len(report["references"])<report["referenceCount"]
+    report["limitations"]=["Exact pool signatures and encoded invoke operands only; virtual/interface/super dispatch, reflection, custom/polymorphic invokes, dynamic loading and runtime execution remain unresolved.",
+        "Definition candidates preserve all covered DEX origins and ambiguity; one candidate is not a verified runtime binding. No transitive traversal, verifier/ART proof or whole-app completeness. Coverage is bounded and excludes rejected/uncovered artifacts."]
+    return report
+
+
 def native_call_budget(options):
     defaults={"max_depth":2,"max_functions":16,"max_edges":128,"max_total_bytes":32768}
     caps={"max_depth":4,"max_functions":32,"max_edges":256,"max_total_bytes":65536}
@@ -556,7 +652,7 @@ def investigate(request):
                 method_chars[0] += chars
                 record.update(validation=meta.pop("validation"), dex=meta)
                 dexes.append((record, methods))
-                if request["action"]=="android_method_code":dex_data.append((identity,data))
+                if request["action"] in ("android_method", "android_method_code"):dex_data.append((identity,data))
             except (ValueError, struct.error, UnicodeError) as exc:
                 record.update(validation="candidate-rejected-or-unsupported", reason=str(exc))
         elif not zip_candidate and data.startswith(b"\x7fELF"):
@@ -721,6 +817,12 @@ def investigate(request):
         evidence["selectionStatus"] = "found" if selected else "not-found-in-covered-artifacts"
         evidence["ambiguousAcrossArtifacts"] = len(selected) > 1
         status = "partial" if not selected or truncated[0] or len(selected) > limit else status
+    if request["action"] == "android_method":
+        try:
+            evidence["methodCalls"] = android_method_calls(dexes, dict(dex_data), selector, limit)
+        except ImportError:
+            evidence["methodCalls"] = {"protocol":"cline-android-method-calls/v1","status":"blocked","reason":"Androguard is not installed","observedExecution":False,"dispatchVerified":False}
+        status = "partial"
     if any(c.get("status")=="blocked" or any(m.get("instructionsTruncated") for m in c.get("methods",[])) for c in selected_code):status="partial"
     if relationship_count > limit or any(r.get("dex",{}).get("methodsTruncated") or r.get("dex",{}).get("loaderReferencesTruncated") for r in records):
         status = "partial"
