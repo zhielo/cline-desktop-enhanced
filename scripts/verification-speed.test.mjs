@@ -74,3 +74,12 @@ test("desktop release changes trigger every mandatory extension and E2E path fil
   for(const name of ["vscode-test:","test-platform-integration:"])assert.ok(extension.includes(name));
   assert.ok(e2e.includes("if: needs.detect-changes.outputs.e2e == 'true'"));
 });
+
+test("PR E2E cannot be cancelled by optional Bun cache publication",()=>{
+  const w=load(".github/workflows/ext-vscode-test-e2e.yml");
+  const save=w.split("- name: Save Bun install cache (bounded optimization)")[1];
+  assert.ok(save.includes("if: success() && github.event_name != 'pull_request' && steps.bun-cache.outputs.cache-hit != 'true'"));
+  assert.ok(w.includes("uses: actions/cache/restore@v4"));
+  assert.ok(w.includes("run: bun run test:e2e:optimal"));
+  assert.ok(w.includes("timeout-minutes: 20"));
+});

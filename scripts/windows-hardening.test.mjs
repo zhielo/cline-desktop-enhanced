@@ -160,7 +160,7 @@ test("extension Bun cache saving is bounded without weakening E2E gates", () => 
  expect(restore).not.toContain("uses: actions/cache@v4");
  expect(restore).not.toContain("restore-keys:");
  const save = source.split("- name: Save Bun install cache (bounded optimization)")[1];
- expect(save).toContain("if: success() && steps.bun-cache.outputs.cache-hit != 'true'");
+ expect(save).toContain("if: success() && github.event_name != 'pull_request' && steps.bun-cache.outputs.cache-hit != 'true'");
  expect(save).toContain("uses: actions/cache/save@v4");
  expect(save).toContain("timeout-minutes: 1");
  expect(save).toContain("continue-on-error: true");

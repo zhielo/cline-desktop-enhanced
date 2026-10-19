@@ -29,3 +29,5 @@ Root package/lock and packaging changes trigger `desktop-test` in addition to th
 
 ## Exact-head release check routing
 Desktop app, consolidated validator and custom Windows release workflow changes also trigger the extension, testing-platform and cross-platform E2E path filters. The release verifier continues to require successful named checks for the exact head; a path-filter skip is not accepted as a substitute for those required checks. The optional compiler caches never reuse a test result or installer.
+
+PR E2E runs restore the Bun download cache read-only. Cache publication is limited to successful non-PR runs, retaining its one-minute limit. This prevents a passing PR test run from being cancelled solely by an optional upload at the overall job deadline; the twenty-minute E2E job limit is unchanged.

@@ -186,8 +186,11 @@ jobs:
                   path: |
                       apps/vscode/test-results/
 
+            # A PR must never lose its passing test result while publishing an
+            # optional cache (the job deadline also cancels continue-on-error steps).
+            # Main/manual runs can warm it; PRs restore available cache read-only.
             - name: Save Bun install cache (bounded optimization)
-              if: success() && steps.bun-cache.outputs.cache-hit != 'true'
+              if: success() && github.event_name != 'pull_request' && steps.bun-cache.outputs.cache-hit != 'true'
               uses: actions/cache/save@v4
               timeout-minutes: 1
               continue-on-error: true
