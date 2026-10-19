@@ -1,4 +1,5 @@
 "use client";
+import { SharedSourceEvidencePanel } from "./source-evidence-selection";
 import { AnalysisProjectSelectionProvider, analysisProjectScope, SharedArtifactSelection, useAnalysisProjectTarget } from "./analysis-project-selection";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
@@ -514,6 +515,7 @@ function AnalysisWorkbenchContent({
 				</button>
 			</div>
 			<SharedArtifactSelection />
+			<SharedSourceEvidencePanel sessionId={sessionId} environmentId={environmentId} />
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
 					{(mode === "notebook" || mode === "graph") && (

@@ -1,5 +1,8 @@
 "use client";
-import { useAnalysisProjectTarget } from "./analysis-project-selection";
+import {
+	useAnalysisProjectTarget,
+	useAnalysisProjectSelection,
+} from "./analysis-project-selection";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
@@ -42,6 +45,7 @@ export function FirstPartyAnalysisWorkspace({
 	sessionId?: string;
 	environmentId: string;
 }) {
+	const project = useAnalysisProjectSelection();
 	const [status, setStatus] = useState<Status | null>(null),
 		[target, setTarget] = useAnalysisProjectTarget("."),
 		[compareTarget, setCompareTarget] = useState("");
@@ -607,6 +611,37 @@ export function FirstPartyAnalysisWorkspace({
 											{JSON.stringify(item, null, 2)}
 										</pre>
 									</PreviewScrollRegion>
+									{project &&
+										selected &&
+										item &&
+										typeof item === "object" &&
+										(view === "artifacts" || view === "findings") && (
+											<button
+												type="button"
+												className="rounded border px-2 py-1 text-xs"
+												onClick={() => {
+													const record = item as Record<string, unknown>;
+													if (
+														view === "findings" &&
+														typeof record.id === "string"
+													)
+														project.setSourceEvidence({
+															receiptId: selected,
+															selector: { kind: "fact", factId: record.id },
+														});
+													else if (
+														view === "artifacts" &&
+														typeof record.path === "string"
+													)
+														project.setSourceEvidence({
+															receiptId: selected,
+															selector: { kind: "artifact", path: record.path },
+														});
+												}}
+											>
+												Inspect saved source identity
+											</button>
+										)}
 									{view === "graph" && item && typeof item === "object" ? (
 										<div className="flex gap-2 text-xs">
 											{(["source", "target"] as const).map((side) => {

@@ -339,6 +339,9 @@ export async function main() {
   await writeFile(join(workspace,"owned-renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
   const analysisCurrent=join(workspace,"owned-analysis-current"), analysisPrevious=join(workspace,"owned-analysis-previous");
   await mkdir(analysisCurrent);await mkdir(analysisPrevious);
+  const sourceSelectionText='export const ownedSelection = "NEVER_EXECUTE_SOURCE_SELECTION";\n';
+  const sourceSelectionTarget=join(analysisCurrent,"selection-owned.ts");
+  await writeFile(sourceSelectionTarget,sourceSelectionText);
   const hybridExpectedOutput="owned-hybrid\n";
   const hybridFixtureTarget=join(analysisCurrent,"hybrid-owned.js");
   await writeFile(hybridFixtureTarget,`process.stdout.write(${JSON.stringify(hybridExpectedOutput)});`);
@@ -919,6 +922,39 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.getByRole("button",{name:"verification",exact:true}).click();
     await page.getByText("Receipt integrity and static inspection are not behavioral certification.",{exact:false}).waitFor();
     stages.push("installed-first-party-mode-parser-evidence-passed");
+    // Receipt-bound read stays available Off; no analysis, approval or target execution is started.
+    const sourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});
+    await sourceWorkspace.getByRole("button",{name:"artifacts",exact:true}).click();
+    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("selection-owned.ts");
+    const inspectSaved=sourceWorkspace.getByRole("button",{name:"Inspect saved source identity",exact:true});
+    await inspectSaved.waitFor({timeout:30000});
+    if(await inspectSaved.count()!==1)throw new Error("Installed source identity fixture did not resolve uniquely");
+    await inspectSaved.click();
+    const selectedSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await selectedSource.getByText(`Saved SHA256: ${createHash("sha256").update(sourceSelectionText).digest("hex")}`,{exact:true}).waitFor();
+    await selectedSource.getByLabel("Bounded source snapshot",{exact:true}).getByText("NEVER_EXECUTE_SOURCE_SELECTION",{exact:false}).waitFor();
+    await sourceWorkspace.getByRole("button",{name:"findings",exact:true}).click();
+    await inspectSaved.first().waitFor({timeout:30000});
+    await inspectSaved.first().click();
+    await selectedSource.locator('li[aria-current="location"]').waitFor({timeout:30000});
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor();
+    try {
+      await writeFile(sourceSelectionTarget,'export const changedSelection = "CURRENT_NOT_SAVED";');
+      await selectedSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+      await selectedSource.getByText("Source identity: stale",{exact:true}).waitFor({timeout:30000});
+      if(await selectedSource.getByLabel("Bounded source snapshot",{exact:true}).count()||await selectedSource.getByRole("button",{name:"Use source path in analysis panes",exact:true}).count())throw new Error("Installed stale source exposed a preview or reusable path");
+      if((await selectedSource.innerText()).includes("CURRENT_NOT_SAVED"))throw new Error("Installed stale source leaked current bytes");
+    } finally { await writeFile(sourceSelectionTarget,sourceSelectionText); }
+    await selectedSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await page.getByRole("button",{name:"Start here",exact:true}).click();
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor();
+    await selectedSource.getByRole("button",{name:"Clear source evidence selection",exact:true}).click();
+    await selectedSource.waitFor({state:"detached"});
+    if((await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs)).mode!=="off")throw new Error("Installed source selection changed Analysis Off");
+    stages.push("installed-source-evidence-hash-bound-selection-stale-recheck-no-execution-passed");
+
     await page.getByRole("button",{name:"Close diff view",exact:true}).click();
 
     await page.waitForFunction(() => document.querySelectorAll('[data-message-role="user"]').length >= 120);

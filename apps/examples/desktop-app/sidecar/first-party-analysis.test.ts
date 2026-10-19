@@ -3,17 +3,27 @@ import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const { modes, sessions, run, consume, complete, fail, observe, record } =
-	vi.hoisted(() => ({
-		modes: vi.fn(),
-		sessions: vi.fn(),
-		run: vi.fn(),
-		consume: vi.fn(),
-		complete: vi.fn(),
-		fail: vi.fn(),
-		observe: vi.fn(),
-		record: vi.fn(),
-	}));
+const {
+	modes,
+	sessions,
+	run,
+	consume,
+	complete,
+	fail,
+	observe,
+	record,
+	selectSource,
+} = vi.hoisted(() => ({
+	selectSource: vi.fn(),
+	modes: vi.fn(),
+	sessions: vi.fn(),
+	run: vi.fn(),
+	consume: vi.fn(),
+	complete: vi.fn(),
+	fail: vi.fn(),
+	observe: vi.fn(),
+	record: vi.fn(),
+}));
 vi.mock("node:fs/promises", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs/promises")>();
 	return { ...actual, realpath: vi.fn(actual.realpath) };
@@ -49,6 +59,9 @@ vi.mock("@cline/core", async (importOriginal) => {
 		dossierDisagreements: vi.fn(),
 	};
 });
+vi.mock("./source-evidence-selection", () => ({
+	selectSourceEvidence: selectSource,
+}));
 vi.mock("./analysis-task-orchestrator", () => ({
 	desktopAnalysisTaskOrchestrator: {
 		consume,
@@ -302,4 +315,40 @@ it("mode changes are blocked while observation is active and released after comp
 			true,
 		),
 	).resolves.toBeUndefined();
+});
+
+it("requires trusted desktop source reads and uses host session scope even with Analysis Off", async () => {
+	ownedRoot = await mkdtemp(join(tmpdir(), "cline-selection-routing-"));
+	const workspace = realpathSync(ownedRoot);
+	sessions.mockReturnValue({ workspace, mode: "off" });
+	selectSource.mockResolvedValue({ status: "matched" });
+	const input = {
+		receiptId: "00000000-0000-4000-8000-000000000001",
+		selector: { kind: "artifact", path: "owned.ts" },
+	};
+	const session = { id: "owning", workspace, busy: false };
+	await expect(
+		handleFirstPartyCommand(
+			"first_party_analysis_select_source",
+			{ input },
+			session,
+			false,
+		),
+	).rejects.toThrow("trusted");
+	expect(selectSource).not.toHaveBeenCalled();
+	await expect(
+		handleFirstPartyCommand(
+			"first_party_analysis_select_source",
+			{ input, workspace: "/forged", sessionId: "forged" },
+			session,
+			true,
+		),
+	).resolves.toEqual({ status: "matched" });
+	expect(selectSource).toHaveBeenCalledWith(
+		input,
+		{ sessionId: "owning", workspace },
+		expect.any(Function),
+	);
+	expect(run).not.toHaveBeenCalled();
+	expect(consume).not.toHaveBeenCalled();
 });

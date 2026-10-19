@@ -1,3 +1,4 @@
+import { selectSourceEvidence } from "./source-evidence-selection";
 import {
 	bindHybridObservation,
 	recheckHybridObservation,
@@ -222,6 +223,17 @@ export async function handleFirstPartyCommand(
 			nextOffset:
 				offset + items.length < view.length ? offset + items.length : null,
 		};
+	}
+	if (command === "first_party_analysis_select_source") {
+		if (!trusted)
+			throw new Error(
+				"Source selection reads require a trusted desktop connection",
+			);
+		return selectSourceEvidence(
+			args.input,
+			{ sessionId: session.id, workspace: session.workspace },
+			(id, receiptId) => db.get(id, receiptId),
+		);
 	}
 	if (command === "first_party_analysis_evidence")
 		return queryFirstPartyEvidence(session.id, args.query, db);

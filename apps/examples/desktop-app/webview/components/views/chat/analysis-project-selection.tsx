@@ -10,9 +10,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+import type { SourceEvidenceSelector } from "../../../../shared/source-evidence-selection";
+
 type Selection = { target?: string; remember: boolean };
 type ProjectSelection = Selection & {
 	storageNotice: string;
+	sourceEvidence?: SourceEvidenceSelector;
+	setSourceEvidence: (selection?: SourceEvidenceSelector) => void;
 	setTarget: (target: string) => void;
 	setRemember: (remember: boolean) => void;
 	clear: () => void;
@@ -70,6 +74,8 @@ function ScopedSelection({
 }) {
 	const [selection, setSelection] = useState<Selection>(() => restore(scope));
 	const [storageNotice, setStorageNotice] = useState("");
+	const [sourceEvidence, setSourceEvidence] =
+		useState<SourceEvidenceSelector>();
 	useEffect(() => {
 		try {
 			if (selection.remember && selection.target !== undefined)
@@ -88,11 +94,17 @@ function ScopedSelection({
 	const value: ProjectSelection = {
 		...selection,
 		storageNotice,
+		sourceEvidence,
+		setSourceEvidence,
 		setTarget: (target) => {
-			if (validTarget(target)) setSelection((s) => ({ ...s, target }));
+			if (validTarget(target)) {
+				setSelection((s) => ({ ...s, target }));
+				setSourceEvidence(undefined);
+			}
 		},
 		setRemember: (remember) => setSelection((s) => ({ ...s, remember })),
 		clear: () => {
+			setSourceEvidence(undefined);
 			try {
 				localStorage.removeItem(scope);
 			} catch {}
