@@ -8,6 +8,21 @@ import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 let container: HTMLDivElement;
 let root: Root;
 const catalog = {
+	capabilities: [
+		{
+			command: "identify_artifact",
+			declaredEffect: "static-analysis",
+			implementationScope: "partial",
+			readiness: "not-probed",
+			interfaces: [
+				{
+					route: "static-review",
+					schemaRef: "ReverseEngineeringInputSchema",
+					description: "Exact static review contract",
+				},
+			],
+		},
+	],
 	recommendations: [
 		{
 			command: "attach_debug_session",
@@ -44,8 +59,8 @@ const catalog = {
 		},
 		...[
 			"find_android_entrypoints",
-            "diff_android_resources",
-            "explain_behavior",
+			"diff_android_resources",
+			"explain_behavior",
 			"trace_android_method",
 			"trace_native_calls",
 			"decompile_function_bundle",
@@ -175,7 +190,7 @@ it.each([
 	["audit_candidate_batch", "target"],
 	["trace_cross_language", "cross_language"],
 	["trace_data_flow", "evidence_trace"],
- ["compare_versions", "version_comparison"],
+	["compare_versions", "version_comparison"],
 	["decompile_dotnet_method", "managed_method"],
 	["read_jvm_method", "jvm_method"],
 ])("prepares %s explicitly without executing on selection", async (command, key) => {
@@ -196,8 +211,8 @@ it.each([
 
 it.each([
 	["explain_behavior", "workflow_query"],
- ["find_android_entrypoints", "advanced_options"],
- ["diff_android_resources", "compare_target"],
+	["find_android_entrypoints", "advanced_options"],
+	["diff_android_resources", "compare_target"],
 	["trace_android_method", "advanced_options"],
 	["trace_native_calls", "advanced_options"],
 	["decompile_function_bundle", "function_selector"],
@@ -258,10 +273,36 @@ it("exposes artifact traversal budgets in a fresh default request without runnin
 });
 
 it("offers bounded Android callback budgets before preparing a command", async () => {
- const {onPrepare}=await mount();
- await act(async()=>{const select=container.querySelector("select")!;select.value="find_android_entrypoints";select.dispatchEvent(new Event("change",{bubbles:true}));});
- const value=JSON.parse(container.querySelector("textarea")!.value);
- expect(value.advanced_options.entrypoints).toEqual({max_depth:8,max_components:64,max_dex_files:32});
- expect(onPrepare).not.toHaveBeenCalled();await click();
- expect(onPrepare.mock.calls[0][0]).toMatchObject({operation:"find_android_entrypoints",advanced_options:{entrypoints:{max_depth:8}}});
+	const { onPrepare } = await mount();
+	await act(async () => {
+		const select = container.querySelector("select")!;
+		select.value = "find_android_entrypoints";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const value = JSON.parse(container.querySelector("textarea")!.value);
+	expect(value.advanced_options.entrypoints).toEqual({
+		max_depth: 8,
+		max_components: 64,
+		max_dex_files: 32,
+	});
+	expect(onPrepare).not.toHaveBeenCalled();
+	await click();
+	expect(onPrepare.mock.calls[0][0]).toMatchObject({
+		operation: "find_android_entrypoints",
+		advanced_options: { entrypoints: { max_depth: 8 } },
+	});
+});
+
+it("shows the shared command contract without probing engines or starting work", async () => {
+	const { invoke, onPrepare } = await mount();
+	const select = container.querySelector("select")!;
+	await act(async () => {
+		select.value = "identify_artifact";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	expect(container.textContent).toContain("Command contract — partial");
+	expect(container.textContent).toContain("Readiness: not-probed");
+	expect(container.textContent).toContain("Exact static review contract");
+	expect(onPrepare).not.toHaveBeenCalled();
+	expect(invoke).toHaveBeenCalledTimes(1);
 });

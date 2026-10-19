@@ -4,7 +4,7 @@ import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
 import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
 	ArtifactDiscoveryOptionsSchema,
- VersionComparisonSchema,
+	VersionComparisonSchema,
 	CrossLanguageOptionsSchema,
 	CandidateValidationSchema,
 	CandidateReviewSchema,
@@ -27,6 +27,7 @@ import {
 	JvmMethodSchema,
 	ManagedMethodSchema,
 	SourceSinkSchema,
+	SourceFlowSchema,
 } from "./advanced-candidates-schema";
 import {
 	ANALYSIS_ALIAS_NAMES,
@@ -183,18 +184,23 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional(),
 	advanced_options: z
 		.object({
-			entrypoints: z.object({
-                max_depth:z.number().int().min(0).max(16).optional(),
-                max_components:z.number().int().min(1).max(128).optional(),
-                max_dex_files:z.number().int().min(1).max(32).optional(),
-            }).strict().optional(),
-			jni_trace: CrossLanguageOptionsSchema.options[0].omit({kind:true,method:true}).optional(),
+			entrypoints: z
+				.object({
+					max_depth: z.number().int().min(0).max(16).optional(),
+					max_components: z.number().int().min(1).max(128).optional(),
+					max_dex_files: z.number().int().min(1).max(32).optional(),
+				})
+				.strict()
+				.optional(),
+			jni_trace: CrossLanguageOptionsSchema.options[0]
+				.omit({ kind: true, method: true })
+				.optional(),
 			discovery: z
 				.object({
 					max_depth: z.number().int().min(0).max(4).optional(),
 					max_artifacts: z.number().int().min(1).max(500).optional(),
 					inspect_native: z.boolean().optional(),
-                    identify_formats: z.boolean().optional(),
+					identify_formats: z.boolean().optional(),
 				})
 				.strict()
 				.optional(),
@@ -328,7 +334,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	candidate_review: CandidateReviewSchema.optional(),
 	workflow_query: WorkflowQuerySchema.optional(),
 	artifact_discovery: ArtifactDiscoveryOptionsSchema.optional(),
- version_comparison: VersionComparisonSchema.optional(),
+	version_comparison: VersionComparisonSchema.optional(),
 	cross_language: CrossLanguageOptionsSchema.optional(),
 	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
 	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
@@ -336,6 +342,7 @@ export const ReverseEngineeringInputSchema = z.object({
 	hypothesis: HypothesisSchema.optional(),
 	candidate: CandidateSchema.optional(),
 	evidence_trace: EvidenceTraceSchema.optional(),
+	source_flow: SourceFlowSchema.optional(),
 	source_sink: SourceSinkSchema.optional(),
 	managed_method: ManagedMethodSchema.optional(),
 	jvm_method: JvmMethodSchema.optional(),

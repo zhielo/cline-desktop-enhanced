@@ -1,3 +1,5 @@
+import { SourceFlowSchema } from "../advanced-candidates-schema";
+import { traceEvidence } from "./evidence-trace";
 import { resolvedDependencyEvidence } from "./dependency-evidence";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -514,6 +516,59 @@ export async function dependencyInventory(
 		riskVerdict: "unknown",
 		limitations: [
 			"Declarations are separate from optional selected package-lock resolution and imported hash-pinned advisory evidence. No network request, install, script execution or clean-risk conclusion.",
+		],
+	};
+}
+
+/** Fresh owned-parser facts. Narrow constant-to-fetch provenance, NOT general taint. */
+export async function freshSourceFlow(
+	input: { target?: string; source_flow?: unknown },
+	signal?: AbortSignal,
+) {
+	if (!input.target) throw new Error("Source target required");
+	const q = SourceFlowSchema.parse(input.source_flow),
+		inventory = await collectWorkflowSources(input.target, signal);
+	signal?.throwIfAborted();
+	const report = analyzeSources(inventory.sources, inventory.limitations);
+	const select = (location: typeof q.start) => {
+		const facts = report.facts.filter(
+			(f) =>
+				f.kind === location.kind &&
+				f.location.path === location.path &&
+				f.location.line === location.line &&
+				f.location.column === location.column,
+		);
+		if (facts.length !== 1)
+			throw new Error(
+				`Expected one exact source-flow fact; found ${facts.length}. Inspect source facts first; no fuzzy fallback.`,
+			);
+		return facts[0].id;
+	};
+	const trace = traceEvidence(
+		report,
+		{
+			start_id: select(q.start),
+			end_id: q.end ? select(q.end) : undefined,
+			max_depth: q.max_depth,
+			max_nodes: q.max_nodes,
+			max_edges: q.max_edges,
+		},
+		true,
+	);
+	signal?.throwIfAborted();
+	return {
+		...trace,
+		status: "partial" as const,
+		mode: "fresh-js-ts-constant-endpoint-flow",
+		authority: "owned-static-parser",
+		sourceSelection: q,
+		artifacts: report.artifacts,
+		inputFingerprint: digest(report.artifacts),
+		limitations: [
+			...report.limitations,
+			"Fresh immutable scalar/pure-return reduction and unshadowed global fetch candidates only. No target imports or code execute.",
+			"Exact one-based source fact locations; paths are relative to the selected directory or file parent. Imported values retain provider hashes and consumer locations.",
+			"Not a taint solver, arbitrary parameter propagation, sanitizer validation, complete source-to-sink analysis or execution proof. Missing edges do not establish absence of behavior.",
 		],
 	};
 }

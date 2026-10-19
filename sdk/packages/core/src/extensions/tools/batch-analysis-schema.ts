@@ -1,11 +1,24 @@
 import { z } from "zod";
+import { SourceFlowSchema } from "./advanced-candidates-schema";
 
 /** Deliberately narrower than reverse_engineering. No scripts, output paths,
  * subprocess engines, runtime, nested notebooks or model-supplied authority. */
 const Target = z.string().min(1).max(4096);
+/** Named data output only. Never interpret paths or executable instructions from reports. */
+export const BatchReportRefSchema = z
+	.object({
+		stage_id: z.string().regex(/^[A-Za-z0-9_-]{1,50}$/),
+		output: z.literal("evidence-graph"),
+	})
+	.strict();
+export function batchReportRef(value: unknown) {
+	const parsed = BatchReportRefSchema.safeParse(value);
+	return parsed.success ? parsed.data : undefined;
+}
 const Limit = z.number().int().min(1).max(500).default(100);
 export const BATCH_SOURCE_OPERATIONS = [
 	"trace_electron_ipc",
+	"trace_data_flow",
 	"audit_preload_bridge",
 	"trace_source_symbol",
 	"explain_behavior",
@@ -39,6 +52,7 @@ export const BatchStaticRequestSchema = z.union([
 	z
 		.object({
 			operation: z.enum(BATCH_SOURCE_OPERATIONS),
+			source_flow: SourceFlowSchema.optional(),
 			target: Target,
 			compare_target: Target.optional(),
 			max_results: Limit,
@@ -53,6 +67,13 @@ export const BatchStaticRequestSchema = z.union([
 		})
 		.strict()
 		.superRefine((v, c) => {
+			if ((v.operation === "trace_data_flow") !== !!v.source_flow)
+				c.addIssue({
+					code: "custom",
+					path: ["source_flow"],
+					message:
+						"Fresh batch source flow requires source_flow and is restricted to trace_data_flow",
+				});
 			if (
 				v.operation === "map_attack_surface" &&
 				v.target.toLowerCase().endsWith(".apk")
@@ -85,7 +106,7 @@ export const BatchStaticRequestSchema = z.union([
 	z
 		.object({
 			operation: z.literal("advanced_analysis"),
-			target: Target,
+			target: z.union([Target, BatchReportRefSchema]),
 			advanced_action: z.enum(BATCH_GRAPH_ACTIONS),
 			max_results: Limit,
 			advanced_options: z
@@ -117,6 +138,11 @@ export const BatchStaticRequestSchema = z.union([
 		.refine(
 			(v) => !v.advanced_options || v.advanced_action === "graph_query",
 			"Graph query options are accepted only by graph_query",
+		)
+		.refine(
+			(v) =>
+				typeof v.target === "string" || v.advanced_action === "graph_query",
+			"An evidence-graph reference can only feed graph_query",
 		),
 ]);
 /** Receipts originate from the strict schema above. Recheck the operation on

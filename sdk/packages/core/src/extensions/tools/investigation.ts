@@ -55,14 +55,34 @@ const BatchRequest = z
 	.strict();
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
- check_release_gate: z.discriminatedUnion("action", [
- z.object({action:z.literal("check"),pullNumber:z.number().int().positive().max(1_000_000),expectedHead:z.string().regex(/^[a-f0-9]{40}$/)}).strict(),
- z.object({action:z.enum(["read","cancel"]),taskId:z.string().uuid()}).strict(),
-]),
- run_device_smoke_test: z.discriminatedUnion("action", [
-  z.object({action:z.literal("start"),artifactId:Id,deviceSerial:z.string().trim().min(1).max(200),packageName:z.string().regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/),durationSeconds:z.number().int().min(2).max(120).default(10),purpose:z.string().trim().min(1).max(2000),hybridProposal:HybridProposalSchema.optional()}).strict(),
-  z.object({action:z.enum(["status","cancel"]),taskId:Id}).strict(),
- ]),
+	check_release_gate: z.discriminatedUnion("action", [
+		z
+			.object({
+				action: z.literal("check"),
+				pullNumber: z.number().int().positive().max(1_000_000),
+				expectedHead: z.string().regex(/^[a-f0-9]{40}$/),
+			})
+			.strict(),
+		z
+			.object({ action: z.enum(["read", "cancel"]), taskId: z.string().uuid() })
+			.strict(),
+	]),
+	run_device_smoke_test: z.discriminatedUnion("action", [
+		z
+			.object({
+				action: z.literal("start"),
+				artifactId: Id,
+				deviceSerial: z.string().trim().min(1).max(200),
+				packageName: z
+					.string()
+					.regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/),
+				durationSeconds: z.number().int().min(2).max(120).default(10),
+				purpose: z.string().trim().min(1).max(2000),
+				hybridProposal: HybridProposalSchema.optional(),
+			})
+			.strict(),
+		z.object({ action: z.enum(["status", "cancel"]), taskId: Id }).strict(),
+	]),
 	correlate_static_runtime: z
 		.object({ receiptId: Id, taskIds: z.array(Id).min(1).max(10) })
 		.strict(),
@@ -134,7 +154,14 @@ export const InvestigationSchemas = {
 			kind: z.enum(["javascript", "typescript", "dex", "apk"]),
 		})
 		.strict(),
-	review_candidate_changes: z.object({ artifactId: Id, scope: z.enum(["recipe", "project-files", "project-inventory"]).optional() }).strict(),
+	review_candidate_changes: z
+		.object({
+			artifactId: Id,
+			scope: z
+				.enum(["recipe", "project-files", "project-inventory"])
+				.optional(),
+		})
+		.strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
 	analyze_function: z
 		.object({
@@ -168,8 +195,10 @@ export type InvestigationExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 const descriptions: Record<InvestigationToolName, string> = {
- check_release_gate: "Check the fixed public zhielo/cline-desktop-enhanced release policy for one exact PR head: required successful CI, Windows installer/smoke steps, authenticated core/engine/installed receipts and final app cleanup. Independently human-approved Inspect network reads only, at most 30 requests/90 seconds/18 MiB; no credentials, installer execution, merge or CI rerun. Changed recipes, missing/expired evidence, unknown checks, moved heads or unavailable APIs block, never pass. Read/cancel use owning saved task IDs without network replay, including after Analysis Off. A passing historical receipt does not prove target compatibility, signing, real-device validation or full recommendation completion.",
- run_device_smoke_test: "Request a separately human-approved launch and bounded 2–120 second process/crash-log observation on one explicitly selected authorized Android device. Uses an immutable workspace APK; installed base APK hash and manifest package must match before launch and after observation. Runtime/Hybrid, attached Full Access only; Hybrid requires real static evidence. No install, uninstall, root, Frida, UI interaction or automatic force-stop. Launch can leave the app running and change its data/network state. Start returns an asynchronous task, not a pass; status/cancel are owning-session reads/cleanup available after Analysis Off. No observed crash does not prove health, regression success or split APK identity. Never claim physical-device validation from fixtures.",
+	check_release_gate:
+		"Check the fixed public zhielo/cline-desktop-enhanced release policy for one exact PR head: required successful CI, Windows installer/smoke steps, authenticated core/engine/installed receipts and final app cleanup. Independently human-approved Inspect network reads only, at most 30 requests/90 seconds/18 MiB; no credentials, installer execution, merge or CI rerun. Changed recipes, missing/expired evidence, unknown checks, moved heads or unavailable APIs block, never pass. Read/cancel use owning saved task IDs without network replay, including after Analysis Off. A passing historical receipt does not prove target compatibility, signing, real-device validation or full recommendation completion.",
+	run_device_smoke_test:
+		"Request a separately human-approved launch and bounded 2–120 second process/crash-log observation on one explicitly selected authorized Android device. Uses an immutable workspace APK; installed base APK hash and manifest package must match before launch and after observation. Runtime/Hybrid, attached Full Access only; Hybrid requires real static evidence. No install, uninstall, root, Frida, UI interaction or automatic force-stop. Launch can leave the app running and change its data/network state. Start returns an asynchronous task, not a pass; status/cancel are owning-session reads/cleanup available after Analysis Off. No observed crash does not prove health, regression success or split APK identity. Never claim physical-device validation from fixtures.",
 	correlate_static_runtime:
 		"Reconcile one exact owning-session saved static receipt with up to ten saved approved task snapshots (at least one runtime task). Hash/scope checks, exact artifact identity, selected Node CPU-sample function-definition-line candidates and supported native module/RVA observations only. Read-only: no attachment, execution, downloads, approval grant or automatic rerun. Shared lines, sampled locations and byte identity never prove causal execution paths or behavior. Unmatched identities stay unresolved.",
 	plan_batch:
@@ -177,7 +206,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 	preview_batch:
 		"Preview canonical input hashes, dependency ordering, scope and budgets for a bounded built-in static batch. No approval or execution occurs.",
 	run_batch:
-		"Request execution of a bounded built-in static batch after fresh independent human approval. Returns an asynchronous receipt, not a completion claim. Inspect it with checkpoint_investigation. Includes bounded JS/TS/Electron/.NET/mitigation comparisons and saved-graph reads. Partial/blocked analysis stops dependents; no shell, candidate writes, runtime, external engines or produced-input chaining.",
+		"Request execution of a bounded built-in static batch after fresh independent human approval. Returns an asynchronous receipt, not a completion claim. Inspect it with checkpoint_investigation. Includes bounded JS/TS/Electron/.NET/mitigation comparisons and saved-graph reads. Partial/blocked analysis stops dependents; no shell, candidate writes, runtime or external engines. A graph_query target may name {stage_id,output:'evidence-graph'} from a completed graph_build dependency; the host verifies and snapshots data only, never follows paths from reports.",
 	checkpoint_investigation:
 		"Read the latest durable owning-session batch checkpoint with revision, per-stage results and integrity hash. Does not force a new checkpoint or repeat work; available for cleanup/status after Analysis is disabled.",
 	cancel_batch:
@@ -215,6 +244,19 @@ const descriptions: Record<InvestigationToolName, string> = {
 	get_evidence_bundle:
 		"Export explicitly selected owning-session evidence with integrity hash, provenance index and limitations. Not a backup; review best-effort redaction before sharing.",
 };
+/** The same schema and description drive model tools and the desktop capability view.
+ * Descriptive only: never grants host authority or probes tool readiness. */
+export function investigationCommandInterface(name: string) {
+	if (!Object.prototype.hasOwnProperty.call(InvestigationSchemas, name))
+		return undefined;
+	const command = name as InvestigationToolName;
+	return {
+		route: "ai-workflow" as const,
+		schemaRef: `InvestigationSchemas.${command}`,
+		parameters: zodToJsonSchema(InvestigationSchemas[command]),
+		description: descriptions[command],
+	};
+}
 export function createInvestigationTools(
 	executor: InvestigationExecutor,
 ): AgentTool[] {
@@ -223,7 +265,7 @@ export function createInvestigationTools(
 			createTool<unknown, string>({
 				name,
 				description: descriptions[name],
-				inputSchema: zodToJsonSchema(InvestigationSchemas[name]),
+				inputSchema: investigationCommandInterface(name)!.parameters,
 				timeoutMs: 300_000,
 				executionMode: "sequential",
 				retryable: false,

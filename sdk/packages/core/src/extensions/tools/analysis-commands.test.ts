@@ -236,3 +236,27 @@ it("keeps generated drafts separate from output/engine approvals and rejects amb
 			}),
 		).toThrow();
 });
+
+it("publishes distinct authoritative AI and static-review contracts without probing readiness", () => {
+	const catalog = analysisCommandCatalog();
+	expect(catalog.contractVersion).toBe("analysis-capabilities/v1");
+	expect(catalog.capabilities).toHaveLength(catalog.entries.length);
+	const batch = catalog.capabilities.find((c) => c.command === "run_batch")!;
+	expect(batch.interfaces.map((i) => i.route)).toEqual([
+		"static-review",
+		"ai-workflow",
+	]);
+	const ai = batch.interfaces.find((i) => i.route === "ai-workflow")!;
+	expect(ai.schemaRef).toBe("InvestigationSchemas.run_batch");
+	expect(JSON.stringify(ai)).toContain("evidence-graph");
+	for (const c of catalog.capabilities) {
+		expect(c.readiness).toBe("not-probed");
+		expect(c.authority).toBe("host-owned-per-request");
+		expect(c.interfaces.length).toBeGreaterThan(0);
+	}
+	for (const recommendation of catalog.recommendations)
+		expect(
+			catalog.capabilities.find((c) => c.command === recommendation.command)
+				?.implementationScope,
+		).toBe(recommendation.scope);
+});

@@ -26,7 +26,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "trace_data_flow",
 		scope: "partial",
 		limitations:
-			"Declared saved-report edges only; unresolved whole-program paths are not inferred.",
+			"Fresh exact-location JS/TS immutable-value-to-fetch candidates plus saved-report data-flow tracing. No arbitrary parameter propagation, sanitizer validation or whole-program paths.",
 	},
 	{
 		group: "cross-tool",
@@ -333,7 +333,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "run_batch",
 		scope: "partial",
 		limitations:
-			"Freshly approved durable static DAG including bounded source/comparison/saved-graph reads. Partial evidence is retained, blocks dependents and allows independent reads; true failures stop work. No mixed-effect orchestration.",
+			"Freshly approved durable static DAG including bounded source/comparison/saved-graph reads. Partial evidence is retained, blocks dependents and allows independent reads; true failures stop work. Completed graph_build evidence-graph output can feed graph_query with retained producer/result/document hashes and private snapshot cleanup. No mixed-effect orchestration.",
 	},
 	{
 		group: "bulk",

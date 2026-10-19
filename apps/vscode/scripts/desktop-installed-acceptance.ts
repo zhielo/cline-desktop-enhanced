@@ -1028,7 +1028,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;mode?:string;endpointReachableInSelectedGraph?:boolean;edges?:unknown[];comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -1131,6 +1131,29 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const batchCancelled=await rpc<InstalledBatchCheckpoint>(page,"cancel_batch",{...triageScope,input:{receiptId:batchStarted.id}});
     if(batchCancelled.receipt.revision!==batchCheckpoint.receipt.revision)throw new Error("Installed terminal cancellation mutated completed evidence");
     stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
+    const contractCatalog=await rpc<{contractVersion:string;capabilities:Array<{command:string;readiness:string;implementationScope:string;interfaces:Array<{route:string;schemaRef:string;parameters?:unknown}>}>}>(page,"analysis_command_catalog",{environmentId:"local"});
+    const batchContract=contractCatalog.capabilities.find(c=>c.command==="run_batch");
+    if(contractCatalog.contractVersion!=="analysis-capabilities/v1"||batchContract?.interfaces.map(i=>i.route).join(",")!=="static-review,ai-workflow"||!JSON.stringify(batchContract.interfaces.find(i=>i.route==="ai-workflow")?.parameters).includes("evidence-graph")||workflowCatalog.recommendations.some(r=>!contractCatalog.capabilities.some(c=>c.command===r.command&&c.implementationScope===r.scope&&c.readiness==="not-probed")))throw new Error("Installed command contracts lost original coverage, exact AI schemas or readiness distinction");
+    const chainedManifest=join(workspace,"owned-chained-graph-manifest.json");
+    const chainedManifestBytes=JSON.stringify({schemaVersion:1,results:[{protocol:"cline-advanced-analysis/v1",status:"completed",engine:"owned-installed-graph",engineVersion:"1",evidence:{},limitations:["Owned report, not target compatibility"]}]});
+    await writeFile(chainedManifest,chainedManifestBytes);
+    const chainedRequest={operation_id:randomUUID(),title:"Installed typed graph output chain",parallel:1,stages:[
+      {id:"build",request:{operation:"advanced_analysis",advanced_action:"graph_build",target:chainedManifest}},
+      {id:"query",depends_on:["build"],request:{operation:"advanced_analysis",advanced_action:"graph_query",target:{stage_id:"build",output:"evidence-graph"}}},
+    ]};
+    const chainedPlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"run_batch",{...triageScope,input:chainedRequest});
+    const chainedApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:chainedPlan.id,requestHash:chainedPlan.requestHash,requirements:chainedPlan.requirements});
+    const chainedStarted=await rpc<{id:string}>(page,"run_batch",{...triageScope,input:{...chainedRequest,phase:"run",planId:chainedPlan.id,executionToken:chainedApproval.executionToken}});
+    type ChainedCheckpoint={receipt:{status:string;jobs:Array<{status:string;result?:unknown;resultHash?:string;inputReport?:{producerReceiptId:string;producerStageId:string;producerResultSha256:string;documentSha256:string}}>}};
+    let chainedCheckpoint:ChainedCheckpoint|undefined;
+    for(let attempt=0;attempt<100;attempt++){
+      chainedCheckpoint=await rpc<ChainedCheckpoint>(page,"checkpoint_investigation",{...triageScope,input:{receiptId:chainedStarted.id}});
+      if(!["accepted","starting","running"].includes(chainedCheckpoint.receipt.status))break;
+      await delay(100);
+    }
+    const chainedJobs=chainedCheckpoint?.receipt.jobs;
+    if(chainedCheckpoint?.receipt.status!=="completed"||chainedJobs?.length!==2||chainedJobs.some(j=>j.status!=="completed")||chainedJobs[1].inputReport?.producerReceiptId!==chainedStarted.id||chainedJobs[1].inputReport?.producerStageId!=="build"||chainedJobs[1].inputReport?.producerResultSha256!==chainedJobs[0].resultHash||!/^[a-f0-9]{64}$/.test(chainedJobs[1].inputReport?.documentSha256??"")||!JSON.stringify(chainedJobs[1].result).includes("owned-installed-graph")||await readFile(chainedManifest,"utf8")!==chainedManifestBytes)throw new Error("Installed typed graph chain lost provenance, result evidence or preserved input");
+    stages.push("installed-shared-command-contract-typed-graph-output-chain-passed");
     const objectivePlan=await runOwnedAdvanced({operation:"plan_investigation",target:ownedWorkflowSource,compare_target:ownedApiAfter,investigation_plan:{workflow:"electron",goal:"Owned explicit source evidence",objectives:["inventory","exact-function","compare"],symbol:"ownedWorkflow"},timeout_ms:120000});
     if(objectivePlan.result.executed!==false||objectivePlan.result.batchDraft?.stages.length!==3||objectivePlan.result.enginePreflight?.startsWith("not-run")!==true||objectivePlan.result.batchDraft.stages.some(s=>s.request.script_path||s.request.output_file))throw new Error("Installed structured batch draft fabricated execution or unsafe stages");
     const ownedBatchCfg=join(workspace,"owned-batch-cfg.json");
@@ -1156,6 +1179,11 @@ ConvertTo-Json -InputObject @($rows) -Compress
     try{await rpc(page,"resume_investigation",{...triageScope,input:{receiptId:expandedStarted.id,revision:expandedCheckpoint.receipt.revision}});}catch{expandedResumeDenied=true;}
     if(!expandedResumeDenied)throw new Error("Installed partial dependency replayed");
     stages.push("installed-structured-batch-draft-partial-independent-reads-passed");
+    const freshFlowTarget=join(workspace,"owned-fresh-source-flow.ts"),freshFlowSource='const url = "https://example.invalid/owned";\nfetch(url);\n';
+    await writeFile(freshFlowTarget,freshFlowSource);
+    const freshFlow=await runOwnedAdvanced({operation:"trace_data_flow",target:freshFlowTarget,source_flow:{kind:"js-ts",start:{path:"owned-fresh-source-flow.ts",line:1,column:7,kind:"configuration"},end:{path:"owned-fresh-source-flow.ts",line:2,column:1,kind:"resolved-endpoint"}},timeout_ms:120000});
+    if(freshFlow.plan.status!=="completed"||freshFlow.result.status!=="partial"||freshFlow.result.mode!=="fresh-js-ts-constant-endpoint-flow"||freshFlow.result.observedExecution!==false||freshFlow.result.endpointReachableInSelectedGraph!==true||freshFlow.result.edges?.length!==1||await readFile(freshFlowTarget,"utf8")!==freshFlowSource)throw new Error("Installed fresh source flow did not preserve exact bounded static evidence");
+    stages.push("installed-fresh-source-flow-exact-locations-no-execution-passed");
 
     // Preparation is deliberately offline: no ADB/device execution or physical-hardware claim.
     const smokeArtifact=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:join(workspace,"owned-project-candidate.apk")}});

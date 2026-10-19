@@ -1218,5 +1218,7 @@ export {
 
 export {
 	BatchStaticRequestSchema,
+	BatchReportRefSchema,
+	batchReportRef,
 	isBatchStaticOperation,
 } from "./extensions/tools/batch-analysis-schema";

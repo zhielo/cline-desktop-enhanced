@@ -11,6 +11,18 @@ type Entry = {
 	limitations: string;
 };
 type Catalog = {
+	capabilities?: {
+		command: string;
+		declaredEffect: string;
+		implementationScope: string;
+		readiness: string;
+		interfaces: {
+			route: string;
+			schemaRef: string;
+			description: string;
+			parameters?: unknown;
+		}[];
+	}[];
 	recommendations?: {
 		command: string;
 		scope: "bounded" | "partial" | "not-implemented";
@@ -27,8 +39,12 @@ type Catalog = {
 };
 function template(command: string) {
 	const base: Record<string, unknown> = { target: "", timeout_ms: 120000 };
-	if (command === "compare_versions") base.version_comparison = {kind:"project",max_results:100};
-	if(command === "find_android_entrypoints") base.advanced_options={entrypoints:{max_depth:8,max_components:64,max_dex_files:32}};
+	if (command === "compare_versions")
+		base.version_comparison = { kind: "project", max_results: 100 };
+	if (command === "find_android_entrypoints")
+		base.advanced_options = {
+			entrypoints: { max_depth: 8, max_components: 64, max_dex_files: 32 },
+		};
 	if (command === "identify_artifact")
 		base.artifact_discovery = { max_depth: 3, max_artifacts: 200 };
 	if (
@@ -298,6 +314,9 @@ export function AdvancedCommandWorkspace({
 	}
 	const entry = catalog?.entries.find((value) => value.command === command);
 	const hostOnly = entry?.route === "ai-workflow";
+	const capability = catalog?.capabilities?.find(
+		(value) => value.command === command,
+	);
 	return (
 		<section aria-label="Advanced AI commands" className="space-y-3">
 			<h3 className="font-semibold">Advanced AI commands</h3>
@@ -346,6 +365,32 @@ export function AdvancedCommandWorkspace({
 				))}
 			</select>
 			{entry && <p className="text-xs">{entry.limitations}</p>}
+			{capability && (
+				<details aria-label="Command capability contract">
+					<summary>Command contract — {capability.implementationScope}</summary>
+					<p className="text-xs">
+						Declared effect: {capability.declaredEffect}. Readiness:{" "}
+						{capability.readiness}. Availability never grants approval or
+						certifies target compatibility.
+					</p>
+					{capability.interfaces.map((value) => (
+						<section
+							key={value.route}
+							aria-label={`${value.route} command interface`}
+						>
+							<h4>
+								{value.route} — {value.schemaRef}
+							</h4>
+							<p className="text-xs">{value.description}</p>
+							{value.parameters !== undefined && (
+								<pre className="max-h-64 overflow-auto text-xs">
+									{JSON.stringify(value.parameters, null, 2)}
+								</pre>
+							)}
+						</section>
+					))}
+				</details>
+			)}
 			{hostOnly && (
 				<output className="block text-xs">
 					Ask the chat agent to use {command} through the owning AI
@@ -366,12 +411,14 @@ export function AdvancedCommandWorkspace({
 				onChange={(event) => setRequest(event.target.value)}
 			/>
 			<p className="text-xs">
-				run_batch and resume_investigation take a reviewed static notebook
-				manifest as target—not a shell command or arbitrary operation list.
-				Candidate batches use a confined JSON manifest with up to eight
-				independent files. They are not transactional and never replay writes.
-				Smali patching publishes one file; assemble it in a separate candidate
-				tree before rebuilding.
+				In this static review form, run_batch and resume_investigation take a
+				reviewed static notebook manifest as target. Their AI workflow interface
+				instead uses the exact typed DAG or receipt schema shown in the command
+				contract. These interfaces are not interchangeable and neither accepts
+				shell commands. Candidate batches use a confined JSON manifest with up
+				to eight independent files. They are not transactional and never replay
+				writes. Smali patching publishes one file; assemble it in a separate
+				candidate tree before rebuilding.
 			</p>
 			<Button
 				disabled={!local || !entry || busy || hostOnly}

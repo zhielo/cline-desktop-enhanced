@@ -112,3 +112,23 @@ export const JvmMethodSchema = z
 		descriptor: z.string().min(1).max(500),
 	})
 	.strict();
+
+const SourceFlowLocation = z
+	.object({
+		path: z.string().min(1).max(4096),
+		line: z.number().int().min(1).max(1000000),
+		column: z.number().int().min(1).max(1000000),
+		kind: z.enum(["configuration", "module-value", "resolved-endpoint"]),
+	})
+	.strict();
+/** Exact source locations, never arbitrary expressions or analysis scripts. */
+export const SourceFlowSchema = z
+	.object({
+		kind: z.literal("js-ts"),
+		start: SourceFlowLocation,
+		end: SourceFlowLocation.optional(),
+		max_depth: z.number().int().min(1).max(12).default(6),
+		max_nodes: z.number().int().min(1).max(500).default(100),
+		max_edges: z.number().int().min(1).max(1000).default(200),
+	})
+	.strict();

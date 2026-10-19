@@ -97,6 +97,8 @@ export const RELEASE_GATE_POLICY = {
 		"installed-explicit-api-signatures-lockfile-evidence-passed",
 		"installed-approved-provenance-archive-originals-preserved",
 		"installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed",
+		"installed-shared-command-contract-typed-graph-output-chain-passed",
+		"installed-fresh-source-flow-exact-locations-no-execution-passed",
 		"installed-structured-batch-draft-partial-independent-reads-passed",
 		"installed-candidate-validation-review-hash-scope-preservation-passed",
 		"installed-runtime-plan-owned-identity-no-attach-no-execute-passed",
@@ -108,12 +110,12 @@ export const RELEASE_GATE_POLICY = {
 		"installed-full-eleven-engine-owned-fixtures-passed",
 		"installed-full-pack-exact-range-dual-decoder-passed",
 		"installed-native-direct-call-transitive-budget-cycle-no-execution-passed",
-        "installed-content-artifact-discovery-nesting-ambiguity-budgets-no-execution-passed",
-        "installed-fresh-android-jni-native-candidates-no-binding-or-execution-passed",
-        "installed-fresh-electron-renderer-preload-main-channel-candidates-passed",
+		"installed-content-artifact-discovery-nesting-ambiguity-budgets-no-execution-passed",
+		"installed-fresh-android-jni-native-candidates-no-binding-or-execution-passed",
+		"installed-fresh-electron-renderer-preload-main-channel-candidates-passed",
 		"installed-android-manifest-dex-callback-candidates-origin-ambiguity-no-execution-passed",
 		"installed-android-resource-member-sha256-xml-structure-budgets-no-execution-passed",
- "installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed",
+		"installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
 		"hub-restart-saved-session-reattached-without-prompt-replay",
@@ -127,8 +129,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"feb4b81b9bdf89b3d9d81fd5d8d7a0508a9ae94d63562ac337d563030da7933a",
+			"6590fa3b269f4de2560ac06c9107edc770acf91914ae6832a2d45c98fde32aea",
 		"scripts/validate-advanced-build.mjs":
-			"a236b556aacd04eefab58d1821263106f5c5b26c11ec8329562ec98530942d70",
+			"f62f8aee7a14c76bac688c83d568dd219e1552b2b91ed83af772ab37d14c609b",
 	},
 } as const;
