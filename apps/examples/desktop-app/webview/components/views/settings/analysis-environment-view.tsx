@@ -7,6 +7,11 @@ import { OptimizationPanel } from "./optimization-panel";
 import { PageFrame, PageHeader } from "../page-layout";
 const EXTERNAL_STATUS_LABEL = "Configuration / acceptance required";
 
+function budgetTime(ms: number) {
+	const seconds = Math.max(0, Math.ceil(ms / 1000));
+	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 type Check = {
 	engine: string;
 	status: string;
@@ -15,12 +20,12 @@ type Check = {
 	reason?: string;
 };
 type Result = {
-  setupCenter?: {
-    desktopBuild?: {version:string; sourceCommit:string};
-    selectedRuntime?: {runtimeId?:string};
-    fullStatus?: string;
-    licensedArchitectures?: string[];
-  };
+	setupCenter?: {
+		desktopBuild?: { version: string; sourceCommit: string };
+		selectedRuntime?: { runtimeId?: string };
+		fullStatus?: string;
+		licensedArchitectures?: string[];
+	};
 	checkedAt: string;
 	configured: boolean;
 	runtime?: { source: string; runtimeId?: string };
@@ -46,8 +51,12 @@ type Result = {
 	setup: string;
 };
 
-export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void} = {}) {
-  const [liveJobs, setLiveJobs] = useState(false);
+export function AnalysisEnvironmentView({
+	onOpenSetup,
+}: {
+	onOpenSetup?: () => void;
+} = {}) {
+	const [liveJobs, setLiveJobs] = useState(false);
 	const [result, setResult] = useState<Result | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [repairMessage, setRepairMessage] = useState("");
@@ -83,9 +92,20 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 			status: string;
 			lastPhase: string;
 			receiptPath: string;
-      elapsedMs?: number; remainingMs?: number | null; deadlineAt?: string | null;
-      phaseTimeoutMs?: number; phaseDeadlineAt?: string; lastPhaseAt?: string; timeoutPhase?: string;
-      stateMeaning?: string;
+			elapsedMs?: number;
+			remainingMs?: number | null;
+			deadlineAt?: string | null;
+			phaseTimeoutMs?: number;
+			phaseDeadlineAt?: string;
+			lastPhaseAt?: string;
+			timeoutPhase?: string;
+			stateMeaning?: string;
+			phaseRemainingMs?: number | null;
+			autoAnalysisRemainingMs?: number | null;
+			autoAnalysisElapsedMs?: number | null;
+			autoAnalysisState?: string;
+			clockSource?: string;
+			resultLabel?: string;
 		}[]
 	>([]);
 	const refreshJobs = async () => {
@@ -103,21 +123,34 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 			);
 		}
 	};
-  useEffect(() => {
-    if (!liveJobs) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const reply = await desktopClient.invoke<{jobs:typeof jobs}>("get_ida_job_diagnostics", {environmentId:"local"});
-        if (!cancelled) setJobs(reply.jobs);
-      } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "IDA job diagnostics unavailable");
-      } finally { if (!cancelled) timer = setTimeout(poll, 2000); }
-    };
-    void poll();
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [liveJobs]);
+	useEffect(() => {
+		if (!liveJobs) return;
+		let cancelled = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const poll = async () => {
+			try {
+				const reply = await desktopClient.invoke<{ jobs: typeof jobs }>(
+					"get_ida_job_diagnostics",
+					{ environmentId: "local" },
+				);
+				if (!cancelled) setJobs(reply.jobs);
+			} catch (cause) {
+				if (!cancelled)
+					setError(
+						cause instanceof Error
+							? cause.message
+							: "IDA job diagnostics unavailable",
+					);
+			} finally {
+				if (!cancelled) timer = setTimeout(poll, 2000);
+			}
+		};
+		void poll();
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [liveJobs]);
 	const check = async () => {
 		setBusy(true);
 		setError("");
@@ -149,10 +182,16 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 					Check the desktop backend’s actual Python interpreter and owned static
 					fixtures. No target binary runs and no packages are installed.
 				</p>
-				<p>Bundled Python health does not validate IDA or its processor-specific Hex-Rays license.
-          Core-pack inventory intentionally omits some full-pack engines. Use Setup Center for full-pack installation and ARM64/x86-64 IDA acceptance—no manual pip setup.</p>
-        <Button onClick={onOpenSetup} disabled={!onOpenSetup} variant="outline">Open Setup Center</Button>
-        <Button onClick={() => void check()} disabled={busy}>
+				<p>
+					Bundled Python health does not validate IDA or its processor-specific
+					Hex-Rays license. Core-pack inventory intentionally omits some
+					full-pack engines. Use Setup Center for full-pack installation and
+					ARM64/x86-64 IDA acceptance—no manual pip setup.
+				</p>
+				<Button onClick={onOpenSetup} disabled={!onOpenSetup} variant="outline">
+					Open Setup Center
+				</Button>
+				<Button onClick={() => void check()} disabled={busy}>
 					{busy ? "Checking environment…" : "Check analysis readiness"}
 				</Button>
 				<Button onClick={() => void repair()} disabled={busy} variant="outline">
@@ -162,8 +201,15 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 				<Button onClick={() => void refreshJobs()} variant="outline">
 					Refresh IDA jobs
 				</Button>
-				<label className="block"><input type="checkbox" checked={liveJobs} onChange={event => setLiveJobs(event.target.checked)} /> Live read-only IDA job refresh (every 2 seconds)</label>
-        <p>
+				<label className="block">
+					<input
+						type="checkbox"
+						checked={liveJobs}
+						onChange={(event) => setLiveJobs(event.target.checked)}
+					/>{" "}
+					Live read-only IDA job refresh (every 2 seconds)
+				</label>
+				<p>
 					IDA progress is based on explicit script phases, not CPU totals or
 					output-file existence. No process is killed or restarted by refresh.
 				</p>
@@ -176,11 +222,42 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 					{jobs.map((job) => (
 						<li key={job.id}>
 							Job {job.id}: PID {job.pid ?? "not launched"} — {job.status};{" "}
-							{job.lastPhase}. Elapsed {typeof job.elapsedMs === "number" ? `${Math.floor(job.elapsedMs/1000)}s` : "unknown"}; deadline remaining {typeof job.remainingMs === "number" ? `${Math.ceil(job.remainingMs/1000)}s` : "unknown"}.
-              {job.timeoutPhase && ` Phase deadline exceeded at ${job.timeoutPhase}; this is a configured limit, not a proven hang.`}
-              {job.phaseDeadlineAt && ` Phase deadline: ${job.phaseDeadlineAt}.`}
-              {job.lastPhaseAt && ` Last script evidence: ${job.lastPhaseAt}.`}
-              {` ${job.stateMeaning ?? "Last recorded host state; not a liveness check"}.`} Receipt: <code>{job.receiptPath}</code>
+							{job.lastPhase}. Elapsed{" "}
+							{typeof job.elapsedMs === "number"
+								? `${Math.floor(job.elapsedMs / 1000)}s`
+								: "unknown"}
+							; deadline remaining{" "}
+							{typeof job.remainingMs === "number"
+								? `${Math.ceil(job.remainingMs / 1000)}s`
+								: "unknown"}
+							.
+							<p>
+								Auto-analysis budget remaining:{" "}
+								{typeof job.autoAnalysisRemainingMs === "number"
+									? budgetTime(job.autoAnalysisRemainingMs)
+									: "not observed"}
+								; elapsed:{" "}
+								{typeof job.autoAnalysisElapsedMs === "number"
+									? budgetTime(job.autoAnalysisElapsedMs)
+									: "not observed"}{" "}
+								({job.autoAnalysisState ?? "unknown"}). Completion percentage
+								unavailable.
+							</p>
+							<p>
+								{job.clockSource === "live-host-monotonic"
+									? "Live host sample; updates every 2 seconds when live refresh is enabled."
+									: "Recorded host snapshot — not a live countdown."}{" "}
+								Default: 60-minute auto-analysis budget within a separate
+								75-minute job limit. Explicit shorter limits still apply.
+							</p>
+							{job.resultLabel && <p>{job.resultLabel}</p>}
+							{job.timeoutPhase &&
+								` Phase deadline exceeded at ${job.timeoutPhase}; this is a configured limit, not a proven hang.`}
+							{job.phaseDeadlineAt &&
+								` Phase deadline: ${job.phaseDeadlineAt}.`}
+							{job.lastPhaseAt && ` Last script evidence: ${job.lastPhaseAt}.`}
+							{` ${job.stateMeaning ?? "Last recorded host state; not a liveness check"}.`}{" "}
+							Receipt: <code>{job.receiptPath}</code>
 						</li>
 					))}
 				</ul>
@@ -188,10 +265,26 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 				<OptimizationPanel />
 				{result && (
 					<div aria-live="polite" className="space-y-4">
-						<p>Installed desktop: {result.setupCenter?.desktopBuild?.version ?? "Unknown"}; build <code>{result.setupCenter?.desktopBuild?.sourceCommit ?? "Unknown"}</code>.
-              Selected runtime: <code>{result.setupCenter?.selectedRuntime?.runtimeId ?? result.runtime?.runtimeId ?? "Unknown"}</code>; full pack: {result.setupCenter?.fullStatus ?? "Open Setup Center"}.
-              IDA processors with current executable-bound owned acceptance: {result.setupCenter?.licensedArchitectures?.join(", ") || "None verified"}.</p>
-            <p>
+						<p>
+							Installed desktop:{" "}
+							{result.setupCenter?.desktopBuild?.version ?? "Unknown"}; build{" "}
+							<code>
+								{result.setupCenter?.desktopBuild?.sourceCommit ?? "Unknown"}
+							</code>
+							. Selected runtime:{" "}
+							<code>
+								{result.setupCenter?.selectedRuntime?.runtimeId ??
+									result.runtime?.runtimeId ??
+									"Unknown"}
+							</code>
+							; full pack:{" "}
+							{result.setupCenter?.fullStatus ?? "Open Setup Center"}. IDA
+							processors with current executable-bound owned acceptance:{" "}
+							{result.setupCenter?.licensedArchitectures?.join(", ") ||
+								"None verified"}
+							.
+						</p>
+						<p>
 							Interpreter:{" "}
 							<code>{result.interpreter.executable ?? "Unavailable"}</code>
 							<br />
@@ -242,10 +335,16 @@ export function AnalysisEnvironmentView({onOpenSetup}: {onOpenSetup?: () => void
 						<ul>
 							{result.externalCapabilities.map((item) => (
 								<li key={item.id}>
-									<strong>{item.id}</strong>: {result.setupCenter?.licensedArchitectures?.length && /IDA|Hex-Rays/i.test(item.id)
-                    ? "Owned processor acceptance passed" : EXTERNAL_STATUS_LABEL}.{" "}
-                  {result.setupCenter?.licensedArchitectures?.length && /IDA|Hex-Rays/i.test(item.id)
-                    ? `Current executable acceptance covers ${result.setupCenter.licensedArchitectures.join(", ")}; other processors and target compatibility remain untested.` : item.reason}
+									<strong>{item.id}</strong>:{" "}
+									{result.setupCenter?.licensedArchitectures?.length &&
+									/IDA|Hex-Rays/i.test(item.id)
+										? "Owned processor acceptance passed"
+										: EXTERNAL_STATUS_LABEL}
+									.{" "}
+									{result.setupCenter?.licensedArchitectures?.length &&
+									/IDA|Hex-Rays/i.test(item.id)
+										? `Current executable acceptance covers ${result.setupCenter.licensedArchitectures.join(", ")}; other processors and target compatibility remain untested.`
+										: item.reason}
 								</li>
 							))}
 						</ul>

@@ -156,7 +156,70 @@ it("executes the generated IDA adapter against API doubles, not a licensed decom
 			resolution: "unknown-expression-target",
 		});
 		expect(value.callees[1]).not.toHaveProperty("targetAddressHex");
+		// A supported cancellation boundary attempts only the owned database,
+		// exits nonzero, and never produces successful decompiler artifacts.
+		const stopPath = join(root, "stop.json");
+		await rm(output);
+		await rm(output + ".native.json");
+		await writeFile(progressPath, "");
+		await writeFile(stopPath, '{"stop":true}');
+		await expect(
+			promisify(execFile)(
+				process.platform === "win32" ? "python" : "python3",
+				["-I", "-S", "-u", harnessPath, scriptPath],
+				{
+					timeout: 30_000,
+					maxBuffer: 1024 * 1024,
+					windowsHide: true,
+					env: {
+						...process.env,
+						CLINE_IDA_PROGRESS_PATH: progressPath,
+						CLINE_IDA_STOP_PATH: stopPath,
+					},
+				},
+			),
+		).rejects.toMatchObject({ code: 1 });
+		const stopped = (await readFile(progressPath, "utf8"))
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line).phase);
+		expect(stopped).toContain("database-saved");
+		expect(stopped).toContain("script-failed");
+		expect(stopped).not.toContain("decompilation-started");
+		await expect(readFile(output)).rejects.toMatchObject({ code: "ENOENT" });
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
 }, 40_000);
+
+it("allows bounded IDA headroom without extending other engine limits", () => {
+	expect(
+		ReverseEngineeringInputSchema.safeParse({
+			operation: "analyze",
+			engine: "ida",
+			timeout_ms: 4_500_000,
+		}).success,
+	).toBe(true);
+	for (const engine of ["auto", "ghidra", "jadx"])
+		expect(
+			ReverseEngineeringInputSchema.safeParse({
+				operation: "analyze",
+				engine,
+				timeout_ms: 4_500_000,
+			}).success,
+		).toBe(false);
+	expect(
+		ReverseEngineeringInputSchema.safeParse({
+			operation: "analyze",
+			engine: "ida",
+			timeout_ms: 4_500_001,
+		}).success,
+	).toBe(false);
+	expect(
+		ReverseEngineeringInputSchema.safeParse({
+			operation: "analyze",
+			engine: "ida",
+			timeout_ms: 60_000,
+		}).success,
+	).toBe(true);
+});

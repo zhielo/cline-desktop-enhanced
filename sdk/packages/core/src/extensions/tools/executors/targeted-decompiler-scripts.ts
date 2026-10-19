@@ -95,7 +95,9 @@ def main():
         raise RuntimeError("Hex-Rays unavailable for the loaded processor; configure the licensed matching decompiler in Setup Center")
     cline_phase("decompiler-initialized")
     cline_phase("auto-analysis-waiting")
+    cline_check_stop()
     if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
+    cline_check_stop()
     cline_phase("analysis-complete")
     matches=[]
     if SELECTOR.get("address"):
