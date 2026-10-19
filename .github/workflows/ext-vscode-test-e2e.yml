@@ -50,6 +50,11 @@ jobs:
                           - 'bun.lock'
                           # SDK source packages are local workspace symlinks (@cline/*), so SDK changes affect the build.
                           - 'sdk/packages/**'
+                          # Desktop release policy requires these checks for the exact candidate.
+                          - 'apps/examples/desktop-app/**'
+                          - 'scripts/validate-advanced-build.mjs'
+                          - '.github/workflows/build-custom-windows-installer.yml'
+                          - '.github/workflows/custom-desktop-validation.yml'
                           - 'apps/vscode/buf.yaml'
                           - 'apps/vscode/tsconfig*.json'
                           - 'apps/vscode/biome.jsonc'

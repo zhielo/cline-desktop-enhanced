@@ -62,3 +62,15 @@ test("diagnostic reader omits stale, malformed and missing receipts",async()=>{
     await writeFile(path.join(dir,"summary.json"),"not json");assert.ok((await summarize(root,{})).includes("diagnostic only"));
   }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test("desktop release changes trigger every mandatory extension and E2E path filter",()=>{
+  const paths=["apps/examples/desktop-app/**","scripts/validate-advanced-build.mjs",".github/workflows/build-custom-windows-installer.yml",".github/workflows/custom-desktop-validation.yml"];
+  const extension=load(".github/workflows/ext-vscode-test.yml");
+  const e2e=load(".github/workflows/ext-vscode-test-e2e.yml");
+  for(const path of paths){
+    assert.equal(extension.split(`- '${path}'`).length-1,2,"Both extension and platform filters must trigger");
+    assert.equal(e2e.split(`- '${path}'`).length-1,1,"E2E filter must trigger");
+  }
+  for(const name of ["vscode-test:","test-platform-integration:"])assert.ok(extension.includes(name));
+  assert.ok(e2e.includes("if: needs.detect-changes.outputs.e2e == 'true'"));
+});

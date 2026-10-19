@@ -26,3 +26,6 @@ The installed journey shares approvals, profiles, runtime rollbacks and retained
 ## Conditional packaging checks
 
 Root package/lock and packaging changes trigger `desktop-test` in addition to the normal check set. The finite release policy recognizes its two exact check names. If either appears, both must be completed successfully for the exact head and trusted Actions app; skipped, missing, duplicate, failed or unknown checks still block release. When this path-triggered workflow is absent, the existing twenty required checks remain mandatory. This fixes a reproduced false rejection without accepting arbitrary additional checks.
+
+## Exact-head release check routing
+Desktop app, consolidated validator and custom Windows release workflow changes also trigger the extension, testing-platform and cross-platform E2E path filters. The release verifier continues to require successful named checks for the exact head; a path-filter skip is not accepted as a substitute for those required checks. The optional compiler caches never reuse a test result or installer.
