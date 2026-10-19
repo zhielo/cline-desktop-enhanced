@@ -20,17 +20,23 @@ describe("fixed Android investigation worker", () => {
 			await readFile(join(scripts, "android-investigation-worker.py"), "utf8"),
 		);
 	});
-	it("passes the stdlib fixture corpus including malformed containers and DEX", async () => {
-		const python =
-			process.env.CLINE_RE_PYTHON ??
-			(process.platform === "win32" ? "python.exe" : "python3");
-		const { stderr } = await promisify(execFile)(
-			python,
-			["-I", join(scripts, "android-investigation-worker.test.py")],
-			{ timeout: 60000, maxBuffer: 1024 * 1024 },
-		);
-		expect(stderr).toContain("OK");
-	});
+	it.each([0, 1, 2, 3])("passes complete stdlib fixture group %i including malformed containers and DEX", async (index) => {
+        const python = process.env.CLINE_RE_PYTHON ??
+            (process.platform === "win32" ? "python.exe" : "python3");
+        // Keep each process inside the existing 20-second test deadline. The
+        // full corpus used one 60-second child inside that shorter deadline.
+        const { stdout, stderr } = await promisify(execFile)(python,
+            ["-I", "-B", join(scripts, "android-investigation-worker.test.py"), "--fixture-shard", String(index), "4"],
+            { timeout: 18_000, maxBuffer: 1024 * 1024, windowsHide: true });
+        const receipt = JSON.parse(stdout) as {protocol:string;index:number;count:number;allCaseIds:string[];caseIds:string[]};
+        expect(receipt).toMatchObject({protocol:"android-fixture-shard/v1",index,count:4});
+        expect(receipt.allCaseIds.length).toBeGreaterThan(0);
+        expect(new Set(receipt.allCaseIds).size).toBe(receipt.allCaseIds.length);
+        expect(receipt.caseIds).toEqual(receipt.allCaseIds.filter((_, position) => position % 4 === index));
+        expect(receipt.caseIds.length).toBeGreaterThan(0);
+        expect(stderr).toContain(`Ran ${receipt.caseIds.length} tests`);
+        expect(stderr).toContain("OK");
+    });
 	it("runs through the real supervised fixed worker, not a user script", async () => {
 		const dir = await mkdtemp(join(tmpdir(), "android-supervised-"));
 		try {
