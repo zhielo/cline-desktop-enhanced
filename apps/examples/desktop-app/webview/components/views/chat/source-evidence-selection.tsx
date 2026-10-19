@@ -13,7 +13,8 @@ export function SharedSourceEvidencePanel({
 	environmentId: string;
 }) {
 	const project = useAnalysisProjectSelection(),
-		selection = project?.sourceEvidence;
+		selection = project?.sourceEvidence,
+		needsRecheck = project?.sourceEvidenceNeedsRecheck ?? false;
 	const [snapshot, setSnapshot] = useState<{
 			key: string;
 			value: SourceEvidenceSelection;
@@ -25,6 +26,7 @@ export function SharedSourceEvidencePanel({
 		selection,
 		sessionId,
 		environmentId,
+		needsRecheck,
 		revision,
 	]);
 	const result = snapshot?.key === requestKey ? snapshot.value : null;
@@ -33,7 +35,8 @@ export function SharedSourceEvidencePanel({
 		setSnapshot(null);
 		setError("");
 		setLoading(false);
-		if (!selection || !sessionId || environmentId !== "local") return;
+		if (!selection || needsRecheck || !sessionId || environmentId !== "local")
+			return;
 		setLoading(true);
 		void desktopClient
 			.invoke<SourceEvidenceSelection>("first_party_analysis_select_source", {
@@ -69,7 +72,7 @@ export function SharedSourceEvidencePanel({
 		return () => {
 			disposed = true;
 		};
-	}, [selection, sessionId, environmentId, requestKey]);
+	}, [selection, needsRecheck, sessionId, environmentId, requestKey]);
 	if (!selection || !project) return null;
 	return (
 		<section
@@ -93,10 +96,34 @@ export function SharedSourceEvidencePanel({
 				type="button"
 				className="rounded border px-2 py-1"
 				disabled={loading || !sessionId || environmentId !== "local"}
-				onClick={() => setRevision((v) => v + 1)}
+				onClick={() => {
+					project.recheckSourceEvidence();
+					setRevision((v) => v + 1);
+				}}
 			>
 				Recheck selected source
 			</button>
+			<label className="flex items-center gap-2">
+				<input
+					type="checkbox"
+					checked={project.rememberSourceEvidence}
+					onChange={(e) => project.setRememberSourceEvidence(e.target.checked)}
+				/>
+				Remember this evidence reference on this device
+			</label>
+			<p>
+				Only the receipt and fact/artifact selector are saved for this exact
+				workspace, environment and chat. Restored references require explicit
+				recheck; no source text, hashes, approval or execution state is
+				restored. Clearing selection removes the saved reference, not the
+				receipt or files.
+			</p>
+			{needsRecheck ? (
+				<output>
+					Restored evidence reference — recheck required. No source has been
+					read.
+				</output>
+			) : null}
 			{loading ? <output>Checking retained source identity…</output> : null}
 			{error ? <p role="alert">{error}</p> : null}
 			{result ? (

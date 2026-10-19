@@ -93,7 +93,7 @@ Fresh source flow is always partial: it is not a general taint solver, arbitrary
 - Fresh exact-location source flow in the installed app without target execution.
 - Malformed refs, wrong producers/consumers, cycles, omitted dependencies, injected paths, partial/truncated/malformed outputs, cancelled consumers and exact-checkpoint continuation.
 
-The installed release policy now requires 57 stages, including these two new named journeys. Local test results are not installed Windows results. Engine/device acceptance must name its actual authorized environment and cannot be replaced by catalog presence or owned static fixtures.
+The installed release policy now requires 58 stages, including these two new named journeys. Local test results are not installed Windows results. Engine/device acceptance must name its actual authorized environment and cannot be replaced by catalog presence or owned static fixtures.
 
 
 ## Shared artifact navigation increment
@@ -118,7 +118,7 @@ An explicit **Inspect saved source identity** action on a retained App analysis 
 
 Supported real JS/TS/JSON/map files must be confined relative workspace members with no linked components and no more than 1 MiB. Matching bytes yield at most nine lines, each capped at 1,000 UTF-16 code units, with exact saved line selection and explicit truncation. BOM and TypeScript Unicode line breaks preserve source coordinate meaning. Invalid coordinates never use fuzzy fallback. Stale, missing, blocked, unsupported and unavailable outcomes retain saved provenance but do not display current source bytes. Matching is only at the checked read: the snapshot is not continuously fresh, execution proof, or authority to execute.
 
-Selection survives workbench pane switches but is memory-only, clears on path change, explicit clear, workspace/environment/chat changes and remount, and is not included in remembered path storage. **Use source path in analysis panes** is an explicit matched-only metadata transfer, not a verified future read or a change to AI JSON. The UI rejects mismatched response receipt/session/fact/path identities and ignores late responses after scope/selection changes.
+Selection survives workbench pane switches and defaults to memory-only. Path change and explicit clear forget it; workspace/environment/chat changes and remount discard live previews. The later opt-in source reference restart increment restores only an inactive selector for the exact scope, separately from remembered path storage. **Use source path in analysis panes** is an explicit matched-only metadata transfer, not a verified future read or a change to AI JSON. The UI rejects mismatched response receipt/session/fact/path identities and ignores late responses after scope/selection changes.
 
 This is a bounded first-party source viewer, not a full editor, universal source-map resolver, virtual archive reader, Smali/native/resource adapter or complete R01/R03 acceptance. The installed policy adds an actual saved-receipt source selection, hash match, stale/no-preview, restore/recheck and cross-pane clear journey with Analysis Off. That Windows journey is required for the exact release commit; local tests do not claim it passed.
 
@@ -137,3 +137,16 @@ R02 remains open for connected producer/candidate/build/verification/device work
 ### Workspace overflow regression
 
 The preceding Windows run built and smoke-tested the NSIS installer but failed installed-WebView acceptance: the persistent composer intercepted the findings-tab click after source selection expanded. Selection details now have a bounded, independently scrollable area; the mode bar is bounded and the workbench clips overflow while preserving space for pane controls. The installed test continues to use a normal hit-tested click, not forced clicks, hidden composer controls or a larger timeout. This fixes the observed layout cause; only a new successful installed Windows run can establish regression acceptance.
+
+
+## Opt-in source reference restart continuity
+
+The source selection now has its own **Remember this evidence reference on this device** control. It stores only a versioned receipt ID and exact fact/artifact selector for the existing workspace/environment/chat scope. This is separate from remembered artifact paths. Source text, hashes, checked outcomes, tool outputs, permissions, plans and execution tokens are never restored from device selection storage. Storage is optional, untrusted and strictly bounded; malformed, extra-field and unsupported records are rejected.
+
+An opted-in reference survives pane/workbench remount and app restart as **recheck required**, with no automatic source read or preview. Explicit **Recheck selected source** uses the existing trusted host route to resolve the owning saved receipt, validate result integrity and perform a fresh bounded read. Stale/missing/unavailable references never fall back to a filename, silently rerun analysis or imply runtime permission. The user can retry or clear an unavailable receipt reference. Scope changes cannot reuse an old preview; each exact scope may restore only its own inactive opted-in reference.
+
+Unchecking removes the saved reference but leaves the current in-memory selection. Selecting a different evidence reference resets this opt-in; it cannot inherit permission to save from the previous reference. Changing the shared target, clearing source selection or clearing shared selection forgets the live and stored reference; source files and receipts are untouched. Failed storage updates/removal show an explicit warning rather than claiming the saved reference was deleted.
+
+The release policy now requires 58 installed stages. The added journey remembers a real retained artifact through the UI, restarts the installed application/sidecar, requires the inactive reference with no cached preview, checks changed bytes as stale only after explicit recheck, restores/rechecks the owned fixture and verifies explicit removal. This journey is required on Windows for the exact proposed commit; local tests alone do not establish installed acceptance. The preceding fee3d708 Windows build and installed 57-stage acceptance passed; that result does not certify this new increment.
+
+This closes the memory-only restart gap for the bounded first-party source selector, not the full cross-domain R01/R03 goal. Smali/native/resource/virtual-member selections and unified producer/build/device verification, broader adapters, configuration authority, runtime acceptance and project retention/retrieval remain as listed in the requirement matrix. PR #141 stays draft pending complete scope and exact-head release acceptance.

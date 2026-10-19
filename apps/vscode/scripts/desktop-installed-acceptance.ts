@@ -1588,6 +1588,30 @@ ConvertTo-Json -InputObject @($rows) -Compress
 
 
 
+    // Save a real receipt selector through the visible UI before a real app/sidecar restart.
+    // No preview, hashes, plan or execution token may enter device selection storage.
+    await page.getByRole("button", {name:/Installer owned session/}).first().click();
+    await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
+    await page.getByRole("button", {name:"App analysis",exact:true}).click();
+    const restartSourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});
+    await restartSourceWorkspace.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
+    await restartSourceWorkspace.getByRole("button",{name:"artifacts",exact:true}).click();
+    await restartSourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("selection-owned.ts");
+    await restartSourceWorkspace.getByRole("button",{name:"Inspect saved source identity",exact:true}).click();
+    const beforeRestartSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
+    await beforeRestartSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await beforeRestartSource.getByLabel("Remember this evidence reference on this device",{exact:true}).check();
+    await page.waitForFunction((id)=>Object.keys(localStorage).filter(k=>k.endsWith(":source-reference.v1"))
+      .some(key=>JSON.parse(localStorage.getItem(key)!).selection?.receiptId===id),parsed.id,{timeout:30000});
+    const savedSourceReference=await acceptanceAction("owned-source-reference-storage",()=>page.evaluate((id)=>{
+      const records=Object.keys(localStorage).filter(k=>k.endsWith(":source-reference.v1"))
+        .map(key=>({key,value:JSON.parse(localStorage.getItem(key)!)})).filter(r=>r.value.selection?.receiptId===id);
+      return records;
+    },parsed.id),30000);
+    if(savedSourceReference.length!==1||JSON.stringify(Object.keys(savedSourceReference[0].value).sort())!==JSON.stringify(["selection","version"])||
+      savedSourceReference[0].value.version!==1||Object.keys(savedSourceReference[0].value.selection).sort().join(",")!=="receiptId,selector"||
+      savedSourceReference[0].value.selection.selector.kind!=="artifact"||Object.keys(savedSourceReference[0].value.selection.selector).sort().join(",")!=="kind,path")
+      throw new Error("Installed remembered source reference retained extra data or wrong selector");
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
     await stop();
     page = await launch();
@@ -1635,6 +1659,29 @@ ConvertTo-Json -InputObject @($rows) -Compress
       },
     });
     stages.push("restart-setting-and-session-persistence-passed");
+    await page.getByRole("button", {name:/Installer owned session/}).first().click();
+    await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
+    const restoredSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
+    await restoredSource.getByText("Restored evidence reference — recheck required. No source has been read.",{exact:true}).waitFor({timeout:30000});
+    if(await restoredSource.getByLabel("Bounded source snapshot",{exact:true}).count()||await restoredSource.getByText("Source identity: matched",{exact:true}).count())
+      throw new Error("Installed restart restored a live source preview or trusted identity");
+    try {
+      await writeFile(sourceSelectionTarget,'export const restartChanged = "CURRENT_RESTART_NOT_SAVED";');
+      await restoredSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+      await restoredSource.getByText("Source identity: stale",{exact:true}).waitFor({timeout:30000});
+      if(await restoredSource.getByLabel("Bounded source snapshot",{exact:true}).count()||(await restoredSource.innerText()).includes("CURRENT_RESTART_NOT_SAVED"))
+        throw new Error("Installed restored stale source exposed current bytes");
+    } finally { await writeFile(sourceSelectionTarget,sourceSelectionText); }
+    await restoredSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+    await restoredSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await restoredSource.getByRole("button",{name:"Clear source evidence selection",exact:true}).click();
+    await restoredSource.waitFor({state:"detached"});
+    await page.waitForFunction((key)=>localStorage.getItem(key)===null,savedSourceReference[0].key,{timeout:30000});
+    if(await acceptanceAction("owned-source-reference-clear",()=>page.evaluate((key)=>localStorage.getItem(key),savedSourceReference[0].key),30000)!==null)
+      throw new Error("Installed explicit clear did not remove saved source reference");
+    if((await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs)).mode!=="off")throw new Error("Installed source restart changed Analysis Off");
+    await page.getByRole("button",{name:"Close diff view",exact:true}).click();
+    stages.push("installed-source-reference-restart-inert-explicit-recheck-clear-passed");
     const beforeHub = JSON.parse(await readFile(discoveryPath, "utf8"));
     if (!Number.isInteger(beforeHub.pid) || beforeHub.pid < 1)
       throw new Error("Owned isolated Hub PID unavailable");

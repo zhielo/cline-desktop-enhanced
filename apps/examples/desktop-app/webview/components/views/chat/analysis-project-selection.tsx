@@ -16,6 +16,11 @@ type Selection = { target?: string; remember: boolean };
 type ProjectSelection = Selection & {
 	storageNotice: string;
 	sourceEvidence?: SourceEvidenceSelector;
+	rememberSourceEvidence: boolean;
+	sourceEvidenceNeedsRecheck: boolean;
+	sourceStorageNotice: string;
+	setRememberSourceEvidence: (remember: boolean) => void;
+	recheckSourceEvidence: () => void;
 	setSourceEvidence: (selection?: SourceEvidenceSelector) => void;
 	setTarget: (target: string) => void;
 	setRemember: (remember: boolean) => void;
@@ -26,6 +31,78 @@ const validTarget = (target: unknown): target is string =>
 	typeof target === "string" &&
 	target.length <= 4096 &&
 	!["\0", "\r", "\n"].some((character) => target.includes(character));
+type SourceReference = {
+	selection?: SourceEvidenceSelector;
+	remember: boolean;
+	needsRecheck: boolean;
+};
+const emptyReference = (): SourceReference => ({
+	remember: false,
+	needsRecheck: false,
+});
+export const sourceReferenceStorageKey = (scope: string) =>
+	`${scope}:source-reference.v1`;
+/** Untrusted device data selects a receipt only, never supplies identity or authority. */
+export function parseSourceReference(
+	value: unknown,
+): SourceEvidenceSelector | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return;
+	const v = value as Record<string, unknown>;
+	if (
+		Object.keys(v).sort().join(",") !== "receiptId,selector" ||
+		typeof v.receiptId !== "string" ||
+		!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(
+			v.receiptId,
+		)
+	)
+		return;
+	if (
+		!v.selector ||
+		typeof v.selector !== "object" ||
+		Array.isArray(v.selector)
+	)
+		return;
+	const selector = v.selector as Record<string, unknown>;
+	if (
+		selector.kind === "fact" &&
+		Object.keys(selector).sort().join(",") === "factId,kind" &&
+		typeof selector.factId === "string" &&
+		/^ev_[a-f0-9]{64}$/.test(selector.factId)
+	)
+		return {
+			receiptId: v.receiptId,
+			selector: { kind: "fact", factId: selector.factId },
+		};
+	if (
+		selector.kind === "artifact" &&
+		Object.keys(selector).sort().join(",") === "kind,path" &&
+		validTarget(selector.path) &&
+		selector.path.length > 0
+	)
+		return {
+			receiptId: v.receiptId,
+			selector: { kind: "artifact", path: selector.path },
+		};
+}
+function restoreSourceReference(scope: string): SourceReference {
+	try {
+		const raw = localStorage.getItem(sourceReferenceStorageKey(scope));
+		if (!raw || raw.length > 32768) return emptyReference();
+		const value = JSON.parse(raw);
+		if (
+			!value ||
+			Array.isArray(value) ||
+			value.version !== 1 ||
+			Object.keys(value).sort().join(",") !== "selection,version"
+		)
+			return emptyReference();
+		const selection = parseSourceReference(value.selection);
+		if (selection) return { selection, remember: true, needsRecheck: true };
+	} catch {
+		/* Optional storage must not block in-memory analysis. */
+	}
+	return emptyReference();
+}
 /** Scoped metadata only. A restored path is not file identity, readiness or authority. */
 export function analysisProjectScope(
 	environmentId: string,
@@ -74,8 +151,27 @@ function ScopedSelection({
 }) {
 	const [selection, setSelection] = useState<Selection>(() => restore(scope));
 	const [storageNotice, setStorageNotice] = useState("");
-	const [sourceEvidence, setSourceEvidence] =
-		useState<SourceEvidenceSelector>();
+	const [sourceReference, setSourceReference] = useState<SourceReference>(() =>
+		restoreSourceReference(scope),
+	);
+	const [sourceStorageNotice, setSourceStorageNotice] = useState("");
+	useEffect(() => {
+		try {
+			const key = sourceReferenceStorageKey(scope);
+			if (sourceReference.remember && sourceReference.selection)
+				localStorage.setItem(
+					key,
+					JSON.stringify({ version: 1, selection: sourceReference.selection }),
+				);
+			else localStorage.removeItem(key);
+			setSourceStorageNotice("");
+		} catch {
+			setSourceStorageNotice(
+				"Device storage unavailable. Saved source reference updates or removal could not be confirmed; no source preview or approval is stored.",
+			);
+		}
+	}, [scope, sourceReference]);
+	const clearSourceReference = () => setSourceReference(emptyReference());
 	useEffect(() => {
 		try {
 			if (selection.remember && selection.target !== undefined)
@@ -94,17 +190,37 @@ function ScopedSelection({
 	const value: ProjectSelection = {
 		...selection,
 		storageNotice,
-		sourceEvidence,
-		setSourceEvidence,
+		sourceEvidence: sourceReference.selection,
+		rememberSourceEvidence: sourceReference.remember,
+		sourceEvidenceNeedsRecheck: sourceReference.needsRecheck,
+		sourceStorageNotice,
+		setSourceEvidence: (value) => {
+			const selection = parseSourceReference(value);
+			setSourceReference((old) =>
+				selection
+					? {
+							selection,
+							remember:
+								old.remember &&
+								JSON.stringify(old.selection) === JSON.stringify(selection),
+							needsRecheck: false,
+						}
+					: emptyReference(),
+			);
+		},
+		setRememberSourceEvidence: (remember) =>
+			setSourceReference((old) => ({ ...old, remember })),
+		recheckSourceEvidence: () =>
+			setSourceReference((old) => ({ ...old, needsRecheck: false })),
 		setTarget: (target) => {
 			if (validTarget(target)) {
 				setSelection((s) => ({ ...s, target }));
-				setSourceEvidence(undefined);
+				clearSourceReference();
 			}
 		},
 		setRemember: (remember) => setSelection((s) => ({ ...s, remember })),
 		clear: () => {
-			setSourceEvidence(undefined);
+			clearSourceReference();
 			try {
 				localStorage.removeItem(scope);
 			} catch {}
@@ -156,6 +272,9 @@ export function SharedArtifactSelection() {
 				Clear shared selection and saved path
 			</Button>
 			{project.storageNotice && <output>{project.storageNotice}</output>}
+			{project.sourceStorageNotice && (
+				<output>{project.sourceStorageNotice}</output>
+			)}
 			<p>
 				Shared by Start here, Analyze, Android tools and App analysis. AI
 				command JSON changes only when explicitly requested. Path metadata only:
