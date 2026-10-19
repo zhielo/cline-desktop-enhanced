@@ -32,13 +32,19 @@ async function setup() {
 			logRoot: join(root, "logs"),
 			tasks,
 			processes,
-			static: async () => ({ succeeded: true }),
+			static: async (
+				_request: Record<string, unknown>,
+				_signal: AbortSignal,
+			) => ({ succeeded: true }),
 			debugger: async () => ({ succeeded: true }),
 		},
 		service = new ExecutionControlService(options);
 	fixtures.push({ root, service, processes });
 	return { root, tasks, processes, options, service };
 }
+// These real-shell correctness fixtures include executable rehashing and the
+// Windows identity probe (itself bounded at 5s). They are not a 5s performance SLA.
+// Deadline behavior is tested separately below with a deliberately waiting adapter.
 function input(stages?: unknown[]) {
 	return {
 		operation: "execution_pipeline",
@@ -52,7 +58,7 @@ function input(stages?: unknown[]) {
 				id: "first",
 				backend: "shell",
 				depends_on: [],
-				timeout_ms: 5000,
+				timeout_ms: 30000,
 				request: {
 					executable: process.execPath,
 					args: ["-e", "process.stdout.write('owned output');"],
@@ -63,7 +69,7 @@ function input(stages?: unknown[]) {
 				id: "second",
 				backend: "shell",
 				depends_on: ["first"],
-				timeout_ms: 5000,
+				timeout_ms: 30000,
 				request: {
 					executable: process.execPath,
 					args: ["-e", "process.exit(0)"],
@@ -79,7 +85,7 @@ async function start(f: Awaited<ReturnType<typeof setup>>, value: unknown) {
 	return { p, r };
 }
 async function terminal(f: Awaited<ReturnType<typeof setup>>, id: string) {
-	for (let i = 0; i < 150; i++) {
+	for (let i = 0; i < 1200; i++) {
 		const c = f.service.get(f.root, id);
 		if (!["accepted", "starting", "running"].includes(c.status)) return c;
 		await new Promise((r) => setTimeout(r, 50));
@@ -90,7 +96,7 @@ it("binds approval and records staged shell results without replay on duplicate 
 	const f = await setup(),
 		{ p, r } = await start(f, input()),
 		c = await terminal(f, r.id);
-	expect(c.status).toBe("completed");
+	expect(c.status, JSON.stringify(c.jobs)).toBe("completed");
 	expect(c.jobs.map((j) => j.status)).toEqual(["completed", "completed"]);
 	expect(c.jobs[0].stdoutHash).toMatch(/^[a-f0-9]{64}$/);
 	expect(c.jobs[0].durationMs).toBeGreaterThanOrEqual(0);
@@ -100,7 +106,7 @@ it("binds approval and records staged shell results without replay on duplicate 
 		existing: true,
 	});
 	expect(f.service.list(f.root)).toHaveLength(1);
-});
+}, 75000);
 it("rejects cycles, unknown host binaries and unvalidated interactive job wrappers", async () => {
 	const f = await setup();
 	await expect(
@@ -323,4 +329,44 @@ it("does not let independent-read continuation broaden trusted pipeline effects"
 				continue_independent_reads: true,
 			}),
 		).rejects.toThrow("Independent read continuation");
+});
+
+// A generous real-process fixture budget must not disable the actual deadline.
+it("enforces an approved stage deadline and never launches its dependent", async () => {
+	const f = await setup();
+	await writeFile(join(f.root, "deadline.bin"), "owned");
+	let calls = 0;
+	f.options.static = async (_request, signal) => {
+		calls++;
+		return new Promise<{ succeeded: boolean }>((_resolve, reject) => {
+			signal.throwIfAborted();
+			signal.addEventListener("abort", () => reject(signal.reason), {
+				once: true,
+			});
+		});
+	};
+	const { r } = await start(
+		f,
+		input([
+			{
+				id: "wait",
+				backend: "static",
+				timeout_ms: 1000,
+				request: { operation: "inspect", target: "deadline.bin" },
+			},
+			{
+				id: "dependent",
+				backend: "static",
+				depends_on: ["wait"],
+				request: { operation: "inspect", target: "deadline.bin" },
+			},
+		]),
+	);
+	const c = await terminal(f, r.id);
+	expect(c.status).toBe("cancelled");
+	expect(c.jobs[0].status).toBe("cancelled");
+	expect(c.jobs[0].error).toMatch(/timeout|aborted/i);
+	expect(c.jobs[1].status).toBe("cancelled");
+	expect(c.jobs[1].startedAt).toBeUndefined();
+	expect(calls).toBe(1);
 });

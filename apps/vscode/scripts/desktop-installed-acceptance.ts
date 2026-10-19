@@ -38,6 +38,13 @@ export function verifyInstalledAnalysisProfile(profile: string) {
   if (profile !== current[1]) throw new Error("Installed analysis profile is stale");
 }
 
+/** Settings replaces the sidebar session list. Exit through the visible Home
+ * control before selecting a saved session; no reload, force click or RPC bypass. */
+export async function openInstalledSavedSession(page: Pick<Page, "getByRole">, title: RegExp) {
+  await page.getByRole("button", { name: "Cline home", exact: true }).click();
+  await page.getByRole("button", { name: title }).first().click();
+}
+
 export function startAcceptanceProcess(
   executable: string,
   args: string[],
@@ -1590,7 +1597,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 
     // Save a real receipt selector through the visible UI before a real app/sidecar restart.
     // No preview, hashes, plan or execution token may enter device selection storage.
-    await page.getByRole("button", {name:/Installer owned session/}).first().click();
+    await openInstalledSavedSession(page, /Installer owned session/);
     await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
     await page.getByRole("button", {name:"App analysis",exact:true}).click();
     const restartSourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});
@@ -1659,7 +1666,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
       },
     });
     stages.push("restart-setting-and-session-persistence-passed");
-    await page.getByRole("button", {name:/Installer owned session/}).first().click();
+    await openInstalledSavedSession(page, /Installer owned session/);
     await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
     const restoredSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
     await restoredSource.getByText("Restored evidence reference — recheck required. No source has been read.",{exact:true}).waitFor({timeout:30000});

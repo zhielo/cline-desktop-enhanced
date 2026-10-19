@@ -18,6 +18,7 @@ import {
 	verifyRecoveredHubSession,
 	waitForInstalledBackendEndpoint,
 	verifyInstalledAnalysisProfile,
+ openInstalledSavedSession,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("owned native tree is stopped before CDP can tear down its WebView children", async () => {
@@ -377,4 +378,24 @@ test("Windows owned tree cleanup confirms an actual Node root and child exited",
   await withInstalledActionDeadline("owned-test-root-exit",()=>root.exited,5000);
   assert.notEqual(root.child.exitCode,null);
  } finally { if(root.child.exitCode===null && root.child.pid) await stopOwnedWindowsTree(root.child.pid,process.cwd(),process.env); }
+});
+
+test("saved-session navigation exits Settings before looking for a hidden session", async () => {
+ const calls=[];let settings=true;
+ const page={getByRole(role,options){
+  assert.equal(role,"button");
+  if(options.name==="Cline home")return {async click(){
+   assert.equal(options.exact,true);calls.push("home");settings=false;
+  }};
+  assert.equal(settings,false,"session list is absent in Settings");
+  assert.equal(String(options.name),String(/Installer owned session/));
+  return {first(){return {async click(){calls.push("saved-session");}}}};
+ }};
+ await openInstalledSavedSession(page,/Installer owned session/);
+ assert.deepEqual(calls,["home","saved-session"]);
+ const failure=new Error("Home navigation failed");let lookups=0;
+ await assert.rejects(openInstalledSavedSession({getByRole(){lookups++;return {async click(){throw failure;}};}},/owned/),error=>error===failure);
+ assert.equal(lookups,1,"a failed navigation must not fall back to an RPC or force click");
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.equal(driver.split("await openInstalledSavedSession(page, /Installer owned session/);").length-1,2);
 });
