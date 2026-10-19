@@ -5840,6 +5840,7 @@ export async function handleCommand(
 	}
 	if (
 		command === "analysis_command_catalog" ||
+  command === "prepare_candidate_verification" ||
   command === "prepare_analysis_task" ||
 		command === "approve_analysis_task" ||
 		command === "cancel_analysis_task" ||
@@ -5930,6 +5931,19 @@ export async function handleCommand(
 		}
 		const owner = workspaceProcessOwner(baseDir);
 		const toolContext = desktopToolContext(owner);
+		if (command === "prepare_candidate_verification") {
+			const prepared = await desktopAnalysisTaskOrchestrator.prepareCandidateVerification({
+				workspaceRoot: baseDir,
+				planId: String(args?.planId ?? "").trim(),
+				allowExternalTarget: args?.allowExternalTarget === true,
+			});
+			if (typeof args?.sessionId === "string")
+				bindFirstPartyTaskEvidence(args.sessionId, baseDir, prepared);
+			if (typeof args?.investigationId === "string")
+				investigations().bind(baseDir, args.investigationId, prepared);
+			return prepared;
+		}
+
 		if (command === "prepare_analysis_task") {
 			const kind = String(args?.kind ?? "") as AnalysisTaskKind;
 			if (!["static", "debugger", "gui", "dynamic"].includes(kind)) {

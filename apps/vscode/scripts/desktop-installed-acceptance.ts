@@ -1138,6 +1138,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
         projectOutcome.checks.map(c=>c.id).join(",") !== "patch-0,assemble-smali,assemble-smali_classes2,rebuild-apk" ||
         projectOutcome.checks.some(c=>c.status!=="completed"))
       throw new Error("Installed real Android project build did not retain its bounded unsigned candidate outcome");
+    // A build receipt is not authority to verify, sign or execute its output.
+    const verificationDraft = await rpc<{id:string;status:string;permission:string;kind:string;requestHash:string;requirements:string[];request:{operation:string;target:string;candidate_validation:{kind:string;expected_sha256:string}};candidateSource:{planId:string;outputSha256:string}}>(page,"prepare_candidate_verification",{...ownedPatchArgs,planId:projectApplied.plan.id});
+    if(verificationDraft.id===projectApplied.plan.id || verificationDraft.status!=="awaiting-approval" || verificationDraft.permission!=="Inspect" || verificationDraft.kind!=="static" || verificationDraft.request.operation!=="validate_candidate" || verificationDraft.request.target!==realpathSync.native(projectPreviewRequest.output_file) || verificationDraft.request.candidate_validation.kind!=="apk" || verificationDraft.request.candidate_validation.expected_sha256!==projectApplied.result.outputSha256 || verificationDraft.candidateSource.planId!==projectApplied.plan.id || verificationDraft.candidateSource.outputSha256!==projectApplied.result.outputSha256)
+      throw new Error("Installed Android candidate handoff lost independent approval or exact output identity");
+    let verificationReplayDenied=false;
+    try { await rpc(page,"run_static_analysis",{...ownedPatchArgs,planId:verificationDraft.id,executionToken:"not-an-approval",input:verificationDraft.request}); } catch { verificationReplayDenied=true; }
+    if(!verificationReplayDenied)throw new Error("Installed candidate verification ran without its own approval");
+    await rpc(page,"cancel_analysis_task",{...ownedPatchArgs,planId:verificationDraft.id});
+    const builtCandidateBytes=await readFile(projectPreviewRequest.output_file);
+    try {
+      await writeFile(projectPreviewRequest.output_file,Buffer.concat([builtCandidateBytes,Buffer.from("owned-stale-candidate")]));
+      let staleCandidateDenied=false;
+      try { await rpc(page,"prepare_candidate_verification",{...ownedPatchArgs,planId:projectApplied.plan.id}); } catch { staleCandidateDenied=true; }
+      if(!staleCandidateDenied)throw new Error("Installed build handoff accepted a changed candidate");
+    } finally { await writeFile(projectPreviewRequest.output_file,builtCandidateBytes); }
+    if(createHash("sha256").update(await readFile(projectPreviewRequest.output_file)).digest("hex")!==projectApplied.result.outputSha256)
+      throw new Error("Installed handoff fixture did not restore its owned APK bytes");
     stages.push("installed-approved-android-project-patch-assemble-rebuild-originals-preserved");
 
     const batchBinary=join(workspace,"owned-candidate-input.bin"),batchAst=join(workspace,"owned-candidate-input.ts"),batchManifest=join(workspace,"owned-candidate-batch.json");

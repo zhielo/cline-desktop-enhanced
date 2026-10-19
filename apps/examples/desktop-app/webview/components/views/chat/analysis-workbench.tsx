@@ -62,6 +62,12 @@ type TaskKind =
 	| "execution";
 type TaskPlan = {
 	candidateOutcome?: CandidateOutcome;
+	candidateSource?: {
+		planId: string;
+		requestHash: string;
+		resultHash: string;
+		outputSha256: string;
+	};
 	id: string;
 	kind: TaskKind;
 	operation: string;
@@ -273,6 +279,25 @@ function AnalysisWorkbenchContent({
 		} finally {
 			setBusy(false);
 		}
+	};
+
+	const prepareCandidateVerification = async (planId: string) => {
+		setBusy(true);
+		setResult(null);
+		setPendingPlan(null);
+		try {
+			const plan = await desktopClient.invoke<TaskPlan>("prepare_candidate_verification", {
+				...common, planId, allowExternalTarget,
+			});
+			setPendingPlan(plan);
+			setUploadConfirmed(false);
+			setRuntimeConfirmed(false);
+			await refreshLedger();
+			setMode("approvals");
+		} catch (error) {
+			toast({ variant: "destructive", title: "Could not prepare candidate verification",
+				description: error instanceof Error ? error.message : "Candidate identity could not be checked." });
+		} finally { setBusy(false); }
 	};
 
 	const approveAndRun = async () => {
@@ -1146,6 +1171,17 @@ function AnalysisWorkbenchContent({
 											<br />
 											Result: {task.evidence?.resultHash}
 										</div>
+										{task.candidateSource && (
+											<p className="break-all text-xs text-muted-foreground">
+												Source build task: {task.candidateSource.planId}
+												<br />
+												Build result SHA256: {task.candidateSource.resultHash}
+												<br />
+												Candidate SHA256: {task.candidateSource.outputSha256}
+												<br />
+												Retained provenance only, not approval or authenticated producer evidence.
+											</p>
+										)}
                                         {task.target && <button
                                             type="button"
                                             className="rounded border px-2 py-1 text-xs"
@@ -1153,6 +1189,10 @@ function AnalysisWorkbenchContent({
                                             onClick={()=>{if (!task.target) return;setTarget(task.target);setResult(task);setMode("analyze");}}
                                         >Select task target in Analyze (identity not rechecked)</button>}
                                         <CandidateOutcomeCard outcome={task.candidateOutcome} status={task.status} />
+                                        {task.status === "completed" && task.candidateOutcome?.operation === "build_android_candidate" && task.candidateOutcome.evidence === "bounded-checks-passed" && task.candidateOutcome.outputSha256 && <div className="space-y-1">
+                                            <button type="button" className="rounded border px-2 py-1 text-xs" disabled={busy} onClick={() => void prepareCandidateVerification(task.id)}>Prepare separate APK verification</button>
+                                            <p className="text-xs text-muted-foreground">Rechecks current file identity, then prepares Inspect approval only. Unsigned APK signature checks may fail. No signing, install or execution.</p>
+                                        </div>}
 										{task.evidence?.outputPaths.map((path) => (
 											<button
 												className="block max-w-full truncate text-left text-primary hover:underline"

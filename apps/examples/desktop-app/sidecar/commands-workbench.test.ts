@@ -272,3 +272,7 @@ it.each(["patch_binary", "apply_ast_transform", "patch_dotnet_constant", "patch_
   cwd: workspace, input: { operation, target: join(workspace, "owned.smali") },
  })).rejects.toThrow("trusted desktop connection");
 });
+
+it("routes candidate verification by retained plan ID, not a caller-supplied APK or hash", async () => {
+ await expect(handleCommand(context,"prepare_candidate_verification",{cwd:workspace,planId:"missing-owned-plan",target:join(workspace,"injected.apk"),expected_sha256:"a".repeat(64)})).rejects.toThrow("Analysis plan was not found");
+});

@@ -411,3 +411,31 @@ it("confines selection details so long source snapshots cannot push pane control
  expect(selection?.classList.contains("overflow-auto")).toBe(true);
  expect(selection?.querySelector('[aria-label="Shared analysis artifact"]')).not.toBeNull();
 });
+
+it("prepares APK verification from a build ID, exposes approval and never automatically runs", async () => {
+ const build = { id:"owned-build", kind:"static", operation:"build_android_candidate", status:"completed", request:{output_file:"/work/candidate.apk"}, requestHash:"a".repeat(64), evidence:{tool:"owned-fixture",resultHash:"b".repeat(64),outputPaths:[]}, candidateOutcome:{version:"candidate-outcome/v1",operation:"build_android_candidate",evidence:"bounded-checks-passed",scope:"android-project-build",outputSha256:"c".repeat(64),publication:"new-unsigned-candidate",checks:[],limitations:[]} };
+ const request = { engine:"auto",operation:"validate_candidate",target:"/work/candidate.apk",candidate_validation:{kind:"apk",expected_sha256:"c".repeat(64)},timeout_ms:120000 };
+ const invoke = vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
+  if(command==="list_analysis_tasks") return [build];
+  if(command==="prepare_candidate_verification") return { id:"verify-plan",kind:"static",operation:"validate_candidate",status:"awaiting-approval",permission:"Inspect",requirements:[],risk:"low",budget:{},request,requestHash:"d".repeat(64) };
+  if(command==="approve_analysis_task") return {executionToken:"new-verification-token"};
+  if(command==="run_static_analysis") return {result:{status:"failed",reason:"unsigned candidate"}};
+  return {};
+ });
+ await act(async()=>{root.render(<AnalysisWorkbench cwd="/work" environmentId="local"/>);await Promise.resolve();});
+ await clickText("Evidence");
+ await clickText("Prepare separate APK verification");
+ expect(invoke).toHaveBeenCalledWith("prepare_candidate_verification",{environmentId:"local",cwd:"/work",planId:"owned-build",allowExternalTarget:false});
+ expect(invoke.mock.calls.some(([c])=>c==="approve_analysis_task"||c==="run_static_analysis")).toBe(false);
+ expect(container.textContent).toContain("Approval boundary");
+ expect(container.textContent).toContain("validate_candidate");
+ await clickText("Approve exact plan and run");
+ expect(invoke).toHaveBeenCalledWith("run_static_analysis",expect.objectContaining({planId:"verify-plan",executionToken:"new-verification-token",input:request}));
+});
+
+it("does not offer APK verification from a partial build", async()=>{
+ vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>command==="list_analysis_tasks"?[{id:"partial",operation:"build_android_candidate",status:"completed",request:{},evidence:{tool:"fixture",outputPaths:[]},candidateOutcome:{version:"candidate-outcome/v1",operation:"build_android_candidate",evidence:"partial",scope:"android-project-build",checks:[],limitations:[]}}]:{});
+ await act(async()=>{root.render(<AnalysisWorkbench cwd="/work" environmentId="local"/>);await Promise.resolve();});
+ await clickText("Evidence");
+ expect(container.textContent).not.toContain("Prepare separate APK verification");
+});

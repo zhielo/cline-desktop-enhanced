@@ -12,7 +12,10 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { isAnalysisWriteOperation } from "@cline/core";
+import {
+	isAnalysisWriteOperation,
+	ReverseEngineeringInputSchema,
+} from "@cline/core";
 import { resolveClineDataDir } from "@cline/shared/storage";
 import { assertAnalysisSandboxReady } from "./analysis-sandbox-client";
 
@@ -51,6 +54,13 @@ type TargetIdentity = {
 
 export interface AnalysisTaskPlan {
 	candidateOutcome?: CandidateOutcome;
+	/** Retained provenance only; never approval or producer authentication. */
+	candidateSource?: {
+		planId: string;
+		requestHash: string;
+		resultHash: string;
+		outputSha256: string;
+	};
 	id: string;
 	workspaceRoot: string;
 	kind: AnalysisTaskKind;
@@ -725,6 +735,70 @@ export class AnalysisTaskOrchestrator {
 			.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 			.slice(0, 100)
 			.map(publicPlan);
+	}
+
+	/** Prepare a distinct Inspect request from a retained first-party build, never replay it. */
+	async prepareCandidateVerification(input: {
+		workspaceRoot: string;
+		planId: string;
+		allowExternalTarget?: boolean;
+	}): Promise<AnalysisTaskPlan> {
+		const source = this.require(input.planId);
+		if (source.workspaceRoot !== canonicalWorkspaceRoot(input.workspaceRoot))
+			throw new Error("Analysis task does not belong to this workspace.");
+		const outcome = source.candidateOutcome;
+		if (
+			source.status !== "completed" ||
+			source.operation !== "build_android_candidate" ||
+			!source.evidence ||
+			source.evidence.requestHash !== source.requestHash ||
+			outcome?.operation !== "build_android_candidate" ||
+			outcome.evidence !== "bounded-checks-passed" ||
+			outcome.publication !== "new-unsigned-candidate" ||
+			typeof outcome.outputSha256 !== "string" ||
+			!/^[a-f0-9]{64}$/.test(outcome.outputSha256)
+		)
+			throw new Error("A completed, bounded unsigned Android build receipt is required.");
+		const output = source.request.output_file;
+		if (typeof output !== "string" || !output)
+			throw new Error("The prepared build has no output target.");
+		// Only the host's prepared request supplies the path, not client/receipt output paths.
+		const target = canonicalFuturePath(output);
+		if (!isWithin(source.workspaceRoot, target) && input.allowExternalTarget !== true)
+			throw new Error("Candidate is outside the workspace; explicitly review and allow the external target.");
+		const identity = await targetIdentity(target);
+		if (identity.kind !== "file" || identity.sha256 !== outcome.outputSha256)
+			throw new Error("Candidate file is missing, unreadable, oversized or changed since the build.");
+		const candidateSource = {
+			planId: source.id,
+			requestHash: source.requestHash,
+			resultHash: source.evidence.resultHash,
+			outputSha256: outcome.outputSha256,
+		};
+		const prepared = await this.prepare({
+			workspaceRoot: source.workspaceRoot,
+			kind: "static",
+			request: ReverseEngineeringInputSchema.parse({
+				engine: "auto",
+				operation: "validate_candidate",
+				target,
+				candidate_validation: {
+					kind: "apk",
+					expected_sha256: candidateSource.outputSha256,
+				},
+				timeout_ms: 120_000,
+			}),
+			allowExternalTarget: input.allowExternalTarget,
+		});
+		// Recheck the identity captured during prepare; consume will check it again after approval.
+		if (prepared.targetIdentity?.sha256 !== candidateSource.outputSha256) {
+			this.cancel(prepared.id);
+			throw new Error("Candidate changed while preparing verification; no approval was granted.");
+		}
+		const stored = this.require(prepared.id);
+		stored.candidateSource = candidateSource;
+		this.persist();
+		return publicPlan(stored);
 	}
 
 	evidenceBundle(planId: string, workspaceRoot: string) {

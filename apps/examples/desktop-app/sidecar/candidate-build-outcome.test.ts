@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -157,9 +157,13 @@ afterEach(async () => {
 		roots.splice(0).map((p) => rm(p, { recursive: true, force: true })),
 	);
 });
-it("retains an explicitly synthetic build receipt through approved ledger restart without replay", async () => {
-	const root = await mkdtemp(join(tmpdir(), "cline-build-summary-"));
-	roots.push(root);
+it.each([false, true])("retains an explicitly synthetic build receipt through approved ledger restart without replay (aliased workspace: %s)", async (aliased) => {
+	const container = await mkdtemp(join(tmpdir(), "cline-build-summary-"));
+	roots.push(container);
+	const actualRoot = join(container, "workspace");
+	await mkdir(actualRoot);
+	const root = aliased ? join(container, "workspace-alias") : actualRoot;
+	if (aliased) await symlink(actualRoot, root, "junction");
 	const target = join(root, "project"),
 		out = join(root, "candidate.apk");
 	await mkdir(join(target, "smali"), { recursive: true });
@@ -197,12 +201,6 @@ it("retains an explicitly synthetic build receipt through approved ledger restar
 			preview_sha256: preview,
 		},
 	});
-	// Ledger contract fixture only: this test does not invoke a builder or produce an APK.
-	const built = receipt({ outputFile: out });
-	Object.assign(built.stages[0].result, {
-		path: "smali/Sample.smali",
-		inputSha256: createHash("sha256").update(text).digest("hex"),
-	});
 	const ledger = join(root, "ledger.json"),
 		host = new AnalysisTaskOrchestrator({ ledgerFilePath: ledger });
 	const prepared = await host.prepare({
@@ -210,6 +208,17 @@ it("retains an explicitly synthetic build receipt through approved ledger restar
 		kind: "static",
 		request,
 	});
+	// The real producer receives the host-canonical request, not the raw input path.
+	// Ledger contract fixture only: no builder is invoked and no APK is produced.
+	const built = receipt({ outputFile: prepared.request.output_file });
+	Object.assign(built.stages[0].result, {
+		path: "smali/Sample.smali",
+		inputSha256: createHash("sha256").update(text).digest("hex"),
+	});
+	if (aliased) {
+		expect(prepared.request.output_file).not.toBe(out);
+		expect(summarizeCandidateOutcome(prepared, { ...built, outputFile: out })?.evidence).toBe("unavailable");
+	}
 	expect(prepared.permission).toBe("Modify");
 	const approval = host.approve(
 		prepared.id,
@@ -249,4 +258,74 @@ it("retains an explicitly synthetic build receipt through approved ledger restar
 	expect(await readFile(join(target, "smali", "Sample.smali"), "utf8")).toBe(
 		text,
 	);
+});
+
+// Identity/approval contracts only; these bytes deliberately are not a valid APK.
+async function ownedBuildForHandoff(options: { external?: boolean; partial?: boolean; failed?: boolean } = {}) {
+ const root = await mkdtemp(join(tmpdir(), "cline-build-handoff-")); roots.push(root);
+ const outside = options.external ? await mkdtemp(join(tmpdir(), "cline-external-candidate-")) : root;
+ if (outside !== root) roots.push(outside);
+ const rawOut = join(outside, "candidate.apk"), bytes = "synthetic identity fixture, not APK acceptance";
+ await writeFile(rawOut, bytes);
+ const out = await realpath(rawOut);
+ const outputHash = createHash("sha256").update(bytes).digest("hex");
+ const host = new AnalysisTaskOrchestrator({ ledgerFilePath: join(root, "ledger.json") });
+ const request = { ...plan.request, operation: plan.operation, output_file: out };
+ const prepared = await host.prepare({ workspaceRoot: root, kind: "static", request });
+ const approval = host.approve(prepared.id, prepared.requirements, prepared.requestHash);
+ await host.consume({ planId: prepared.id, executionToken: approval.executionToken, workspaceRoot: root, kind: "static", request });
+ const built = receipt({ outputFile: prepared.request.output_file, outputSha256: outputHash, ...(options.partial ? { cleanupWarnings: ["owned cleanup uncertainty"] } : {}) });
+ Object.assign(built.stages.at(-1)!.result, { outputSha256: outputHash });
+ if (options.failed) host.failWithEvidence(prepared.id, built, "synthetic-owned-fixture", "failed");
+ else host.complete(prepared.id, built, "synthetic-owned-fixture");
+ return { root, out, outputHash, prepared, host };
+}
+it("prepares a fresh independent Inspect plan with provenance and requires new approval", async () => {
+ const f = await ownedBuildForHandoff();
+ const host = new AnalysisTaskOrchestrator({ ledgerFilePath: join(f.root, "ledger.json") });
+ const next = await host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id });
+ expect(next).toMatchObject({ kind: "static", operation: "validate_candidate", permission: "Inspect", status: "awaiting-approval", target: f.out,
+  targetIdentity: { sha256: f.outputHash }, candidateSource: { planId: f.prepared.id, requestHash: f.prepared.requestHash, outputSha256: f.outputHash } });
+ expect(ReverseEngineeringInputSchema.parse(next.request).candidate_validation).toEqual({ kind: "apk", expected_sha256: f.outputHash });
+ expect(ReverseEngineeringInputSchema.parse(next.request)).toEqual(next.request);
+ expect(next.id).not.toBe(f.prepared.id); expect(next.budget.network).toBe("disabled");
+ expect(JSON.stringify(next)).not.toContain("executionToken");
+ await expect(host.consume({ planId: next.id, executionToken: "invented-token", workspaceRoot: f.root, kind: "static", request: next.request })).rejects.toThrow();
+ const restored = new AnalysisTaskOrchestrator({ ledgerFilePath: join(f.root, "ledger.json") });
+ expect(restored.list(f.root).find(p => p.id === next.id)?.candidateSource).toEqual(next.candidateSource);
+ const approved = restored.approve(next.id, next.requirements, next.requestHash);
+ await writeFile(f.out, "changed after approval");
+ await expect(restored.consume({ planId: next.id, executionToken: approved.executionToken, workspaceRoot: f.root, kind: "static", request: next.request })).rejects.toThrow("target changed");
+});
+it("rejects wrong workspace, missing or changed output and unrelated plans", async () => {
+ const f = await ownedBuildForHandoff();
+ const other = await mkdtemp(join(tmpdir(), "cline-other-workspace-")); roots.push(other);
+ await expect(f.host.prepareCandidateVerification({ workspaceRoot: other, planId: f.prepared.id })).rejects.toThrow("does not belong");
+ await writeFile(f.out, "different");
+ await expect(f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id })).rejects.toThrow("changed since the build");
+ await rm(f.out);
+ await expect(f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id })).rejects.toThrow("missing");
+ const pending = await f.host.prepare({ workspaceRoot: f.root, kind: "static", request: { operation: "inspect" } });
+ await expect(f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: pending.id })).rejects.toThrow("build receipt is required");
+ expect(f.host.list(f.root).filter(p => p.operation === "validate_candidate")).toHaveLength(0);
+});
+it.each([{partial:true}, {failed:true}])("does not promote incomplete build evidence (%j)", async (options) => {
+ const f = await ownedBuildForHandoff(options);
+ await expect(f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id })).rejects.toThrow("build receipt is required");
+});
+it("requires a new external-target acknowledgement rather than inheriting build authority", async () => {
+ const f = await ownedBuildForHandoff({ external: true });
+ await expect(f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id })).rejects.toThrow("outside the workspace");
+ const next = await f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id, allowExternalTarget: true });
+ expect(next.requirements).toContain("external-target"); expect(next.status).toBe("awaiting-approval");
+});
+
+it("consumes only the separately approved canonical verification envelope", async () => {
+ const f = await ownedBuildForHandoff();
+ const next = await f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id });
+ const approved = f.host.approve(next.id, next.requirements, next.requestHash);
+ const running = await f.host.consume({ planId: next.id, executionToken: approved.executionToken, workspaceRoot: f.root, kind: "static", request: ReverseEngineeringInputSchema.parse(next.request) });
+ expect(running.status).toBe("running");
+ f.host.fail(next.id, "Owned identity test only; no APK verification engine was invoked");
+ await expect(f.host.consume({ planId: next.id, executionToken: approved.executionToken, workspaceRoot: f.root, kind: "static", request: next.request })).rejects.toThrow();
 });
