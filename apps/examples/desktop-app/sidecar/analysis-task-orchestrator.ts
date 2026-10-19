@@ -1,3 +1,5 @@
+import { summarizeAndroidCandidateLifecycle } from "./android-candidate-lifecycle";
+import type { AndroidCandidateLifecycle } from "../shared/android-candidate-lifecycle";
 import { summarizeCandidateOutcome } from "./candidate-outcome";
 import type { CandidateOutcome } from "../shared/candidate-outcome";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
@@ -54,6 +56,8 @@ type TargetIdentity = {
 
 export interface AnalysisTaskPlan {
 	candidateOutcome?: CandidateOutcome;
+	/** Recomputed on list only; never persisted or used for authorization. */
+	candidateLifecycle?: AndroidCandidateLifecycle;
 	/** Retained provenance only; never approval or producer authentication. */
 	candidateSource?: {
 		planId: string;
@@ -352,6 +356,8 @@ function requirementsFor(
 
 function publicPlan(plan: StoredPlan): AnalysisTaskPlan {
 	const { approvalTokenHash: _secret, ...value } = plan;
+	// Never trust a retained derived summary, including from an older ledger.
+	delete value.candidateLifecycle;
 	return structuredClone(value);
 }
 
@@ -730,11 +736,16 @@ export class AnalysisTaskOrchestrator {
 	list(workspaceRoot: string): AnalysisTaskPlan[] {
 		this.expireStale();
 		const root = canonicalWorkspaceRoot(workspaceRoot);
-		return [...this.plans.values()]
-			.filter((plan) => plan.workspaceRoot === root)
+		const retained = [...this.plans.values()].filter((plan) => plan.workspaceRoot === root);
+		return retained
 			.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 			.slice(0, 100)
-			.map(publicPlan);
+			.map((plan) => {
+				const value = publicPlan(plan);
+				const summary = summarizeAndroidCandidateLifecycle(plan, retained);
+				if (summary) value.candidateLifecycle = summary;
+				return value;
+			});
 	}
 
 	/** Prepare a distinct Inspect request from a retained first-party build, never replay it. */
@@ -893,6 +904,7 @@ export class AnalysisTaskOrchestrator {
 			};
 			if (stored.version !== 1 || !Array.isArray(stored.plans)) return;
 			for (const plan of stored.plans) {
+				delete plan.candidateLifecycle;
 				if (plan.status === "running") {
 					plan.status = "interrupted";
 					plan.completedAt = new Date(this.now()).toISOString();
