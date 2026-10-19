@@ -841,3 +841,68 @@ it("retains blocked/failed/cancelled artifact discovery without a successful fal
 	).rejects.toThrow();
 	expect(runner).not.toHaveBeenCalled();
 });
+
+it("routes Android traversal budgets only to the existing relationship worker", async () => {
+	const run = vi.fn<InvestigationRunner>(async () => ({ status: "partial" }));
+	const input = ReverseEngineeringInputSchema.parse({
+		operation: "trace_android_method",
+		target: "/owned.dex",
+		advanced_options: {
+			method: { class_descriptor: "LCalls;", name: "root", descriptor: "()V" },
+			android_calls: {
+				max_depth: 4,
+				max_nodes: 8,
+				max_edges: 16,
+				direction: "callers",
+			},
+		},
+	});
+	const result = await investigationWorkflow(input, run);
+	expect(run).toHaveBeenCalledTimes(2);
+	expect(run.mock.calls[0][0].advanced_options).toEqual({
+		method: input.advanced_options!.method,
+	});
+	expect(run.mock.calls[1][0]).toMatchObject({
+		advanced_action: "android_method",
+		advanced_options: input.advanced_options,
+	});
+	expect(result).toMatchObject({ status: "partial", observedExecution: false });
+	expect(result.limitations.join(" ")).toContain("breadth-first");
+});
+it.each([
+	{ max_depth: 5 },
+	{ max_depth: true },
+	{ max_nodes: 0 },
+	{ max_nodes: 65 },
+	{ max_edges: 201 },
+	{ direction: "execute" },
+	{ shell: "no" },
+])("rejects Android traversal budget escape %j", (android_calls) => {
+	expect(() =>
+		ReverseEngineeringInputSchema.parse({
+			operation: "trace_android_method",
+			advanced_options: { android_calls },
+		}),
+	).toThrow();
+});
+it("rejects unrelated Android method overrides before either worker", async () => {
+	const run = vi.fn<InvestigationRunner>();
+	await expect(
+		investigationWorkflow(
+			ReverseEngineeringInputSchema.parse({
+				operation: "trace_android_method",
+				target: "/owned.dex",
+				advanced_options: {
+					method: {
+						class_descriptor: "LCalls;",
+						name: "root",
+						descriptor: "()V",
+					},
+					native_calls: {},
+				},
+			}),
+			run,
+		),
+	).rejects.toThrow("unrelated advanced overrides");
+	expect(run).not.toHaveBeenCalled();
+});

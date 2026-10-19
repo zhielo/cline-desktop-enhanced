@@ -87,6 +87,41 @@ def calls_fixture(root_code=b'\x71\x00\x01\x00\x00\x00\x0e\x00'):
     return reseal(data)
 
 
+def traversal_fixture(links=((1,), (2,), (0,3), ())):
+    """Owned static root -> middle -> leaf -> root/external DEX. Never executed."""
+    names=['root','middle','leaf','external'];defined=len(links)
+    strings=['LCalls;','V']+names
+    stringoff=112;typeoff=stringoff+4*len(strings);protooff=typeoff+8
+    methodoff=protooff+12;classoff=methodoff+8*len(names);dataoff=classoff+32
+    data=bytearray(dataoff);offsets=[]
+    for value in strings:
+        offsets.append(len(data));data+=bytes([len(value)])+value.encode()+b'\0'
+    while len(data)%4:data+=b'\0'
+    codes=[]
+    for targets in links:
+        codes.append(len(data))
+        body=b''.join(b'\x71\x00'+struct.pack('<H',target)+b'\0\0' for target in targets)+b'\x0e\0'
+        data+=struct.pack('<HHHHII',0,0,0,0,0,len(body)//2)+body
+        while len(data)%4:data+=b'\0'
+    classdata=len(data);data+=bytes([0,0,defined,0])
+    for i,offset in enumerate(codes):
+        data+=bytes([0 if i==0 else 1,9]);value=offset
+        while value>=128:data+=bytes([(value&127)|128]);value>>=7
+        data+=bytes([value])
+    while len(data)%4:data+=b'\0'
+    mapoff=len(data)
+    entries=[(0,1,0),(1,len(strings),stringoff),(2,2,typeoff),(3,1,protooff),(5,len(names),methodoff),(6,1,classoff),(0x2002,len(strings),dataoff),(0x2001,defined,codes[0]),(0x2000,1,classdata),(0x1000,1,mapoff)]
+    data+=struct.pack('<I',len(entries))
+    for kind,count,offset in entries:data+=struct.pack('<HHII',kind,0,count,offset)
+    data[:8]=b'dex\n035\0'
+    struct.pack_into('<20I',data,32,len(data),112,0x12345678,0,0,mapoff,len(strings),stringoff,2,typeoff,1,protooff,0,0,len(names),methodoff,1,classoff,len(data)-dataoff,dataoff)
+    for i,offset in enumerate(offsets):struct.pack_into('<I',data,stringoff+4*i,offset)
+    struct.pack_into('<II',data,typeoff,0,1);struct.pack_into('<III',data,protooff,1,1,0)
+    for i in range(len(names)):struct.pack_into('<HHI',data,methodoff+8*i,0,0,2+i)
+    struct.pack_into('<8I',data,classoff,0,1,0xffffffff,0,0xffffffff,0,classdata,0)
+    return reseal(data)
+
+
 def archive(entries, compressed=False):
     buf=io.BytesIO()
     with zipfile.ZipFile(buf,'w',compression=zipfile.ZIP_DEFLATED if compressed else zipfile.ZIP_STORED) as z:
@@ -508,6 +543,73 @@ class AndroidTests(unittest.TestCase):
         bounded=self.run_action(archive(entries),'android_method',options={'method':{'class_descriptor':'LCall0;','name':'root','descriptor':'()V'}})['evidence']['methodCalls']
         self.assertEqual(bounded['coverage']['dexFiles'],8);self.assertIn('dex-budget',bounded['coverage']['limitsReached'])
         self.assertEqual(bounded['selectedDefinitionCount'],1)
+
+    def test_android_traversal_budget_rejects_untrusted_fields_and_types(self):
+        for value in ({'max_depth':5},{'max_depth':True},{'max_nodes':0},{'max_edges':201},{'direction':'execute'},{'shell':'no'},[],{'max_nodes':None}):
+            with self.assertRaises(ValueError):w.android_call_budget(value)
+        self.assertEqual(w.android_call_budget({})['max_depth'],2)
+
+    def test_owned_android_traversal_fixture_is_exact(self):
+        import base64
+        fixture=json.loads((HERE/'owned-android-call-traversal-fixture.json').read_text())
+        for key,links in [('cycle',((1,), (2,), (0,3), ())),('external',((1,), (2,), (0,3)))]:
+            data=traversal_fixture(links)
+            self.assertEqual(base64.b64decode(fixture[key]['base64']),data)
+            self.assertEqual(fixture[key]['sha256'],hashlib.sha256(data).hexdigest())
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_real_android_transitive_cycle_directions_and_provenance(self):
+        data=traversal_fixture();options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'},'android_calls':{'max_depth':4,'direction':'callees'}}
+        calls=self.run_action(data,'android_method',options=options)['evidence']['methodCalls'];g=calls['traversal']
+        self.assertEqual([n['name'] for n in g['nodes']],['root','middle','leaf','external'])
+        self.assertEqual([n['depth'] for n in g['nodes']],[0,1,2,3])
+        self.assertEqual(len(g['edges']),4);self.assertEqual(g['edges'][2]['resolution'],'already-scheduled-or-visited')
+        self.assertEqual(g['limitsReached'],[]);self.assertEqual(calls['referenceCount'],2)
+        self.assertEqual(len({e['id'] for e in g['edges']}),4)
+        for node in g['nodes']:
+            self.assertEqual(node['artifactSha256'],hashlib.sha256(data).hexdigest());self.assertEqual(len(node['byteFingerprint']),64)
+        for edge in g['edges']:
+            self.assertEqual(edge['artifactSha256'],hashlib.sha256(data).hexdigest());self.assertFalse(edge['dispatchVerified']);self.assertFalse(edge['executionObserved'])
+        self.assertFalse(g['dispatchVerified']);self.assertFalse(g['observedExecution'])
+        reverse=self.run_action(data,'android_method',options=dict(options,android_calls={'max_depth':4,'direction':'callers'}))['evidence']['methodCalls']['traversal']
+        self.assertEqual([n['name'] for n in reverse['nodes']],['root','leaf','middle'])
+        self.assertEqual(len(reverse['edges']),3)
+        both=self.run_action(data,'android_method',options=dict(options,android_calls={'max_depth':4}))['evidence']['methodCalls']['traversal']
+        self.assertEqual(len(both['edges']),4);self.assertEqual(len({e['id'] for e in both['edges']}),4)
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_real_android_traversal_limits_external_and_ambiguous(self):
+        options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'}}
+        def graph(budget,data=None,limit=200):
+            return self.run_action(traversal_fixture() if data is None else data,'android_method',limit=limit,options=dict(options,android_calls=dict(direction='callees',**budget)))['evidence']['methodCalls']['traversal']
+        zero=graph({'max_depth':0});self.assertEqual(len(zero['nodes']),1);self.assertEqual(zero['edges'],[]);self.assertIn('depth-budget',zero['limitsReached'])
+        depth=graph({'max_depth':1});self.assertEqual([n['name'] for n in depth['nodes']],['root','middle']);self.assertIn('depth-budget',depth['limitsReached'])
+        nodes=graph({'max_nodes':1});self.assertEqual(len(nodes['nodes']),1);self.assertEqual(nodes['edges'][0]['resolution'],'node-budget')
+        edges=graph({'max_edges':1});self.assertEqual(len(edges['edges']),1);self.assertIn('edge-budget',edges['limitsReached'])
+        detailed=graph({'max_depth':4},limit=1);self.assertEqual(len(detailed['edges']),4);self.assertIn('reference-budget',detailed['scanLimitsReached'])
+        external=graph({'max_depth':4},traversal_fixture(((1,), (2,), (0,3))));self.assertEqual(len(external['nodes']),3);self.assertEqual(external['edges'][-1]['resolution'],'external-or-uncovered-definition');self.assertIsNone(external['edges'][-1]['targetMethodId'])
+        ambiguous=graph({},archive([('classes.dex',traversal_fixture()),('classes2.dex',traversal_fixture())]));self.assertEqual(ambiguous['status'],'not-started');self.assertEqual(ambiguous['nodes'],[]);self.assertEqual(ambiguous['reason'],'ambiguous-definition')
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_real_android_downstream_ambiguity_and_index_budget_stop_expansion(self):
+        data=traversal_fixture()
+        duplicate=reseal(data.replace(b'root',b'noop'))
+        options={'method':{'class_descriptor':'LCalls;','name':'root','descriptor':'()V'},'android_calls':{'max_depth':4,'direction':'both'}}
+        g=self.run_action(archive([('classes.dex',data),('classes2.dex',duplicate)]),'android_method',options=options)['evidence']['methodCalls']['traversal']
+        self.assertEqual(len(g['nodes']),1)
+        self.assertEqual({e['resolution'] for e in g['edges']},{'ambiguous-definition','ambiguous-source-definition'})
+        self.assertTrue(any(e['definitionCandidateCount']==2 for e in g['edges']))
+        many=calls_fixture(b'\x71\x00\x01\x00\x00\x00'*4097+b'\x0e\0')
+        limited=self.run_action(many,'android_method',options=options)['evidence']['methodCalls']['traversal']
+        self.assertEqual(limited['indexedReferences'],4096);self.assertIn('traversal-index-budget',limited['scanLimitsReached'])
+        self.assertLessEqual(len(limited['edges']),128)
+
+    @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
+    def test_real_android_native_declaration_does_not_invent_code_hash(self):
+        options={'method':{'class_descriptor':'LFixture;','name':'native_work','descriptor':'()V'},'android_calls':{}}
+        graph=self.run_action(dex_fixture(),'android_method',options=options)['evidence']['methodCalls']['traversal']
+        self.assertEqual(len(graph['nodes']),1);self.assertEqual(graph['edges'],[])
+        self.assertEqual(graph['nodes'][0]['codeStatus'],'defined-without-code');self.assertIsNone(graph['nodes'][0]['byteFingerprint'])
 
     @unittest.skipUnless(importlib.util.find_spec('androguard'),'optional Androguard not configured')
     def test_exact_defined_dex_bytecode(self):

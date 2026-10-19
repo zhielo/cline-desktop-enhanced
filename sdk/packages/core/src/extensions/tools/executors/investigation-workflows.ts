@@ -359,6 +359,15 @@ export async function investigationWorkflow(
     }
 
 	if (input.operation === "trace_android_method") {
+		if (
+			input.advanced_options &&
+			Object.keys(input.advanced_options).some(
+				(key) => key !== "method" && key !== "android_calls",
+			)
+		)
+			throw new Error(
+				"Android method tracing rejects unrelated advanced overrides",
+			);
 		if (!input.advanced_options?.method)
 			throw new Error("Exact advanced_options.method required");
 		const bytecode = await stage("selected-bytecode", {
@@ -379,12 +388,17 @@ export async function investigationWorkflow(
 			operation: "advanced_analysis",
 			advanced_action: "android_method",
 			target: input.target,
-			advanced_options: { method: input.advanced_options.method },
+			advanced_options: {
+				method: input.advanced_options.method,
+				...(input.advanced_options.android_calls
+					? { android_calls: input.advanced_options.android_calls }
+					: {}),
+			},
 			max_results: input.max_results ?? 200,
 		});
 		return envelope(
 			[
-				"Exact selected DEX bytecode plus a bounded one-hop encoded invoke caller/callee reference view from the existing Androguard engine, preserving DEX origin, input/code hashes and ambiguous definition candidates. Fixed scan budgets and missing-engine/decoder limitations remain explicit; this is not transitive traversal, dynamic dispatch, a full call graph or runtime reachability.",
+				"Exact selected DEX bytecode plus a bounded one-hop encoded invoke caller/callee reference view from the existing Androguard engine, preserving DEX origin, input/code hashes and ambiguous definition candidates. Optional advanced_options.android_calls adds bounded breadth-first caller/callee signature-candidate traversal, stopping at ambiguous/external definitions with cycle deduplication and depth/node/edge limits. Fixed scan budgets and missing-engine/decoder limitations remain explicit; neither view proves dynamic dispatch, a complete call graph or runtime reachability.",
 			],
 			true,
 		);

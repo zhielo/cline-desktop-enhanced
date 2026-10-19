@@ -82,7 +82,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "trace_android_method",
 		scope: "partial",
 		limitations:
-			"Exact method code plus bounded one-hop encoded invoke caller/callee references with DEX/code hashes, definition ambiguity and explicit scan/missing-engine limits. No transitive traversal, runtime dispatch or full call graph.",
+			"Exact method code and one-hop encoded invoke references, plus optional android_calls bounded breadth-first caller/callee signature-candidate traversal. DEX/code hashes, ambiguity stops, cycle deduplication and scan/depth/node/edge limits remain explicit; no verified runtime dispatch or complete call graph.",
 	},
 	{
 		group: "android",
