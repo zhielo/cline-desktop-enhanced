@@ -28,6 +28,7 @@ type Catalog = {
 function template(command: string) {
 	const base: Record<string, unknown> = { target: "", timeout_ms: 120000 };
 	if (command === "compare_versions") base.version_comparison = {kind:"project",max_results:100};
+	if(command === "find_android_entrypoints") base.advanced_options={entrypoints:{max_depth:8,max_components:64,max_dex_files:32}};
 	if (command === "identify_artifact")
 		base.artifact_discovery = { max_depth: 3, max_artifacts: 200 };
 	if (

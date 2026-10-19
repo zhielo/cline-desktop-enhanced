@@ -344,38 +344,20 @@ export async function investigationWorkflow(
 			true,
 		);
 	}
-	if (
-		["find_android_entrypoints", "map_attack_surface"].includes(input.operation)
-	) {
-		const report = await stage("apk-security", {
-			operation: "apk_security_report",
-			target: input.target,
-			max_results: input.max_results ?? 200,
-		});
-		if (!ok(report) && typeof report.reportFile !== "string")
-			return envelope(
-				["APK security stage failed; no manifest evidence was read."],
-				true,
-			);
-		if (typeof report.reportFile !== "string")
-			throw new Error("APK report did not return a report file");
-		const bytes = await readCandidateFile(
-				report.reportFile,
-				4 * 1024 * 1024,
-				combined,
-			),
-			doc = json(bytes) as Record<string, unknown>;
-		return {
-			...envelope(
-				[
-					"Manifest component/export evidence only. Supported manifest decoding depends on available Android tools; lifecycle/callback expansion, reachability and execution remain unresolved.",
-				],
-				true,
-			),
-			manifestEvidence: doc.apkSecurity,
-			reportSha256: candidateHash(bytes),
-		};
-	}
+	if (["find_android_entrypoints", "map_attack_surface"].includes(input.operation)) {
+        if(input.advanced_options && Object.keys(input.advanced_options).some(k=>k!=="entrypoints"))
+            throw new Error("Android entrypoints rejects unrelated advanced overrides");
+        await stage("manifest-dex-entrypoint-candidates",{
+            operation:"advanced_analysis",advanced_action:"android_entrypoints",target:input.target,
+            max_results:input.max_results??200,
+            advanced_options:input.advanced_options?.entrypoints ? {entrypoints:input.advanced_options.entrypoints}:undefined,
+        });
+        return envelope([
+            "Fresh manifest declarations and supported exact defined DEX lifecycle/callback signatures, preserving multidex origin and bounded superclass lookup. Static candidates only, not observed dispatch, reachability or effective exported/permission policy.",
+            "Fixed Application/Activity/Service/Receiver/Provider catalog; aliases use declared targets. Missing/rejected/ambiguous classes, dynamic callbacks, framework/OEM methods and resource-referenced names remain unresolved. No signing, install, target execution or security verdict.",
+        ],true);
+    }
+
 	if (input.operation === "trace_android_method") {
 		if (!input.advanced_options?.method)
 			throw new Error("Exact advanced_options.method required");
@@ -407,26 +389,23 @@ export async function investigationWorkflow(
 			true,
 		);
 	}
-	if (
-		input.operation === "diff_android_resources" ||
-		(input.operation === "compare_versions" &&
-			input.target.toLowerCase().endsWith(".apk"))
-	) {
-		if (!input.compare_target)
-			throw new Error("Explicit compare_target required");
-		await stage("apk-entry-differences", {
-			operation: "compare_apks",
-			target: input.target,
-			compare_target: input.compare_target,
-			max_results: input.max_results ?? 200,
-		});
-		return envelope(
-			[
-				"Combined manifest/resources/assets/DEX/native ZIP-entry size/CRC differences; CRC equality is not cryptographic byte equivalence or decoded semantic/API comparison. Inspect bounded resultsTruncated and categoryCounts. No code executes.",
-			],
-			true,
-		);
-	}
+    if(input.operation === "diff_android_resources") {
+        if(!input.compare_target)throw new Error("Explicit compare_target required");
+        if(input.advanced_options)throw new Error("Android resource comparison rejects unrelated advanced overrides");
+        await stage("apk-byte-and-xml-structure-differences",{
+            operation:"advanced_analysis",advanced_action:"android_resources",target:input.target,
+            compare_target:input.compare_target,max_results:input.max_results??200,
+        });
+        return envelope([
+            "Actual regular ZIP-entry SHA256 differences plus optional bounded namespace-expanded XML structure fingerprints, not CRC equality or decoded resource-table semantic equivalence. Both input hashes and truncation remain explicit; no extraction, signing, installation or target execution.",
+        ],true);
+    }
+    if(input.operation === "compare_versions" && input.target.toLowerCase().endsWith(".apk")) {
+        if(!input.compare_target)throw new Error("Explicit compare_target required");
+        await stage("apk-entry-differences",{operation:"compare_apks",target:input.target,compare_target:input.compare_target,max_results:input.max_results??200});
+        return envelope(["Legacy APK ZIP-entry size/CRC comparison only. Use diff_android_resources for actual member SHA256 and bounded XML structural differences; no semantic or runtime equivalence."],true);
+    }
+
 	if (input.operation === "compare_versions") {
 		if (!input.compare_target)
 			throw new Error("Explicit compare_target required");

@@ -19,7 +19,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "map_attack_surface",
 		scope: "partial",
 		limitations:
-			"JS/TS syntax and APK manifest evidence; no universal entrypoint inventory.",
+			"JS/TS syntax plus APK manifest/exact DEX callback candidates with bounded superclass search; no universal entrypoint inventory or observed dispatch.",
 	},
 	{
 		group: "cross-tool",
@@ -75,7 +75,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "find_android_entrypoints",
 		scope: "partial",
 		limitations:
-			"Manifest components only; lifecycle/callback expansion unresolved.",
+			"Fresh standard root multidex classes plus manifest Application/Activity/Service/Receiver/Provider and alias targets, fixed exact callback signatures and bounded superclass candidates. Dynamic listeners, framework/OEM-specific dispatch, rejected/uncovered classes and reachability remain unresolved.",
 	},
 	{
 		group: "android",
@@ -116,7 +116,7 @@ export const RECOMMENDATION_COVERAGE = [
 		command: "diff_android_resources",
 		scope: "partial",
 		limitations:
-			"ZIP-entry size/CRC comparison; no decoded resource semantic diff.",
+			"Actual covered ZIP-member SHA256 differences, category counts and optional namespace-expanded XML structural fingerprints. No resources.arsc/configuration resolution, semantic equivalence, signature or device proof.",
 	},
 	{
 		group: "android",

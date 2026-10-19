@@ -2488,6 +2488,9 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
+ if(input.advanced_options?.entrypoints && !(["find_android_entrypoints","map_attack_surface"].includes(input.operation) || input.operation==="advanced_analysis"&&input.advanced_action==="android_entrypoints"))throw new Error("entrypoints budgets require the Android entrypoint action");
+
+ if(input.advanced_options?.entrypoints && input.operation==="map_attack_surface" && !input.target?.toLowerCase().endsWith(".apk"))throw new Error("entrypoints budgets require an APK target for map_attack_surface");
  if(input.version_comparison && input.operation !== "compare_versions")throw new Error("version_comparison is accepted only by compare_versions");
  if(input.operation === "compare_versions" && input.version_comparison){
   const allowed=new Set(["operation","target","compare_target","version_comparison","timeout_ms","engine","report_format","discovery_depth"]);

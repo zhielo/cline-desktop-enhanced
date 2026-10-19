@@ -48,6 +48,8 @@ export const ADVANCED_ACTIONS = [
 	"decrypt_blob",
 	"artifact_discovery",
 	"android_relationships",
+	"android_entrypoints",
+	"android_resources",
 	"android_method",
 	"investigation_query",
 	"android_method_code",
@@ -79,6 +81,8 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"decrypt_blob",
 	"artifact_discovery",
 	"android_relationships",
+	"android_entrypoints",
+	"android_resources",
 	"android_method",
 	"android_method_code",
 	"native_function",
@@ -127,6 +131,7 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
+        entrypoints?: {max_depth?:number;max_components?:number;max_dex_files?:number};
         jni_trace?: {native_artifact?:string;max_candidates?:number;native_calls?:{max_depth?:number;max_functions?:number;max_edges?:number;max_total_bytes?:number}};
 		discovery?: {
 			max_depth?: number;
@@ -253,7 +258,7 @@ async function runAdvancedAnalysisOwned(
 			? []
 			: [
 					request.target,
-					...(request.action === "match_native_functions"
+					...(["match_native_functions", "android_resources"].includes(request.action)
 						? [request.compareTarget]
 						: []),
 				];
@@ -300,6 +305,8 @@ async function runAdvancedAnalysisOwned(
 		[
 			"artifact_discovery",
 			"android_relationships",
+	"android_entrypoints",
+	"android_resources",
 			"android_method",
 			"android_method_code",
 			"native_function",
