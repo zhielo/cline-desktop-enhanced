@@ -80,6 +80,17 @@ jobs:
         with:
           bun-version: ${{ steps.toolchain.outputs.version }}
 
+      # Cheap, dependency-free failures must precede downloads/compiler setup.
+      # This is feedback only: the complete validator and installed gate still run.
+      - name: Fast verification preflight
+        run: bun run validate:quick
+
+      - name: Restore locked Bun download cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-downloads-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('bun.lock', 'workers/android-capture/bun.lock') }}
+
       - name: Read and validate desktop version
         id: version
         shell: bash
@@ -153,9 +164,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             apps/examples/desktop-app/src-tauri/target
-          key: windows-cargo-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('apps/examples/desktop-app/src-tauri/Cargo.lock') }}
+            !apps/examples/desktop-app/src-tauri/target/release/bundle/**
+          # Refresh immutable caches when Rust inputs change; the old lock-only
+          # key never saved newer compiler outputs after an exact cache hit.
+          # Cargo still rebuilds/checks inputs; no cached installer is accepted.
+          key: windows-cargo-v2-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('apps/examples/desktop-app/src-tauri/Cargo.lock') }}-${{ hashFiles('apps/examples/desktop-app/src-tauri/src/**/*.rs', 'apps/examples/desktop-app/src-tauri/build.rs', 'apps/examples/desktop-app/src-tauri/Cargo.toml', 'apps/examples/desktop-app/src-tauri/tauri*.json') }}-${{ github.sha }}
           restore-keys: |
-            windows-cargo-${{ env.RUST_TOOLCHAIN }}-
+            windows-cargo-v2-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('apps/examples/desktop-app/src-tauri/Cargo.lock') }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -314,6 +329,14 @@ jobs:
             --compile \
             --outfile "$RUNNER_TEMP/process-session-terminal-smoke.exe"
           "$RUNNER_TEMP/process-session-terminal-smoke.exe"
+
+      - name: Restore Next compiler cache only
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: apps/examples/desktop-app/webview/.next/cache
+          key: next-compiler-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: |
+            next-compiler-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('bun.lock') }}-
 
       - name: Build NSIS installer
         working-directory: apps/examples/desktop-app
@@ -579,6 +602,11 @@ jobs:
         run: |
           "Smoke test: ${{ steps.smoke.outcome }}; Installed UI: ${{ steps.ui_acceptance.outcome }}" |
             Out-File 'dist/custom-installer/BUILD-INFO.txt' -Encoding utf8 -Append
+
+      - name: Summarize verification bottlenecks
+        if: ${{ always() }}
+        shell: pwsh
+        run: node scripts/summarize-verification.mjs
 
       - name: Write dependency source inventory
         if: ${{ steps.installer.outcome == 'success' }}
