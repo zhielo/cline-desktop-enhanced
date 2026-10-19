@@ -353,3 +353,89 @@ it("carries the owning session through advanced candidate preparation, approval 
  for (const command of ["prepare_analysis_task", "approve_analysis_task", "run_static_analysis"])
   expect(invoke).toHaveBeenCalledWith(command, expect.objectContaining({ sessionId: "owning-chat", environmentId: "local", cwd: "C:\\owned" }));
 });
+it.each([undefined, "shared-session"])("shares an artifact in fresh or attached session %s but changes AI JSON only explicitly",async(sessionId)=>{
+ const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
+  if(command==="list_analysis_tasks" || command==="binary_triage_history")return [];
+  if(command==="first_party_analysis_status")return {mode:"off",receipts:[],readiness:{}};
+  if(command==="analysis_command_catalog")return {entries:[{command:"identify_artifact",route:"static-review",effect:"read",availability:"implemented",limitations:"bounded"}],unavailable:[],limitations:[]};
+  return {};
+ });
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/owned-shared" environmentId="local" sessionId={sessionId}/>));
+ const shared=container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!;
+ await setInput(shared,"/owned-shared/app.apk");
+ await clickText("Android tools");expect(container.querySelector<HTMLInputElement>('input[placeholder="app.apk, classes.dex, or decoded-project"]')!.value).toBe("/owned-shared/app.apk");
+ await clickText("App analysis");expect(container.querySelector<HTMLInputElement>('input[aria-label="JavaScript analysis target"]')!.value).toBe("/owned-shared/app.apk");
+ await clickText("AI commands");const json=container.querySelector<HTMLTextAreaElement>("textarea")!;expect(JSON.parse(json.value).target).toBe("");
+ await clickText("Use shared artifact in command JSON");expect(JSON.parse(json.value).target).toBe("/owned-shared/app.apk");
+ expect(invoke.mock.calls.some(([c])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|first_party_analysis_inspect|first_party_analysis_run)$/.test(c))).toBe(false);
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/other-workspace" environmentId="local"/>));expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe("");
+});
+it("does not carry an in-flight reviewed plan across workspace scopes",async()=>{
+ let finish!:(value:unknown)=>void;
+ const delayed=new Promise(resolve=>{finish=resolve;});
+ const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
+  if(command==="list_analysis_tasks")return [];
+  if(command==="prepare_analysis_task")return delayed;
+  return {};
+ });
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/old-workspace" environmentId="local"/>));
+ await setInput(container.querySelector<HTMLInputElement>('input[placeholder="Workspace-relative or absolute path"]')!,"old.bin");
+ await clickText("Prepare static-analysis task");
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/new-workspace" environmentId="local"/>));
+ await act(async()=>finish({id:"stale-plan",kind:"static",operation:"inspect",target:"old.bin",request:{operation:"inspect",target:"old.bin"},requestHash:"a".repeat(64),permission:"Inspect",status:"awaiting-approval",requirements:[],risk:"low",budget:{},createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+60000).toISOString()}));
+ expect(container.textContent).not.toContain("Approve exact plan and run");
+ expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe("");
+ expect(invoke.mock.calls.some(([command])=>command==="approve_analysis_task")).toBe(false);
+});
+it("navigates from saved evidence to its task target without replay or identity claims",async()=>{
+ const saved={id:"saved-evidence",operation:"inspect",target:"/owned/source.exe",status:"completed",requestHash:"a".repeat(64),permission:"Inspect",risk:"low",evidence:{tool:"owned",resultHash:"b".repeat(64),outputPaths:[]}};
+ const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>command==="list_analysis_tasks"?[saved]:{});
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/evidence-navigation" environmentId="local"/>));
+ await clickText("Evidence");
+ await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Select target from evidence saved-evidence"]')!.click());
+ expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe(saved.target);
+ expect(container.querySelector<HTMLInputElement>('input[placeholder="Workspace-relative or absolute path"]')!.value).toBe(saved.target);
+ expect(container.textContent).toContain(saved.evidence.resultHash);
+ expect(invoke.mock.calls.some(([command])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|open_artifact)$/.test(command))).toBe(false);
+});
+
+
+it("confines selection details so long source snapshots cannot push pane controls below the composer", async () => {
+ vi.spyOn(desktopClient,"invoke").mockImplementation(async command=> command === "list_analysis_tasks" ? [] : {});
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/bounded-layout" environmentId="local"/>));
+ const workbench=container.querySelector('[aria-label="Analysis workbench"]');
+ expect(workbench?.classList.contains("min-h-0")).toBe(true);
+ expect(workbench?.classList.contains("overflow-hidden")).toBe(true);
+ const selection=container.querySelector('[aria-label="Analysis selection details"]');
+ expect(selection?.classList.contains("max-h-[40%]")).toBe(true);
+ expect(selection?.classList.contains("overflow-auto")).toBe(true);
+ expect(selection?.querySelector('[aria-label="Shared analysis artifact"]')).not.toBeNull();
+});
+
+it("prepares APK verification from a build ID, exposes approval and never automatically runs", async () => {
+ const build = { id:"owned-build", kind:"static", operation:"build_android_candidate", status:"completed", request:{output_file:"/work/candidate.apk"}, requestHash:"a".repeat(64), evidence:{tool:"owned-fixture",resultHash:"b".repeat(64),outputPaths:[]}, candidateOutcome:{version:"candidate-outcome/v1",operation:"build_android_candidate",evidence:"bounded-checks-passed",scope:"android-project-build",outputSha256:"c".repeat(64),publication:"new-unsigned-candidate",checks:[],limitations:[]} };
+ const request = { engine:"auto",operation:"validate_candidate",target:"/work/candidate.apk",candidate_validation:{kind:"apk",expected_sha256:"c".repeat(64)},timeout_ms:120000 };
+ const invoke = vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
+  if(command==="list_analysis_tasks") return [build];
+  if(command==="prepare_candidate_verification") return { id:"verify-plan",kind:"static",operation:"validate_candidate",status:"awaiting-approval",permission:"Inspect",requirements:[],risk:"low",budget:{},request,requestHash:"d".repeat(64) };
+  if(command==="approve_analysis_task") return {executionToken:"new-verification-token"};
+  if(command==="run_static_analysis") return {result:{status:"failed",reason:"unsigned candidate"}};
+  return {};
+ });
+ await act(async()=>{root.render(<AnalysisWorkbench cwd="/work" environmentId="local"/>);await Promise.resolve();});
+ await clickText("Evidence");
+ await clickText("Prepare separate APK verification");
+ expect(invoke).toHaveBeenCalledWith("prepare_candidate_verification",{environmentId:"local",cwd:"/work",planId:"owned-build",allowExternalTarget:false});
+ expect(invoke.mock.calls.some(([c])=>c==="approve_analysis_task"||c==="run_static_analysis")).toBe(false);
+ expect(container.textContent).toContain("Approval boundary");
+ expect(container.textContent).toContain("validate_candidate");
+ await clickText("Approve exact plan and run");
+ expect(invoke).toHaveBeenCalledWith("run_static_analysis",expect.objectContaining({planId:"verify-plan",executionToken:"new-verification-token",input:request}));
+});
+
+it("does not offer APK verification from a partial build", async()=>{
+ vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>command==="list_analysis_tasks"?[{id:"partial",operation:"build_android_candidate",status:"completed",request:{},evidence:{tool:"fixture",outputPaths:[]},candidateOutcome:{version:"candidate-outcome/v1",operation:"build_android_candidate",evidence:"partial",scope:"android-project-build",checks:[],limitations:[]}}]:{});
+ await act(async()=>{root.render(<AnalysisWorkbench cwd="/work" environmentId="local"/>);await Promise.resolve();});
+ await clickText("Evidence");
+ expect(container.textContent).not.toContain("Prepare separate APK verification");
+});

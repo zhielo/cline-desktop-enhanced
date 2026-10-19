@@ -407,3 +407,23 @@ it("gives mounted draft and session controls distinct accessible identities", as
  expect([...el.querySelectorAll("select")].filter(control => control.id === session.id)).toHaveLength(1);
  expect([...el.querySelectorAll("select")].filter(control => control.id === draft.id)).toHaveLength(1);
 });
+
+it("allows draft path selection locally without a session, host calls or runtime authority", async () => {
+ await act(async () => root.render(<FirstPartyAnalysisWorkspace environmentId="local" />));
+ const target = el.querySelector<HTMLInputElement>('input[aria-label="JavaScript analysis target"]')!;
+ expect(target.value).toBe(".");
+ await act(async () => {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")?.set?.call(target,"owned.ts");
+  target.dispatchEvent(new Event("input",{bubbles:true}));
+ });
+ expect(target.value).toBe("owned.ts");
+ const inspect = [...el.querySelectorAll("button")].find(b=>b.textContent?.includes("Inspect static sources"))!;
+ expect(inspect.disabled).toBe(true);
+ await act(async () => inspect.click());
+ expect(el.textContent).toContain("Path selection only");
+ expect(el.querySelector('input[aria-label="Inspector source target"]')).toBeNull();
+ expect(invoke).not.toHaveBeenCalled();
+ await act(async () => root.render(<FirstPartyAnalysisWorkspace environmentId="ssh:remote" />));
+ expect(el.querySelector('input[aria-label="JavaScript analysis target"]')).toBeNull();
+ expect(invoke).not.toHaveBeenCalled();
+});

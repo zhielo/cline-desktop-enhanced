@@ -1,4 +1,5 @@
 "use client";
+import { useAnalysisProjectTarget } from "./analysis-project-selection";
 import { useCallback, useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,7 @@ export function GuidedInvestigation({
 	) => void;
 }) {
 	const prefix = useId(),
-		[target, setTarget] = useState(""),
+		[target, setTarget] = useAnalysisProjectTarget(""),
 		[question, setQuestion] = useState(""),
 		[operation, setOperation] = useState("inspect_binary"),
 		[address, setAddress] = useState(""),

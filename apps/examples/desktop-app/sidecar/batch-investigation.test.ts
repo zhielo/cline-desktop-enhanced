@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
@@ -98,7 +98,10 @@ async function fixture(
 	};
 	return { root, tasks, service, call, req, run };
 }
-async function terminal(f: Awaited<ReturnType<typeof fixture>>, id: string) {
+async function terminal(
+	f: Pick<Awaited<ReturnType<typeof fixture>>, "root" | "service">,
+	id: string,
+) {
 	for (let i = 0; i < 200; i++) {
 		const c = f.service.get(f.root, id);
 		if (!["accepted", "starting", "running"].includes(c.status)) return c;
@@ -501,4 +504,284 @@ it("preserves nested CFG partial status while independent reads finish", async (
 		result: { status: "partial", evidence: { equivalence: "not-proven" } },
 	});
 	expect(c.jobs[1].startedAt).toBeUndefined();
+});
+
+const ownedGraph = {
+	schemaVersion: 1,
+	nodes: [],
+	edges: [],
+	coverage: ["Owned fixture, not target compatibility"],
+	sourceHashes: [],
+};
+async function graphFixture(adapter?: Parameters<typeof fixture>[0]) {
+	const f = await fixture(adapter);
+	const manifest = {
+		schemaVersion: 1,
+		results: [
+			{
+				protocol: "cline-advanced-analysis/v1",
+				status: "completed",
+				engine: "owned-fixture",
+				engineVersion: "1",
+				evidence: {},
+				limitations: ["Untrusted input report"],
+			},
+		],
+	};
+	await writeFile(join(f.root, "manifest.json"), JSON.stringify(manifest));
+	const req = {
+		operation_id: randomUUID(),
+		title: "Owned chained graph",
+		parallel: 1,
+		stages: [
+			{
+				id: "build",
+				request: {
+					operation: "advanced_analysis",
+					advanced_action: "graph_build",
+					target: "manifest.json",
+				},
+			},
+			{
+				id: "query",
+				depends_on: ["build"],
+				request: {
+					operation: "advanced_analysis",
+					advanced_action: "graph_query",
+					target: { stage_id: "build", output: "evidence-graph" },
+				},
+			},
+		],
+	};
+	return { ...f, req };
+}
+it("chains an actual graph_build output into graph_query without trusting a report path", async () => {
+	const f = await graphFixture(),
+		preview = (await f.call("preview_batch", f.req)) as unknown as {
+			request: { stages: Array<{ request: { target: unknown } }> };
+		};
+	expect(preview.request.stages[1].request.target).toEqual({
+		stage_id: "build",
+		output: "evidence-graph",
+	});
+	expect(f.tasks.list(f.root)).toHaveLength(0);
+	const run = await f.run("run_batch", f.req),
+		c = await terminal(f, run.id);
+	expect(c.status).toBe("completed");
+	expect(c.jobs[1].inputReport).toMatchObject({
+		producerReceiptId: c.id,
+		producerStageId: "build",
+		producerResultSha256: c.jobs[0].resultHash,
+		output: "evidence-graph",
+	});
+	expect(c.jobs[1].inputReport?.documentSha256).toMatch(/^[a-f0-9]{64}$/);
+	expect(JSON.stringify(c.jobs[1].result)).toContain("owned-fixture");
+	expect(
+		(await readdir(join(f.root, "logs"))).filter((n) =>
+			n.startsWith("report-"),
+		),
+	).toEqual([]);
+});
+it.each([
+	"absent-dependency",
+	"wrong-producer",
+	"wrong-consumer",
+	"unknown-output",
+	"self-reference",
+	"injected-path",
+])("rejects invalid report reference %s before approval", async (kind) => {
+	const f = await graphFixture();
+	const req: any = structuredClone(f.req);
+	if (kind === "absent-dependency") req.stages[1].depends_on = [];
+	if (kind === "wrong-producer")
+		req.stages[0].request = { operation: "inspect", target: "owned.bin" };
+	if (kind === "wrong-consumer")
+		req.stages[1].request.advanced_action = "cfg_analyze";
+	if (kind === "unknown-output")
+		req.stages[1].request.target.output = "executable";
+	if (kind === "self-reference")
+		req.stages[1].request.target.stage_id = "query";
+	if (kind === "injected-path")
+		req.stages[1].request.target.path = "../../outside";
+	await expect(f.call("preview_batch", req)).rejects.toThrow();
+	expect(f.tasks.list(f.root)).toHaveLength(0);
+	expect(f.service.list(f.root)).toHaveLength(0);
+});
+it.each([
+	"partial",
+	"truncated",
+	"malformed",
+	"missing",
+])("does not consume %s producer evidence", async (kind) => {
+	let queries = 0;
+	const f = await graphFixture(async (req) => {
+		if (req.advanced_action === "graph_query") {
+			queries++;
+			return { status: "completed" };
+		}
+		if (kind === "missing")
+			return { status: "completed", path: "../../never-follow-this.json" };
+		return {
+			result: {
+				protocol: "cline-advanced-analysis/v1",
+				status: kind === "partial" ? "partial" : "completed",
+				evidence: {
+					graph:
+						kind === "malformed"
+							? { ...ownedGraph, unexpected: "invalid" }
+							: ownedGraph,
+				},
+			},
+			...(kind === "truncated" ? { huge: "x".repeat(70000) } : {}),
+		};
+	});
+	const run = await f.run("run_batch", f.req),
+		c = await terminal(f, run.id);
+	expect(c.status).not.toBe("completed");
+	expect(queries).toBe(0);
+	expect(c.jobs[1].status).not.toBe("completed");
+});
+it("freshly approved continuation consumes the exact reused producer without rerunning it", async () => {
+	let builds = 0,
+		queries = 0;
+	const f = await graphFixture(async (req) => {
+		if (req.operation === "scan_strings")
+			throw new Error("Owned intermediate failure");
+		if (req.advanced_action === "graph_build") {
+			builds++;
+			return {
+				result: {
+					protocol: "cline-advanced-analysis/v1",
+					status: "completed",
+					evidence: { graph: ownedGraph },
+				},
+			};
+		}
+		queries++;
+		expect(JSON.parse(await readFile(String(req.target), "utf8"))).toEqual(
+			ownedGraph,
+		);
+		return { status: "completed" };
+	});
+	const req = {
+		...f.req,
+		stages: [
+			f.req.stages[0],
+			{
+				id: "fail",
+				depends_on: ["build"],
+				request: { operation: "scan_strings", target: "owned.bin" },
+			},
+			f.req.stages[1],
+		],
+	};
+	const first = await f.run("run_batch", req),
+		c = await terminal(f, first.id);
+	expect(c.jobs.map((j) => j.status)).toEqual([
+		"completed",
+		"failed",
+		"cancelled",
+	]);
+	const resumed = await f.run("resume_investigation", {
+			receiptId: c.id,
+			revision: c.revision,
+		}),
+		done = await terminal(f, resumed.id);
+	expect(done.status).toBe("completed");
+	expect(builds).toBe(1);
+	expect(queries).toBe(1);
+	expect(done.jobs[0].inputReport?.producerReceiptId).toBe(c.id);
+});
+it("cancellation removes private report snapshots and preserves bound provenance", async () => {
+	let snapshot = "",
+		entered!: () => void;
+	const started = new Promise<void>((r) => {
+		entered = r;
+	});
+	const f = await graphFixture(async (req, signal) => {
+		if (req.advanced_action === "graph_build")
+			return {
+				result: {
+					protocol: "cline-advanced-analysis/v1",
+					status: "completed",
+					evidence: { graph: ownedGraph },
+				},
+			};
+		snapshot = String(req.target);
+		await readFile(snapshot);
+		entered();
+		await new Promise<void>((_, reject) => {
+			if (signal.aborted) reject(signal.reason);
+			else
+				signal.addEventListener("abort", () => reject(signal.reason), {
+					once: true,
+				});
+		});
+	});
+	const run = await f.run("run_batch", f.req);
+	await started;
+	await f.call("cancel_batch", { receiptId: run.id });
+	const c = await terminal(f, run.id);
+	expect(c.status).not.toBe("completed");
+	expect(c.jobs[1].inputReport?.producerStageId).toBe("build");
+	await expect(readFile(snapshot)).rejects.toThrow();
+});
+it("fresh source-flow batch evidence stays partial and cannot unlock dependent work", async () => {
+	const f = await fixture();
+	const source = 'const url = "https://example.invalid/owned";\nfetch(url);\n';
+	await writeFile(join(f.root, "owned.ts"), source);
+	const request = {
+		...f.req,
+		stages: [
+			{
+				id: "flow",
+				request: {
+					operation: "trace_data_flow",
+					target: "owned.ts",
+					source_flow: {
+						kind: "js-ts",
+						start: {
+							path: "owned.ts",
+							line: 1,
+							column: 7,
+							kind: "configuration",
+						},
+						end: {
+							path: "owned.ts",
+							line: 2,
+							column: 1,
+							kind: "resolved-endpoint",
+						},
+					},
+				},
+			},
+			{
+				id: "dependent",
+				depends_on: ["flow"],
+				request: { operation: "inspect", target: "owned.bin" },
+			},
+		],
+	};
+	const started = await f.run("run_batch", request);
+	const receipt = await terminal(f, started.id);
+	expect(receipt.status).toBe("partial");
+	expect(receipt.jobs.map((j) => j.status)).toEqual(["partial", "cancelled"]);
+	expect(receipt.jobs[0].result).toMatchObject({
+		status: "partial",
+		mode: "fresh-js-ts-constant-endpoint-flow",
+		observedExecution: false,
+		endpointReachableInSelectedGraph: true,
+	});
+	expect(await readFile(join(f.root, "owned.ts"), "utf8")).toBe(source);
+	await expect(
+		f.call("preview_batch", {
+			...request,
+			stages: [
+				{
+					...request.stages[0],
+					request: { ...request.stages[0].request, operation: "inspect" },
+				},
+			],
+		}),
+	).rejects.toThrow();
 });

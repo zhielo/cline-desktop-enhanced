@@ -11,6 +11,7 @@ import {
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	stopOwnedApplication,
+ quitOwnedApplicationForRestart,
  stopOwnedWindowsTree,
  verifyOwnedTreeStopReceipt,
  OWNED_WINDOWS_TREE_STOP,
@@ -18,6 +19,8 @@ import {
 	verifyRecoveredHubSession,
 	waitForInstalledBackendEndpoint,
 	verifyInstalledAnalysisProfile,
+ openInstalledSavedSession,
+ verifyInstalledSourceReferenceStorage,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("owned native tree is stopped before CDP can tear down its WebView children", async () => {
@@ -377,4 +380,67 @@ test("Windows owned tree cleanup confirms an actual Node root and child exited",
   await withInstalledActionDeadline("owned-test-root-exit",()=>root.exited,5000);
   assert.notEqual(root.child.exitCode,null);
  } finally { if(root.child.exitCode===null && root.child.pid) await stopOwnedWindowsTree(root.child.pid,process.cwd(),process.env); }
+});
+
+test("saved-session navigation exits Settings before looking for a hidden session", async () => {
+ const calls=[];let settings=true;
+ const page={getByRole(role,options){
+  assert.equal(role,"button");
+  if(options.name==="Cline home")return {async click(){
+   assert.equal(options.exact,true);calls.push("home");settings=false;
+  }};
+  assert.equal(settings,false,"session list is absent in Settings");
+  assert.equal(String(options.name),String(/Installer owned session/));
+  return {first(){return {async click(){calls.push("saved-session");}}}};
+ }};
+ await openInstalledSavedSession(page,/Installer owned session/);
+ assert.deepEqual(calls,["home","saved-session"]);
+ const failure=new Error("Home navigation failed");let lookups=0;
+ await assert.rejects(openInstalledSavedSession({getByRole(){lookups++;return {async click(){throw failure;}};}},/owned/),error=>error===failure);
+ assert.equal(lookups,1,"a failed navigation must not fall back to an RPC or force click");
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.equal(driver.split("await openInstalledSavedSession(page, /Installer owned session/);").length-1,2);
+});
+
+
+test("restart source reference check never injects or accepts lost or changed device metadata", () => {
+ const saved={version:1,selection:{receiptId:"00000000-0000-4000-8000-000000000001",selector:{kind:"artifact",path:"owned.ts"}}};
+ assert.doesNotThrow(()=>verifyInstalledSourceReferenceStorage(saved,JSON.stringify(saved)));
+ for(const raw of [null,undefined,"", "{", "x".repeat(32769), JSON.stringify({...saved,version:2}), JSON.stringify({...saved,preview:"MUST_NOT_RESTORE"}), JSON.stringify({version:1,selection:{...saved.selection,receiptId:"other"}})])
+  assert.throws(()=>verifyInstalledSourceReferenceStorage(saved,raw),/Installed source reference/);
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.ok(driver.indexOf('"owned-source-reference-after-restart"') < driver.indexOf('const restoredSource='));
+ assert.ok(driver.includes('join(evidence,"failure.png")'));
+ assert.ok(driver.includes('projectApplied.plan.candidateOutcome'));
+});
+
+test("normal native restart requests quit once and waits for clean exit before disconnect", async () => {
+ const order=[];let finish;
+ const exit=new Promise(resolve=>{finish=resolve;});
+ const pending=quitOwnedApplicationForRestart(async()=>{order.push("quit");},()=>exit,async()=>{order.push("disconnect");},1000);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(order,["quit"]);
+ finish(0);await pending;
+ assert.deepEqual(order,["quit","disconnect"]);
+ // Native exit may destroy the renderer before its invoke response arrives.
+ await quitOwnedApplicationForRestart(async()=>{throw new Error("renderer closed");},async()=>0,async()=>{},1000);
+ await quitOwnedApplicationForRestart(()=>new Promise(()=>{}),async()=>0,async()=>{},1000);
+});
+
+test("normal restart never converts nonzero, missing or timed-out native exit into a pass", async () => {
+ for(const code of [1,null]){
+  let quits=0,disconnects=0;
+  await assert.rejects(quitOwnedApplicationForRestart(async()=>{quits++;},async()=>code,async()=>{disconnects++;},1000),/confirmed native exit code zero/);
+  assert.equal(quits,1);assert.equal(disconnects,0);
+ }
+ let quits=0,disconnects=0;
+ await assert.rejects(quitOwnedApplicationForRestart(async()=>{quits++;},()=>new Promise(()=>{}),async()=>{disconnects++;},10),/owned-native-quit-exit; no replay/);
+ assert.equal(quits,1);assert.equal(disconnects,0);
+ await assert.rejects(quitOwnedApplicationForRestart(async()=>{},async()=>0,async()=>{throw new Error("disconnect failed");},1000),/disconnect failed/);
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ const restart=driver.slice(driver.indexOf("async function quitForRestart"),driver.indexOf("\n\ttry {",driver.indexOf("async function quitForRestart")));
+ assert.ok(restart.includes('.invoke("quit_app")'));
+ assert.ok(!restart.includes("killOwnedProcess")&&!restart.includes("localStorage"));
+ assert.ok(driver.includes('acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000)'));
+ assert.ok(driver.includes("await stopOwnedApplication("),"forced failure cleanup remains separate");
 });

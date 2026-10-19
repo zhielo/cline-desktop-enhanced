@@ -1,4 +1,8 @@
 "use client";
+import {
+	useAnalysisProjectTarget,
+	useAnalysisProjectSelection,
+} from "./analysis-project-selection";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
@@ -41,8 +45,9 @@ export function FirstPartyAnalysisWorkspace({
 	sessionId?: string;
 	environmentId: string;
 }) {
+	const project = useAnalysisProjectSelection();
 	const [status, setStatus] = useState<Status | null>(null),
-		[target, setTarget] = useState("."),
+		[target, setTarget] = useAnalysisProjectTarget("."),
 		[compareTarget, setCompareTarget] = useState("");
 	const [inspectorTarget, setInspectorTarget] = useState(""),
 		[inspectorPid, setInspectorPid] = useState(""),
@@ -146,8 +151,39 @@ export function FirstPartyAnalysisWorkspace({
 		inspectorRevision.current++;
 		setInspectorPlan(null);
 	}, [selected, hybridQuestion, hybridKind, hybridTaskId, status?.mode]);
-	if (!sessionId || environmentId !== "local")
+	const targetInput = (
+		<input
+			aria-label="JavaScript analysis target"
+			className="rounded border bg-background p-2 text-xs"
+			value={target}
+			onChange={(e) => setTarget(e.target.value)}
+			placeholder="Workspace-relative artifact or folder"
+		/>
+	);
+	if (environmentId !== "local")
 		return <p>Open an existing local session to use first-party analysis.</p>;
+	if (!sessionId)
+		return (
+			<section
+				className="space-y-3 p-3"
+				aria-label="First-party Analysis Workspace"
+			>
+				<h3 className="font-semibold">First-party Analysis Workspace</h3>
+				<p className="text-xs text-muted-foreground">
+					Path selection only. Open an existing local session to inspect sources
+					or use saved evidence. Selecting a path does not execute analysis,
+					create a session or enable runtime tools.
+				</p>
+				{targetInput}
+				<button
+					type="button"
+					disabled
+					className="rounded border px-3 py-2 text-xs disabled:opacity-50"
+				>
+					Inspect static sources
+				</button>
+			</section>
+		);
 	const run = async () => {
 		setRunning(true);
 		setError("");
@@ -316,13 +352,7 @@ export function FirstPartyAnalysisWorkspace({
 				existing tools.
 			</p>
 			<div className="flex flex-wrap gap-2">
-				<input
-					aria-label="JavaScript analysis target"
-					className="rounded border bg-background p-2 text-xs"
-					value={target}
-					onChange={(e) => setTarget(e.target.value)}
-					placeholder="Workspace-relative artifact or folder"
-				/>
+				{targetInput}
 				<input
 					aria-label="JavaScript comparison target"
 					className="rounded border bg-background p-2 text-xs"
@@ -581,6 +611,37 @@ export function FirstPartyAnalysisWorkspace({
 											{JSON.stringify(item, null, 2)}
 										</pre>
 									</PreviewScrollRegion>
+									{project &&
+										selected &&
+										item &&
+										typeof item === "object" &&
+										(view === "artifacts" || view === "findings") && (
+											<button
+												type="button"
+												className="rounded border px-2 py-1 text-xs"
+												onClick={() => {
+													const record = item as Record<string, unknown>;
+													if (
+														view === "findings" &&
+														typeof record.id === "string"
+													)
+														project.setSourceEvidence({
+															receiptId: selected,
+															selector: { kind: "fact", factId: record.id },
+														});
+													else if (
+														view === "artifacts" &&
+														typeof record.path === "string"
+													)
+														project.setSourceEvidence({
+															receiptId: selected,
+															selector: { kind: "artifact", path: record.path },
+														});
+												}}
+											>
+												Inspect saved source identity
+											</button>
+										)}
 									{view === "graph" && item && typeof item === "object" ? (
 										<div className="flex gap-2 text-xs">
 											{(["source", "target"] as const).map((side) => {

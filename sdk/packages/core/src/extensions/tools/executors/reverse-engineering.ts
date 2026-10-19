@@ -12,6 +12,7 @@ import { CANDIDATE_COMMANDS } from "../advanced-candidates-schema";
 import { advancedCandidate, decompileManagedSelection } from "./advanced-candidates";
 import { candidateBatch } from "./candidate-batch";
 import { traceSourceSink } from "./source-sink-trace";
+import { freshSourceFlow } from "./source-investigation";
 import { traceEvidence } from "./evidence-trace";
 import { candidateHash, readCandidateFile } from "./candidate-files";
 import { inspectJvmMethod } from "./jvm-method";
@@ -2496,6 +2497,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
   const allowed=new Set(["operation","target","compare_target","version_comparison","timeout_ms","engine","report_format","discovery_depth"]);
   if(Object.entries(input).some(([key,value])=>value!==undefined&&!allowed.has(key)) || input.engine!=="auto" || input.report_format!=="json" || input.discovery_depth!=="fast")throw new Error("Project version comparison rejects legacy overrides and unrelated options");
   return JSON.stringify(await compareProjectVersions(input,context.signal));
+ }
+ if (input.source_flow && input.operation !== "trace_data_flow") throw new Error("source_flow is accepted only by trace_data_flow");
+ if (input.operation === "trace_data_flow" && input.source_flow) {
+  if(input.evidence_trace || input.source_sink || input.cross_language || input.advanced_action || input.advanced_options)throw new Error("Fresh source flow rejects imported graph and engine overrides");
+  return JSON.stringify(await freshSourceFlow(input, context.signal));
  }
  if(input.cross_language && input.operation !== "trace_cross_language")throw new Error("cross_language is accepted only by trace_cross_language");
  if(input.advanced_options?.jni_trace && (input.operation!=="advanced_analysis"||input.advanced_action!=="android_relationships"))throw new Error("jni_trace requires the fixed android_relationships action");

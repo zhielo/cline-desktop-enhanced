@@ -38,6 +38,25 @@ export function verifyInstalledAnalysisProfile(profile: string) {
   if (profile !== current[1]) throw new Error("Installed analysis profile is stale");
 }
 
+/** Settings replaces the sidebar session list. Exit through the visible Home
+ * control before selecting a saved session; no reload, force click or RPC bypass. */
+export async function openInstalledSavedSession(page: Pick<Page, "getByRole">, title: RegExp) {
+  await page.getByRole("button", { name: "Cline home", exact: true }).click();
+  await page.getByRole("button", { name: title }).first().click();
+}
+
+/** Read-only restart check. Never reconstruct or inject a lost device reference. */
+export function verifyInstalledSourceReferenceStorage(expected: unknown, raw: unknown) {
+  if (typeof raw !== "string" || raw.length > 32768)
+    throw new Error("Installed source reference missing after native restart; no reference restored or injected");
+  let actual: unknown;
+  try { actual = JSON.parse(raw); } catch {
+    throw new Error("Installed source reference malformed after native restart");
+  }
+  if (JSON.stringify(actual) !== JSON.stringify(expected))
+    throw new Error("Installed source reference changed across native restart; no fallback selection allowed");
+}
+
 export function startAcceptanceProcess(
   executable: string,
   args: string[],
@@ -87,6 +106,29 @@ export async function stopOwnedApplication(
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1)
     throw new AggregateError(failures, "Owned application termination and disconnect failed");
+}
+
+/** Normal restart is not a crash test. Ask the existing native Quit command once,
+ * then require clean exit of the exact launched child before disconnecting CDP.
+ * An exit can close the invoke transport before its response: the native exit,
+ * not that response, is authoritative. A timeout/nonzero exit fails; no force-kill
+ * fallback may turn it into a successful restart. Failure cleanup stays separate. */
+export async function quitOwnedApplicationForRestart(
+  requestQuit: () => Promise<unknown>,
+  waitForExit: () => Promise<number | null>,
+  disconnect: () => Promise<void>,
+  timeoutMs = 30_000,
+) {
+  const request = Promise.resolve().then(requestQuit).then(
+    () => "acknowledged" as const,
+    () => "transport-closed-or-rejected" as const,
+  );
+  const code = await withInstalledActionDeadline("owned-native-quit-exit", waitForExit, timeoutMs);
+  if (code !== 0) throw new Error("Owned normal restart requires confirmed native exit code zero");
+  await withInstalledActionDeadline("owned-native-quit-disconnect", disconnect, timeoutMs);
+  // The request can be pending after exit if its renderer was destroyed. Do not
+  // wait on it or replay it; it has a rejection handler and grants no authority.
+  void request;
 }
 
 /** A single taskkill can report a WebView child already exiting as an error.
@@ -339,6 +381,9 @@ export async function main() {
   await writeFile(join(workspace,"owned-renderer.js"),'import {ipcRenderer} from "electron"; ipcRenderer.invoke("owned:fixture");');
   const analysisCurrent=join(workspace,"owned-analysis-current"), analysisPrevious=join(workspace,"owned-analysis-previous");
   await mkdir(analysisCurrent);await mkdir(analysisPrevious);
+  const sourceSelectionText='export const ownedSelection = "NEVER_EXECUTE_SOURCE_SELECTION";\n';
+  const sourceSelectionTarget=join(analysisCurrent,"selection-owned.ts");
+  await writeFile(sourceSelectionTarget,sourceSelectionText);
   const hybridExpectedOutput="owned-hybrid\n";
   const hybridFixtureTarget=join(analysisCurrent,"hybrid-owned.js");
   await writeFile(hybridFixtureTarget,`process.stdout.write(${JSON.stringify(hybridExpectedOutput)});`);
@@ -668,6 +713,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
       app = undefined;
     }
 	}
+	async function quitForRestart(page: Page) {
+    const ownedBrowser=browser,ownedApp=app;
+    if(!ownedBrowser||!ownedApp||ownedApp.child.exitCode!==null)
+      throw new Error("Owned live application required for normal restart");
+    await quitOwnedApplicationForRestart(
+      () => page.evaluate(() => (window as unknown as {
+        __TAURI_INTERNALS__: {invoke:(name:string)=>Promise<unknown>}
+      }).__TAURI_INTERNALS__.invoke("quit_app")),
+      () => ownedApp.exited,
+      async () => {
+        await ownedApp.closed;
+        await ownedBrowser.close();
+      },
+    );
+    browser=undefined;
+    app=undefined;
+  }
 
 	try {
 		// Use the installed sidecar to bootstrap an isolated Hub on an OS-assigned port.
@@ -724,6 +786,31 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if (!(await advancedPanel.getByLabel("Exact command parameters (JSON)", { exact: true }).inputValue()).includes("expected_sha256")) throw new Error("Installed advanced command template missing hash guard");
     if (!(await advancedPanel.textContent())?.includes("Not available in this command pack")) throw new Error("Installed advanced catalog hid unavailable capabilities");
     stages.push("installed-fresh-advanced-command-catalog-visible-without-execution");
+    const sharedArtifact=preTaskWorkspace.getByLabel("Shared artifact path",{exact:true});
+    const sharedPath=join(workspace,"owned-selection-only.apk");
+    await sharedArtifact.fill(sharedPath);
+    await preTaskWorkspace.getByLabel("Remember this path on this device",{exact:true}).check();
+    await preTaskWorkspace.getByRole("button",{name:"Android tools",exact:true}).click();
+    const sharedAndroid=preTaskWorkspace.getByLabel("Target file or decoded project directory",{exact:true});
+    if(await sharedAndroid.inputValue()!==sharedPath)throw new Error("Installed Android pane lost shared path metadata");
+    await sharedAndroid.fill(sharedPath+".dex");
+    await preTaskWorkspace.getByRole("button",{name:"Analyze",exact:true}).click();
+    if(await preTaskWorkspace.getByPlaceholder("Workspace-relative or absolute path",{exact:true}).inputValue()!==sharedPath+".dex")throw new Error("Installed Analyze pane lost shared path metadata");
+    await preTaskWorkspace.getByRole("button",{name:"App analysis",exact:true}).click();
+    if(await preTaskWorkspace.getByLabel("JavaScript analysis target",{exact:true}).inputValue()!==sharedPath+".dex")throw new Error("Installed source pane lost shared path metadata");
+    if(!await preTaskWorkspace.getByRole("button",{name:"Inspect static sources",exact:true}).isDisabled())throw new Error("Installed draft source inspection must require an existing session");
+    if(await preTaskWorkspace.getByRole("button",{name:"Review Inspector plan",exact:true}).count())throw new Error("Installed draft must not expose runtime authority");
+    await preTaskWorkspace.getByRole("button",{name:"AI commands",exact:true}).click();
+    await advancedPanel.getByLabel("Advanced command",{exact:true}).selectOption("identify_artifact");
+    const sharedCommand=advancedPanel.getByLabel("Exact command parameters (JSON)",{exact:true});
+    if(JSON.parse(await sharedCommand.inputValue()).target!=="")throw new Error("Installed shared selection silently changed AI parameters");
+    await advancedPanel.getByRole("button",{name:"Use shared artifact in command JSON",exact:true}).click();
+    if(JSON.parse(await sharedCommand.inputValue()).target!==sharedPath+".dex")throw new Error("Installed explicit shared path transfer failed");
+    await analysisToggle.click();await analysisToggle.click();
+    if(await sharedArtifact.inputValue()!==sharedPath+".dex")throw new Error("Installed remembered shared selection lost on workspace remount");
+    await preTaskWorkspace.getByRole("button",{name:"Clear shared selection and saved path",exact:true}).click();
+    if(await sharedArtifact.inputValue()!==""||await preTaskWorkspace.getByLabel("Remember this path on this device",{exact:true}).isChecked())throw new Error("Installed shared metadata clear failed");
+    stages.push("installed-shared-artifact-cross-pane-explicit-json-remember-clear-passed");
     await analysisToggle.click();
     await freshAnalysis.selectOption("off");
     stages.push("installed-fresh-draft-analysis-visible-before-first-task");
@@ -894,6 +981,41 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.getByRole("button",{name:"verification",exact:true}).click();
     await page.getByText("Receipt integrity and static inspection are not behavioral certification.",{exact:false}).waitFor();
     stages.push("installed-first-party-mode-parser-evidence-passed");
+    // Receipt-bound read stays available Off; no analysis, approval or target execution is started.
+    const sourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});
+    await sourceWorkspace.getByRole("button",{name:"artifacts",exact:true}).click();
+    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("selection-owned.ts");
+    const inspectSaved=sourceWorkspace.getByRole("button",{name:"Inspect saved source identity",exact:true});
+    await inspectSaved.waitFor({timeout:30000});
+    if(await inspectSaved.count()!==1)throw new Error("Installed source identity fixture did not resolve uniquely");
+    await inspectSaved.click();
+    const selectedSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await selectedSource.getByText(`Saved SHA256: ${createHash("sha256").update(sourceSelectionText).digest("hex")}`,{exact:true}).waitFor();
+    await selectedSource.getByLabel("Bounded source snapshot",{exact:true}).getByText("NEVER_EXECUTE_SOURCE_SELECTION",{exact:false}).waitFor();
+    // Normal hit-tested click must remain reachable after a large selection preview.
+    // Never force clicks or hide the composer to mask a real overflow regression.
+    await sourceWorkspace.getByRole("button",{name:"findings",exact:true}).click();
+    await inspectSaved.first().waitFor({timeout:30000});
+    await inspectSaved.first().click();
+    await selectedSource.locator('li[aria-current="location"]').waitFor({timeout:30000});
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor();
+    try {
+      await writeFile(sourceSelectionTarget,'export const changedSelection = "CURRENT_NOT_SAVED";');
+      await selectedSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+      await selectedSource.getByText("Source identity: stale",{exact:true}).waitFor({timeout:30000});
+      if(await selectedSource.getByLabel("Bounded source snapshot",{exact:true}).count()||await selectedSource.getByRole("button",{name:"Use source path in analysis panes",exact:true}).count())throw new Error("Installed stale source exposed a preview or reusable path");
+      if((await selectedSource.innerText()).includes("CURRENT_NOT_SAVED"))throw new Error("Installed stale source leaked current bytes");
+    } finally { await writeFile(sourceSelectionTarget,sourceSelectionText); }
+    await selectedSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await page.getByRole("button",{name:"Start here",exact:true}).click();
+    await selectedSource.getByText("Source identity: matched",{exact:true}).waitFor();
+    await selectedSource.getByRole("button",{name:"Clear source evidence selection",exact:true}).click();
+    await selectedSource.waitFor({state:"detached"});
+    if((await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs)).mode!=="off")throw new Error("Installed source selection changed Analysis Off");
+    stages.push("installed-source-evidence-hash-bound-selection-stale-recheck-no-execution-passed");
+
     await page.getByRole("button",{name:"Close diff view",exact:true}).click();
 
     await page.waitForFunction(() => document.querySelectorAll('[data-message-role="user"]').length >= 120);
@@ -1028,7 +1150,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;mode?:string;endpointReachableInSelectedGraph?:boolean;edges?:unknown[];comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{id:string;status:string;candidateOutcome?:{operation:string;evidence:string;outputSha256?:string;publication?:string;checks:{id:string;status:string}[]}}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -1050,6 +1172,29 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(projectPreview.plan.status!=="completed"||projectPreview.result.executed!==false||projectPreview.result.published||!projectPreview.result.projectSha256)throw new Error("Installed project preview failed or wrote output");
     const projectApplied=await runOwnedAdvanced({...projectPreviewRequest,operation:"build_android_candidate",android_project_patch:{...ownedProjectPatch,expected_project_sha256:projectPreview.result.projectSha256,preview_sha256:projectPreview.result.previewSha256}});
     if(projectApplied.plan.status!=="completed"||projectApplied.result.status!=="completed"||!projectApplied.result.published||!projectApplied.result.sourceUnchanged||!projectApplied.result.outputSha256||!["assemble-smali","assemble-smali_classes2","rebuild-apk"].every(id=>projectApplied.result.stages?.some(stage=>stage.id===id))||await readFile(join(ownedProjectSmali,"Sample.smali"),"utf8")!==ownedSmaliText)throw new Error("Installed approved Android project pipeline failed or altered its source");
+    const projectOutcome = projectApplied.plan.candidateOutcome;
+    if (projectOutcome?.operation !== "build_android_candidate" || projectOutcome.evidence !== "bounded-checks-passed" ||
+        projectOutcome.outputSha256 !== projectApplied.result.outputSha256 || projectOutcome.publication !== "new-unsigned-candidate" ||
+        projectOutcome.checks.map(c=>c.id).join(",") !== "patch-0,assemble-smali,assemble-smali_classes2,rebuild-apk" ||
+        projectOutcome.checks.some(c=>c.status!=="completed"))
+      throw new Error("Installed real Android project build did not retain its bounded unsigned candidate outcome");
+    // A build receipt is not authority to verify, sign or execute its output.
+    const verificationDraft = await rpc<{id:string;status:string;permission:string;kind:string;requestHash:string;requirements:string[];request:{operation:string;target:string;candidate_validation:{kind:string;expected_sha256:string}};candidateSource:{planId:string;outputSha256:string}}>(page,"prepare_candidate_verification",{...ownedPatchArgs,planId:projectApplied.plan.id});
+    if(verificationDraft.id===projectApplied.plan.id || verificationDraft.status!=="awaiting-approval" || verificationDraft.permission!=="Inspect" || verificationDraft.kind!=="static" || verificationDraft.request.operation!=="validate_candidate" || verificationDraft.request.target!==realpathSync.native(projectPreviewRequest.output_file) || verificationDraft.request.candidate_validation.kind!=="apk" || verificationDraft.request.candidate_validation.expected_sha256!==projectApplied.result.outputSha256 || verificationDraft.candidateSource.planId!==projectApplied.plan.id || verificationDraft.candidateSource.outputSha256!==projectApplied.result.outputSha256)
+      throw new Error("Installed Android candidate handoff lost independent approval or exact output identity");
+    let verificationReplayDenied=false;
+    try { await rpc(page,"run_static_analysis",{...ownedPatchArgs,planId:verificationDraft.id,executionToken:"not-an-approval",input:verificationDraft.request}); } catch { verificationReplayDenied=true; }
+    if(!verificationReplayDenied)throw new Error("Installed candidate verification ran without its own approval");
+    await rpc(page,"cancel_analysis_task",{...ownedPatchArgs,planId:verificationDraft.id});
+    const builtCandidateBytes=await readFile(projectPreviewRequest.output_file);
+    try {
+      await writeFile(projectPreviewRequest.output_file,Buffer.concat([builtCandidateBytes,Buffer.from("owned-stale-candidate")]));
+      let staleCandidateDenied=false;
+      try { await rpc(page,"prepare_candidate_verification",{...ownedPatchArgs,planId:projectApplied.plan.id}); } catch { staleCandidateDenied=true; }
+      if(!staleCandidateDenied)throw new Error("Installed build handoff accepted a changed candidate");
+    } finally { await writeFile(projectPreviewRequest.output_file,builtCandidateBytes); }
+    if(createHash("sha256").update(await readFile(projectPreviewRequest.output_file)).digest("hex")!==projectApplied.result.outputSha256)
+      throw new Error("Installed handoff fixture did not restore its owned APK bytes");
     stages.push("installed-approved-android-project-patch-assemble-rebuild-originals-preserved");
 
     const batchBinary=join(workspace,"owned-candidate-input.bin"),batchAst=join(workspace,"owned-candidate-input.ts"),batchManifest=join(workspace,"owned-candidate-batch.json");
@@ -1131,6 +1276,29 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const batchCancelled=await rpc<InstalledBatchCheckpoint>(page,"cancel_batch",{...triageScope,input:{receiptId:batchStarted.id}});
     if(batchCancelled.receipt.revision!==batchCheckpoint.receipt.revision)throw new Error("Installed terminal cancellation mutated completed evidence");
     stages.push("installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed");
+    const contractCatalog=await rpc<{contractVersion:string;capabilities:Array<{command:string;readiness:string;implementationScope:string;interfaces:Array<{route:string;schemaRef:string;parameters?:unknown}>}>}>(page,"analysis_command_catalog",{environmentId:"local"});
+    const batchContract=contractCatalog.capabilities.find(c=>c.command==="run_batch");
+    if(contractCatalog.contractVersion!=="analysis-capabilities/v1"||batchContract?.interfaces.map(i=>i.route).join(",")!=="static-review,ai-workflow"||!JSON.stringify(batchContract.interfaces.find(i=>i.route==="ai-workflow")?.parameters).includes("evidence-graph")||workflowCatalog.recommendations.some(r=>!contractCatalog.capabilities.some(c=>c.command===r.command&&c.implementationScope===r.scope&&c.readiness==="not-probed")))throw new Error("Installed command contracts lost original coverage, exact AI schemas or readiness distinction");
+    const chainedManifest=join(workspace,"owned-chained-graph-manifest.json");
+    const chainedManifestBytes=JSON.stringify({schemaVersion:1,results:[{protocol:"cline-advanced-analysis/v1",status:"completed",engine:"owned-installed-graph",engineVersion:"1",evidence:{},limitations:["Owned report, not target compatibility"]}]});
+    await writeFile(chainedManifest,chainedManifestBytes);
+    const chainedRequest={operation_id:randomUUID(),title:"Installed typed graph output chain",parallel:1,stages:[
+      {id:"build",request:{operation:"advanced_analysis",advanced_action:"graph_build",target:chainedManifest}},
+      {id:"query",depends_on:["build"],request:{operation:"advanced_analysis",advanced_action:"graph_query",target:{stage_id:"build",output:"evidence-graph"}}},
+    ]};
+    const chainedPlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"run_batch",{...triageScope,input:chainedRequest});
+    const chainedApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:chainedPlan.id,requestHash:chainedPlan.requestHash,requirements:chainedPlan.requirements});
+    const chainedStarted=await rpc<{id:string}>(page,"run_batch",{...triageScope,input:{...chainedRequest,phase:"run",planId:chainedPlan.id,executionToken:chainedApproval.executionToken}});
+    type ChainedCheckpoint={receipt:{status:string;jobs:Array<{status:string;result?:unknown;resultHash?:string;inputReport?:{producerReceiptId:string;producerStageId:string;producerResultSha256:string;documentSha256:string}}>}};
+    let chainedCheckpoint:ChainedCheckpoint|undefined;
+    for(let attempt=0;attempt<100;attempt++){
+      chainedCheckpoint=await rpc<ChainedCheckpoint>(page,"checkpoint_investigation",{...triageScope,input:{receiptId:chainedStarted.id}});
+      if(!["accepted","starting","running"].includes(chainedCheckpoint.receipt.status))break;
+      await delay(100);
+    }
+    const chainedJobs=chainedCheckpoint?.receipt.jobs;
+    if(chainedCheckpoint?.receipt.status!=="completed"||chainedJobs?.length!==2||chainedJobs.some(j=>j.status!=="completed")||chainedJobs[1].inputReport?.producerReceiptId!==chainedStarted.id||chainedJobs[1].inputReport?.producerStageId!=="build"||chainedJobs[1].inputReport?.producerResultSha256!==chainedJobs[0].resultHash||!/^[a-f0-9]{64}$/.test(chainedJobs[1].inputReport?.documentSha256??"")||!JSON.stringify(chainedJobs[1].result).includes("owned-installed-graph")||await readFile(chainedManifest,"utf8")!==chainedManifestBytes)throw new Error("Installed typed graph chain lost provenance, result evidence or preserved input");
+    stages.push("installed-shared-command-contract-typed-graph-output-chain-passed");
     const objectivePlan=await runOwnedAdvanced({operation:"plan_investigation",target:ownedWorkflowSource,compare_target:ownedApiAfter,investigation_plan:{workflow:"electron",goal:"Owned explicit source evidence",objectives:["inventory","exact-function","compare"],symbol:"ownedWorkflow"},timeout_ms:120000});
     if(objectivePlan.result.executed!==false||objectivePlan.result.batchDraft?.stages.length!==3||objectivePlan.result.enginePreflight?.startsWith("not-run")!==true||objectivePlan.result.batchDraft.stages.some(s=>s.request.script_path||s.request.output_file))throw new Error("Installed structured batch draft fabricated execution or unsafe stages");
     const ownedBatchCfg=join(workspace,"owned-batch-cfg.json");
@@ -1156,6 +1324,11 @@ ConvertTo-Json -InputObject @($rows) -Compress
     try{await rpc(page,"resume_investigation",{...triageScope,input:{receiptId:expandedStarted.id,revision:expandedCheckpoint.receipt.revision}});}catch{expandedResumeDenied=true;}
     if(!expandedResumeDenied)throw new Error("Installed partial dependency replayed");
     stages.push("installed-structured-batch-draft-partial-independent-reads-passed");
+    const freshFlowTarget=join(workspace,"owned-fresh-source-flow.ts"),freshFlowSource='const url = "https://example.invalid/owned";\nfetch(url);\n';
+    await writeFile(freshFlowTarget,freshFlowSource);
+    const freshFlow=await runOwnedAdvanced({operation:"trace_data_flow",target:freshFlowTarget,source_flow:{kind:"js-ts",start:{path:"owned-fresh-source-flow.ts",line:1,column:7,kind:"configuration"},end:{path:"owned-fresh-source-flow.ts",line:2,column:1,kind:"resolved-endpoint"}},timeout_ms:120000});
+    if(freshFlow.plan.status!=="completed"||freshFlow.result.status!=="partial"||freshFlow.result.mode!=="fresh-js-ts-constant-endpoint-flow"||freshFlow.result.observedExecution!==false||freshFlow.result.endpointReachableInSelectedGraph!==true||freshFlow.result.edges?.length!==1||await readFile(freshFlowTarget,"utf8")!==freshFlowSource)throw new Error("Installed fresh source flow did not preserve exact bounded static evidence");
+    stages.push("installed-fresh-source-flow-exact-locations-no-execution-passed");
 
     // Preparation is deliberately offline: no ADB/device execution or physical-hardware claim.
     const smokeArtifact=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:join(workspace,"owned-project-candidate.apk")}});
@@ -1195,12 +1368,30 @@ ConvertTo-Json -InputObject @($rows) -Compress
     ] as const){
       const plan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,command,{...triageScope,input:{...input,phase:"prepare"}});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      const result=await rpc<{result:{protocol:string;status:string;receiptSha256:string;published:boolean}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
+      const result=await rpc<{plan:{status:string;candidateOutcome?:{evidence:string;receiptSha256:string}};result:{protocol:string;status:string;receiptSha256:string;published:boolean}}>(page,command,{...triageScope,input:{...input,phase:"run",planId:plan.id,executionToken:approval.executionToken}});
       if(result.result.protocol!=="cline-candidate-verification/v1"||result.result.status!=="completed"||result.result.published!==false||!/^[a-f0-9]{64}$/.test(result.result.receiptSha256))throw new Error("Installed hash-bound candidate verification failed");
+      if(result.plan.status!=="completed"||result.plan.candidateOutcome?.evidence!=="bounded-checks-passed"||result.plan.candidateOutcome.receiptSha256!==result.result.receiptSha256)throw new Error("Installed candidate summary lost bounded check identity");
       let denied=false;try{await rpc(page,command,{...analysisArgs,input:{...input,phase:"prepare"}});}catch{denied=true;}if(!denied)throw new Error("Installed candidate handle crossed session boundary");
     }
     if(await readFile(ownedWorkflowSource,"utf8")!==ownedWorkflowText||!(await readFile(batchBinary)).equals(batchBinaryBefore)||await readFile(batchAst,"utf8")!==batchAstBefore)throw new Error("Installed candidate verification changed originals");
     stages.push("installed-candidate-validation-review-hash-scope-preservation-passed");
+    // Syntax failure is retained evidence, never successful completion or build/device proof.
+    const failedCandidatePath=join(workspace,"owned-invalid-candidate.ts"),failedCandidateText="export const = ;";
+    await writeFile(failedCandidatePath,failedCandidateText);
+    const failedCandidateHandle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target:failedCandidatePath}});
+    const failedCandidateInput={artifactId:failedCandidateHandle.id,kind:"typescript"};
+    const failedCandidatePlan=await rpc<{id:string;requirements:string[];requestHash:string}>(page,"validate_candidate",{...triageScope,input:failedCandidateInput});
+    const failedCandidateApproval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:failedCandidatePlan.id,requestHash:failedCandidatePlan.requestHash,requirements:failedCandidatePlan.requirements});
+    const failedCandidate=await rpc<{plan:{status:string;candidateOutcome?:{evidence:string;inputSha256:string;receiptSha256:string};evidence?:{resultHash:string;outputPaths:string[]}};result:{status:string;receiptSha256:string}}>(page,"validate_candidate",{...triageScope,input:{...failedCandidateInput,phase:"run",planId:failedCandidatePlan.id,executionToken:failedCandidateApproval.executionToken}});
+    if(failedCandidate.plan.status!=="failed"||failedCandidate.result.status!=="failed"||failedCandidate.plan.candidateOutcome?.evidence!=="failed"||failedCandidate.plan.candidateOutcome.receiptSha256!==failedCandidate.result.receiptSha256||failedCandidate.plan.candidateOutcome.inputSha256!==createHash("sha256").update(failedCandidateText).digest("hex")||!/^[a-f0-9]{64}$/.test(failedCandidate.plan.evidence?.resultHash??"")||failedCandidate.plan.evidence?.outputPaths.length!==0)throw new Error("Installed failed candidate lost exact retained evidence or became a success");
+    const retainedCandidates=await rpc<Array<{id:string;status:string;candidateOutcome?:{evidence:string}}>>(page,"list_analysis_tasks",{...triageScope,cwd:workspace});
+    if(!retainedCandidates.some(task=>task.id===failedCandidatePlan.id&&task.status==="failed"&&task.candidateOutcome?.evidence==="failed"))throw new Error("Installed failed candidate missing from task ledger");
+    const failedCandidateExport=await rpc<{outputPath:string}>(page,"export_analysis_evidence",{...triageScope,cwd:workspace,planId:failedCandidatePlan.id});
+    const failedCandidateBundle=JSON.parse(await readFile(failedCandidateExport.outputPath,"utf8"));
+    if(failedCandidateBundle.payload?.task?.status!=="failed"||failedCandidateBundle.payload?.task?.candidateOutcome?.evidence!=="failed"||await readFile(failedCandidatePath,"utf8")!==failedCandidateText)throw new Error("Installed failed evidence export changed status or original");
+    let failedCandidateReplayDenied=false;try{await rpc(page,"validate_candidate",{...triageScope,input:{...failedCandidateInput,phase:"run",planId:failedCandidatePlan.id,executionToken:failedCandidateApproval.executionToken}});}catch{failedCandidateReplayDenied=true;}
+    if(!failedCandidateReplayDenied)throw new Error("Installed failed candidate replayed consumed approval");
+    stages.push("installed-candidate-outcomes-failed-retention-explicit-export-no-replay-passed");
     const projectBeforeFiles={"main.ts":"export const value=1;","removed.txt":"remove",".owned-config":"EMPTY"},projectAfterFiles={"main.ts":"export const value=2;","added.txt":"add",".owned-config":"EMPTY"};
     for(const [directory,files] of [["owned-project-before",projectBeforeFiles],["owned-project-after",projectAfterFiles]] as const){await mkdir(join(workspace,directory),{recursive:true});for(const [name,text] of Object.entries(files))await writeFile(join(workspace,directory,name),text);}
     const projectInventory=(files:Record<string,string>)=>createHash("sha256").update(JSON.stringify({protocol:"cline-project-inventory/v1",files:Object.entries(files).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([path,text])=>({path,bytes:Buffer.byteLength(text),sha256:createHash("sha256").update(text).digest("hex")}))})).digest("hex");
@@ -1442,6 +1633,23 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(missingElectron.status!=="partial"||missingElectron.selection.status!=="not-found-in-covered-sources"||missingElectron.nodes.length!==0)throw new Error("Installed missing IPC channel invented a path");
     for(const [name,source]of Object.entries(electronSources))if(await readFile(join(electronRoot,name),"utf8")!==source||!electronResult.artifacts.some(a=>a.path===name&&a.sha256===createHash("sha256").update(source).digest("hex")))throw new Error("Installed fresh Electron input/provenance changed");
     stages.push("installed-fresh-electron-renderer-preload-main-channel-candidates-passed");
+    const methodCallsFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-android-method-calls-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string;ambiguousBase64:string;ambiguousSha256:string};
+    const methodCallsTarget=join(workspace,"owned-method-calls.dex"),ambiguousMethodCallsTarget=join(workspace,"owned-method-calls-ambiguous.apk");
+    for(const f of [{path:methodCallsTarget,base64:methodCallsFixture.base64,sha256:methodCallsFixture.sha256},{path:ambiguousMethodCallsTarget,base64:methodCallsFixture.ambiguousBase64,sha256:methodCallsFixture.ambiguousSha256}]){
+      const bytes=Buffer.from(f.base64,"base64");if(createHash("sha256").update(bytes).digest("hex")!==f.sha256)throw new Error("Owned method-call fixture digest mismatch");await writeFile(f.path,bytes);
+    }
+    type OwnedMethodCalls={status:string;observedExecution:boolean;stages:{result:{result:{input:{sha256:string};evidence:{methodCalls:{protocol:string;status:string;selectionStatus:string;selectedDefinitionCount:number;referenceCount:number;referencesTruncated:boolean;dispatchVerified:boolean;observedExecution:boolean;coverage:{methods:number;instructions:number};references:{artifactSha256:string;relativeToSelection:string;bytecodeOffset:number;opcode:string;dispatchVerified:boolean;executionObserved:boolean;caller:{byteFingerprint:string}}[]}}}}}[]};
+    const methodCallsRequest={operation:"trace_android_method",target:methodCallsTarget,advanced_options:{method:{class_descriptor:"LCalls;",name:"root",descriptor:"()V"}},timeout_ms:120000};
+    const methodCallsResult=(await runOwnedAdvanced(methodCallsRequest)).result as unknown as OwnedMethodCalls,methodCallsWorker=methodCallsResult.stages[1]?.result.result,methodCalls=methodCallsWorker?.evidence.methodCalls;
+    if(methodCallsResult.status!=="partial"||methodCallsResult.observedExecution!==false||methodCallsWorker?.input.sha256!==methodCallsFixture.sha256||methodCalls?.protocol!=="cline-android-method-calls/v1"||methodCalls.status!=="partial"||methodCalls.selectionStatus!=="defined"||methodCalls.selectedDefinitionCount!==1||methodCalls.referenceCount!==2||methodCalls.references.length!==2||methodCalls.references.map(r=>r.relativeToSelection).sort().join(",")!=="callee,caller"||methodCalls.dispatchVerified!==false||methodCalls.observedExecution!==false||methodCalls.coverage.methods!==2||methodCalls.coverage.instructions!==4||methodCalls.references.some(r=>r.artifactSha256!==methodCallsFixture.sha256||r.bytecodeOffset!==0||r.opcode!=="invoke-static"||r.dispatchVerified!==false||r.executionObserved!==false||!/^[a-f0-9]{64}$/.test(r.caller.byteFingerprint)))throw new Error("Installed exact method-call references lost origin, limits or static-only status");
+    const limitedMethodCalls=(await runOwnedAdvanced({...methodCallsRequest,max_results:1})).result as unknown as OwnedMethodCalls;
+    const limitedMethodEvidence=limitedMethodCalls.stages[1]?.result.result.evidence.methodCalls;
+    if(limitedMethodCalls.status!=="partial"||limitedMethodEvidence?.referenceCount!==2||limitedMethodEvidence.references.length!==1||limitedMethodEvidence.referencesTruncated!==true)throw new Error("Installed method-call detail budget lost coverage counts");
+    const ambiguousMethodCalls=(await runOwnedAdvanced({...methodCallsRequest,target:ambiguousMethodCallsTarget})).result as unknown as OwnedMethodCalls;
+    const ambiguousMethodEvidence=ambiguousMethodCalls.stages[1]?.result.result.evidence.methodCalls;
+    if(ambiguousMethodCalls.status!=="partial"||ambiguousMethodEvidence?.selectionStatus!=="ambiguous-definition"||ambiguousMethodEvidence.selectedDefinitionCount!==2||ambiguousMethodEvidence.references.length!==0)throw new Error("Installed method tracing selected an ambiguous DEX definition");
+    if(!(await readFile(methodCallsTarget)).equals(Buffer.from(methodCallsFixture.base64,"base64"))||!(await readFile(ambiguousMethodCallsTarget)).equals(Buffer.from(methodCallsFixture.ambiguousBase64,"base64")))throw new Error("Installed method-call tracing modified its input");
+    stages.push("installed-android-method-call-references-origin-budgets-ambiguity-no-execution-passed");
     const callbackFixture=JSON.parse(readFileSync(new URL("../../../sdk/packages/core/scripts/owned-android-entrypoints-fixture.json",import.meta.url),"utf8")) as {base64:string;sha256:string;comparisonBase64:string;comparisonSha256:string;ambiguousBase64:string;ambiguousSha256:string;dexSha256:string};
     const callbackTarget=join(workspace,"owned-callback.apk"),callbackOther=join(workspace,"owned-callback-after.apk"),callbackAmbiguous=join(workspace,"owned-callback-ambiguous.apk");
     const callbackInputs=[{path:callbackTarget,base64:callbackFixture.base64,sha256:callbackFixture.sha256},{path:callbackOther,base64:callbackFixture.comparisonBase64,sha256:callbackFixture.comparisonSha256},{path:callbackAmbiguous,base64:callbackFixture.ambiguousBase64,sha256:callbackFixture.ambiguousSha256}];
@@ -1479,9 +1687,36 @@ ConvertTo-Json -InputObject @($rows) -Compress
 
 
 
+    // Save a real receipt selector through the visible UI before a real app/sidecar restart.
+    // No preview, hashes, plan or execution token may enter device selection storage.
+    await openInstalledSavedSession(page, /Installer owned session/);
+    await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
+    await page.getByRole("button", {name:"App analysis",exact:true}).click();
+    const restartSourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});
+    await restartSourceWorkspace.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
+    await restartSourceWorkspace.getByRole("button",{name:"artifacts",exact:true}).click();
+    await restartSourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("selection-owned.ts");
+    await restartSourceWorkspace.getByRole("button",{name:"Inspect saved source identity",exact:true}).click();
+    const beforeRestartSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
+    await beforeRestartSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await beforeRestartSource.getByLabel("Remember this evidence reference on this device",{exact:true}).check();
+    await page.waitForFunction((id)=>Object.keys(localStorage).filter(k=>k.endsWith(":source-reference.v1"))
+      .some(key=>JSON.parse(localStorage.getItem(key)!).selection?.receiptId===id),parsed.id,{timeout:30000});
+    const savedSourceReference=await acceptanceAction("owned-source-reference-storage",()=>page.evaluate((id)=>{
+      const records=Object.keys(localStorage).filter(k=>k.endsWith(":source-reference.v1"))
+        .map(key=>({key,value:JSON.parse(localStorage.getItem(key)!)})).filter(r=>r.value.selection?.receiptId===id);
+      return records;
+    },parsed.id),30000);
+    if(savedSourceReference.length!==1||JSON.stringify(Object.keys(savedSourceReference[0].value).sort())!==JSON.stringify(["selection","version"])||
+      savedSourceReference[0].value.version!==1||Object.keys(savedSourceReference[0].value.selection).sort().join(",")!=="receiptId,selector"||
+      savedSourceReference[0].value.selection.selector.kind!=="artifact"||Object.keys(savedSourceReference[0].value.selection.selector).sort().join(",")!=="kind,path")
+      throw new Error("Installed remembered source reference retained extra data or wrong selector");
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
-    await stop();
+    await acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000);
     page = await launch();
+    const restartedSourceReference = await acceptanceAction("owned-source-reference-after-restart", () =>
+      page.evaluate((key) => localStorage.getItem(key), savedSourceReference[0].key), 30000);
+    verifyInstalledSourceReferenceStorage(savedSourceReference[0].value, restartedSourceReference);
     await settings(page, "General");
     const persisted = await rpc<{ customAiInstructions?: string }>(
       page,
@@ -1526,6 +1761,29 @@ ConvertTo-Json -InputObject @($rows) -Compress
       },
     });
     stages.push("restart-setting-and-session-persistence-passed");
+    await openInstalledSavedSession(page, /Installer owned session/);
+    await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
+    const restoredSource=page.getByRole("region",{name:"Selected source evidence",exact:true});
+    await restoredSource.getByText("Restored evidence reference — recheck required. No source has been read.",{exact:true}).waitFor({timeout:30000});
+    if(await restoredSource.getByLabel("Bounded source snapshot",{exact:true}).count()||await restoredSource.getByText("Source identity: matched",{exact:true}).count())
+      throw new Error("Installed restart restored a live source preview or trusted identity");
+    try {
+      await writeFile(sourceSelectionTarget,'export const restartChanged = "CURRENT_RESTART_NOT_SAVED";');
+      await restoredSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+      await restoredSource.getByText("Source identity: stale",{exact:true}).waitFor({timeout:30000});
+      if(await restoredSource.getByLabel("Bounded source snapshot",{exact:true}).count()||(await restoredSource.innerText()).includes("CURRENT_RESTART_NOT_SAVED"))
+        throw new Error("Installed restored stale source exposed current bytes");
+    } finally { await writeFile(sourceSelectionTarget,sourceSelectionText); }
+    await restoredSource.getByRole("button",{name:"Recheck selected source",exact:true}).click();
+    await restoredSource.getByText("Source identity: matched",{exact:true}).waitFor({timeout:30000});
+    await restoredSource.getByRole("button",{name:"Clear source evidence selection",exact:true}).click();
+    await restoredSource.waitFor({state:"detached"});
+    await page.waitForFunction((key)=>localStorage.getItem(key)===null,savedSourceReference[0].key,{timeout:30000});
+    if(await acceptanceAction("owned-source-reference-clear",()=>page.evaluate((key)=>localStorage.getItem(key),savedSourceReference[0].key),30000)!==null)
+      throw new Error("Installed explicit clear did not remove saved source reference");
+    if((await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs)).mode!=="off")throw new Error("Installed source restart changed Analysis Off");
+    await page.getByRole("button",{name:"Close diff view",exact:true}).click();
+    stages.push("installed-source-reference-restart-inert-explicit-recheck-clear-passed");
     const beforeHub = JSON.parse(await readFile(discoveryPath, "utf8"));
     if (!Number.isInteger(beforeHub.pid) || beforeHub.pid < 1)
       throw new Error("Owned isolated Hub PID unavailable");
@@ -1625,6 +1883,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		const reason = (error instanceof Error ? error.message : String(error))
 			.replace(/approval_token=[^&\s]+/g, "approval_token=[REDACTED]")
       .slice(0, 2000);
+    // Fixed fixture-owned page only. Capture the actual failed UI before native teardown.
+    try {
+      const failedPage = browser?.contexts().flatMap(context=>context.pages()).find(candidate=>/tauri\.localhost|tauri:\/\/localhost/.test(candidate.url()));
+      if (failedPage && !failedPage.isClosed()) await failedPage.screenshot({path:join(evidence,"failure.png"),timeout:5000});
+    }
+    catch { /* A closed renderer must not replace the original acceptance failure. */ }
 		// Read only two fixed fixture-owned logs, each at most 64 KiB, redacted.
     let hubStartupDiagnostic = "";
     for (const [leaf, evidenceLeaf] of [["code.log", "owned-backend-tail.log"],

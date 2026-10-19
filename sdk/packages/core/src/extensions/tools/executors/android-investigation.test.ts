@@ -242,3 +242,37 @@ it("identifies nested content through the public command, preserves input and re
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+
+
+it("retains exact Android caller/callee evidence or an explicit missing-engine result through the public command", async () => {
+ const dir = await mkdtemp(join(tmpdir(), "android-method-calls-"));
+ vi.stubEnv("CLINE_RE_CACHE_DIR", join(dir,"cache"));
+ try {
+  const f = JSON.parse(await readFile(join(scripts,"owned-android-method-calls-fixture.json"),"utf8"));
+  const bytes = Buffer.from(f.base64,"base64"), target = join(dir,"owned.dex");
+  await writeFile(target,bytes);
+  const request = {operation:"trace_android_method",target,advanced_options:{method:{class_descriptor:"LCalls;",name:"root",descriptor:"()V"}}};
+  const execute = async (extra:Record<string,unknown>={}) => JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse({...request,...extra}),{} as never));
+  const result = await execute();
+  expect(result).toMatchObject({status:"partial",observedExecution:false});
+  // If the selected-code stage itself is blocked, the dependency must not be run.
+  if(result.stages.length === 1) {
+   expect(result.stages[0].result.result.evidence.selectedCode[0].status).toBe("blocked");
+  } else {
+   const worker = result.stages[1].result.result, calls = worker.evidence.methodCalls;
+   expect(worker.input.sha256).toBe(f.sha256);
+   if(calls.status === "blocked") {
+    expect(calls).toMatchObject({reason:"Androguard is not installed",observedExecution:false,dispatchVerified:false});
+    expect(result.stages[0].result.result.evidence.selectedCode[0].status).toBe("blocked");
+   } else {
+   expect(calls).toMatchObject({protocol:"cline-android-method-calls/v1",status:"partial",selectedDefinitionCount:1,referenceCount:2,dispatchVerified:false,observedExecution:false});
+   expect(calls.references.map((r:{relativeToSelection:string})=>r.relativeToSelection).sort()).toEqual(["callee","caller"]);
+   expect(calls.references.every((r:{artifactSha256:string;bytecodeOffset:number;dispatchVerified:boolean})=>r.artifactSha256===f.sha256&&r.bytecodeOffset===0&&!r.dispatchVerified)).toBe(true);
+   const limited=await execute({max_results:1});expect(limited.stages[1].result.result.evidence.methodCalls).toMatchObject({referenceCount:2,referencesTruncated:true});
+   const ambiguous=join(dir,"ambiguous.apk");await writeFile(ambiguous,Buffer.from(f.ambiguousBase64,"base64"));
+   const duplicate=await execute({target:ambiguous});expect(duplicate.stages[1].result.result.evidence.methodCalls).toMatchObject({selectionStatus:"ambiguous-definition",references:[]});
+   }
+  }
+  expect(await readFile(target)).toEqual(bytes);
+ } finally { vi.unstubAllEnvs(); await rm(dir,{recursive:true,force:true}); }
+});

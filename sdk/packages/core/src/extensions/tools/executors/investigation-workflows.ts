@@ -384,7 +384,7 @@ export async function investigationWorkflow(
 		});
 		return envelope(
 			[
-				"Exact selected DEX method bytecode and bounded reference candidates, preserving DEX origin; reflection, dynamic dispatch, full call graph and runtime reachability remain unresolved.",
+				"Exact selected DEX bytecode plus a bounded one-hop encoded invoke caller/callee reference view from the existing Androguard engine, preserving DEX origin, input/code hashes and ambiguous definition candidates. Fixed scan budgets and missing-engine/decoder limitations remain explicit; this is not transitive traversal, dynamic dispatch, a full call graph or runtime reachability.",
 			],
 			true,
 		);

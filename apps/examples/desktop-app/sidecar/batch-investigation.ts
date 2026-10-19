@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { InvestigationSchemas, isBatchStaticOperation } from "@cline/core";
+import {
+	InvestigationSchemas,
+	batchReportRef,
+	isBatchStaticOperation,
+} from "@cline/core";
 import { z } from "zod";
 import type { AnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
 import type { ExecutionControlService } from "./execution-control-service";
@@ -17,7 +21,7 @@ const Names = [
 ] as const;
 const limits = [
 	"Built-in static file inspection, source/Electron/.NET/mitigation/comparison and saved-graph analysis only; no target execution, shell, candidate writes or external engines. Partial results retain their evidence and allow independent reads; they never pass dependencies. Failures stop the batch.",
-	"All inputs must already exist as confined regular files of at most 64 MiB; no producer-output chaining.",
+	"File inputs must be confined regular files of at most 64 MiB. A graph_query target may instead name a completed graph_build evidence-graph output in the same approved DAG. No path, write, engine or runtime output chaining.",
 	"Dependencies order stages; they do not imply data flow or runtime causality. Two simultaneous reads maximum.",
 	"Resume never retries started stages and blocks unresolved dependencies. Checkpoints are already durable; status reads do not force a flush.",
 ];
@@ -77,9 +81,10 @@ export async function handleBatchInvestigation(
 			if (s.backend !== "static" || !isBatchStaticOperation(s.request))
 				throw new Error("Only built-in static batches can resume here");
 			if (
-				!s.target_sha256 ||
-				(await ownedFile(scope.workspace, String(s.request.target))).sha256 !==
-					s.target_sha256
+				!batchReportRef(s.request.target) &&
+				(!s.target_sha256 ||
+					(await ownedFile(scope.workspace, String(s.request.target)))
+						.sha256 !== s.target_sha256)
 			)
 				throw new Error(
 					"Batch input changed; stale dependent evidence cannot be reused",

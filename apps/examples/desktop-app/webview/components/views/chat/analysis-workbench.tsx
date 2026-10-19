@@ -1,4 +1,8 @@
 "use client";
+import { CandidateOutcomeCard } from "./candidate-outcome";
+import type { CandidateOutcome } from "../../../../shared/candidate-outcome";
+import { SharedSourceEvidencePanel } from "./source-evidence-selection";
+import { AnalysisProjectSelectionProvider, analysisProjectScope, SharedArtifactSelection, useAnalysisProjectTarget } from "./analysis-project-selection";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
 import { GuidedInvestigation } from "./guided-investigation";
@@ -57,6 +61,13 @@ type TaskKind =
 	| "device"
 	| "execution";
 type TaskPlan = {
+	candidateOutcome?: CandidateOutcome;
+	candidateSource?: {
+		planId: string;
+		requestHash: string;
+		resultHash: string;
+		outputSha256: string;
+	};
 	id: string;
 	kind: TaskKind;
 	operation: string;
@@ -130,7 +141,12 @@ function pretty(value: unknown): string {
 	return JSON.stringify(value, null, 2);
 }
 
-export function AnalysisWorkbench({
+type AnalysisWorkbenchProps = { sessionId?: string; cwd?: string; environmentId: string };
+export function AnalysisWorkbench(props: AnalysisWorkbenchProps) {
+ const scope = analysisProjectScope(props.environmentId, props.cwd, props.sessionId);
+ return <AnalysisProjectSelectionProvider key={scope} scope={scope}><AnalysisWorkbenchContent {...props} /></AnalysisProjectSelectionProvider>;
+}
+function AnalysisWorkbenchContent({
  sessionId,	cwd,
 	environmentId,
 }: {
@@ -144,7 +160,7 @@ export function AnalysisWorkbench({
 	const [tasks, setTasks] = useState<TaskPlan[]>([]);
 	const [pendingPlan, setPendingPlan] = useState<TaskPlan | null>(null);
 	const [loadingDiscovery, setLoadingDiscovery] = useState(false);
-	const [target, setTarget] = useState("");
+	const [target, setTarget] = useAnalysisProjectTarget();
 	const [decompilerOptions, setDecompilerOptions] = useState("{}");
 	const [operation, setOperation] = useState<AnalysisOperation>("inspect");
 	const [engine, setEngine] = useState("auto");
@@ -263,6 +279,25 @@ export function AnalysisWorkbench({
 		} finally {
 			setBusy(false);
 		}
+	};
+
+	const prepareCandidateVerification = async (planId: string) => {
+		setBusy(true);
+		setResult(null);
+		setPendingPlan(null);
+		try {
+			const plan = await desktopClient.invoke<TaskPlan>("prepare_candidate_verification", {
+				...common, planId, allowExternalTarget,
+			});
+			setPendingPlan(plan);
+			setUploadConfirmed(false);
+			setRuntimeConfirmed(false);
+			await refreshLedger();
+			setMode("approvals");
+		} catch (error) {
+			toast({ variant: "destructive", title: "Could not prepare candidate verification",
+				description: error instanceof Error ? error.message : "Candidate identity could not be checked." });
+		} finally { setBusy(false); }
 	};
 
 	const approveAndRun = async () => {
@@ -477,8 +512,8 @@ export function AnalysisWorkbench({
 	);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 py-2">
+		<section aria-label="Analysis workbench" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+			<div className="flex max-h-[25%] shrink-0 flex-wrap items-center gap-1 overflow-auto border-b border-border px-3 py-2">
 				{modes.map((item) => (
 					<button
 						className={cn(
@@ -507,6 +542,10 @@ export function AnalysisWorkbench({
 					/>
 				</button>
 			</div>
+			<section aria-label="Analysis selection details" className="max-h-[40%] min-h-0 shrink-0 overflow-auto">
+				<SharedArtifactSelection />
+				<SharedSourceEvidencePanel sessionId={sessionId} environmentId={environmentId} />
+			</section>
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
 					{(mode === "notebook" || mode === "graph") && (
@@ -529,7 +568,7 @@ export function AnalysisWorkbench({
 					)}
 					{mode === "investigation" && (
 						<InvestigationWorkspace
-							cwd={cwd}
+							cwd={cwd ?? ""}
 							environmentId={environmentId}
 							onSelect={setInvestigationId}
 							selectedId={investigationId}
@@ -1132,6 +1171,28 @@ export function AnalysisWorkbench({
 											<br />
 											Result: {task.evidence?.resultHash}
 										</div>
+										{task.candidateSource && (
+											<p className="break-all text-xs text-muted-foreground">
+												Source build task: {task.candidateSource.planId}
+												<br />
+												Build result SHA256: {task.candidateSource.resultHash}
+												<br />
+												Candidate SHA256: {task.candidateSource.outputSha256}
+												<br />
+												Retained provenance only, not approval or authenticated producer evidence.
+											</p>
+										)}
+                                        {task.target && <button
+                                            type="button"
+                                            className="rounded border px-2 py-1 text-xs"
+                                            aria-label={`Select target from evidence ${task.id}`}
+                                            onClick={()=>{if (!task.target) return;setTarget(task.target);setResult(task);setMode("analyze");}}
+                                        >Select task target in Analyze (identity not rechecked)</button>}
+                                        <CandidateOutcomeCard outcome={task.candidateOutcome} status={task.status} />
+                                        {task.status === "completed" && task.candidateOutcome?.operation === "build_android_candidate" && task.candidateOutcome.evidence === "bounded-checks-passed" && task.candidateOutcome.outputSha256 && <div className="space-y-1">
+                                            <button type="button" className="rounded border px-2 py-1 text-xs" disabled={busy} onClick={() => void prepareCandidateVerification(task.id)}>Prepare separate APK verification</button>
+                                            <p className="text-xs text-muted-foreground">Rechecks current file identity, then prepares Inspect approval only. Unsigned APK signature checks may fail. No signing, install or execution.</p>
+                                        </div>}
 										{task.evidence?.outputPaths.map((path) => (
 											<button
 												className="block max-w-full truncate text-left text-primary hover:underline"
@@ -1160,6 +1221,7 @@ export function AnalysisWorkbench({
 						<Activity className="h-3.5 w-3.5" />
 						Supervised output
 					</div>
+                    {result && typeof result === "object" && "plan" in result && result.plan && typeof result.plan === "object" && "candidateOutcome" in result.plan ? <CandidateOutcomeCard outcome={(result.plan as TaskPlan).candidateOutcome} status={(result.plan as TaskPlan).status} /> : null}
 					<pre className="min-h-48 whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-4 font-mono text-xs leading-5">
 						{busy
 							? "Running bounded operation…"
@@ -1169,6 +1231,6 @@ export function AnalysisWorkbench({
 					</pre>
 				</div>
 			</div>
-		</div>
+		</section>
 	);
 }

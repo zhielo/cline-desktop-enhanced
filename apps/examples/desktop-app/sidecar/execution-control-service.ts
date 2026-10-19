@@ -1,10 +1,21 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, realpathSync } from "node:fs";
-import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	realpath,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import {
+	BatchReportRefSchema,
+	EvidenceGraphSchema,
+	batchReportRef,
 	LiveDebuggerInputSchema,
 	isBatchStaticOperation,
 	type ProcessSessionManager,
@@ -113,6 +124,13 @@ type Job = {
 	logTruncated?: boolean;
 	resultTruncated?: boolean;
 	resultHash?: string;
+	inputReport?: {
+		producerReceiptId: string;
+		producerStageId: string;
+		producerResultSha256: string;
+		documentSha256: string;
+		output: "evidence-graph";
+	};
 };
 export type ExecutionReceipt = {
 	id: string;
@@ -284,10 +302,120 @@ export class ExecutionControlService {
 				};
 			});
 	}
+	private reportProducer(
+		c: Pick<ExecutionReceipt, "id" | "request" | "workspace" | "jobs">,
+		stageId: string,
+	) {
+		if (c.request.stages.some((s) => s.id === stageId))
+			return {
+				receipt: c,
+				stage: c.request.stages.find((s) => s.id === stageId)!,
+				job: c.jobs.find((j) => j.id === stageId),
+			};
+		const resume = c.request.resume_from;
+		if (!resume || !resume.reused.includes(stageId))
+			throw new Error("Report producer is not in this approved batch");
+		const prior = this.get(c.workspace, resume.id);
+		if (
+			prior.controlUnavailable ||
+			prior.revision !== resume.revision ||
+			prior.hash !== resume.hash ||
+			prior.request.owner_session_id !== c.request.owner_session_id
+		)
+			throw new Error(
+				"Report producer checkpoint changed or belongs to another session",
+			);
+		const stage = prior.request.stages.find((s) => s.id === stageId);
+		if (!stage) throw new Error("Report producer stage unavailable");
+		return {
+			receipt: prior,
+			stage,
+			job: prior.jobs.find((j) => j.id === stageId),
+		};
+	}
+	private graphDocument(
+		c: Pick<ExecutionReceipt, "id" | "request" | "workspace" | "jobs">,
+		stageId: string,
+	) {
+		const producer = this.reportProducer(c, stageId),
+			j = producer.job;
+		if (
+			!j ||
+			j.status !== "completed" ||
+			j.resultTruncated ||
+			!j.resultHash ||
+			digest(JSON.stringify(j.result) ?? "null") !== j.resultHash
+		)
+			throw new Error("Report producer is incomplete, truncated or changed");
+		const bundle = j.result as {
+			result?: {
+				protocol?: string;
+				status?: string;
+				evidence?: { graph?: unknown };
+			};
+		};
+		if (
+			bundle?.result?.protocol !== "cline-advanced-analysis/v1" ||
+			bundle.result.status !== "completed" ||
+			!bundle.result.evidence?.graph
+		)
+			throw new Error(
+				"Producer did not return a completed evidence-graph output",
+			);
+		const document = JSON.stringify(
+			EvidenceGraphSchema.parse(bundle.result.evidence.graph),
+		);
+		if (Buffer.byteLength(document) > 65536)
+			throw new Error("Chained report byte budget exceeded");
+		return { document, producer, resultHash: j.resultHash };
+	}
 	async preview(root: string, value: unknown) {
 		const p: Pipeline = PipelineInput.parse(value);
 		validateGraph(p);
 		for (const stage of p.stages) {
+			if (stage.request.target && typeof stage.request.target !== "string") {
+				const ref = BatchReportRefSchema.parse(stage.request.target);
+				if (
+					stage.backend !== "static" ||
+					stage.request.operation !== "advanced_analysis" ||
+					stage.request.advanced_action !== "graph_query"
+				)
+					throw new Error(
+						"Report outputs can only feed the static graph_query adapter",
+					);
+				const producer = this.reportProducer(
+					{
+						id: "preview",
+						request: p,
+						workspace: realpathSync(root),
+						jobs: [],
+					},
+					ref.stage_id,
+				);
+				if (
+					producer.stage.backend !== "static" ||
+					producer.stage.request.operation !== "advanced_analysis" ||
+					producer.stage.request.advanced_action !== "graph_build"
+				)
+					throw new Error(
+						"Evidence-graph producer must be a graph_build stage",
+					);
+				if (p.stages.some((s) => s.id === ref.stage_id)) {
+					if (!stage.depends_on.includes(ref.stage_id))
+						throw new Error(
+							"Report reference requires an explicit producer dependency",
+						);
+				} else
+					this.graphDocument(
+						{
+							id: "preview",
+							request: p,
+							workspace: realpathSync(root),
+							jobs: [],
+						},
+						ref.stage_id,
+					);
+			}
 			if (
 				p.continue_independent_reads &&
 				(stage.backend !== "static" ||
@@ -336,8 +464,14 @@ export class ExecutionControlService {
 			} else {
 				const request =
 					stage.backend === "static"
-						? ReverseEngineeringInputSchema.parse(stage.request)
+						? ReverseEngineeringInputSchema.parse({
+								...stage.request,
+								target: batchReportRef(stage.request.target)
+									? undefined
+									: stage.request.target,
+							})
 						: LiveDebuggerInputSchema.parse(stage.request);
+				const report = batchReportRef(stage.request.target);
 				if (
 					stage.backend === "static" &&
 					(![
@@ -352,6 +486,7 @@ export class ExecutionControlService {
 						"decompile",
 						"disassemble_smali",
 						"trace_electron_ipc",
+						"trace_data_flow",
 						"audit_preload_bridge",
 						"trace_source_symbol",
 						"explain_behavior",
@@ -366,7 +501,7 @@ export class ExecutionControlService {
 					throw new Error(
 						"Static pipeline accepts fixed built-in operations only",
 					);
-				if ("target" in request && request.target) {
+				if (!report && "target" in request && request.target) {
 					const f = await ownedFile(root, request.target);
 					request.target = f.path;
 					stage.target_sha256 = f.sha256;
@@ -391,7 +526,7 @@ export class ExecutionControlService {
 					(stage as Stage & { compare_sha256?: string }).compare_sha256 =
 						f.sha256;
 				}
-				stage.request = request;
+				stage.request = report ? { ...request, target: report } : request;
 			}
 			// Canonical shared resource prevents conflicting writers even if callers omit a label.
 			stage.resource =
@@ -590,8 +725,32 @@ export class ExecutionControlService {
 		const started = Date.now(),
 			parent = this.options.tasks.signal(c.planId),
 			signal = AbortSignal.any([parent, AbortSignal.timeout(stage.timeout_ms)]);
+		let reportDirectory: string | undefined;
 		try {
 			signal.throwIfAborted();
+			let adapterRequest = stage.request;
+			const ref = batchReportRef(stage.request.target);
+			if (ref) {
+				const { document, producer, resultHash } = this.graphDocument(
+					c,
+					ref.stage_id,
+				);
+				await mkdir(this.options.logRoot, { recursive: true, mode: 0o700 });
+				reportDirectory = await mkdtemp(join(this.options.logRoot, "report-"));
+				const target = join(reportDirectory, "evidence-graph.json");
+				await writeFile(target, document, { flag: "wx", mode: 0o600 });
+				if (digest(await readFile(target)) !== digest(document))
+					throw new Error("Chained report snapshot changed");
+				j.inputReport = {
+					producerReceiptId: producer.receipt.id,
+					producerStageId: ref.stage_id,
+					producerResultSha256: resultHash,
+					documentSha256: digest(document),
+					output: ref.output,
+				};
+				this.checkpoint(c, `report-bound:${j.id}`);
+				adapterRequest = { ...stage.request, target };
+			}
 			if (
 				stage.target_sha256 &&
 				(await ownedFile(c.workspace, String(stage.request.target))).sha256 !==
@@ -605,9 +764,10 @@ export class ExecutionControlService {
 			)
 				throw new Error("Comparison artifact changed after approval");
 			if (stage.backend !== "shell") {
+				signal.throwIfAborted();
 				const result = await (stage.backend === "static"
 					? this.options.static
-					: this.options.debugger)(stage.request, signal);
+					: this.options.debugger)(adapterRequest, signal);
 				// Preserve returned evidence even when cancellation races adapter completion.
 				const encoded = JSON.stringify(result) ?? "null";
 				j.resultHash = digest(encoded);
@@ -792,6 +952,14 @@ export class ExecutionControlService {
 				);
 			}
 		} finally {
+			if (reportDirectory) {
+				try {
+					await rm(reportDirectory, { recursive: true, force: true });
+				} catch {
+					j.status = "uncertain";
+					j.error = "Private chained report cleanup could not be confirmed";
+				}
+			}
 			j.durationMs = Date.now() - started;
 			j.completedAt = new Date().toISOString();
 			this.checkpoint(c, `stage-finish:${stage.id}`);

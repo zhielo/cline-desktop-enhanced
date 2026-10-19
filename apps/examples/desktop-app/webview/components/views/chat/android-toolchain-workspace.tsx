@@ -1,4 +1,5 @@
 "use client";
+import { useAnalysisProjectTarget } from "./analysis-project-selection";
 import { useCallback, useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ export function AndroidToolchainWorkspace({
 }) {
 	const prefix = useId(),
 		[operation, setOperation] = useState("inspect"),
-		[target, setTarget] = useState(""),
+		[target, setTarget] = useAnalysisProjectTarget(""),
 		[output, setOutput] = useState(""),
 		[selector, setSelector] = useState(""),
 		[secondary, setSecondary] = useState(""),

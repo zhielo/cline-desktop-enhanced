@@ -116,6 +116,8 @@ it("snapshots, patches, assembles every root and reuses the existing builder bef
 	const result = await androidProjectCandidate(f.build, f.run);
 	expect(result).toMatchObject({
 		status: "completed",
+		protocol: "cline-android-project-candidate/v1",
+		smaliRoots: ["smali", "smali_classes2"],
 		published: true,
 		sourceUnchanged: true,
 		observedExecution: false,
