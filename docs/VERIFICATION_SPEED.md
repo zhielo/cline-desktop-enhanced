@@ -22,3 +22,7 @@ Existing same-job, exact-source, exact-run-attempt core receipt reuse for the en
 Observed baseline: PR142's Windows job ran 48m07s, consolidated core validation 14m15s, NSIS build 10m31s, installation smoke 2m19s and installed WebView acceptance 7m31s. Within the core report, sidecar regression took about 230s and complete workspace typechecking about 199s. These are observations from one hosted run, not controlled benchmarks or a promise of faster future runs.
 
 The installed journey shares approvals, profiles, runtime rollbacks and retained evidence across phases. It must not be split naively or have survival-observation windows shortened. Isolated sharding and additional build-output reuse remain follow-up work requiring explicit dependency contracts and independent acceptance. Measure cold and warm runs before claiming a speed improvement; retain the serial path if resource contention worsens reliability.
+
+## Conditional packaging checks
+
+Root package/lock and packaging changes trigger `desktop-test` in addition to the normal check set. The finite release policy recognizes its two exact check names. If either appears, both must be completed successfully for the exact head and trusted Actions app; skipped, missing, duplicate, failed or unknown checks still block release. When this path-triggered workflow is absent, the existing twenty required checks remain mandatory. This fixes a reproduced false rejection without accepting arbitrary additional checks.

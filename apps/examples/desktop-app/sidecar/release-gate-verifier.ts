@@ -90,7 +90,14 @@ export function verifyReleaseGateEvidence(
 			e.checks.total_count <= 100,
 		"Incomplete check pagination",
 	);
-	const remaining: string[] = [...policy.requiredChecks];
+	const conditionalTriggered = e.checks.check_runs.some((c) =>
+		policy.conditionalChecks.includes(c.name as never),
+	);
+	const remaining: string[] = [
+		...policy.requiredChecks,
+		...(conditionalTriggered ? policy.conditionalChecks : []),
+	];
+	const requiredCheckCount = remaining.length;
 	const ids = new Set<number>();
 	for (const c of e.checks.check_runs) {
 		requireProof(!ids.has(c.id), "Duplicate check identity");
@@ -277,7 +284,7 @@ export function verifyReleaseGateEvidence(
 		tree: e.headCommit.tree.sha,
 		runId: r.id,
 		runAttempt: r.run_attempt,
-		checks: policy.requiredChecks.length,
+		checks: requiredCheckCount,
 		coreGates: policy.coreGates.length,
 		engineGates: policy.engineGates.length,
 		installedStages: policy.installedStages.length,

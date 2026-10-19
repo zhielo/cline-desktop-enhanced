@@ -25,6 +25,11 @@ export const RELEASE_GATE_POLICY = {
 		"Quality Checks",
 		"Detect Changes",
 	],
+	// desktop-test is path-triggered. When either check appears, require both.
+	conditionalChecks: [
+		"Test DMG background tooling",
+		"Test x86 installer against x64 sidecars",
+	],
 	allowedSkipped: ["Run Tests", "strip"],
 	coreGates: [
 		"Check owned ARM64 fixture",
