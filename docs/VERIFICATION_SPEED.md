@@ -34,3 +34,19 @@ PR E2E runs restore the Bun download cache read-only. Cache publication is limit
 
 ## Bounded Android fixture groups
 Windows SDK evidence exposed a mismatch: the complete Python corpus had a 60-second child-process timeout inside a 20-second Vitest deadline. The SDK test now executes four sequential, dynamically discovered unittest groups, with each child bounded to 18 seconds under the unchanged 20-second test deadline. Each group validates its exact modulo partition of the full discovered case inventory, its count and successful completion. All current 80 cases are covered exactly once; optional-engine skip rules are unchanged. The other full Python gate still runs the complete corpus normally. No application runtime budget, global test timeout or release requirement was increased.
+
+### Final candidate verification protocol
+
+Mark the PR ready for review before freezing its final verification commit. The
+`ready_for_review` event intentionally starts fresh E2E checks and may cancel
+older same-head runs; those cancellations must not be treated as successful
+release evidence. Use one final source commit after that transition so the
+strict release collector receives an unambiguous exact-head check set. Do not
+change code while that candidate builds unless a concrete defect is found.
+
+Local checks for this change include the full workspace type check and lint
+(lint warnings are reported, not promoted to clean output), fork preservation,
+15 focused Android SDK tests, all 80 dynamically discovered Python corpus
+cases across four groups, 48 workflow regressions and 45 release-gate tests.
+Local results never replace the fresh Windows installer, installed WebView
+acceptance, artifact digest validation or prospective merge-tree identity.
