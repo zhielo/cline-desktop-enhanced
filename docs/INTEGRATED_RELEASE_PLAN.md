@@ -8,7 +8,7 @@ Keep the existing Tauri/WebView → sidecar → shared Hub/SDK authority. Reuse 
 
 | Requirement | Deliverable | Current branch increment | Still required for product acceptance |
 | --- | --- | --- | --- |
-| R01 Workspace | Shared project/artifact/selection navigation across Code, Investigate, Compare, Validate | Existing panes preserved; exact shared command interfaces visible | Unified artifact/selection read model and cross-pane navigation/restart journey |
+| R01 Workspace | Shared project/artifact/selection navigation across Code, Investigate, Compare, Validate | Existing panes now share optional scoped path metadata across Guide/Analyze/Android/App analysis; explicit AI JSON transfer, optional local remember/clear and scope-bound remount | Hash-backed artifact/structured-selection read model, evidence navigation and complete restart journey |
 | R02 Verification | Plan → inspect → approve → modify → validate → review with honest outcomes | Exact AI schemas shared with catalog; partial producer results cannot unlock graph consumers | Connected candidate/build/verification summaries and distinct operational/evidence outcomes |
 | R03 Evidence explorer | Precise source/Smali/native/resource selections and linked provenance | Fresh JS/TS flow uses exact hash-backed fact locations; graph consumers retain producer/result/document identities | Shared visual selections, cross-domain navigation and stale-evidence display |
 | R04 Android | Multidex → entrypoint → method → JNI → preview → rebuild → verify | Previous bounded Android/candidate implementations preserved | Bounded caller/callee traversal, supported dynamic-registration analysis, resource-table semantics and unified build/signature/device summary |
@@ -93,4 +93,15 @@ Fresh source flow is always partial: it is not a general taint solver, arbitrary
 - Fresh exact-location source flow in the installed app without target execution.
 - Malformed refs, wrong producers/consumers, cycles, omitted dependencies, injected paths, partial/truncated/malformed outputs, cancelled consumers and exact-checkpoint continuation.
 
-The installed release policy now requires 54 stages, including these two new named journeys. Local test results are not installed Windows results. Engine/device acceptance must name its actual authorized environment and cannot be replaced by catalog presence or owned static fixtures.
+The installed release policy now requires 55 stages, including these two new named journeys. Local test results are not installed Windows results. Engine/device acceptance must name its actual authorized environment and cannot be replaced by catalog presence or owned static fixtures.
+
+
+## Shared artifact navigation increment
+
+Evidence-ledger cards can explicitly select their task target in Analyze while retaining the saved task/request/result provenance in the supervised output. This is navigation only: the current artifact is not rehashed or certified, and no task is prepared or run.
+
+The existing workbench now shares one artifact path across Start here, Analyze, Android tools and App analysis. AI JSON is deliberately not overwritten: **Use shared artifact in command JSON** copies only the target into a valid JSON object after an explicit click. Switching workspace, environment or chat remounts the workbench, resetting pending plans and local pane state; scopes use an unambiguous tuple encoding.
+
+Paths are in-memory by default. **Remember this path on this device** opts into one versioned path-only record for that exact scope. **Clear shared selection and saved path** removes this record and clears the selection; it does not delete source files or stored evidence. Malformed, oversized, authority-bearing and unsupported stored records are rejected, and storage failure leaves in-memory use available with an explicit warning when saved updates/removal cannot be confirmed. No permissions, execution tokens, source contents, hashes or results are persisted by this feature. An input path is unverified metadata, never readiness, an artifact identity or authority to run a tool.
+
+Standalone panes retain their existing local defaults. No runtime engine, installation, preparation, approval or target execution occurs from selecting or remembering a path. Existing diagnostics/status reads still occur when panes open. Shared structured code/Smali/native selections and stale-evidence navigation remain outstanding. The installed policy adds an actual cross-pane/explicit-JSON/remember/clear journey; it is not claimed passed until the new exact commit's Windows checks complete.

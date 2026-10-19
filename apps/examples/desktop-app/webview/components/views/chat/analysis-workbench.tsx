@@ -1,4 +1,5 @@
 "use client";
+import { AnalysisProjectSelectionProvider, analysisProjectScope, SharedArtifactSelection, useAnalysisProjectTarget } from "./analysis-project-selection";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
 import { GuidedInvestigation } from "./guided-investigation";
@@ -130,7 +131,12 @@ function pretty(value: unknown): string {
 	return JSON.stringify(value, null, 2);
 }
 
-export function AnalysisWorkbench({
+type AnalysisWorkbenchProps = { sessionId?: string; cwd?: string; environmentId: string };
+export function AnalysisWorkbench(props: AnalysisWorkbenchProps) {
+ const scope = analysisProjectScope(props.environmentId, props.cwd, props.sessionId);
+ return <AnalysisProjectSelectionProvider key={scope} scope={scope}><AnalysisWorkbenchContent {...props} /></AnalysisProjectSelectionProvider>;
+}
+function AnalysisWorkbenchContent({
  sessionId,	cwd,
 	environmentId,
 }: {
@@ -144,7 +150,7 @@ export function AnalysisWorkbench({
 	const [tasks, setTasks] = useState<TaskPlan[]>([]);
 	const [pendingPlan, setPendingPlan] = useState<TaskPlan | null>(null);
 	const [loadingDiscovery, setLoadingDiscovery] = useState(false);
-	const [target, setTarget] = useState("");
+	const [target, setTarget] = useAnalysisProjectTarget();
 	const [decompilerOptions, setDecompilerOptions] = useState("{}");
 	const [operation, setOperation] = useState<AnalysisOperation>("inspect");
 	const [engine, setEngine] = useState("auto");
@@ -507,6 +513,7 @@ export function AnalysisWorkbench({
 					/>
 				</button>
 			</div>
+			<SharedArtifactSelection />
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
 					{(mode === "notebook" || mode === "graph") && (
@@ -529,7 +536,7 @@ export function AnalysisWorkbench({
 					)}
 					{mode === "investigation" && (
 						<InvestigationWorkspace
-							cwd={cwd}
+							cwd={cwd ?? ""}
 							environmentId={environmentId}
 							onSelect={setInvestigationId}
 							selectedId={investigationId}
@@ -1132,6 +1139,12 @@ export function AnalysisWorkbench({
 											<br />
 											Result: {task.evidence?.resultHash}
 										</div>
+                                        {task.target && <button
+                                            type="button"
+                                            className="rounded border px-2 py-1 text-xs"
+                                            aria-label={`Select target from evidence ${task.id}`}
+                                            onClick={()=>{if (!task.target) return;setTarget(task.target);setResult(task);setMode("analyze");}}
+                                        >Select task target in Analyze (identity not rechecked)</button>}
 										{task.evidence?.outputPaths.map((path) => (
 											<button
 												className="block max-w-full truncate text-left text-primary hover:underline"

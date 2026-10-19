@@ -353,3 +353,48 @@ it("carries the owning session through advanced candidate preparation, approval 
  for (const command of ["prepare_analysis_task", "approve_analysis_task", "run_static_analysis"])
   expect(invoke).toHaveBeenCalledWith(command, expect.objectContaining({ sessionId: "owning-chat", environmentId: "local", cwd: "C:\\owned" }));
 });
+it("shares an artifact across existing panes but changes AI JSON only explicitly",async()=>{
+ const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
+  if(command==="list_analysis_tasks" || command==="binary_triage_history")return [];
+  if(command==="first_party_analysis_status")return {mode:"off",receipts:[],readiness:{}};
+  if(command==="analysis_command_catalog")return {entries:[{command:"identify_artifact",route:"static-review",effect:"read",availability:"implemented",limitations:"bounded"}],unavailable:[],limitations:[]};
+  return {};
+ });
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/owned-shared" environmentId="local" sessionId="shared-session"/>));
+ const shared=container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!;
+ await setInput(shared,"/owned-shared/app.apk");
+ await clickText("Android tools");expect(container.querySelector<HTMLInputElement>('input[placeholder="app.apk, classes.dex, or decoded-project"]')!.value).toBe("/owned-shared/app.apk");
+ await clickText("App analysis");expect(container.querySelector<HTMLInputElement>('input[aria-label="JavaScript analysis target"]')!.value).toBe("/owned-shared/app.apk");
+ await clickText("AI commands");const json=container.querySelector<HTMLTextAreaElement>("textarea")!;expect(JSON.parse(json.value).target).toBe("");
+ await clickText("Use shared artifact in command JSON");expect(JSON.parse(json.value).target).toBe("/owned-shared/app.apk");
+ expect(invoke.mock.calls.some(([c])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|first_party_analysis_inspect)$/.test(c))).toBe(false);
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/other-workspace" environmentId="local"/>));expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe("");
+});
+it("does not carry an in-flight reviewed plan across workspace scopes",async()=>{
+ let finish!:(value:unknown)=>void;
+ const delayed=new Promise(resolve=>{finish=resolve;});
+ const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
+  if(command==="list_analysis_tasks")return [];
+  if(command==="prepare_analysis_task")return delayed;
+  return {};
+ });
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/old-workspace" environmentId="local"/>));
+ await setInput(container.querySelector<HTMLInputElement>('input[placeholder="Workspace-relative or absolute path"]')!,"old.bin");
+ await clickText("Prepare static-analysis task");
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/new-workspace" environmentId="local"/>));
+ await act(async()=>finish({id:"stale-plan",kind:"static",operation:"inspect",target:"old.bin",request:{operation:"inspect",target:"old.bin"},requestHash:"a".repeat(64),permission:"Inspect",status:"awaiting-approval",requirements:[],risk:"low",budget:{},createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+60000).toISOString()}));
+ expect(container.textContent).not.toContain("Approve exact plan and run");
+ expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe("");
+ expect(invoke.mock.calls.some(([command])=>command==="approve_analysis_task")).toBe(false);
+});
+it("navigates from saved evidence to its task target without replay or identity claims",async()=>{
+ const saved={id:"saved-evidence",operation:"inspect",target:"/owned/source.exe",status:"completed",requestHash:"a".repeat(64),permission:"Inspect",risk:"low",evidence:{tool:"owned",resultHash:"b".repeat(64),outputPaths:[]}};
+ const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>command==="list_analysis_tasks"?[saved]:{});
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/evidence-navigation" environmentId="local"/>));
+ await clickText("Evidence");
+ await act(async()=>container.querySelector<HTMLButtonElement>('button[aria-label="Select target from evidence saved-evidence"]')!.click());
+ expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe(saved.target);
+ expect(container.querySelector<HTMLInputElement>('input[placeholder="Workspace-relative or absolute path"]')!.value).toBe(saved.target);
+ expect(container.textContent).toContain(saved.evidence.resultHash);
+ expect(invoke.mock.calls.some(([command])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|open_artifact)$/.test(command))).toBe(false);
+});

@@ -1,4 +1,5 @@
 "use client";
+import { useAnalysisProjectSelection } from "./analysis-project-selection";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { desktopClient } from "@/lib/desktop-client";
@@ -262,6 +263,7 @@ export function AdvancedCommandWorkspace({
 	onPrepare: (request: Record<string, unknown>) => unknown;
 }) {
 	const prefix = useId();
+ const projectSelection = useAnalysisProjectSelection();
 	const [catalog, setCatalog] = useState<Catalog | null>(null);
 	const [command, setCommand] = useState("identify_artifact");
 	const [request, setRequest] = useState(() => template("identify_artifact"));
@@ -399,6 +401,10 @@ export function AdvancedCommandWorkspace({
 					selecting it runs nothing.
 				</output>
 			)}
+   {projectSelection?.target && !hostOnly && <Button variant="outline" disabled={!local || busy} onClick={()=>{
+    try { const input=JSON.parse(request); if(!input || Array.isArray(input) || typeof input!=="object")throw new Error(); setRequest(JSON.stringify({...input,target:projectSelection.target},null,2)); setError(""); }
+    catch { setError("Fix the JSON object before copying the shared artifact. No parameters were changed."); }
+   }}>Use shared artifact in command JSON</Button>}
 			<label htmlFor={`${prefix}-request`}>
 				Exact command parameters (JSON)
 			</label>

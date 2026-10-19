@@ -1,4 +1,5 @@
 "use client";
+import { useAnalysisProjectTarget } from "./analysis-project-selection";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
@@ -42,7 +43,7 @@ export function FirstPartyAnalysisWorkspace({
 	environmentId: string;
 }) {
 	const [status, setStatus] = useState<Status | null>(null),
-		[target, setTarget] = useState("."),
+		[target, setTarget] = useAnalysisProjectTarget("."),
 		[compareTarget, setCompareTarget] = useState("");
 	const [inspectorTarget, setInspectorTarget] = useState(""),
 		[inspectorPid, setInspectorPid] = useState(""),
