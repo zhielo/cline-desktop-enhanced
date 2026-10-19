@@ -93,6 +93,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-binary-triage-four-owned-engines-passed",
 		"installed-advanced-smali-preview-approved-candidate-original-preserved",
 		"installed-approved-android-project-patch-assemble-rebuild-originals-preserved",
+		"installed-android-lifecycle-build-verify-unsigned-signature-failure-no-execution-passed",
 		"installed-preview-approved-binary-ast-batch-originals-preserved",
 		"installed-multiedit-audit-source-sink-originals-preserved",
 		"installed-integrated-source-hypothesis-notebook-coverage-passed",
@@ -135,7 +136,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"9a3cbbf1812aa6484ef5e4af0f664a7dd1a5c825a25db673e08017ff3f2e6446",
+			"9d18d4f0333a91c947e5d2048cc45e53ee13436a679f579310d3d605b5a9c49d",
 		"scripts/validate-advanced-build.mjs":
 			"f62f8aee7a14c76bac688c83d568dd219e1552b2b91ed83af772ab37d14c609b",
 	},

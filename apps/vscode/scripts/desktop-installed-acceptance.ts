@@ -1196,6 +1196,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(createHash("sha256").update(await readFile(projectPreviewRequest.output_file)).digest("hex")!==projectApplied.result.outputSha256)
       throw new Error("Installed handoff fixture did not restore its owned APK bytes");
     stages.push("installed-approved-android-project-patch-assemble-rebuild-originals-preserved");
+    // Independently approve actual read-only verification of the real unsigned APK.
+    // A failed signature check must remain visible next to its successful structure check.
+    const lifecycleDraft = await rpc<typeof verificationDraft>(page,"prepare_candidate_verification",{...ownedPatchArgs,planId:projectApplied.plan.id});
+    const lifecycleApproval = await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:lifecycleDraft.id,requestHash:lifecycleDraft.requestHash,requirements:lifecycleDraft.requirements});
+    const lifecycleVerification = await rpc<{plan:{status:string};result:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:lifecycleDraft.id,executionToken:lifecycleApproval.executionToken,input:lifecycleDraft.request});
+    const lifecycleTasks = await rpc<Array<{id:string;candidateLifecycle?:{version:string;outputSha256:string;signing:string;device:string;totalLinkedAttempts:number;rejectedLinks:number;verificationAttempts:{planId:string;status:string;evidence:string;structure:string;signature:string;receiptSha256?:string}[]}}>>(page,"list_analysis_tasks",{...ownedPatchArgs});
+    const lifecycle = lifecycleTasks.find(task=>task.id===projectApplied.plan.id)?.candidateLifecycle;
+    const verifiedAttempt = lifecycle?.verificationAttempts.find(attempt=>attempt.planId===lifecycleDraft.id);
+    const cancelledAttempt = lifecycle?.verificationAttempts.find(attempt=>attempt.planId===verificationDraft.id);
+    if(lifecycleVerification.plan.status!=="failed" || lifecycleVerification.result.status!=="failed" || lifecycle?.version!=="android-candidate-lifecycle/v1" || lifecycle.outputSha256!==projectApplied.result.outputSha256 || lifecycle.signing!=="not-attested" || lifecycle.device!=="not-linked" || lifecycle.totalLinkedAttempts!==2 || lifecycle.rejectedLinks!==0 || verifiedAttempt?.evidence!=="failed" || verifiedAttempt.structure!=="completed" || verifiedAttempt.signature!=="failed" || !/^[a-f0-9]{64}$/.test(verifiedAttempt.receiptSha256??"") || cancelledAttempt?.status!=="cancelled" || cancelledAttempt.signature!=="unavailable" || !(await readFile(projectPreviewRequest.output_file)).equals(builtCandidateBytes))
+      throw new Error("Installed Android lifecycle lost independent attempts, unsigned signature failure, identity or no-execution boundary");
+    stages.push("installed-android-lifecycle-build-verify-unsigned-signature-failure-no-execution-passed");
+
 
     const batchBinary=join(workspace,"owned-candidate-input.bin"),batchAst=join(workspace,"owned-candidate-input.ts"),batchManifest=join(workspace,"owned-candidate-batch.json");
     const batchBinaryBefore=Buffer.from([0,1,2,3]),batchAstBefore="export const owned = 1; export const enabled = false;\n";

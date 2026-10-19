@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, symlink } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { ReverseEngineeringInputSchema } from "@cline/core";
+import { ReverseEngineeringInputSchema, digest } from "@cline/core";
 import { AnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
 import { summarizeCandidateOutcome } from "./candidate-outcome";
 const hash = "a".repeat(64),
@@ -328,4 +328,41 @@ it("consumes only the separately approved canonical verification envelope", asyn
  expect(running.status).toBe("running");
  f.host.fail(next.id, "Owned identity test only; no APK verification engine was invoked");
  await expect(f.host.consume({ planId: next.id, executionToken: approved.executionToken, workspaceRoot: f.root, kind: "static", request: next.request })).rejects.toThrow();
+});
+
+it("recomputes build lifecycle from independent retained attempts across restart, without replay", async () => {
+ const f = await ownedBuildForHandoff();
+ const next = await f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id });
+ expect(f.host.list(f.root).find(p => p.id === f.prepared.id)?.candidateLifecycle).toMatchObject({
+  totalLinkedAttempts: 1, signing: "not-attested", device: "not-linked",
+  verificationAttempts: [{ planId: next.id, status: "awaiting-approval", evidence: "unavailable" }],
+ });
+ f.host.cancel(next.id);
+ const savedLedger = JSON.parse(await readFile(join(f.root, "ledger.json"), "utf8"));
+ savedLedger.plans.find((p: { id: string }) => p.id === f.prepared.id).candidateLifecycle = { version: "android-candidate-lifecycle/v1", signing: "forged-pass", device: "forged-pass" };
+ await writeFile(join(f.root, "ledger.json"), JSON.stringify(savedLedger));
+ const restored = new AnalysisTaskOrchestrator({ ledgerFilePath: join(f.root, "ledger.json") });
+ expect(restored.list(f.root).find(p => p.id === f.prepared.id)?.candidateLifecycle?.verificationAttempts[0]).toMatchObject({ status: "cancelled", signature: "unavailable" });
+ const ledger = JSON.parse(await readFile(join(f.root, "ledger.json"), "utf8"));
+ expect(JSON.stringify(ledger)).not.toContain('"candidateLifecycle"');
+ expect(JSON.stringify(restored.list(f.root))).not.toContain("executionToken");
+ expect(await readFile(f.out, "utf8")).toBe("synthetic identity fixture, not APK acceptance");
+});
+
+it("links a separately consumed failed verification receipt without upgrading unsigned/device status", async () => {
+ const f = await ownedBuildForHandoff();
+ const next = await f.host.prepareCandidateVerification({ workspaceRoot: f.root, planId: f.prepared.id });
+ const approval = f.host.approve(next.id, next.requirements, next.requestHash);
+ await f.host.consume({ planId: next.id, executionToken: approval.executionToken, workspaceRoot: f.root, kind: "static", request: next.request });
+ // Synthetic protocol contract only: the fixture bytes are deliberately not an APK.
+ const body = { protocol: "cline-candidate-verification/v1", operation: "validate_candidate", effect: "read", status: "failed", inputSha256: f.outputHash, inputBytes: 45,
+  checks: [{ id: "inspect", status: "completed" }, { id: "verify_apk_signature", status: "failed" }], limitations: ["Synthetic test, not APK acceptance"], published: false, observedExecution: false };
+ f.host.failWithEvidence(next.id, { ...body, receiptSha256: digest(body) }, "synthetic-owned-fixture", "signature failed");
+ const restored = new AnalysisTaskOrchestrator({ ledgerFilePath: join(f.root, "ledger.json") });
+ const summary = restored.list(f.root).find(p => p.id === f.prepared.id)?.candidateLifecycle;
+ expect(summary).toMatchObject({ signing: "not-attested", device: "not-linked", totalLinkedAttempts: 1,
+  verificationAttempts: [{ planId: next.id, status: "failed", evidence: "failed", structure: "completed", signature: "failed", receiptSha256: digest(body) }] });
+ expect(restored.evidenceBundle(f.prepared.id, f.root).payload.task.candidateLifecycle).toBeUndefined();
+ await expect(restored.consume({ planId: next.id, executionToken: approval.executionToken, workspaceRoot: f.root, kind: "static", request: next.request })).rejects.toThrow();
+ expect(await readFile(f.out, "utf8")).toBe("synthetic identity fixture, not APK acceptance");
 });

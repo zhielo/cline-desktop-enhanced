@@ -150,3 +150,31 @@ it("shows unsigned build identity without adding verification or execution actio
 	expect(container.querySelector("button")).toBeNull();
 	expect(invoke).not.toHaveBeenCalled();
 });
+
+it("renders independent Android lifecycle outcomes without automatic RPC or a green aggregate", async () => {
+ const { AndroidCandidateLifecycleCard } = await import("./android-candidate-lifecycle");
+ const invoke = vi.spyOn(desktopClient, "invoke");
+ await act(async () => root.render(<AndroidCandidateLifecycleCard summary={{
+  version: "android-candidate-lifecycle/v1", buildPlanId: "owned-build", outputSha256: "a".repeat(64), publication: "new-unsigned-candidate",
+  verificationAttempts: [{ planId: "owned-verify", status: "completed", evidence: "failed", structure: "completed", signature: "failed" }],
+  totalLinkedAttempts: 1, omittedAttempts: 2, rejectedLinks: 1, signing: "not-attested", device: "not-linked",
+  limitations: ["Retained metadata only. <script>untrusted</script>"],
+ }} />));
+ expect(container.textContent).toContain("APK structure: completed; signature verification: failed");
+ expect(container.textContent).toContain("Signing: not-attested; device outcomes: not-linked");
+ expect(container.textContent).toContain("not displayed: 2");
+ expect(container.textContent).toContain("inconsistent retained links: 1");
+ expect(container.querySelector("script")).toBeNull(); expect(container.querySelector("button")).toBeNull(); expect(invoke).not.toHaveBeenCalled();
+});
+it("shows the host lifecycle in Evidence, not a UI-inferred successful verification", async () => {
+ const saved = { id: "build", operation: "build_android_candidate", status: "completed", requestHash: "c".repeat(64),
+  evidence: { tool: "synthetic-test", resultHash: "d".repeat(64), outputPaths: [] },
+  candidateLifecycle: { version: "android-candidate-lifecycle/v1", buildPlanId: "build", outputSha256: "a".repeat(64), publication: "new-unsigned-candidate", verificationAttempts: [], totalLinkedAttempts: 0, omittedAttempts: 0, rejectedLinks: 0, signing: "not-attested", device: "not-linked", limitations: ["No execution or approval."] },
+ };
+ const invoke = vi.spyOn(desktopClient, "invoke").mockImplementation(async (command: string) => command === "list_analysis_tasks" ? [saved] : {});
+ await act(async () => { root.render(<AnalysisWorkbench cwd="/owned" environmentId="local" />); await Promise.resolve(); });
+ const button = [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === "Evidence");
+ await act(async () => button?.click());
+ expect(container.querySelector('[aria-label="Android candidate lifecycle"]')?.textContent).toContain("No matching retained APK verification attempt");
+ expect(invoke.mock.calls.some(([name]) => /prepare|approve|run_static|execute/.test(name))).toBe(false);
+});

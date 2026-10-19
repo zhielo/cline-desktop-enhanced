@@ -1,4 +1,6 @@
 "use client";
+import { AndroidCandidateLifecycleCard } from "./android-candidate-lifecycle";
+import type { AndroidCandidateLifecycle } from "../../../../shared/android-candidate-lifecycle";
 import { CandidateOutcomeCard } from "./candidate-outcome";
 import type { CandidateOutcome } from "../../../../shared/candidate-outcome";
 import { SharedSourceEvidencePanel } from "./source-evidence-selection";
@@ -62,6 +64,7 @@ type TaskKind =
 	| "execution";
 type TaskPlan = {
 	candidateOutcome?: CandidateOutcome;
+	candidateLifecycle?: AndroidCandidateLifecycle;
 	candidateSource?: {
 		planId: string;
 		requestHash: string;
@@ -1189,6 +1192,7 @@ function AnalysisWorkbenchContent({
                                             onClick={()=>{if (!task.target) return;setTarget(task.target);setResult(task);setMode("analyze");}}
                                         >Select task target in Analyze (identity not rechecked)</button>}
                                         <CandidateOutcomeCard outcome={task.candidateOutcome} status={task.status} />
+                                        <AndroidCandidateLifecycleCard summary={task.candidateLifecycle} />
                                         {task.status === "completed" && task.candidateOutcome?.operation === "build_android_candidate" && task.candidateOutcome.evidence === "bounded-checks-passed" && task.candidateOutcome.outputSha256 && <div className="space-y-1">
                                             <button type="button" className="rounded border px-2 py-1 text-xs" disabled={busy} onClick={() => void prepareCandidateVerification(task.id)}>Prepare separate APK verification</button>
                                             <p className="text-xs text-muted-foreground">Rechecks current file identity, then prepares Inspect approval only. Unsigned APK signature checks may fail. No signing, install or execution.</p>
