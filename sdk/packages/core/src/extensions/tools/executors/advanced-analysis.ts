@@ -131,6 +131,12 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
+		android_calls?: {
+			max_depth?: number;
+			max_nodes?: number;
+			max_edges?: number;
+			direction?: "callers" | "callees" | "both";
+		};
         entrypoints?: {max_depth?:number;max_components?:number;max_dex_files?:number};
         jni_trace?: {native_artifact?:string;max_candidates?:number;native_calls?:{max_depth?:number;max_functions?:number;max_edges?:number;max_total_bytes?:number}};
 		discovery?: {

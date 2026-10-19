@@ -12,7 +12,7 @@ import zipfile
 import zlib
 import xml.etree.ElementTree as ET
 
-VERSION = "android-static/v8"
+VERSION = "android-static/v9"
 MAX_INPUT = 64 * 1024 * 1024
 MAX_CHILD = 16 * 1024 * 1024
 MAX_WORK = 128 * 1024 * 1024
@@ -371,8 +371,81 @@ def selected_dex_code(data, selector, limit):
     return {"engine":"androguard","engineVersion":importlib.metadata.version("androguard"),"methods":results,"coverage":"selected-defined-method-bytecode-not-recovered-source-or-runtime-execution"}
 
 
-def android_method_calls(dexes, dex_data, selector, limit):
-    """One-hop encoded invoke references only; never infer dynamic dispatch."""
+def android_call_budget(options):
+    defaults = {"max_depth":2,"max_nodes":32,"max_edges":128,"direction":"both"}
+    caps = {"max_depth":4,"max_nodes":64,"max_edges":200}
+    if not isinstance(options,dict) or set(options)-set(defaults):
+        raise ValueError("Invalid android_calls budget fields")
+    result = dict(defaults, **options)
+    for key, cap in caps.items():
+        value=result[key]
+        if type(value) is not int or not (0 if key=="max_depth" else 1)<=value<=cap:
+            raise ValueError("Invalid android_calls budget")
+    if result["direction"] not in ("callers","callees","both"):
+        raise ValueError("Invalid android_calls direction")
+    return result
+
+
+def android_call_traversal(selected, definitions, references, budget, coverage):
+    """Breadth-first encoded-signature candidates, never runtime reachability."""
+    root_artifact, root = selected
+    by_id = {m["id"]:(a,m) for values in definitions.values() for a,m in values}
+    outgoing, incoming = {}, {}
+    for row in references:
+        outgoing.setdefault(row["callerMethodId"], []).append(row)
+        # Ambiguous definitions are evidence, not edges that can be followed.
+        if row["definitionCandidateCount"]==1:
+            target=row["definitionCandidates"][0]["methodId"]
+            incoming.setdefault(target, []).append(row)
+    result={"protocol":"cline-android-call-traversal/v1","status":"partial",
+        "binding":"encoded-signature-candidates-only","dispatchVerified":False,"observedExecution":False,
+        "budget":budget,"nodes":[],"edges":[],"limitsReached":[],
+        "scanLimitsReached":list(coverage["limitsReached"]),"indexedReferences":len(references),"maxIndexedReferences":4096,
+        "decodeFailures":coverage["decodeFailures"],"unsupportedInvokes":coverage["unsupportedInvokes"],
+        "limitations":["Breadth-first static reference candidates only, not a runtime call graph, path execution, verifier proof or whole-app completeness.",
+            "Ambiguous and external definitions stop expansion. Virtual/interface/super dispatch, reflection, custom/polymorphic invokes and dynamic loading remain unresolved. Caller discovery is limited to the covered scan."]}
+    def reached(reason):
+        if reason not in result["limitsReached"]:result["limitsReached"].append(reason)
+    def node(artifact, method, depth):
+        return dict({k:method[k] for k in ("id","classDescriptor","name","descriptor")},
+            byteFingerprint=method.get("byteFingerprint"),codeStatus="defined-code" if method.get("codeOffset") else "defined-without-code",
+            artifactId=artifact["id"],artifactSha256=artifact["sha256"],depth=depth)
+    result["nodes"].append(node(root_artifact,root,0))
+    scheduled={root["id"]}; seen_edges=set(); queue=[(root["id"],0)]
+    for current,depth in queue:
+        adjacent=[]
+        if budget["direction"] in ("callees","both"):
+            adjacent.extend((row,"callee") for row in outgoing.get(current,[]))
+        if budget["direction"] in ("callers","both"):
+            adjacent.extend((row,"caller") for row in incoming.get(current,[]))
+        for row,direction in adjacent:
+            if row["id"] in seen_edges:continue
+            if depth>=budget["max_depth"]:reached("depth-budget");continue
+            if len(result["edges"])>=budget["max_edges"]:reached("edge-budget");continue
+            seen_edges.add(row["id"])
+            candidates=row["definitionCandidates"]
+            target_id=candidates[0]["methodId"] if row["definitionCandidateCount"]==1 else None
+            next_id=row["callerMethodId"] if direction=="caller" else target_id
+            resolution="ambiguous-definition" if row["definitionCandidateCount"]>1 else "external-or-uncovered-definition" if target_id is None else "unique-covered-signature-candidate"
+            if next_id and direction=="caller":
+                _,caller=by_id[next_id]
+                if len(definitions.get((caller["classDescriptor"],caller["name"],caller["descriptor"]),[]))!=1:
+                    resolution="ambiguous-source-definition";next_id=None
+            if next_id:
+                if next_id in scheduled:resolution="already-scheduled-or-visited"
+                elif len(scheduled)>=budget["max_nodes"]:resolution="node-budget";reached("node-budget")
+                else:
+                    scheduled.add(next_id);queue.append((next_id,depth+1))
+                    artifact,method=by_id[next_id];result["nodes"].append(node(artifact,method,depth+1))
+            result["edges"].append(dict(row,sourceMethodId=row["callerMethodId"],targetMethodId=target_id,
+                discoveredFrom=current,traversalDirection=direction,depth=depth+1,resolution=resolution))
+    return result
+
+
+def android_method_calls(dexes, dex_data, selector, limit, traversal_options=None):
+    """One-hop references plus optional bounded traversal; never infer dispatch."""
+    budget = android_call_budget(traversal_options) if traversal_options is not None else None
+    indexed_references = []
     import importlib.metadata
     from androguard.core.dex import DEX
     from loguru import logger
@@ -396,6 +469,10 @@ def android_method_calls(dexes, dex_data, selector, limit):
             "dexFiles":0,"methods":0,"instructions":0,"codeBytes":0,"dexBytes":0,
             "limitsReached":[],"decodeFailures":0,"unsupportedInvokes":0}}
     if len(selected)!=1:
+        if budget is not None:
+            report["traversal"]={"protocol":"cline-android-call-traversal/v1","status":"not-started",
+                "reason":report["selectionStatus"],"budget":budget,"nodes":[],"edges":[],
+                "dispatchVerified":False,"observedExecution":False}
         return report
     selected_id = selected[0][1]["id"]
     report["selectedMethodId"] = selected_id
@@ -440,30 +517,35 @@ def android_method_calls(dexes, dex_data, selector, limit):
                         index=instruction.get_ref_kind()
                         if type(index) is not int or not 0<=index<len(methods): raise ValueError("method reference bounds")
                         target=methods[index]
-                        if method["id"]==selected_id or signature(target)==wanted:
-                            report["referenceCount"]+=1
-                            if len(report["references"])<coverage["maxReferences"]:
-                                candidates=definitions.get(signature(target),[])
-                                report["references"].append({"id":stable(artifact["id"],method["methodIndex"],position,"invoke"),
-                                    "artifactId":artifact["id"],"artifactSha256":artifact["sha256"],"callerMethodId":method["id"],
-                                    "caller":{k:method[k] for k in ("classDescriptor","name","descriptor","byteFingerprint")},
-                                    "bytecodeOffset":position,"opcode":instruction.get_name()[:64],
-                                    "referencedMethod":{k:target[k] for k in ("id","methodIndex","classDescriptor","name","descriptor")},
-                                    "relativeToSelection":"caller-and-callee" if method["id"]==selected_id and signature(target)==wanted else "callee" if method["id"]==selected_id else "caller",
-                                    "definitionCandidateCount":len(candidates),
-                                    "definitionCandidates":[{"methodId":m["id"],"artifactId":a["id"],"artifactSha256":a["sha256"]} for a,m in candidates[:4]],
-                                    "definitionCandidatesTruncated":len(candidates)>4,
-                                    "binding":"encoded-method-reference-only", "dispatchVerified":False,"executionObserved":False})
-                            else: reached("reference-budget")
+                        if budget is not None and len(indexed_references)>=4096:reached("traversal-index-budget")
+                        related=method["id"]==selected_id or signature(target)==wanted
+                        if related:report["referenceCount"]+=1
+                        if (related and len(report["references"])<coverage["maxReferences"]) or (budget is not None and len(indexed_references)<4096):
+                            candidates=definitions.get(signature(target),[])
+                            row={"id":stable(artifact["id"],method["methodIndex"],position,"invoke"),
+                                "artifactId":artifact["id"],"artifactSha256":artifact["sha256"],"callerMethodId":method["id"],
+                                "caller":{k:method[k] for k in ("classDescriptor","name","descriptor","byteFingerprint")},
+                                "bytecodeOffset":position,"opcode":instruction.get_name()[:64],
+                                "referencedMethod":{k:target[k] for k in ("id","methodIndex","classDescriptor","name","descriptor")},
+                                "relativeToSelection":"caller-and-callee" if method["id"]==selected_id and signature(target)==wanted else "callee" if method["id"]==selected_id else "caller" if signature(target)==wanted else "transitive-candidate",
+                                "definitionCandidateCount":len(candidates),
+                                "definitionCandidates":[{"methodId":m["id"],"artifactId":a["id"],"artifactSha256":a["sha256"]} for a,m in candidates[:4]],
+                                "definitionCandidatesTruncated":len(candidates)>4,
+                                "binding":"encoded-method-reference-only", "dispatchVerified":False,"executionObserved":False}
+                            if related and len(report["references"])<coverage["maxReferences"]:report["references"].append(row)
+                            if budget is not None and len(indexed_references)<4096:indexed_references.append(row)
+                        if related and report["referenceCount"]>coverage["maxReferences"]:reached("reference-budget")
                     position+=size
                 if position<method["instructionBytes"]: reached("incomplete-method-decode")
             except Exception:
                 coverage["decodeFailures"]+=1
             if "instruction-budget" in coverage["limitsReached"]: break
         if "instruction-budget" in coverage["limitsReached"]: break
+    if budget is not None:
+        report["traversal"]=android_call_traversal(selected[0],definitions,indexed_references,budget,coverage)
     report["referencesTruncated"] = len(report["references"])<report["referenceCount"]
     report["limitations"]=["Exact pool signatures and encoded invoke operands only; virtual/interface/super dispatch, reflection, custom/polymorphic invokes, dynamic loading and runtime execution remain unresolved.",
-        "Definition candidates preserve all covered DEX origins and ambiguity; one candidate is not a verified runtime binding. No transitive traversal, verifier/ART proof or whole-app completeness. Coverage is bounded and excludes rejected/uncovered artifacts."]
+        "Definition candidates preserve all covered DEX origins and ambiguity; one candidate is not a verified runtime binding. Optional traversal follows unique covered signature candidates only, not verifier/ART proof or whole-app completeness. Coverage is bounded and excludes rejected/uncovered artifacts."]
     return report
 
 
@@ -819,7 +901,7 @@ def investigate(request):
         status = "partial" if not selected or truncated[0] or len(selected) > limit else status
     if request["action"] == "android_method":
         try:
-            evidence["methodCalls"] = android_method_calls(dexes, dict(dex_data), selector, limit)
+            evidence["methodCalls"] = android_method_calls(dexes, dict(dex_data), selector, limit, options.get("android_calls"))
         except ImportError:
             evidence["methodCalls"] = {"protocol":"cline-android-method-calls/v1","status":"blocked","reason":"Androguard is not installed","observedExecution":False,"dispatchVerified":False}
         status = "partial"

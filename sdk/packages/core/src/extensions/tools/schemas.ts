@@ -204,6 +204,15 @@ export const ReverseEngineeringInputSchema = z.object({
 				})
 				.strict()
 				.optional(),
+			android_calls: z
+				.object({
+					max_depth: z.number().int().min(0).max(4).optional(),
+					max_nodes: z.number().int().min(1).max(64).optional(),
+					max_edges: z.number().int().min(1).max(200).optional(),
+					direction: z.enum(["callers", "callees", "both"]).optional(),
+				})
+				.strict()
+				.optional(),
 			native_calls: z
 				.object({
 					max_depth: z.number().int().min(0).max(4).optional(),

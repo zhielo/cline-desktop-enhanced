@@ -276,3 +276,89 @@ it("retains exact Android caller/callee evidence or an explicit missing-engine r
   expect(await readFile(target)).toEqual(bytes);
  } finally { vi.unstubAllEnvs(); await rm(dir,{recursive:true,force:true}); }
 });
+
+it("preserves bounded Android transitive traversal through the supervised public executor", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "android-traversal-"));
+	vi.stubEnv("CLINE_RE_CACHE_DIR", join(dir, "cache"));
+	try {
+		const f = JSON.parse(
+			await readFile(
+				join(scripts, "owned-android-call-traversal-fixture.json"),
+				"utf8",
+			),
+		);
+		const bytes = Buffer.from(f.cycle.base64, "base64"),
+			target = join(dir, "owned.dex");
+		await writeFile(target, bytes);
+		const request = {
+			operation: "trace_android_method",
+			target,
+			advanced_options: {
+				method: {
+					class_descriptor: "LCalls;",
+					name: "root",
+					descriptor: "()V",
+				},
+				android_calls: { max_depth: 4, direction: "callees" },
+			},
+		};
+		const execute = async (extra: Record<string, unknown> = {}) =>
+			JSON.parse(
+				await createReverseEngineeringExecutor()(
+					ReverseEngineeringInputSchema.parse({ ...request, ...extra }),
+					{} as never,
+				),
+			);
+		const result = await execute();
+		expect(result).toMatchObject({
+			status: "partial",
+			observedExecution: false,
+		});
+		if (result.stages.length === 1) {
+			expect(
+				result.stages[0].result.result.evidence.selectedCode[0].status,
+			).toBe("blocked");
+		} else {
+			const worker = result.stages[1].result.result,
+				calls = worker.evidence.methodCalls;
+			if (calls.status === "blocked")
+				expect(calls.reason).toBe("Androguard is not installed");
+			else {
+				expect(worker.input.sha256).toBe(f.cycle.sha256);
+				expect(calls.traversal).toMatchObject({
+					protocol: "cline-android-call-traversal/v1",
+					status: "partial",
+					dispatchVerified: false,
+					observedExecution: false,
+				});
+				expect(
+					calls.traversal.nodes.map((n: { name: string }) => n.name),
+				).toEqual(["root", "middle", "leaf", "external"]);
+				expect(calls.traversal.edges).toHaveLength(4);
+				expect(calls.traversal.edges[2].resolution).toBe(
+					"already-scheduled-or-visited",
+				);
+				const limited = await execute({
+					advanced_options: {
+						...request.advanced_options,
+						android_calls: { max_nodes: 1, direction: "callees" },
+					},
+				});
+				expect(
+					limited.stages[1].result.result.evidence.methodCalls.traversal,
+				).toMatchObject({
+					nodes: [{ name: "root" }],
+					limitsReached: ["node-budget"],
+				});
+			}
+		}
+		expect(await readFile(target)).toEqual(bytes);
+	} finally {
+		vi.unstubAllEnvs();
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+it.each([ {operation:"analyze"}, {operation:"advanced_analysis",advanced_action:"android_method_code"} ])("rejects Android traversal options on unrelated public actions %j",async(action)=>{
+ await expect(createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse({...action,advanced_options:{android_calls:{}}}),{} as never)).rejects.toThrow("android_calls budgets require Android method relationship analysis");
+});
