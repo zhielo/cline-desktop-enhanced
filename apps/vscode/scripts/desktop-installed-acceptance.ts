@@ -45,6 +45,18 @@ export async function openInstalledSavedSession(page: Pick<Page, "getByRole">, t
   await page.getByRole("button", { name: title }).first().click();
 }
 
+/** Read-only restart check. Never reconstruct or inject a lost device reference. */
+export function verifyInstalledSourceReferenceStorage(expected: unknown, raw: unknown) {
+  if (typeof raw !== "string" || raw.length > 32768)
+    throw new Error("Installed source reference missing after native restart; no reference restored or injected");
+  let actual: unknown;
+  try { actual = JSON.parse(raw); } catch {
+    throw new Error("Installed source reference malformed after native restart");
+  }
+  if (JSON.stringify(actual) !== JSON.stringify(expected))
+    throw new Error("Installed source reference changed across native restart; no fallback selection allowed");
+}
+
 export function startAcceptanceProcess(
   executable: string,
   args: string[],
@@ -1098,7 +1110,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
     async function runOwnedAdvanced(request:Record<string,unknown>) {
       const plan=await rpc<{id:string;requestHash:string;requirements:string[];request:Record<string,unknown>}>(page,"prepare_analysis_task",{...ownedPatchArgs,kind:"static",request});
       const approval=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...ownedPatchArgs,planId:plan.id,requestHash:plan.requestHash,requirements:plan.requirements});
-      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;mode?:string;endpointReachableInSelectedGraph?:boolean;edges?:unknown[];comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{status:string}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
+      return rpc<{result:{published:boolean;previewSha256:string;projectSha256?:string;sourceUnchanged?:boolean;validation?:string;outputSha256?:string;batchPreviewSha256?:string;status?:string;mode?:string;endpointReachableInSelectedGraph?:boolean;edges?:unknown[];comparison?:{changed:string[]};resolvedEvidence?:{resolved:{name:string;version:string}[]};result?:{status:string;evidence:{boundaryAgreement:boolean;rangeSha256:string;decoders:{engine:string;version:string;decodedBytes:number}[]}};results?:{status:string}[];verifiedStageIds?:string[];remainingStageIds?:string[];witnesses?:{sourceId:string;sinkId:string;route:string[]}[];observedExecution?:boolean;selectedFunction?:{sha256:string;text:string};conclusion?:string;executed?:boolean;enginePreflight?:string;batchDraft?:{stages:{request:Record<string,unknown>}[]};stages?:{id:string;dependsOn:string[]}[]};plan:{id:string;status:string;candidateOutcome?:{operation:string;evidence:string;outputSha256?:string;publication?:string;checks:{id:string;status:string}[]}}}>(page,"run_static_analysis",{...ownedPatchArgs,planId:plan.id,executionToken:approval.executionToken,input:plan.request});
     }
     const previewRequest={operation:"preview_smali_patch",target:ownedSmaliSource,output_file:ownedSmaliOutput,smali_patch:ownedPatch,timeout_ms:120000};
     const ownedPreview=await runOwnedAdvanced(previewRequest);
@@ -1120,6 +1132,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(projectPreview.plan.status!=="completed"||projectPreview.result.executed!==false||projectPreview.result.published||!projectPreview.result.projectSha256)throw new Error("Installed project preview failed or wrote output");
     const projectApplied=await runOwnedAdvanced({...projectPreviewRequest,operation:"build_android_candidate",android_project_patch:{...ownedProjectPatch,expected_project_sha256:projectPreview.result.projectSha256,preview_sha256:projectPreview.result.previewSha256}});
     if(projectApplied.plan.status!=="completed"||projectApplied.result.status!=="completed"||!projectApplied.result.published||!projectApplied.result.sourceUnchanged||!projectApplied.result.outputSha256||!["assemble-smali","assemble-smali_classes2","rebuild-apk"].every(id=>projectApplied.result.stages?.some(stage=>stage.id===id))||await readFile(join(ownedProjectSmali,"Sample.smali"),"utf8")!==ownedSmaliText)throw new Error("Installed approved Android project pipeline failed or altered its source");
+    const projectOutcome = projectApplied.plan.candidateOutcome;
+    if (projectOutcome?.operation !== "build_android_candidate" || projectOutcome.evidence !== "bounded-checks-passed" ||
+        projectOutcome.outputSha256 !== projectApplied.result.outputSha256 || projectOutcome.publication !== "new-unsigned-candidate" ||
+        projectOutcome.checks.map(c=>c.id).join(",") !== "patch-0,assemble-smali,assemble-smali_classes2,rebuild-apk" ||
+        projectOutcome.checks.some(c=>c.status!=="completed"))
+      throw new Error("Installed real Android project build did not retain its bounded unsigned candidate outcome");
     stages.push("installed-approved-android-project-patch-assemble-rebuild-originals-preserved");
 
     const batchBinary=join(workspace,"owned-candidate-input.bin"),batchAst=join(workspace,"owned-candidate-input.ts"),batchManifest=join(workspace,"owned-candidate-batch.json");
@@ -1622,6 +1640,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
     await stop();
     page = await launch();
+    const restartedSourceReference = await acceptanceAction("owned-source-reference-after-restart", () =>
+      page.evaluate((key) => localStorage.getItem(key), savedSourceReference[0].key), 30000);
+    verifyInstalledSourceReferenceStorage(savedSourceReference[0].value, restartedSourceReference);
     await settings(page, "General");
     const persisted = await rpc<{ customAiInstructions?: string }>(
       page,
@@ -1788,6 +1809,12 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		const reason = (error instanceof Error ? error.message : String(error))
 			.replace(/approval_token=[^&\s]+/g, "approval_token=[REDACTED]")
       .slice(0, 2000);
+    // Fixed fixture-owned page only. Capture the actual failed UI before native teardown.
+    try {
+      const failedPage = browser?.contexts().flatMap(context=>context.pages()).find(candidate=>/tauri\.localhost|tauri:\/\/localhost/.test(candidate.url()));
+      if (failedPage && !failedPage.isClosed()) await failedPage.screenshot({path:join(evidence,"failure.png"),timeout:5000});
+    }
+    catch { /* A closed renderer must not replace the original acceptance failure. */ }
 		// Read only two fixed fixture-owned logs, each at most 64 KiB, redacted.
     let hubStartupDiagnostic = "";
     for (const [leaf, evidenceLeaf] of [["code.log", "owned-backend-tail.log"],

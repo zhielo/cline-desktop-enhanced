@@ -168,6 +168,7 @@ export async function androidProjectCandidate(
 		extra: Record<string, unknown> = {},
 	) => ({
 		schemaVersion: 1,
+		protocol: "cline-android-project-candidate/v1",
 		operation: input.operation,
 		status,
 		effect:
@@ -175,6 +176,7 @@ export async function androidProjectCandidate(
 				? "plan-only"
 				: "candidate-write",
 		projectSha256: inventory.sha256,
+		smaliRoots: inventory.smaliRoots,
 		previewSha256,
 		outputFile: output,
 		published,

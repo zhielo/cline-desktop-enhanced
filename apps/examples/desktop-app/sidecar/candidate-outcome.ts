@@ -1,3 +1,4 @@
+import { summarizeAndroidCandidateBuild } from "./candidate-build-outcome";
 import { digest } from "@cline/core";
 import { z } from "zod";
 import type { CandidateOutcome } from "../shared/candidate-outcome";
@@ -42,6 +43,8 @@ export function summarizeCandidateOutcome(
 	plan: Basis,
 	result: unknown,
 ): CandidateOutcome | undefined {
+	if (plan.operation === "build_android_candidate")
+		return summarizeAndroidCandidateBuild(plan, result);
 	if (
 		plan.operation !== "validate_candidate" &&
 		plan.operation !== "review_candidate_changes"

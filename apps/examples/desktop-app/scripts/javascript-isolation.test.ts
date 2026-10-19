@@ -283,6 +283,11 @@ describe.skipIf(!windows)(
 				} finally {
 					clearTimeout(timer);
 				}
-			}, 30000);
+				// Outer hang guard, not the target deadline: integrity verification and
+				// staging precede launch; then the host has timeoutMs + 20s, cancellation
+				// has a 10s forced-stop grace, and controller profile cleanup has 10s.
+				// A 30s test timeout can interrupt valid teardown (observed on Windows).
+				// Production execution/cancel/cleanup budgets remain unchanged.
+			}, 90000);
 	},
 );

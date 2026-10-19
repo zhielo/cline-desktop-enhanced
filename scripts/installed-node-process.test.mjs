@@ -19,6 +19,7 @@ import {
 	waitForInstalledBackendEndpoint,
 	verifyInstalledAnalysisProfile,
  openInstalledSavedSession,
+ verifyInstalledSourceReferenceStorage,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("owned native tree is stopped before CDP can tear down its WebView children", async () => {
@@ -398,4 +399,16 @@ test("saved-session navigation exits Settings before looking for a hidden sessio
  assert.equal(lookups,1,"a failed navigation must not fall back to an RPC or force click");
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
  assert.equal(driver.split("await openInstalledSavedSession(page, /Installer owned session/);").length-1,2);
+});
+
+
+test("restart source reference check never injects or accepts lost or changed device metadata", () => {
+ const saved={version:1,selection:{receiptId:"00000000-0000-4000-8000-000000000001",selector:{kind:"artifact",path:"owned.ts"}}};
+ assert.doesNotThrow(()=>verifyInstalledSourceReferenceStorage(saved,JSON.stringify(saved)));
+ for(const raw of [null,undefined,"", "{", "x".repeat(32769), JSON.stringify({...saved,version:2}), JSON.stringify({...saved,preview:"MUST_NOT_RESTORE"}), JSON.stringify({version:1,selection:{...saved.selection,receiptId:"other"}})])
+  assert.throws(()=>verifyInstalledSourceReferenceStorage(saved,raw),/Installed source reference/);
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.ok(driver.indexOf('"owned-source-reference-after-restart"') < driver.indexOf('const restoredSource='));
+ assert.ok(driver.includes('join(evidence,"failure.png")'));
+ assert.ok(driver.includes('projectApplied.plan.candidateOutcome'));
 });

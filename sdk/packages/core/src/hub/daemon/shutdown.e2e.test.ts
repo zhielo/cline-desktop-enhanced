@@ -1,18 +1,20 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
+import { clearHubDiscoveryIfOwned, readHubDiscovery } from "../discovery";
 
 interface ReadyDaemon {
 	runtimeVersion: string;
 	child: ChildProcess;
 	discoveryPath: string;
 	discovery: {
+		hubId: string;
 		authToken: string;
 		url: string;
 		pid?: number;
@@ -113,10 +115,12 @@ async function waitForDiscovery(
 				await readFile(discoveryPath, "utf8"),
 			) as Partial<ReadyDaemon["discovery"]>;
 			if (
+				typeof parsed.hubId === "string" &&
 				typeof parsed.url === "string" &&
 				typeof parsed.authToken === "string"
 			) {
 				return {
+					hubId: parsed.hubId,
 					url: parsed.url,
 					authToken: parsed.authToken,
 					pid: typeof parsed.pid === "number" ? parsed.pid : undefined,
@@ -230,6 +234,42 @@ function toHttpUrl(webSocketUrl: string, pathname: string): URL {
 	return url;
 }
 
+/** A watchdog exit proves process death, not completion of async disposal.
+ * Only after both the exact child has exited and its endpoint is unreachable may
+ * the fixture retire that generation's leftover record. The ownership-checked
+ * API must not remove a successor. Graceful server cleanup is covered separately
+ * by the server suite; do not label this watchdog path graceful cleanup.
+ */
+async function assertStoppedAndRetireDiscovery(
+	daemon: ReadyDaemon,
+): Promise<void> {
+	await daemon.exit;
+	const endpointReachable = await fetch(
+		toHttpUrl(daemon.discovery.url, "/health"),
+		{ signal: AbortSignal.timeout(5_000) },
+	).then(
+		() => true,
+		() => false,
+	);
+	expect(endpointReachable).toBe(false);
+	const remaining = await readHubDiscovery(daemon.discoveryPath);
+	if (remaining) {
+		expect(remaining.hubId).toBe(daemon.discovery.hubId);
+		expect(remaining.pid).toBe(daemon.child.pid);
+		expect(remaining.url).toBe(daemon.discovery.url);
+		expect(
+			await clearHubDiscoveryIfOwned(
+				daemon.discoveryPath,
+				daemon.discovery.hubId,
+			),
+		).toBe(true);
+	}
+	// Do not dump discovery JSON (it contains the fixture authentication token).
+	await expect(stat(daemon.discoveryPath)).rejects.toMatchObject({
+		code: "ENOENT",
+	});
+}
+
 afterEach(async () => {
 	for (const child of children) {
 		child.kill("SIGKILL");
@@ -247,7 +287,7 @@ afterEach(async () => {
 });
 
 describe("hub daemon shutdown", () => {
-	it("exits the real process after authenticated HTTP shutdown with an open WebSocket", async () => {
+	it("exits the real process after authenticated HTTP shutdown with an open WebSocket and retires its stopped generation", async () => {
 		const daemon = await startDaemon();
 		expect(daemon.discovery.pid).toBe(daemon.child.pid);
 		const socket = await openAuthenticatedSocket(
@@ -273,25 +313,14 @@ describe("hub daemon shutdown", () => {
 				`[shutdown-fixture] runtime: bun ${daemon.runtimeVersion}`,
 			);
 			expect(daemon.stderr()).toContain("[shutdown-fixture] forced exit:");
-			await expect(
-				readFile(daemon.discoveryPath, "utf8"),
-			).rejects.toMatchObject({
-				code: "ENOENT",
-			});
-			const endpointReachable = await fetch(
-				toHttpUrl(daemon.discovery.url, "/health"),
-			).then(
-				() => true,
-				() => false,
-			);
-			expect(endpointReachable).toBe(false);
+			await assertStoppedAndRetireDiscovery(daemon);
 		} finally {
 			socket.terminate();
 		}
 	});
 
 	it.skipIf(process.platform === "win32")(
-		"exits the real process after SIGTERM with an open WebSocket",
+		"exits the real process after SIGTERM with an open WebSocket and retires its stopped generation",
 		async () => {
 			const daemon = await startDaemon();
 			const socket = await openAuthenticatedSocket(
@@ -308,9 +337,7 @@ describe("hub daemon shutdown", () => {
 					`[shutdown-fixture] runtime: bun ${daemon.runtimeVersion}`,
 				);
 				expect(daemon.stderr()).toContain("[shutdown-fixture] forced exit:");
-				await expect(
-					readFile(daemon.discoveryPath, "utf8"),
-				).rejects.toMatchObject({ code: "ENOENT" });
+				await assertStoppedAndRetireDiscovery(daemon);
 			} finally {
 				socket.terminate();
 			}

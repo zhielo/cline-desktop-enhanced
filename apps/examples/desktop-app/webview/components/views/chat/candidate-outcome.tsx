@@ -26,6 +26,17 @@ export function CandidateOutcomeCard({
 					Verification receipt SHA256: {outcome.receiptSha256}
 				</p>
 			) : null}
+			{outcome.outputSha256 ? (
+				<p className="break-all">
+					Published candidate SHA256: {outcome.outputSha256}
+				</p>
+			) : null}
+			{outcome.publication ? (
+				<p>
+					Publication: {outcome.publication} — signing and device checks remain
+					separate.
+				</p>
+			) : null}
 			<ul>
 				{outcome.checks.map((c) => (
 					<li key={c.id}>

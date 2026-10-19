@@ -126,3 +126,27 @@ it("shows retained failed evidence in the ledger and exports only on explicit cl
 		),
 	).toBe(false);
 });
+it("shows unsigned build identity without adding verification or execution actions", async () => {
+	const invoke = vi.spyOn(desktopClient, "invoke");
+	await act(async () =>
+		root.render(
+			<CandidateOutcomeCard
+				status="completed"
+				outcome={{
+					...outcome("bounded-checks-passed"),
+					operation: "build_android_candidate",
+					scope: "android-project-build",
+					outputSha256: "c".repeat(64),
+					publication: "new-unsigned-candidate",
+				}}
+			/>,
+		),
+	);
+	expect(container.textContent).toContain("Published candidate SHA256");
+	expect(container.textContent).toContain("new-unsigned-candidate");
+	expect(container.textContent).toContain(
+		"signing and device checks remain separate",
+	);
+	expect(container.querySelector("button")).toBeNull();
+	expect(invoke).not.toHaveBeenCalled();
+});
