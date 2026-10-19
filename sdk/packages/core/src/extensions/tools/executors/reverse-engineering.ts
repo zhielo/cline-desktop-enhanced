@@ -2125,7 +2125,9 @@ def main():
         raise RuntimeError("Hex-Rays unavailable for the loaded processor; configure its licensed decompiler in Setup Center")
     cline_phase("decompiler-initialized")
     cline_phase("auto-analysis-waiting")
+    cline_check_stop()
     if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
+    cline_check_stop()
     cline_phase("analysis-complete")
     cline_phase("decompilation-started")
     decompiled = 0
@@ -2181,7 +2183,9 @@ exit_code = 0
 try:
     cline_phase("input-loaded")
     cline_phase("auto-analysis-waiting")
+    cline_check_stop()
     if not ida_auto.auto_wait(): raise RuntimeError("IDA auto-analysis cancelled or incomplete")
+    cline_check_stop()
     cline_phase("analysis-complete")
     cline_phase("database-saving")
     if not ida_loader.save_database(idc.get_idb_path(), ida_loader.DBFL_COMP):
@@ -3748,11 +3752,11 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				input.acknowledge_external_output,
 			);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
-		const timeoutMs = input.timeout_ms ?? DEFAULT_IDA_TIMEOUT_MS;
+		const timeoutMs = input.timeout_ms ?? (engine === "ida" ? DEFAULT_IDA_TIMEOUT_MS : 3_600_000);
 		if (engine === "ida" && !gui)
 			context.emitUpdate?.({
 				stream: "stdout",
-				chunk: `[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs / 1000)}s, phase budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? DEFAULT_IDA_PHASE_TIMEOUT_MS, timeoutMs) / 1000)}s. Missing Python packages do not diagnose IDA.\n`,
+				chunk: `[IDA progress] Preflight: executable identity and private analysis lease; process deadline ${Math.ceil(timeoutMs / 1000)}s, auto-analysis budget ${Math.ceil(Math.min(input.ida_phase_timeout_ms ?? DEFAULT_IDA_PHASE_TIMEOUT_MS, timeoutMs) / 1000)}s from phase entry; overall includes startup/save/export. Explicit shorter process deadlines still cap analysis. Missing Python packages do not diagnose IDA.\n`,
 			});
 		const engineIdentity = await toolIdentity(engine, available[engine]);
 		const fingerprintFile = async (file: string | undefined) => {
