@@ -736,6 +736,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
     if(await preTaskWorkspace.getByPlaceholder("Workspace-relative or absolute path",{exact:true}).inputValue()!==sharedPath+".dex")throw new Error("Installed Analyze pane lost shared path metadata");
     await preTaskWorkspace.getByRole("button",{name:"App analysis",exact:true}).click();
     if(await preTaskWorkspace.getByLabel("JavaScript analysis target",{exact:true}).inputValue()!==sharedPath+".dex")throw new Error("Installed source pane lost shared path metadata");
+    if(!await preTaskWorkspace.getByRole("button",{name:"Inspect static sources",exact:true}).isDisabled())throw new Error("Installed draft source inspection must require an existing session");
+    if(await preTaskWorkspace.getByRole("button",{name:"Review Inspector plan",exact:true}).count())throw new Error("Installed draft must not expose runtime authority");
     await preTaskWorkspace.getByRole("button",{name:"AI commands",exact:true}).click();
     await advancedPanel.getByLabel("Advanced command",{exact:true}).selectOption("identify_artifact");
     const sharedCommand=advancedPanel.getByLabel("Exact command parameters (JSON)",{exact:true});

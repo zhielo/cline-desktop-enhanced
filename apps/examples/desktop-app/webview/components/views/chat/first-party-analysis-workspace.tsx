@@ -147,8 +147,39 @@ export function FirstPartyAnalysisWorkspace({
 		inspectorRevision.current++;
 		setInspectorPlan(null);
 	}, [selected, hybridQuestion, hybridKind, hybridTaskId, status?.mode]);
-	if (!sessionId || environmentId !== "local")
+	const targetInput = (
+		<input
+			aria-label="JavaScript analysis target"
+			className="rounded border bg-background p-2 text-xs"
+			value={target}
+			onChange={(e) => setTarget(e.target.value)}
+			placeholder="Workspace-relative artifact or folder"
+		/>
+	);
+	if (environmentId !== "local")
 		return <p>Open an existing local session to use first-party analysis.</p>;
+	if (!sessionId)
+		return (
+			<section
+				className="space-y-3 p-3"
+				aria-label="First-party Analysis Workspace"
+			>
+				<h3 className="font-semibold">First-party Analysis Workspace</h3>
+				<p className="text-xs text-muted-foreground">
+					Path selection only. Open an existing local session to inspect sources
+					or use saved evidence. Selecting a path does not execute analysis,
+					create a session or enable runtime tools.
+				</p>
+				{targetInput}
+				<button
+					type="button"
+					disabled
+					className="rounded border px-3 py-2 text-xs disabled:opacity-50"
+				>
+					Inspect static sources
+				</button>
+			</section>
+		);
 	const run = async () => {
 		setRunning(true);
 		setError("");
@@ -317,13 +348,7 @@ export function FirstPartyAnalysisWorkspace({
 				existing tools.
 			</p>
 			<div className="flex flex-wrap gap-2">
-				<input
-					aria-label="JavaScript analysis target"
-					className="rounded border bg-background p-2 text-xs"
-					value={target}
-					onChange={(e) => setTarget(e.target.value)}
-					placeholder="Workspace-relative artifact or folder"
-				/>
+				{targetInput}
 				<input
 					aria-label="JavaScript comparison target"
 					className="rounded border bg-background p-2 text-xs"

@@ -353,21 +353,21 @@ it("carries the owning session through advanced candidate preparation, approval 
  for (const command of ["prepare_analysis_task", "approve_analysis_task", "run_static_analysis"])
   expect(invoke).toHaveBeenCalledWith(command, expect.objectContaining({ sessionId: "owning-chat", environmentId: "local", cwd: "C:\\owned" }));
 });
-it("shares an artifact across existing panes but changes AI JSON only explicitly",async()=>{
+it.each([undefined, "shared-session"])("shares an artifact in fresh or attached session %s but changes AI JSON only explicitly",async(sessionId)=>{
  const invoke=vi.spyOn(desktopClient,"invoke").mockImplementation(async(command:string)=>{
   if(command==="list_analysis_tasks" || command==="binary_triage_history")return [];
   if(command==="first_party_analysis_status")return {mode:"off",receipts:[],readiness:{}};
   if(command==="analysis_command_catalog")return {entries:[{command:"identify_artifact",route:"static-review",effect:"read",availability:"implemented",limitations:"bounded"}],unavailable:[],limitations:[]};
   return {};
  });
- await act(async()=>root.render(<AnalysisWorkbench cwd="/owned-shared" environmentId="local" sessionId="shared-session"/>));
+ await act(async()=>root.render(<AnalysisWorkbench cwd="/owned-shared" environmentId="local" sessionId={sessionId}/>));
  const shared=container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!;
  await setInput(shared,"/owned-shared/app.apk");
  await clickText("Android tools");expect(container.querySelector<HTMLInputElement>('input[placeholder="app.apk, classes.dex, or decoded-project"]')!.value).toBe("/owned-shared/app.apk");
  await clickText("App analysis");expect(container.querySelector<HTMLInputElement>('input[aria-label="JavaScript analysis target"]')!.value).toBe("/owned-shared/app.apk");
  await clickText("AI commands");const json=container.querySelector<HTMLTextAreaElement>("textarea")!;expect(JSON.parse(json.value).target).toBe("");
  await clickText("Use shared artifact in command JSON");expect(JSON.parse(json.value).target).toBe("/owned-shared/app.apk");
- expect(invoke.mock.calls.some(([c])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|first_party_analysis_inspect)$/.test(c))).toBe(false);
+ expect(invoke.mock.calls.some(([c])=>/^(prepare_analysis_task|approve_analysis_task|run_static_analysis|first_party_analysis_inspect|first_party_analysis_run)$/.test(c))).toBe(false);
  await act(async()=>root.render(<AnalysisWorkbench cwd="/other-workspace" environmentId="local"/>));expect(container.querySelector<HTMLInputElement>('input[aria-label="Shared artifact path"]')!.value).toBe("");
 });
 it("does not carry an in-flight reviewed plan across workspace scopes",async()=>{
