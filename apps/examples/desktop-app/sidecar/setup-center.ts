@@ -549,6 +549,12 @@ async function ghidraIdentity(home: string, includeEnvironment = true) {
 	const hash = createHash("sha256");
 	for (const file of [
 		executable,
+		join(
+			home,
+			"support",
+			process.platform === "win32" ? "launch.bat" : "launch.sh",
+		),
+		join(home, "support", "LaunchSupport.jar"),
 		join(home, "Ghidra", "application.properties"),
 		join(home, "support", "launch.properties"),
 	]) {
@@ -559,8 +565,22 @@ async function ghidraIdentity(home: string, includeEnvironment = true) {
 		hash.update(await readFile(file));
 	}
 	if (includeEnvironment) {
-		hash.update(process.env.JAVA_HOME ?? "");
-		hash.update(process.env.PATH ?? "");
+		// These inputs affect Java discovery, JVM startup and headless execution.
+		// Length-delimited JSON prevents adjacent values from sharing a fingerprint.
+		hash.update(
+			JSON.stringify(
+				[
+					"JAVA_HOME",
+					"PATH",
+					"GHIDRA_JAVA_OPTIONS",
+					"GHIDRA_HEADLESS_JAVA_OPTIONS",
+					"GHIDRA_HEADLESS_MAXMEM",
+					"JAVA_TOOL_OPTIONS",
+					"JDK_JAVA_OPTIONS",
+					"_JAVA_OPTIONS",
+				].map((name) => [name, process.env[name] ?? null]),
+			),
+		);
 	}
 	return hash.digest("hex");
 }
