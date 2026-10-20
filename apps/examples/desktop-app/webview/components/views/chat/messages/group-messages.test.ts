@@ -768,7 +768,7 @@ describe("buildUserRunCountMap", () => {
 			role: "user",
 			content: "checkpointed",
 			meta: {
-				checkpoint: { ref: "abc", createdAt: 1, runCount: 3, kind: "auto" },
+				checkpoint: { ref: "abc", createdAt: 1, runCount: 3, kind: "stash" },
 			},
 		});
 

@@ -9,7 +9,7 @@ import {
 	ToolActivityTrigger,
 } from "@cline/ui/components/agent-chat";
 import { ToolFileDiff } from "@cline/ui/components/agent-chat/tool-diff";
-import type { ToolLabelPart } from "@cline/ui/components/agent-chat/tool-summary";
+import type { ToolLabelPart, ToolSummaryItem } from "@cline/ui/components/agent-chat/tool-summary";
 import Ansi from "ansi-to-react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -131,12 +131,14 @@ const ToolCallRow = memo(function ToolCallRow({
 			toolSessionId &&
 			onProceedWhileRunning,
 	);
-	const fileDiffs = summary.items.flatMap((item, index) => {
+	type FileItem = Extract<ToolSummaryItem,{type:"file"}>;
+ type FileDiff = {key:string;item:FileItem} & ({kind:"rich";hunk:{oldText:string;newText:string}}|{kind:"text";hunk:null});
+ const fileDiffs = summary.items.flatMap<FileDiff>((item, index) => {
 		if (item.type !== "file") return [];
 		const hunks =
 			item.hunks ??
 			(item.newText !== undefined
-				? [{ oldText: item.oldText, newText: item.newText }]
+				? [{ oldText: item.oldText ?? "", newText: item.newText }]
 				: null);
 		if (hunks) {
 			return hunks.map((hunk, hunkIndex) => ({

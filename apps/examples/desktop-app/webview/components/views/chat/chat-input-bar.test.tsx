@@ -198,9 +198,9 @@ async function renderVoiceComposer({
 	attachments?: Parameters<typeof ChatInputBar>[0]["attachments"];
 	model?: string;
 	hasRunningAgents?: boolean;
-	onAbort?: ReturnType<typeof vi.fn>;
-	onPromptInputChange?: ReturnType<typeof vi.fn>;
-	onSend?: ReturnType<typeof vi.fn>;
+	onAbort?: Parameters<typeof ChatInputBar>[0]["onAbort"];
+	onPromptInputChange?: Parameters<typeof ChatInputBar>[0]["onPromptInputChange"];
+	onSend?: Parameters<typeof ChatInputBar>[0]["onSend"];
 	prompt?: string;
 	promptVersion?: number;
 	status?: ChatSessionStatus;
@@ -215,13 +215,13 @@ async function renderVoiceComposer({
 	await act(async () => {
 		root.render(
 			<WorkspaceProvider value={workspaceValue}>
-				<ChatInputBar
+				<ChatInputBar environmentId="local"
 					readOnly={readOnly}
 					executionTarget={executionTarget}
 					attachments={attachments}
 					gitBranch="main"
 					hasRunningAgents={hasRunningAgents}
-					mode="act"
+
 					model={model}
 					onAbort={onAbort}
 					onAttachFiles={onAttachFiles}
@@ -230,7 +230,7 @@ async function renderVoiceComposer({
 						current: "main",
 						branches: ["main"],
 					}))}
-					onModeChange={vi.fn()}
+
 					onModelChange={vi.fn()}
 					onPermissionProfileChange={onPermissionProfileChange}
 					onPromptInputChange={onPromptInputChange}
@@ -575,7 +575,7 @@ describe("ChatInputBar", () => {
 						executionTarget="cloud"
 						gitBranch="no-git"
 						hasActiveSession
-						mode="act"
+
 						model="claude-test"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -584,7 +584,7 @@ describe("ChatInputBar", () => {
 							current: "no-git",
 							branches: [],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={onModelChange}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={onProviderChange}
@@ -709,7 +709,7 @@ describe("ChatInputBar", () => {
 							executionTarget="cloud"
 							gitBranch="no-git"
 							hasActiveSession={false}
-							mode="act"
+
 							model="test-model"
 							onAbort={vi.fn()}
 							onAttachFiles={vi.fn()}
@@ -718,7 +718,7 @@ describe("ChatInputBar", () => {
 								current: "no-git",
 								branches: [],
 							}))}
-							onModeChange={vi.fn()}
+
 							onModelChange={vi.fn()}
 							onPromptInputChange={vi.fn()}
 							onProviderChange={vi.fn()}
@@ -792,10 +792,10 @@ describe("ChatInputBar", () => {
 						selectChat: vi.fn(async () => true),
 					}}
 				>
-					<ChatInputBar
+					<ChatInputBar environmentId="local"
 						attachments={[]}
 						gitBranch="main"
-						mode="act"
+
 						model="test-model"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -804,7 +804,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}
@@ -1337,7 +1337,7 @@ describe("ChatInputBar", () => {
 							attachments={[]}
 							environmentId="local"
 							gitBranch="main"
-							mode="act"
+
 							model="test-model"
 							onAbort={vi.fn()}
 							onAttachFiles={vi.fn()}
@@ -1346,7 +1346,7 @@ describe("ChatInputBar", () => {
 								current: "main",
 								branches: ["main"],
 							}))}
-							onModeChange={vi.fn()}
+
 							onModelChange={vi.fn()}
 							onPromptInputChange={vi.fn()}
 							onProviderChange={vi.fn()}
@@ -1520,7 +1520,7 @@ describe("ChatInputBar", () => {
 						attachments={[]}
 						environmentId="local"
 						gitBranch="main"
-						mode="act"
+
 						model="test-model"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -1529,7 +1529,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}
@@ -1613,7 +1613,7 @@ describe("ChatInputBar", () => {
 						attachments={[]}
 						environmentId="local"
 						gitBranch="main"
-						mode="act"
+
 						model="test-model"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -1623,7 +1623,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}
@@ -1788,10 +1788,10 @@ describe("ChatInputBar", () => {
 						selectChat: vi.fn(async () => true),
 					}}
 				>
-					<ChatInputBar
+					<ChatInputBar environmentId="local"
 						attachments={[]}
 						gitBranch="main"
-						mode="act"
+
 						model="test-model"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -1800,7 +1800,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}
@@ -1887,10 +1887,10 @@ describe("ChatInputBar", () => {
 						selectChat: vi.fn(async () => true),
 					}}
 				>
-					<ChatInputBar
+					<ChatInputBar environmentId="local"
 						attachments={[]}
 						gitBranch="main"
-						mode="act"
+
 						model="old-session-model"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -1899,7 +1899,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}
@@ -1999,10 +1999,10 @@ describe("ChatInputBar", () => {
 		await act(async () => {
 			root.render(
 				<WorkspaceProvider value={workspaceValue}>
-					<ChatInputBar
+					<ChatInputBar environmentId="local"
 						attachments={[]}
 						gitBranch="main"
-						mode="act"
+
 						model="anthropic/claude-opus-5"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -2011,7 +2011,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}
@@ -2086,10 +2086,10 @@ describe("ChatInputBar", () => {
 		await act(async () => {
 			root.render(
 				<WorkspaceProvider value={workspaceValue}>
-					<ChatInputBar
+					<ChatInputBar environmentId="local"
 						attachments={[]}
 						gitBranch="main"
-						mode="act"
+
 						model="anthropic/claude-opus-5"
 						onAbort={vi.fn()}
 						onAttachFiles={vi.fn()}
@@ -2098,7 +2098,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onOpenModelSettings={onOpenModelSettings}
 						onPromptInputChange={vi.fn()}
@@ -2153,18 +2153,18 @@ describe("ChatInputBar", () => {
 			hasActiveSession?: boolean;
 			model: string;
 			provider: string;
-			onModelChange?: ReturnType<typeof vi.fn>;
-			onProviderChange?: ReturnType<typeof vi.fn>;
+			onModelChange?: ReturnType<typeof vi.fn<(...args: string[]) => void>>;
+			onProviderChange?: ReturnType<typeof vi.fn<(...args: string[]) => void>>;
 		}) => {
 			await act(async () => {
 				root.render(
 					<WorkspaceProvider value={workspaceValue}>
-						<ChatInputBar
+						<ChatInputBar environmentId="local"
 							attachments={[]}
 							executionTarget={props.executionTarget}
 							gitBranch="main"
 							hasActiveSession={props.hasActiveSession}
-							mode="act"
+
 							model={props.model}
 							onAbort={vi.fn()}
 							onAttachFiles={vi.fn()}
@@ -2173,7 +2173,7 @@ describe("ChatInputBar", () => {
 								current: "main",
 								branches: ["main"],
 							}))}
-							onModeChange={vi.fn()}
+
 							onModelChange={props.onModelChange ?? vi.fn()}
 							onPromptInputChange={vi.fn()}
 							onProviderChange={props.onProviderChange ?? vi.fn()}
@@ -2380,7 +2380,7 @@ describe("ChatInputBar", () => {
 				// The app stays open, but this picker has to load live models again.
 				await act(async () => root.unmount());
 				root = createRoot(container);
-				const initial = getInitialChatConfig();
+				const initial = getInitialChatConfig("local");
 				expect(initial).toMatchObject({
 					provider: "cline-pass",
 					model: kimi.id,
@@ -2616,10 +2616,10 @@ describe("ChatInputBar", () => {
 						selectChat: vi.fn(async () => true),
 					}}
 				>
-					<ChatInputBar
+					<ChatInputBar environmentId="local"
 						attachments={[]}
 						gitBranch="main"
-						mode="act"
+
 						model="test-model"
 						onAbort={vi.fn()}
 						onAttachFiles={onAttachFiles}
@@ -2628,7 +2628,7 @@ describe("ChatInputBar", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={onPromptInputChange}
 						onProviderChange={vi.fn()}
@@ -2757,7 +2757,7 @@ describe("ChatInputBar token ring", () => {
 						attachments={[]}
 						environmentId="local"
 						gitBranch="main"
-						mode="act"
+
 						model="test-model"
 						modelContextWindow={modelContextWindow}
 						onAbort={vi.fn()}
@@ -2767,7 +2767,7 @@ describe("ChatInputBar token ring", () => {
 							current: "main",
 							branches: ["main"],
 						}))}
-						onModeChange={vi.fn()}
+
 						onModelChange={vi.fn()}
 						onPromptInputChange={vi.fn()}
 						onProviderChange={vi.fn()}

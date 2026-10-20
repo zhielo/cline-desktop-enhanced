@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
 
 const roots: string[] = [];
@@ -693,8 +693,86 @@ it("keeps Android project preview Inspect and binds a separately approved build 
 	).rejects.toThrow("exact request envelope");
 });
 
-it("project-file review exposes broad read scope and exact inventories without enabling writes or network",async()=>{
- const root=workspace(),target=join(root,"manifest.json");writeFileSync(target,"{}");const tasks=new AnalysisTaskOrchestrator();
- const plan=await tasks.prepare({workspaceRoot:root,kind:"static",request:{operation:"review_candidate_changes",target,candidate_review:{manifest_sha256:"a".repeat(64),scope:"project-files"}}});
- expect(plan.permission).toBe("Inspect");expect(plan.budget.network).toBe("disabled");expect(plan.requirements).toContain("all-regular-files-in-disjoint-manifest-child-roots-no-ignore-rules");expect(plan.requirements).toContain("exact-full-inventory-hashes-and-complete-file-change-allowlist");
+it("project-file review exposes broad read scope and exact inventories without enabling writes or network", async () => {
+	const root = workspace(),
+		target = join(root, "manifest.json");
+	writeFileSync(target, "{}");
+	const tasks = new AnalysisTaskOrchestrator();
+	const plan = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request: {
+			operation: "review_candidate_changes",
+			target,
+			candidate_review: {
+				manifest_sha256: "a".repeat(64),
+				scope: "project-files",
+			},
+		},
+	});
+	expect(plan.permission).toBe("Inspect");
+	expect(plan.budget.network).toBe("disabled");
+	expect(plan.requirements).toContain(
+		"all-regular-files-in-disjoint-manifest-child-roots-no-ignore-rules",
+	);
+	expect(plan.requirements).toContain(
+		"exact-full-inventory-hashes-and-complete-file-change-allowlist",
+	);
+});
+
+it("approves the complete one-hour IDA phase and 75-minute overall envelope", async () => {
+	const orchestrator = new AnalysisTaskOrchestrator();
+	const root = workspace();
+	const request = {
+		engine: "ida",
+		operation: "decompile",
+		target: "owned.bin",
+		timeout_ms: 4500000,
+		ida_phase_timeout_ms: 3600000,
+	};
+	const p = await orchestrator.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request,
+		timeoutMs: 4500000,
+	});
+	expect(p.budget.timeoutMs).toBe(4500000);
+});
+
+it("keeps IDA active for a full hour and aborts exactly at the approved overall deadline", async () => {
+	const root = workspace();
+	const tasks = new AnalysisTaskOrchestrator();
+	const request = {
+		engine: "ida",
+		operation: "decompile",
+		target: "owned.bin",
+		timeout_ms: 4500000,
+		ida_phase_timeout_ms: 3600000,
+	};
+	const plan = await tasks.prepare({
+		workspaceRoot: root,
+		kind: "static",
+		request,
+	});
+	const approved = tasks.approve(plan.id, plan.requirements, plan.requestHash);
+	vi.useFakeTimers();
+	try {
+		await tasks.consume({
+			planId: plan.id,
+			executionToken: approved.executionToken,
+			workspaceRoot: root,
+			kind: "static",
+			request,
+		});
+		const signal = tasks.signal(plan.id);
+		await vi.advanceTimersByTimeAsync(3600000);
+		expect(signal.aborted).toBe(false);
+		await vi.advanceTimersByTimeAsync(899999);
+		expect(signal.aborted).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(signal.aborted).toBe(true);
+		expect(String(signal.reason)).toContain("4500000ms");
+	} finally {
+		vi.useRealTimers();
+	}
 });

@@ -1,3 +1,4 @@
+import { resolveAnalysisTimeoutMs } from "../shared/analysis-budgets";
 import { summarizeAndroidCandidateLifecycle } from "./android-candidate-lifecycle";
 import type { AndroidCandidateLifecycle } from "../shared/android-candidate-lifecycle";
 import { summarizeCandidateOutcome } from "./candidate-outcome";
@@ -524,10 +525,7 @@ export class AnalysisTaskOrchestrator {
 						? "moderate"
 						: "low",
 			budget: {
-				timeoutMs: Math.min(
-					Math.max(input.timeoutMs ?? 120_000, 1_000),
-					30 * 60_000,
-				),
+				timeoutMs: resolveAnalysisTimeoutMs(request, input.timeoutMs),
 				maxOutputBytes: Math.min(
 					Math.max(input.maxOutputBytes ?? 1024 * 1024, 64 * 1024),
 					16 * 1024 * 1024,

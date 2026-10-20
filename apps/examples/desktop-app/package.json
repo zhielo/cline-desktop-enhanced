@@ -27,7 +27,7 @@
 		"package:desktop:linux": "bun run scripts/package-desktop.ts --platform linux",
 		"start": "next start webview",
 		"pretypecheck": "bun run build:ui",
-		"typecheck": "tsc -p tsconfig.dev.json --noEmit",
+		"typecheck": "tsc -p tsconfig.dev.json --noEmit && bun run typecheck:web",
 		"pretest:chat-ui": "bun run build:ui",
 		"test:chat-ui": "vitest run webview/components/views/chat/candidate-outcome.test.tsx webview/components/views/chat/source-evidence-selection.test.tsx webview/components/views/chat/analysis-project-selection.test.tsx webview/components/views/chat/advanced-command-workspace.test.tsx webview/components/views/chat/first-party-analysis.test.tsx webview/components/views/chat/apk-incident-workspace.test.tsx webview/components/views/chat/artifact-evidence.test.tsx webview/components/views/chat/analysis-authoring.test.tsx webview/components/views/chat/analysis-workbench.test.tsx webview/components/views/engineering/engineering-workspace.test.tsx webview/components/views/chat/chat-messages.test.tsx webview/components/views/chat/session-completion-card.test.tsx webview/components/views/chat/messages webview/components/ui/markdown.interactions.test.tsx webview/lib/artifact-paths.test.ts --config vitest.config.mts webview/components/views/chat/execution-workspace.test.tsx webview/components/views/chat/runtime-jni-workspace.test.tsx webview/components/views/chat/investigation-workflow.test.tsx webview/components/views/chat/draft-recovery-control.test.tsx webview/lib/draft-recovery.test.ts",
 		"pretest:settings-ui": "bun run build:ui",
@@ -35,7 +35,8 @@
 		"test:sidecar": "vitest run sidecar scripts/telemetry-define-args.test.ts webview/hooks/chat-session/helpers.test.ts webview/hooks/use-chat-session.test.tsx webview/hooks/use-session-history.test.tsx webview/lib/session-reasoning.test.ts webview/lib/cloud-repositories.test.ts webview/lib/cloud-session-error.test.ts webview/lib/image-attachments.test.ts webview/lib/notion-agent-routing.test.ts webview/lib/run-error.test.ts webview/lib/session-status.test.ts webview/lib/workspace-paths.test.ts webview/components/agent-sidebar.test.tsx webview/components/views/chat/chat-input-bar.test.tsx webview/components/views/chat/chat-messages.test.tsx webview/components/views/chat/environment-selector.test.tsx webview/components/views/chat/welcome-chat.test.tsx webview/components/views/chat/welcome-workspace-controls.test.tsx webview/components/views/sessions/sessions-view.test.tsx webview/components/views/settings/settings-view.test.tsx --config vitest.config.mts",
 		"test:sidecar-startup": "bun test scripts/desktop-startup.test.ts",
 		"test:desktop-client": "vitest run webview/lib/desktop-client.test.ts --config vitest.config.mts",
-		"clean": "rm -rf webview/.next webview/out node_modules dist && (cd src-tauri && rm -rf target node_modules dist)"
+		"clean": "rm -rf webview/.next webview/out node_modules dist && (cd src-tauri && rm -rf target node_modules dist)",
+		"typecheck:web": "tsc -p webview/tsconfig.json --noEmit"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.2.0",

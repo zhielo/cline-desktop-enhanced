@@ -53,6 +53,8 @@ export const RELEASE_GATE_POLICY = {
 		"Test Windows workflow hardening",
 		"Test consolidated runner",
 		"Type-check desktop",
+        "Type-check complete desktop WebView including fixtures",
+        "Test audit repair contracts",
 		"Type-check core",
 		"Run required desktop sidecar regression suite",
 		"Test real Windows AppContainer execution boundary",
@@ -145,6 +147,6 @@ export const RELEASE_GATE_POLICY = {
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"fa491f5b1052ef57cad6c0f034db83cd772d5830bd28bf2da1c08472f4fec4bb",
 		"scripts/validate-advanced-build.mjs":
-			"e42e34b7a60ab26537d285b2cdaf2b69c2ecd3804a5999a4bdce89c784831a94",
+			"0e1d9c3b694d3da51b607a501fead2c14073b1aa2f8020bb54887d3ed122ec28",
 	},
 } as const;

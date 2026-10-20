@@ -1,3 +1,4 @@
+import { resolveAnalysisTimeoutMs } from "../shared/analysis-budgets";
 import { handleDeviceSmoke } from "./device-smoke";
 import { handleManagedRuntime, managedInspectorSessions } from "./managed-runtime";
 import { handleRuntimeCapture } from "./runtime-capture";
@@ -5961,7 +5962,7 @@ export async function handleCommand(
 			const operation = String(suppliedRequest.operation ?? "").trim();
 			if (!operation) throw new Error("operation is required");
 			if (suppliedRequest.timeout_ms === undefined) {
-				suppliedRequest.timeout_ms = 120_000;
+				suppliedRequest.timeout_ms = resolveAnalysisTimeoutMs(suppliedRequest);
 			}
 			let request: Record<string, unknown>;
 			if (kind === "debugger") {

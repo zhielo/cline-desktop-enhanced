@@ -300,7 +300,7 @@ describe("DiffView hunk rendering", () => {
 	it("renders each hunk through the shared @pierre/diffs renderer", async () => {
 		await act(async () => {
 			root.render(
-				<DiffView
+				<DiffView environmentId="local"
 					fileDiffs={[MODIFIED_FILE_DIFF, CREATED_FILE_DIFF]}
 					onClose={vi.fn()}
 				/>,
@@ -312,7 +312,7 @@ describe("DiffView hunk rendering", () => {
 
 	it("shows the empty-hunks placeholder instead of a diff renderer", async () => {
 		await act(async () => {
-			root.render(<DiffView fileDiffs={[FILE_DIFF]} onClose={vi.fn()} />);
+			root.render(<DiffView environmentId="local" fileDiffs={[FILE_DIFF]} onClose={vi.fn()} />);
 		});
 
 		expect(diffContainers()).toHaveLength(0);
@@ -322,7 +322,7 @@ describe("DiffView hunk rendering", () => {
 	it("removes the diff body when a file is collapsed and restores it on expand", async () => {
 		await act(async () => {
 			root.render(
-				<DiffView fileDiffs={[MODIFIED_FILE_DIFF]} onClose={vi.fn()} />,
+				<DiffView environmentId="local" fileDiffs={[MODIFIED_FILE_DIFF]} onClose={vi.fn()} />,
 			);
 		});
 
@@ -342,7 +342,7 @@ describe("DiffView hunk rendering", () => {
 	it("keeps the per-file add/del counts in the header", async () => {
 		await act(async () => {
 			root.render(
-				<DiffView fileDiffs={[MODIFIED_FILE_DIFF]} onClose={vi.fn()} />,
+				<DiffView environmentId="local" fileDiffs={[MODIFIED_FILE_DIFF]} onClose={vi.fn()} />,
 			);
 		});
 

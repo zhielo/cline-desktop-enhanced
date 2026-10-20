@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeCapabilities } from "@cline/core";
@@ -1718,6 +1718,188 @@ describe("Chat chunk pipe selection", () => {
 			.filter((payload) => (payload as { stream?: string }).stream === stream)
 			.map((payload) => String((payload as { chunk?: string }).chunk));
 	}
+
+	it.each([
+		"hub",
+		"core",
+	])("requires successful plan completion and current approval through %s events", async (pipe) => {
+		const api = await import("./context");
+		const validation = await import("./task-validation");
+		const root = mkdtempSync(join(tmpdir(), "cline-validation-host-"));
+		vi.stubEnv("CLINE_SESSION_DATA_DIR", join(root, "sessions"));
+		vi.stubEnv("CLINE_KANBAN_DATA_DIR", join(root, "kanban"));
+		const ctx = await createStreamingContext("owned-validation");
+		const session = ctx.liveSessions.get("owned-validation")!;
+		session.config = {
+			cwd: root,
+			workspaceRoot: root,
+			mode: "act",
+			autoApproveTools: true,
+			permissionProfile: "read-only",
+		};
+		const execute = vi.fn(async () => ({ exitCode: 0 }));
+		const actualRun = validation.runDurableTaskValidations;
+		const spy = vi
+			.spyOn(validation, "runDurableTaskValidations")
+			.mockImplementation((input) => actualRun({ ...input, execute }));
+		const emit = (finished: boolean, id: string, error?: string) => {
+			const input = {
+				plan_id: "owned-plan",
+				steps: [
+					{
+						id: "owned-check",
+						label: "Owned check",
+						status: "completed",
+						validation_commands: ["owned fixture only"],
+					},
+				],
+			};
+			if (pipe === "hub")
+				api.handleHubLiveEvent(ctx, {
+					event: finished ? "tool.finished" : "tool.started",
+					sessionId: "owned-validation",
+					payload: {
+						toolCallId: id,
+						toolName: "update_plan",
+						...(finished ? { error, output: { ok: !error } } : { input }),
+					},
+				});
+			else
+				api.handleCoreSessionEvent(ctx, {
+					type: "agent_event",
+					payload: {
+						sessionId: "owned-validation",
+						event: {
+							type: finished ? "content_end" : "content_start",
+							contentType: "tool",
+							toolCallId: id,
+							toolName: "update_plan",
+							...(finished ? { error, output: { ok: !error } } : { input }),
+						},
+					},
+				} as never);
+		};
+		try {
+			emit(false, "restricted");
+			emit(true, "restricted");
+			await Promise.resolve();
+			expect(execute).not.toHaveBeenCalled();
+			session.config.permissionProfile = "full-access";
+			emit(false, "failed");
+			await Promise.resolve();
+			expect(execute).not.toHaveBeenCalled();
+			emit(true, "failed", "Plan rejected");
+			await Promise.resolve();
+			expect(execute).not.toHaveBeenCalled();
+			emit(false, "accepted");
+			emit(true, "failed"); // stale completion cannot authorize the replacement plan
+			await Promise.resolve();
+			expect(execute).not.toHaveBeenCalled();
+			expect(execute).not.toHaveBeenCalled();
+			emit(true, "accepted");
+			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+			await vi.waitFor(() =>
+				expect(session.taskState?.steps[0]?.validation?.[0]?.status).toBe(
+					"passed",
+				),
+			);
+			expect(
+				readDurableTaskState("owned-validation")?.steps[0]?.validation?.[0]
+					?.status,
+			).toBe("passed");
+		} finally {
+			await api.cancelSessionTaskValidations(ctx, "owned-validation");
+			spy.mockRestore();
+			vi.unstubAllEnvs();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("persists cancellation rather than a late pass after the Hub abort event", async () => {
+		const api = await import("./context");
+		const validation = await import("./task-validation");
+		const root = mkdtempSync(join(tmpdir(), "cline-validation-abort-"));
+		vi.stubEnv("CLINE_SESSION_DATA_DIR", join(root, "sessions"));
+		vi.stubEnv("CLINE_KANBAN_DATA_DIR", join(root, "kanban"));
+		const ctx = await createStreamingContext("owned-abort");
+		const session = ctx.liveSessions.get("owned-abort")!;
+		session.config = {
+			cwd: root,
+			workspaceRoot: root,
+			mode: "act",
+			autoApproveTools: true,
+			permissionProfile: "full-access",
+		};
+		let finish: (value: { exitCode: number }) => void = () => {};
+		let signal: AbortSignal | undefined;
+		const execute = vi.fn(
+			(
+				_command: string,
+				options: Parameters<
+					import("./task-validation").DurableTaskValidationExecutor
+				>[1],
+			) => {
+				signal = options.signal;
+				return new Promise<{ exitCode: number }>((resolve) => {
+					finish = resolve;
+				});
+			},
+		);
+		const actualRun = validation.runDurableTaskValidations;
+		const spy = vi
+			.spyOn(validation, "runDurableTaskValidations")
+			.mockImplementation((input) => actualRun({ ...input, execute }));
+		try {
+			api.handleHubLiveEvent(ctx, {
+				event: "tool.started",
+				sessionId: "owned-abort",
+				payload: {
+					toolCallId: "plan",
+					toolName: "update_plan",
+					input: {
+						plan_id: "owned-plan",
+						steps: [
+							{
+								id: "check",
+								label: "Owned check",
+								status: "completed",
+								validation_commands: ["owned fixture only"],
+							},
+						],
+					},
+				},
+			});
+			api.handleHubLiveEvent(ctx, {
+				event: "tool.finished",
+				sessionId: "owned-abort",
+				payload: {
+					toolCallId: "plan",
+					toolName: "update_plan",
+					output: { ok: true },
+				},
+			});
+			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+			api.handleHubLiveEvent(ctx, {
+				event: "run.aborted",
+				sessionId: "owned-abort",
+				payload: {},
+			});
+			expect(signal?.aborted).toBe(true);
+			finish({ exitCode: 0 });
+			await api.cancelSessionTaskValidations(ctx, "owned-abort");
+			expect(session.taskState?.steps[0]?.status).toBe("cancelled");
+			expect(
+				readDurableTaskState("owned-abort")?.steps[0]?.validation?.[0]?.status,
+			).toBe("cancelled");
+			expect(execute).toHaveBeenCalledTimes(1);
+		} finally {
+			finish({ exitCode: 0 });
+			await api.cancelSessionTaskValidations(ctx, "owned-abort");
+			spy.mockRestore();
+			vi.unstubAllEnvs();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
 
 	it("emits one copy when both pipes carry the same delta", async () => {
 		const { handleCoreSessionEvent, handleHubLiveEvent } = await import(

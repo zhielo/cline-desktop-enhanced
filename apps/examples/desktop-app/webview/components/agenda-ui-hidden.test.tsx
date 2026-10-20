@@ -109,6 +109,7 @@ describe("Agenda UI hidden by default", () => {
 					}}
 				>
 					<WelcomeScreen
+ environmentSelector={null}
 						active
 						body={null}
 						composer={null}
