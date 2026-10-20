@@ -138,7 +138,7 @@ async function main() {
     job("Test bounded acceptance diagnostics", ["test", "scripts/report-installed-acceptance.test.mjs"]),
     { ...job("Measure fixed owned command workload", ["scripts/benchmark-command-execution.mjs", "--out", path.join(output, "command-performance.json")]), executable: "node" },
     job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),
-    job("Test consolidated runner", ["test", "scripts/validate-advanced-build.test.mjs"]),
+    job("Test consolidated runner", ["test", "scripts/validate-advanced-build.test.mjs", "scripts/verification-speed.test.mjs"]),
     job("Type-check desktop", ["x", "tsc", "-p", "apps/examples/desktop-app/tsconfig.dev.json", "--noEmit"]),
     job("Type-check core", ["x", "tsc", "-p", "sdk/packages/core/tsconfig.build.json", "--noEmit"]),
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),

@@ -43,6 +43,15 @@ jobs:
         with:
           bun-version: ${{ steps.toolchain.outputs.version }}
 
+      - name: Fast verification preflight
+        run: bun run validate:quick
+
+      - name: Restore locked Bun download cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-downloads-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('bun.lock', 'workers/android-capture/bun.lock') }}
+
       - name: Setup validation tools
         shell: pwsh
         run: |
@@ -69,6 +78,10 @@ jobs:
         env:
           CLINE_VALIDATION_PARALLEL: "1"
         run: bun run validate:advanced
+
+      - name: Summarize verification bottlenecks
+        if: ${{ always() }}
+        run: node scripts/summarize-verification.mjs
 
       - name: Upload regression evidence
         if: ${{ always() }}

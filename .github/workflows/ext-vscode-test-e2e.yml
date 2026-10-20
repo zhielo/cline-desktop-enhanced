@@ -50,6 +50,11 @@ jobs:
                           - 'bun.lock'
                           # SDK source packages are local workspace symlinks (@cline/*), so SDK changes affect the build.
                           - 'sdk/packages/**'
+                          # Desktop release policy requires these checks for the exact candidate.
+                          - 'apps/examples/desktop-app/**'
+                          - 'scripts/validate-advanced-build.mjs'
+                          - '.github/workflows/build-custom-windows-installer.yml'
+                          - '.github/workflows/custom-desktop-validation.yml'
                           - 'apps/vscode/buf.yaml'
                           - 'apps/vscode/tsconfig*.json'
                           - 'apps/vscode/biome.jsonc'
@@ -181,8 +186,11 @@ jobs:
                   path: |
                       apps/vscode/test-results/
 
+            # A PR must never lose its passing test result while publishing an
+            # optional cache (the job deadline also cancels continue-on-error steps).
+            # Main/manual runs can warm it; PRs restore available cache read-only.
             - name: Save Bun install cache (bounded optimization)
-              if: success() && steps.bun-cache.outputs.cache-hit != 'true'
+              if: success() && github.event_name != 'pull_request' && steps.bun-cache.outputs.cache-hit != 'true'
               uses: actions/cache/save@v4
               timeout-minutes: 1
               continue-on-error: true

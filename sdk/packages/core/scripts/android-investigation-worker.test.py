@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import struct
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -728,4 +729,31 @@ class NativeCallTraversalTests(unittest.TestCase):
         self.assertEqual(len(graph['nodes']),1);self.assertEqual(graph['edges'][0]['resolution'],'indirect-not-followed')
 
 
-if __name__=='__main__':unittest.main()
+def fixture_shard(index, count):
+    # Discover with unittest, not a second hard-coded inventory. Future cases
+    # automatically belong to exactly one shard, including inherited tests.
+    if count != 4 or not 0 <= index < count:
+        raise ValueError('Expected one of four fixed fixture shards')
+    def flatten(suite):
+        for item in suite:
+            if isinstance(item, unittest.TestSuite):
+                yield from flatten(item)
+            else:
+                yield item
+    cases = list(flatten(unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])))
+    selected = cases[index::count]
+    if not selected:
+        raise ValueError('Empty fixture shard is not passing evidence')
+    print(json.dumps({'protocol':'android-fixture-shard/v1', 'index':index, 'count':count,
+                      'allCaseIds':[case.id() for case in cases],
+                      'caseIds':[case.id() for case in selected]}), flush=True)
+    result = unittest.TextTestRunner().run(unittest.TestSuite(selected))
+    return 0 if result.wasSuccessful() and result.testsRun == len(selected) else 1
+
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--fixture-shard':
+        if len(sys.argv) != 4:
+            raise ValueError('Expected --fixture-shard INDEX 4')
+        sys.exit(fixture_shard(int(sys.argv[2]), int(sys.argv[3])))
+    unittest.main()

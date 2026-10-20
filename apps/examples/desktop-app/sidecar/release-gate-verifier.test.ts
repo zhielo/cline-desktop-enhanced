@@ -1,13 +1,14 @@
-import { it as test } from "vitest";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
-import { RELEASE_GATE_POLICY as p } from "./release-gate-policy";
+import { it as test } from "vitest";
 import { fixture, head } from "./__fixtures__/release-gate";
+import { RELEASE_GATE_POLICY as p } from "./release-gate-policy";
 import {
+	type ReleaseGateEvidence,
 	sha256,
 	verifyReleaseGateEvidence,
-	type ReleaseGateEvidence,
 } from "./release-gate-verifier";
+
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
@@ -200,4 +201,47 @@ test("all policy file fingerprints match staged policy", () => {
 			sha256(readFileSync(new URL(`../../../../${path}`, import.meta.url))),
 			hash,
 		);
+});
+test("conditional desktop packaging checks must both pass when triggered", () => {
+	const e = fixture();
+	const template = e.checks.check_runs[0];
+	for (const [index, name] of [
+		"Test DMG background tooling",
+		"Test x86 installer against x64 sidecars",
+	].entries())
+		e.checks.check_runs.push({
+			...template,
+			id: 9000 + index,
+			name,
+			conclusion: "success",
+		});
+	e.checks.total_count = e.checks.check_runs.length;
+	assert.equal(
+		verifyReleaseGateEvidence(133, head, e).checks,
+		p.requiredChecks.length + 2,
+	);
+	for (const conclusion of ["failure", "skipped", "cancelled", "timed_out"]) {
+		const changed = structuredClone(e);
+		changed.checks.check_runs.at(-1)!.conclusion = conclusion;
+		assert.throws(() => verifyReleaseGateEvidence(133, head, changed));
+	}
+	const missing = structuredClone(e);
+	missing.checks.check_runs.pop();
+	missing.checks.total_count--;
+	assert.throws(() => verifyReleaseGateEvidence(133, head, missing));
+	const duplicate = structuredClone(e);
+	duplicate.checks.check_runs.push({
+		...duplicate.checks.check_runs.at(-1)!,
+		id: 9002,
+	});
+	duplicate.checks.total_count++;
+	assert.throws(() => verifyReleaseGateEvidence(133, head, duplicate));
+	const unknown = fixture();
+	unknown.checks.check_runs.push({
+		...template,
+		id: 9003,
+		name: "unknown conditional gate",
+	});
+	unknown.checks.total_count++;
+	assert.throws(() => verifyReleaseGateEvidence(133, head, unknown));
 });

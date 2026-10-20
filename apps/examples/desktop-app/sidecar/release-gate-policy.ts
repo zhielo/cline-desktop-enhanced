@@ -25,6 +25,11 @@ export const RELEASE_GATE_POLICY = {
 		"Quality Checks",
 		"Detect Changes",
 	],
+	// desktop-test is path-triggered. When either check appears, require both.
+	conditionalChecks: [
+		"Test DMG background tooling",
+		"Test x86 installer against x64 sidecars",
+	],
 	allowedSkipped: ["Run Tests", "strip"],
 	coreGates: [
 		"Check owned ARM64 fixture",
@@ -134,10 +139,10 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/build-custom-windows-installer.yml":
-			"c9e1b73a41a9e71ba757ef0b38c9d8c3d53f71a45588cdfc6a390e6eae53fc87",
+			"324cc282cd50728d248d3a9a38dbe128187b714ba1e09dc2ce824fe027c7f9ee",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"9d18d4f0333a91c947e5d2048cc45e53ee13436a679f579310d3d605b5a9c49d",
+			"e852d5c5430d96b8dc1e4f2c7f546f3345dc47e47eabb680141695241e4ea49c",
 		"scripts/validate-advanced-build.mjs":
-			"f62f8aee7a14c76bac688c83d568dd219e1552b2b91ed83af772ab37d14c609b",
+			"5893d30ed5de50aa967d335f63e949113a1036412c513525bef14ae7b647c039",
 	},
 } as const;
