@@ -29,6 +29,8 @@ vi.mock("./trusted-update", () => ({
 
 import {
 	FULL_ENGINE_IDS,
+	testGhidraIntegration,
+	currentGhidraAcceptance,
 	testLicensedIda,
 	saveSetupPreferences,
 	currentIdaAcceptance,
@@ -82,6 +84,7 @@ it("rejects relative installations, worker credentials, half configuration and p
 	).toBe("https://owned.example/");
 	for (const input of [
 		{ idaHome: "relative" },
+		{ ghidraHome: "relative" },
 		{ adbPath: "adb.exe" },
 		{ workerEndpoint: "https://owned.example/" },
 		{ workerEndpoint: "http://owned.example/", workerPublicKey: key },
@@ -204,4 +207,90 @@ it("ARM64 acceptance uses a fixed owned fixture and invalidates replacement of t
 	await expect(
 		hashIdaExecutable(executable, join(root, "not-selected")),
 	).rejects.toThrow();
+});
+
+async function ownedGhidraSetup() {
+	const root = await mkdtemp(join(tmpdir(), "owned-ghidra-setup-"));
+	roots.push(root);
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	vi.stubEnv("GHIDRA_HOME", process.env.GHIDRA_HOME ?? "");
+	vi.stubEnv(
+		"CLINE_GHIDRA_SELECTED_HOME",
+		process.env.CLINE_GHIDRA_SELECTED_HOME ?? "",
+	);
+	const home = join(root, "ghidra"),
+		javaHome = join(root, "jdk");
+	await mkdir(join(home, "support"), { recursive: true });
+	await mkdir(join(home, "Ghidra"));
+	await mkdir(join(javaHome, "bin"), { recursive: true });
+	await writeFile(
+		join(
+			home,
+			"support",
+			process.platform === "win32" ? "analyzeHeadless.bat" : "analyzeHeadless",
+		),
+		"owned launcher",
+	);
+	await writeFile(
+		join(home, "Ghidra", "application.properties"),
+		"application.version=12.1.4",
+	);
+	await writeFile(
+		join(home, "support", "launch.properties"),
+		"JAVA_HOME_OVERRIDE=",
+	);
+	const java = join(
+		javaHome,
+		"bin",
+		process.platform === "win32" ? "java.exe" : "java",
+	);
+	await writeFile(java, "owned java");
+	await saveSetupPreferences({ ...base, ghidraHome: home });
+	return { home, javaHome, java };
+}
+it("Ghidra readiness requires explicit decompilation and invalidates changed Java/configuration", async () => {
+	const { home, javaHome, java } = await ownedGhidraSetup();
+	const before = await getSetupCenterStatus();
+	expect(before.ghidra.status).toBe("Not tested or stale");
+	const fixture = await import(
+		"../../../../scripts/fixtures/owned-native-elf.json"
+	);
+	mocks.executor.mockImplementation(async (input) => {
+		await mkdir(input.output_directory, { recursive: true });
+		await writeFile(
+			join(input.output_directory, "ghidra-analysis-receipt.json"),
+			JSON.stringify({ javaHome, javaVersion: "21-owned" }),
+		);
+		return JSON.stringify({
+			succeeded: true,
+			artifactVerified: true,
+			databaseVerified: true,
+			sha256: fixture.sha256,
+			engineVersion: "12.1.4",
+		});
+	});
+	const receipt = await testGhidraIntegration();
+	expect(receipt.status).toBe("passed");
+	expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
+	expect((await getSetupCenterStatus()).ghidra.status).toBe("Ready");
+	await writeFile(java, "changed java");
+	expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
+	await writeFile(java, "owned java");
+	await writeFile(
+		join(home, "support", "launch.properties"),
+		"JAVA_HOME_OVERRIDE=changed",
+	);
+	expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
+	mocks.executor.mockReset();
+});
+it("persists failed Ghidra/Java acceptance without claiming Ready", async () => {
+	await ownedGhidraSetup();
+	mocks.executor.mockResolvedValue(
+		JSON.stringify({ succeeded: false, stdout: "No compatible JDK" }),
+	);
+	await expect(testGhidraIntegration()).rejects.toThrow("No compatible JDK");
+	const status = await getSetupCenterStatus();
+	expect(status.ghidra.status).toBe("Test failed");
+	expect(status.ghidra.reason).toContain("No compatible JDK");
+	mocks.executor.mockReset();
 });

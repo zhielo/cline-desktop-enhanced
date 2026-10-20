@@ -9,6 +9,7 @@ import { PageFrame, PageHeader } from "../page-layout";
 type Preferences = {
 	schemaVersion: 1;
 	idaHome: string;
+	ghidraHome?: string;
 	adbPath: string;
 	deviceSerial: string;
 	deviceKind: "physical" | "emulator";
@@ -25,6 +26,7 @@ type SetupJob = {
 	error?: string;
 };
 type Status = {
+	ghidra?: { status: string; javaVersion?: string; reason: string };
 	firstPartyAnalysis?: {
 		installed: boolean;
 		parser: string;
@@ -173,6 +175,7 @@ export function SetupCenter() {
 			"setup_center_test_full",
 			"setup_center_rollback_core",
 			"setup_center_test_ida",
+			"setup_center_test_ghidra",
 			"setup_center_test_worker",
 			"setup_center_test_device",
 		].includes(command);
@@ -287,7 +290,7 @@ export function SetupCenter() {
 			/>
 			<div className="space-y-6 p-6">
 				<BackendConnectionStatus />
-                <BinaryTriageReadiness />
+				<BinaryTriageReadiness />
 				<p className="text-xs">
 					Installed does not mean verified. Ready requires an owned-fixture
 					execution receipt; stale or not-tested components need an explicit
@@ -400,7 +403,7 @@ export function SetupCenter() {
 							)
 						}
 					>
-						Test every local engine
+						Test Python pack engines
 					</Button>
 					<Button
 						disabled={busy}
@@ -517,6 +520,72 @@ export function SetupCenter() {
 				</ul>
 				{form && (
 					<div className="space-y-4">
+						<h2 className="text-lg font-semibold">Ghidra and Java</h2>
+						<p role="status">
+							Ghidra: {status?.ghidra?.status ?? "Not tested"}
+							{status?.ghidra?.javaVersion
+								? ` — Java ${status.ghidra.javaVersion}`
+								: ""}
+						</p>
+						<p>
+							{status?.ghidra?.reason ??
+								"Ghidra has a separate explicit owned-fixture test; Python pack readiness does not cover it."}
+						</p>
+						<label className="block">
+							Ghidra installation folder
+							<input
+								className="block w-full rounded border p-2"
+								value={form.ghidraHome ?? ""}
+								onChange={(e) => change("ghidraHome", e.target.value)}
+							/>
+						</label>
+						<div className="flex flex-wrap gap-2">
+							<Button
+								disabled={busy}
+								onClick={() =>
+									void desktopClient
+										.invoke<string | null>("pick_workspace_directory", {
+											environmentId: "local",
+										})
+										.then((path) => {
+											if (path) change("ghidraHome", path);
+										})
+										.catch((e) => setError(String(e)))
+								}
+							>
+								Choose Ghidra folder
+							</Button>
+							<Button
+								disabled={busy}
+								onClick={() =>
+									void action(
+										"setup_center_save_ghidra",
+										"Save this Ghidra installation? No analysis is executed. Apply saved setup to an idle backend separately.",
+										{ ghidraHome: form.ghidraHome ?? "" },
+									)
+								}
+							>
+								Save Ghidra installation
+							</Button>
+							<Button
+								disabled={busy}
+								onClick={() =>
+									void action(
+										"setup_center_test_ghidra",
+										"Save this Ghidra folder and run bounded headless analysis and selected decompilation on one owned x86-64 ELF? This launches Java and Ghidra, not target code. No packages are installed.",
+										{ ghidraHome: form.ghidraHome ?? "" },
+									)
+								}
+							>
+								Test Ghidra and Java
+							</Button>
+						</div>
+						<p>
+							Use a JDK supported by your Ghidra version. Configure Java with
+							Ghidra's supported launcher settings if the test reports no
+							compatible JDK. This test is separate from the Python pack and
+							does not establish every processor or target's compatibility.
+						</p>
 						<h2 className="text-lg font-semibold">Licensed IDA and Hex-Rays</h2>
 						<p>{status?.licensedStatus}</p>
 						<label className="block">

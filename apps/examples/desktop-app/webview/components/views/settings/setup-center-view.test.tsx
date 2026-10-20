@@ -316,3 +316,77 @@ it("preserves processor choice on remount and saves IDA without running the opti
 		localStorage.clear();
 	}
 });
+
+it("keeps Ghidra/Java testing separate and requires explicit confirmation", async () => {
+	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	calls.mockReset();
+	const status = {
+		preferences: {
+			schemaVersion: 1,
+			idaHome: "",
+			ghidraHome: "C:\\Owned Ghidra",
+			adbPath: "",
+			deviceSerial: "",
+			deviceKind: "physical",
+			workerEndpoint: "",
+			workerPublicKey: "",
+			acceptedPlatformToolsLicense: false,
+		},
+		fullStatus: "Ready",
+		features: [],
+		packs: [],
+		limitations: [],
+		ghidra: {
+			status: "Not tested or stale",
+			reason: "Separate owned test required",
+		},
+	};
+	calls.mockImplementation(async (command) =>
+		command === "setup_center_status"
+			? status
+			: command === "binary_triage_status"
+				? { tools: [] }
+				: {},
+	);
+	const element = document.createElement("div");
+	document.body.append(element);
+	const root = createRoot(element);
+	const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+	try {
+		await act(async () => root.render(<SetupCenter />));
+		expect(
+			calls.mock.calls.some(
+				([command]) => command === "setup_center_test_ghidra",
+			),
+		).toBe(false);
+		expect(element.textContent).toContain("Test Python pack engines");
+		expect(element.textContent).toContain("Ghidra: Not tested or stale");
+		const button = [...element.querySelectorAll("button")].find(
+			(b) => b.textContent === "Test Ghidra and Java",
+		)!;
+		await act(async () => button.click());
+		expect(
+			calls.mock.calls.some(
+				([command]) => command === "setup_center_test_ghidra",
+			),
+		).toBe(false);
+		confirm.mockReturnValue(true);
+		await act(async () => button.click());
+		expect(calls).toHaveBeenCalledWith(
+			"setup_center_test_ghidra",
+			expect.objectContaining({
+				environmentId: "local",
+				confirmed: true,
+				background: true,
+				ghidraHome: status.preferences.ghidraHome,
+			}),
+			{ timeoutMs: 15000 },
+		);
+	} finally {
+		confirm.mockRestore();
+		await act(async () => root.unmount());
+		element.remove();
+		calls.mockReset();
+		localStorage.clear();
+	}
+});

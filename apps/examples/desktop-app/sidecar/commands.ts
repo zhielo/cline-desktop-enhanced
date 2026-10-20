@@ -292,6 +292,7 @@ import {
 	saveSetupPreferences,
 	testFullCapabilityPack,
 	testLicensedIda,
+	testGhidraIntegration,
 	testSetupDevice,
 	testSetupWorker,
 } from "./setup-center";
@@ -4572,6 +4573,15 @@ export async function handleCommand(
 			assertSetupIdle();
 			return await saveSetupPreferences(args.preferences);
 		}
+		if (command === "setup_center_save_ghidra") {
+			assertSetupIdle();
+			if (typeof args.ghidraHome !== "string" || !args.ghidraHome.trim())
+				throw new Error("Select a Ghidra installation folder");
+			return await saveSetupPreferences({
+				...(await readSetupPreferences()),
+				ghidraHome: args.ghidraHome,
+			});
+		}
 		if (command === "setup_center_save_ida") {
 			assertSetupIdle();
 			if (typeof args.idaHome !== "string" || !args.idaHome.trim())
@@ -4609,6 +4619,16 @@ export async function handleCommand(
 			return await tracked(async (phase) => {
 				phase("Testing exact selected device connectivity");
 				return await testSetupDevice();
+			});
+		if (command === "setup_center_test_ghidra")
+			return await tracked(async (phase) => {
+				phase("Testing real Ghidra headless, Java and owned selected-function decompilation");
+				if (typeof args.ghidraHome === "string")
+					await saveSetupPreferences({
+						...(await readSetupPreferences()),
+						ghidraHome: args.ghidraHome,
+					});
+				return await testGhidraIntegration();
 			});
 		if (command === "setup_center_test_ida") {
 			if (args.authorizedLicense !== true)

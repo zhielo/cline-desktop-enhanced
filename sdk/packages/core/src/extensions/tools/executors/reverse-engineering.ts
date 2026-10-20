@@ -1,3 +1,8 @@
+import {
+	ghidraScriptPath,
+	prepareGhidraVerification,
+	verifyGhidraAnalysis,
+} from "./ghidra-verification";
 import { compareProjectVersions } from "./project-versions";
 import { planRuntimeObservation } from "./runtime-observation-plan";
 import { verifyCandidate, validateDexBytes } from "./candidate-verification";
@@ -257,8 +262,10 @@ function splitPathEntries(value: string | undefined): string[] {
  */
 export function shouldRefreshEngineEnvironment(name: string) {
 	return !(
-		process.env.CLINE_IDA_SELECTED_HOME?.trim() &&
-		["IDA_HOME", "IDADIR"].includes(name)
+		(process.env.CLINE_IDA_SELECTED_HOME?.trim() &&
+			["IDA_HOME", "IDADIR"].includes(name)) ||
+		(process.env.CLINE_GHIDRA_SELECTED_HOME?.trim() &&
+			["GHIDRA_HOME", "GHIDRA_INSTALL_DIR"].includes(name))
 	);
 }
 
@@ -396,11 +403,16 @@ async function platformInstallRoots(engine: Engine): Promise<string[]> {
 async function executableCandidates(engine: Engine): Promise<string[]> {
 	const win = process.platform === "win32";
 	const discoveredRoots =
-		engine === "ida" && process.env.CLINE_IDA_SELECTED_HOME?.trim()
+		(engine === "ida" && process.env.CLINE_IDA_SELECTED_HOME?.trim()) ||
+		(engine === "ghidra" && process.env.CLINE_GHIDRA_SELECTED_HOME?.trim())
 			? []
 			: await platformInstallRoots(engine);
 	if (engine === "ghidra") {
-		const home = process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR;
+		const selectedHome = process.env.CLINE_GHIDRA_SELECTED_HOME?.trim();
+		if (selectedHome && !path.isAbsolute(selectedHome))
+			throw new Error("Explicit Ghidra selection must be an absolute installation folder");
+		const home =
+			selectedHome ?? process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR;
 		const roots = [...(home ? [home] : []), ...discoveredRoots];
 		return [
 			...roots.flatMap((root) => [
@@ -420,8 +432,10 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 				),
 				path.join(root, "Contents", "Resources", "ghidra", "ghidraRun"),
 			]),
-			win ? "analyzeHeadless.bat" : "analyzeHeadless",
-			win ? "ghidraRun.bat" : "ghidraRun",
+			...(selectedHome
+				? []
+				: [win ? "analyzeHeadless.bat" : "analyzeHeadless",
+					win ? "ghidraRun.bat" : "ghidraRun"]),
 		];
 	}
 	if (engine === "ida") {
@@ -2350,7 +2364,11 @@ async function discoverCapabilities(
 		depth,
 		platform: process.platform,
 		path: process.env.PATH ?? "",
-		ghidra: process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR ?? "",
+		ghidra:
+			process.env.CLINE_GHIDRA_SELECTED_HOME ??
+			process.env.GHIDRA_HOME ??
+			process.env.GHIDRA_INSTALL_DIR ?? "",
+		ghidraSelectionExplicit: Boolean(process.env.CLINE_GHIDRA_SELECTED_HOME),
 		ida:
 			process.env.CLINE_IDA_SELECTED_HOME ??
 			process.env.IDA_HOME ??
@@ -3718,7 +3736,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			input.engine === "auto" ? chooseAuto(target, available) : input.engine;
 		if (!engine)
 			throw new Error(
-				"No compatible reverse-engineering engine was found. In Cline Desktop, open Settings → Setup Center to select and test the authorized IDA installation and matching processor decompiler. Non-desktop hosts may configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
+				"No compatible reverse-engineering engine was found. In Cline Desktop, open Settings → Setup Center to select and test Ghidra/Java or the authorized IDA installation and matching processor decompiler. Non-desktop hosts may configure GHIDRA_HOME, IDA_HOME/IDADIR, or JADX_HOME.",
 			);
 		if (
 			input.managed_worker === true &&
@@ -4083,10 +4101,17 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					existingManifest?.sha256 === hash &&
 					existingManifest?.engine === engine &&
 					existingManifest?.engineVersion === engineIdentity.version &&
-					existingManifest?.analysisOptionsHash === optionsHash;
+					existingManifest?.analysisOptionsHash === optionsHash &&
+					(engine !== "ghidra" ||
+						(typeof existingManifest.target === "string" &&
+							path.basename(existingManifest.target) === path.basename(target)));
 				const projectName = `cline-${hash.slice(0, 16)}`;
 				const ghidraProject = path.join(outputDir, `${projectName}.gpr`);
 				const idaDatabase = path.join(outputDir, "analysis.i64");
+				const ghidraVerification =
+					engine === "ghidra" && !gui
+						? await prepareGhidraVerification(outputDir, hash)
+						: undefined;
 				let reusedAnalysis = false;
 				let args: string[];
 
@@ -4095,7 +4120,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						args = [(await exists(ghidraProject)) ? ghidraProject : target];
 						reusedAnalysis = args[0] === ghidraProject;
 					} else {
-						const projectExists = sameArtifact && (await exists(ghidraProject));
+						const projectExists =
+							input.reuse_analysis !== false && sameArtifact &&
+							(await exists(ghidraProject));
 						reusedAnalysis = projectExists;
 						args = projectExists
 							? [outputDir, projectName, "-process", path.basename(target)]
@@ -4139,10 +4166,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 								...(input.script_args ?? []),
 							);
 						}
+						if (ghidraVerification) {
+							scriptPaths.push(path.dirname(ghidraVerification.script));
+							postScripts.push(...ghidraVerification.args);
+						}
 						if (scriptPaths.length > 0) {
 							args.push(
 								"-scriptPath",
-								[...new Set(scriptPaths)].join(path.delimiter),
+								ghidraScriptPath(scriptPaths),
 								...postScripts,
 							);
 						}
@@ -4283,12 +4314,14 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						? await fs.lstat(idaDatabase).catch(() => undefined)
 						: undefined;
 				const databaseVerified =
-					engine !== "ida" ||
-					Boolean(
-						databaseStat?.isFile() &&
-							!databaseStat.isSymbolicLink() &&
-							databaseStat.size > 0,
-					);
+					engine === "ghidra" && ghidraVerification
+						? await verifyGhidraAnalysis(ghidraProject, ghidraVerification, hash)
+						: engine !== "ida" ||
+							Boolean(
+								databaseStat?.isFile() &&
+								!databaseStat.isSymbolicLink() &&
+								databaseStat.size > 0,
+							);
 				const artifactVerified =
 					databaseVerified &&
 					(input.operation !== "decompile" ||
@@ -4299,6 +4332,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					!result.timedOut &&
 					!result.cancelled &&
 					!result.outputDrainTimedOut &&
+					!(engine === "ghidra" &&
+						(result.truncated ||
+						 /REPORT SCRIPT ERROR|REPORT: (?:Post-)?Analysis (?:timed out|failed)|REPORT: Save failed/i.test(`${result.stdout}\n${result.stderr}`))) &&
 					artifactVerified;
 				const selectedNativeEvidence =
 					succeeded &&

@@ -38,6 +38,7 @@ const Preferences = z
 	.object({
 		schemaVersion: z.literal(1),
 		idaHome: z.string().max(4096).default(""),
+		ghidraHome: z.string().max(4096).default(""),
 		adbPath: z.string().max(4096).default(""),
 		deviceSerial: z
 			.string()
@@ -77,7 +78,7 @@ export async function readSetupPreferences(): Promise<SetupPreferences> {
 }
 export function validateSetupPreferences(input: unknown) {
 	const value = Preferences.parse(input);
-	for (const path of [value.idaHome, value.adbPath])
+	for (const path of [value.idaHome, value.ghidraHome, value.adbPath])
 		if (path && (!isAbsolute(path) || /[\0\r\n]/.test(path)))
 			throw new Error("Absolute installation path required");
 	if (Boolean(value.workerEndpoint) !== Boolean(value.workerPublicKey))
@@ -116,6 +117,13 @@ function applyPreferences(value: SetupPreferences, explicit = false) {
 		delete process.env.IDA_HOME;
 		delete process.env.CLINE_IDA_SELECTED_HOME;
 	}
+	if (value.ghidraHome) {
+		process.env.GHIDRA_HOME = value.ghidraHome;
+		process.env.CLINE_GHIDRA_SELECTED_HOME = value.ghidraHome;
+	} else if (explicit) {
+		delete process.env.GHIDRA_HOME;
+		delete process.env.CLINE_GHIDRA_SELECTED_HOME;
+	}
 	if (value.workerEndpoint) {
 		process.env.CLINE_ANALYSIS_SANDBOX_WORKER = value.workerEndpoint;
 		process.env.CLINE_ANALYSIS_SANDBOX_PUBLIC_KEY = value.workerPublicKey;
@@ -134,6 +142,11 @@ export async function saveSetupPreferences(input: unknown) {
 		if (!info.isDirectory() || info.isSymbolicLink())
 			throw new Error("Non-linked IDA installation directory required");
 	}
+	if (value.ghidraHome) {
+		const info = await lstat(value.ghidraHome);
+		if (!info.isDirectory() || info.isSymbolicLink())
+			throw new Error("Non-linked Ghidra installation directory required");
+	}
 	if (value.adbPath) {
 		const info = await lstat(value.adbPath);
 		if (!info.isFile() || info.isSymbolicLink())
@@ -147,7 +160,7 @@ export async function saveSetupPreferences(input: unknown) {
 		saved: true,
 		restartRequired: true,
 		message:
-			"Saved. Restart an existing shared backend before using changed IDA or worker settings; running jobs were not interrupted.",
+			"Saved. Restart an existing shared backend before using changed IDA, Ghidra or worker settings; running jobs were not interrupted.",
 	};
 }
 export const FULL_ENGINE_IDS = [
@@ -407,8 +420,13 @@ export async function testSetupDevice() {
 	return receipt;
 }
 export async function hashIdaExecutable(file: string, home: string) {
+	return hashSetupExecutable(file, home, "IDA");
+}
+async function hashSetupExecutable(file: string, home: string, label: string) {
 	if (!isAbsolute(file))
-		throw new Error("IDA acceptance requires an absolute executable identity");
+		throw new Error(
+			`${label} acceptance requires an absolute executable identity`,
+		);
 	const [root, executable] = await Promise.all([
 		realpath(home),
 		realpath(file),
@@ -421,11 +439,11 @@ export async function hashIdaExecutable(file: string, home: string) {
 		isAbsolute(child)
 	)
 		throw new Error(
-			"IDA acceptance executable is outside the selected installation",
+			`${label} acceptance executable is outside the selected installation`,
 		);
 	const info = await lstat(file);
 	if (!info.isFile() || info.isSymbolicLink() || info.size > 512 * 1024 * 1024)
-		throw new Error("Invalid IDA acceptance executable");
+		throw new Error(`Invalid ${label} acceptance executable`);
 	const hash = createHash("sha256");
 	for await (const chunk of createReadStream(file, {
 		highWaterMark: 64 * 1024,
@@ -521,6 +539,162 @@ export async function testLicensedIda(
 		await saveOwnedJson("ida-receipt.json", receipt);
 	return receipt;
 }
+// Status reads do not launch Java. Only explicit owned acceptance establishes readiness.
+async function ghidraIdentity(home: string, includeEnvironment = true) {
+	const executable = join(
+		home,
+		"support",
+		process.platform === "win32" ? "analyzeHeadless.bat" : "analyzeHeadless",
+	);
+	const hash = createHash("sha256");
+	for (const file of [
+		executable,
+		join(home, "Ghidra", "application.properties"),
+		join(home, "support", "launch.properties"),
+	]) {
+		const stat = await lstat(file);
+		if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024)
+			throw new Error("Invalid Ghidra launcher/configuration");
+		hash.update(file);
+		hash.update(await readFile(file));
+	}
+	if (includeEnvironment) {
+		hash.update(process.env.JAVA_HOME ?? "");
+		hash.update(process.env.PATH ?? "");
+	}
+	return hash.digest("hex");
+}
+export async function currentGhidraAcceptance(
+	receipt: Record<string, unknown> | null,
+	home: string,
+) {
+	try {
+		if (
+			!home ||
+			receipt?.status !== "passed" ||
+			receipt.ghidraHome !== home ||
+			receipt.fixtureSha256 !== ownedElf.sha256 ||
+			typeof receipt.javaHome !== "string" ||
+			!isAbsolute(receipt.javaHome)
+		)
+			return false;
+		const java = join(
+			receipt.javaHome,
+			"bin",
+			process.platform === "win32" ? "java.exe" : "java",
+		);
+		return (
+			receipt.identity === (await ghidraIdentity(home)) &&
+			receipt.javaSha256 ===
+				(await hashSetupExecutable(java, receipt.javaHome, "Ghidra Java"))
+		);
+	} catch {
+		return false;
+	}
+}
+export async function testGhidraIntegration() {
+	const preferences = await readSetupPreferences();
+	if (!preferences.ghidraHome)
+		throw new Error("Select your Ghidra installation first");
+	applyPreferences(preferences);
+	const identity = await ghidraIdentity(preferences.ghidraHome);
+	const configIdentity = await ghidraIdentity(preferences.ghidraHome, false);
+	await mkdir(directory(), { recursive: true, mode: 0o700 });
+	const root = await mkdtemp(join(directory(), "owned-ghidra-"));
+	const bytes = Buffer.from(ownedElf.base64, "base64");
+	if (createHash("sha256").update(bytes).digest("hex") !== ownedElf.sha256)
+		throw new Error("Owned Ghidra fixture identity mismatch");
+	const target = join(root, "owned.so");
+	await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
+	let receipt: Record<string, unknown> = {
+		status: "failed",
+		ghidraHome: preferences.ghidraHome,
+		identity,
+		fixtureSha256: ownedElf.sha256,
+		checkedAt: new Date().toISOString(),
+		scope:
+			"Owned x86-64 selected function and compatible Java only; no target execution",
+	};
+	try {
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(
+				{
+					engine: "ghidra",
+					operation: "decompile",
+					target,
+					function_selector: { address: ownedElf.functionAddress },
+					output_directory: join(root, "analysis"),
+					timeout_ms: 120000,
+					max_cpu: 2,
+				},
+				{} as never,
+			),
+		);
+		if (
+			!result.succeeded ||
+			!result.artifactVerified ||
+			!result.databaseVerified ||
+			result.sha256 !== ownedElf.sha256
+		)
+			throw new Error(
+				String(
+					result.stderr ||
+						result.stdout ||
+						"Ghidra project/decompilation verification failed",
+				).slice(-4000),
+			);
+		const info = await lstat(
+			join(root, "analysis", "ghidra-analysis-receipt.json"),
+		);
+		if (!info.isFile() || info.isSymbolicLink() || info.size > 16384)
+			throw new Error("Invalid Ghidra receipt");
+		const actual = JSON.parse(
+			await readFile(
+				join(root, "analysis", "ghidra-analysis-receipt.json"),
+				"utf8",
+			),
+		);
+		if (
+			typeof actual.javaHome !== "string" ||
+			!isAbsolute(actual.javaHome) ||
+			typeof actual.javaVersion !== "string"
+		)
+			throw new Error("Ghidra Java runtime identity missing");
+		const java = join(
+			actual.javaHome,
+			"bin",
+			process.platform === "win32" ? "java.exe" : "java",
+		);
+		receipt = {
+			...receipt,
+			status:
+				configIdentity === (await ghidraIdentity(preferences.ghidraHome, false))
+					? "passed"
+					: "failed",
+			identity: await ghidraIdentity(preferences.ghidraHome),
+			javaHome: actual.javaHome,
+			javaVersion: actual.javaVersion,
+			javaSha256: await hashSetupExecutable(
+				java,
+				actual.javaHome,
+				"Ghidra Java",
+			),
+			engineVersion: result.engineVersion,
+		};
+	} catch (error) {
+		receipt = {
+			...receipt,
+			error:
+				error instanceof Error ? error.message : "Ghidra acceptance failed",
+		};
+	}
+	await saveOwnedJson("ghidra-receipt.json", receipt);
+	if (receipt.status !== "passed")
+		throw new Error(
+			String(receipt.error ?? "Ghidra installation changed during acceptance"),
+		);
+	return receipt;
+}
 export async function testSetupWorker() {
 	const value = await readSetupPreferences();
 	applyPreferences(value);
@@ -546,6 +720,13 @@ export async function getSetupCenterStatus() {
 				"ida-receipt-arm64.json",
 			].map((name) => readOwnedJson(name).catch(() => null)),
 		)) as Array<Record<string, unknown> | null>;
+	const ghidraReceipt = (await readOwnedJson("ghidra-receipt.json").catch(
+		() => null,
+	)) as Record<string, unknown> | null;
+	const ghidraCurrent = await currentGhidraAcceptance(
+		ghidraReceipt,
+		preferences.ghidraHome,
+	);
 	const licensedArchitectures = [];
 	if (await currentIdaAcceptance(idaReceipt, preferences.idaHome, "x86_64"))
 		licensedArchitectures.push("x86_64");
@@ -661,6 +842,23 @@ export async function getSetupCenterStatus() {
 			source: runtime.source,
 			integrity: runtime.integrity,
 		},
+		ghidra: {
+			status: ghidraCurrent
+				? "Ready"
+				: ghidraReceipt?.ghidraHome === preferences.ghidraHome &&
+						ghidraReceipt?.status === "failed"
+					? "Test failed"
+					: preferences.ghidraHome
+						? "Not tested or stale"
+						: "Setup needed",
+			javaVersion: ghidraCurrent ? ghidraReceipt?.javaVersion : undefined,
+			reason: ghidraCurrent
+				? "Owned x86-64 selected-function decompilation and Java passed; target compatibility remains separate"
+				: ghidraReceipt?.ghidraHome === preferences.ghidraHome &&
+						typeof ghidraReceipt?.error === "string"
+					? ghidraReceipt.error
+					: "Select Ghidra and run its separate owned test. A compatible JDK is required by the Ghidra launcher.",
+		},
 		licensedArchitectures,
 		licensedStatus: licensedArchitectures.length
 			? `Owned IDA acceptance passed for ${licensedArchitectures.join(", ")}; other processors and target compatibility remain untested`
@@ -677,6 +875,7 @@ export async function getSetupCenterStatus() {
 				: "Configure and explicitly test a signed isolated worker",
 		updates: privateUpdateReadiness(),
 		limitations: [
+			"The Python pack test does not test Ghidra, IDA, devices or workers; use their separate explicit tests.",
 			"Install all means the tested local engine packs. It cannot supply commercial licenses or device authorization.",
 			"Unicorn emulates bounded bytes; angr performs static VEX lifting. QBDI target tracing still requires an approved signed isolated worker.",
 			"Pack activation and rollback preserve old runtime files and project data; existing shared Hub processes require a separate backend restart.",

@@ -12,6 +12,14 @@ import * as windowsEnvironment from "./windows-tool-environment";
 const ZIP_WITH_TRAVERSAL =
 	"UEsDBBQAAAAAAGIZN11H3dx5AgAAAAIAAAANAAAAc2FmZS9maWxlLnR4dG9rUEsDBBQAAAAAAGIZN10fKKpnAgAAAAIAAAANAAAALi4vZXNjYXBlLnR4dG5vUEsBAhQDFAAAAAAAYhk3XUfd3HkCAAAAAgAAAA0AAAAAAAAAAAAAAIABAAAAAHNhZmUvZmlsZS50eHRQSwECFAMUAAAAAABiGTddHyiqZwIAAAACAAAADQAAAAAAAAAAAAAAgAEtAAAALi4vZXNjYXBlLnR4dFBLBQYAAAAAAgACAHYAAABaAAAAAAA=";
 
+const ghidraReceiptMock = `mkdir -p "$1/$2.rep"; touch "$1/$2.gpr"; printf project > "$1/$2.rep/project.prp"
+( while [ "$#" -gt 0 ]; do
+ if [ "$1" = "ClineVerifyAnalysis.java" ]; then
+  printf '{"schemaVersion":1,"attempt":"%s","inputSha256":"%s","programName":"owned","analysisCompleted":true}' "$3" "$4" > "$2"; break
+ fi
+ shift
+ done )
+`;
 const temporaryDirectories: string[] = [];
 const originalPath = process.env.PATH;
 const originalCacheDirectory = process.env.CLINE_RE_CACHE_DIR;
@@ -651,7 +659,7 @@ printf "%s\\n" "$@"`,
 		await executable(
 			path.join(ghidraHome, "support"),
 			"analyzeHeadless",
-			'mkdir -p "$1"; touch "$1/$2.gpr"; printf "%s\\n" "$@"',
+			ghidraReceiptMock + 'printf "%s\\n" "$@"',
 		);
 		process.env.GHIDRA_HOME = ghidraHome;
 		const target = path.join(directory, "sample.bin");
@@ -863,8 +871,7 @@ describe("targeted adapter routing (mock engines, not real decompilation)", () =
 		await executable(
 			path.join(home, "support"),
 			"analyzeHeadless",
-			`mkdir -p "$1"; touch "$1/$2.gpr"
-while [ "$#" -gt 0 ]; do
+			ghidraReceiptMock + `while [ "$#" -gt 0 ]; do
  if [ "$1" = "-postScript" ]; then shift 2; printf '/* mock selected */' > "$1"; printf '%s' '{"schemaVersion":1,"addressHex":"0x1000","name":"mock-selected","signature":"int mock_selected(void)","pseudocode":"/* mock selected */","architecture":"x86:LE:64:default","image":{"preferredBaseHex":"0x0","addressSpace":"ghidra-program-virtual"},"callees":[],"relationsTruncated":false,"coverage":"selected-function-decompiler-and-bounded-high-pcode-not-runtime"}' > "$1.native.json"; break; else shift; fi
 done`,
 		);
