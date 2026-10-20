@@ -151,3 +151,49 @@ it("never promotes ambiguous same-time failures and exports bounded evidence det
 	).toBe("host-validation");
 	expect(formatFinalReport(view)).toContain("## Execution evidence");
 });
+
+it("recovers current outcome after a later matching host check passes without erasing history", () => {
+	for (const oldOutcome of ["failed", "blocked", "partial"] as const) {
+		const r = checked();
+		const success = r.evidence[0];
+		r.evidence.unshift({
+			...success,
+			id: "old",
+			status: oldOutcome === "failed" ? "failed" : "completed",
+			outcome: oldOutcome,
+			observation: {
+				...receipt,
+				id: "old",
+				recordedAtMs: 10,
+				outcome: oldOutcome,
+			},
+		});
+		expect(taskReportView(r, "completed").outcome).toBe(
+			"Declared checks passed",
+		);
+		expect(taskReportView(r, "completed").evidenceDetails).toHaveLength(2);
+	}
+});
+it("never clears unassigned or different-scope failures with an unrelated success", () => {
+	for (const change of [
+		{ observation: undefined },
+		{
+			observation: {
+				...receipt,
+				id: "old",
+				recordedAtMs: 10,
+				outcome: "failed" as const,
+				validationScope: "different",
+			},
+		},
+	]) {
+		const r = checked();
+		r.evidence.unshift({
+			...r.evidence[0],
+			id: "old",
+			status: "failed",
+			...change,
+		});
+		expect(taskReportView(r, "completed").outcome).toContain("Failed");
+	}
+});

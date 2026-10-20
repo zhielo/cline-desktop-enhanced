@@ -3695,6 +3695,7 @@ export function useChatSession(environmentId: string, draftKey = "default") {
 				checkpointRunCount,
 				config,
 			})) as {
+    messages?: unknown;
 				sessionId?: string;
 			};
 			const nextSessionId =
@@ -4242,6 +4243,7 @@ export function useChatSession(environmentId: string, draftKey = "default") {
 					750,
 					reconcileFork,
 				)) as {
+     messages?: unknown;
 					sessionId?: string;
 					forkedFromSessionId?: string;
 					conversationId?: string;

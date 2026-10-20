@@ -1,4 +1,4 @@
-import { GeneratedMediaSchema } from "@cline/shared/browser";
+import { GeneratedMediaSchema, type GeneratedMedia } from "@cline/shared/browser";
 import { z } from "zod";
 import { TaskObservationSchema } from "../../shared/task-observation";
 
@@ -63,7 +63,16 @@ export const ChatMessageImageSchema = z.object({
 	data: z.string().min(1),
 });
 
-export const ChatMessageMediaSchema = GeneratedMediaSchema;
+// Adapt the shared Zod 4 boundary into the WebView's Zod 3 graph. Never nest
+// schemas from different Zod majors; canonical validation remains in shared.
+export const ChatMessageMediaSchema = z.unknown().transform((value, ctx): GeneratedMedia => {
+ const result = GeneratedMediaSchema.safeParse(value);
+ if (!result.success) {
+  ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid generated media" });
+  return z.NEVER;
+ }
+ return result.data;
+});
 
 export const TaskStepStatusSchema = z.enum([
 	"pending",

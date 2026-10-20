@@ -456,14 +456,14 @@ describe("useChatSession", () => {
 		);
 		let hydration!: Promise<void>;
 		await act(async () => {
-			hydration = current.hydrateSession({
+			hydration = current.hydrateSession(withEnvironment({
 				sessionId: sid,
 				status: "completed",
 				provider: "cline",
 				model: "test",
 				cwd: "/workspace/cline",
 				startedAt: "2026-10-07T00:00:00Z",
-			});
+			}));
 			await Promise.resolve();
 		});
 		await act(async () =>
@@ -532,13 +532,13 @@ describe("useChatSession", () => {
 		await act(async () =>
 			root.render(<HookHarness environmentId={environmentId} />),
 		);
-		await act(async () => current.hydrateSession(history));
+		await act(async () => current.hydrateSession(withEnvironment(history)));
 		expect(current.status).toBe("running");
 		await act(async () => root.render(null));
 		await act(async () =>
 			root.render(<HookHarness environmentId={environmentId} />),
 		);
-		await act(async () => current.hydrateSession(history));
+		await act(async () => current.hydrateSession(withEnvironment(history)));
 		expect(current.status).toBe("running");
 		expect(current.messages.map((message) => message.id)).toEqual([
 			"user",
@@ -575,14 +575,14 @@ describe("useChatSession", () => {
 		);
 		let hydration!: Promise<void>;
 		await act(async () => {
-			hydration = current.hydrateSession({
+			hydration = current.hydrateSession(withEnvironment({
 				sessionId: sid,
 				status: "running",
 				provider: "cline",
 				model: "test",
 				cwd: "/workspace/cline",
 				startedAt: "2026-10-07T00:00:00Z",
-			});
+			}));
 			await Promise.resolve();
 		});
 		await act(async () =>
@@ -632,11 +632,11 @@ describe("useChatSession", () => {
 				workspaceRoot: "/workspace",
 				startedAt: "2026-10-05T00:00:00Z",
 			});
-			await act(async () => current.hydrateSession(history("long-chat")));
+			await act(async () => current.hydrateSession(withEnvironment(history("long-chat"))));
 			expect(current.messages.some((message) => message.id === "saved-answer")).toBe(true);
 			failRead = true;
 			await act(async () =>
-				current.hydrateSession(history(sameSession ? "long-chat" : "other-chat")),
+				current.hydrateSession(withEnvironment(history(sameSession ? "long-chat" : "other-chat"))),
 			);
 			expect(current.status).toBe("error");
 			expect(current.messages.some((message) => message.id === "saved-answer")).toBe(sameSession);
@@ -678,13 +678,13 @@ describe("useChatSession", () => {
 			},
 		);
 		await act(async () =>
-			current.hydrateSession({
+			current.hydrateSession(withEnvironment({
 				sessionId,
 				origin: "cloud",
 				status: "completed",
 				...cloudSessionConfig,
 				startedAt: "2026-09-01T00:00:00Z",
-			}),
+			})),
 		);
 		await act(async () =>
 			handlerFor("cloud_session_rehydrated")({
@@ -745,13 +745,13 @@ describe("useChatSession", () => {
 		);
 		let hydration!: Promise<void>;
 		await act(async () => {
-			hydration = current.hydrateSession({
+			hydration = current.hydrateSession(withEnvironment({
 				sessionId: "old-cloud",
 				origin: "cloud",
 				status: "running",
 				repoUrl: "https://github.com/cline/test",
 				startedAt: "2026-09-01T00:00:00Z",
-			});
+			}));
 			await Promise.resolve();
 		});
 		await reached.promise;
@@ -807,7 +807,7 @@ describe("useChatSession", () => {
 			return [];
 		});
 		await act(async () =>
-			current.hydrateSession({
+			current.hydrateSession(withEnvironment({
 				sessionId: "expired-cloud",
 				environmentId: "local",
 				origin: "cloud",
@@ -815,7 +815,7 @@ describe("useChatSession", () => {
 				...cloudSessionConfig,
 				repoUrl: "https://github.com/cline/test",
 				startedAt: "2026-09-01T00:00:00Z",
-			}),
+			})),
 		);
 		expect(current.isCloudSessionExpired).toBe(true);
 		if (failedCommand) {
@@ -963,11 +963,11 @@ describe("useChatSession", () => {
 			},
 		);
 		await act(async () => current.start(current.config));
-		let activeTask!: Promise<void>;
+		let activeTask!: Promise<boolean>;
 		await act(async () => {
 			activeTask = current.sendPrompt("active");
 		});
-		let queuedTask!: Promise<void>;
+		let queuedTask!: Promise<boolean>;
 		await act(async () => {
 			queuedTask = current.sendPrompt("queued");
 		});
@@ -1035,7 +1035,7 @@ describe("useChatSession", () => {
 				},
 			);
 			await act(async () => current.start(current.config));
-			let activeTask!: Promise<void>;
+			let activeTask!: Promise<boolean>;
 			await act(async () => {
 				activeTask = current.sendPrompt("active");
 			});
@@ -1230,7 +1230,7 @@ describe("useChatSession", () => {
 			},
 		);
 
-		let sendTask: Promise<void> | undefined;
+		let sendTask: Promise<boolean> | undefined;
 		await act(async () => {
 			sendTask = current.sendPrompt("hello");
 			await Promise.resolve();
@@ -1334,7 +1334,7 @@ describe("useChatSession", () => {
 			await act(async () => {
 				statusHandler({ sessionId, status: "running" });
 			});
-			let sendTask!: Promise<void>;
+			let sendTask!: Promise<boolean>;
 			await act(async () => {
 				sendTask = current.sendPrompt("queued follow-up");
 				for (let i = 0; i < 5; i += 1) await Promise.resolve();
@@ -1448,7 +1448,7 @@ describe("useChatSession", () => {
 		await act(async () => current.start(current.config));
 		const chatEventHandler = handlerFor("chat_event");
 
-		let sendTask!: Promise<void>;
+		let sendTask!: Promise<boolean>;
 		await act(async () => {
 			sendTask = current.sendPrompt("spawn a subagent");
 			await Promise.resolve();
@@ -1670,7 +1670,7 @@ describe("useChatSession", () => {
 		vi.useFakeTimers();
 		try {
 			await act(async () => {
-				await current.hydrateSession({
+				await current.hydrateSession(withEnvironment({
 					environmentId,
 					sessionId: hydratedSessionId,
 					status: "running",
@@ -1679,7 +1679,7 @@ describe("useChatSession", () => {
 					cwd: "/workspace/cline",
 					workspaceRoot: "/workspace/cline",
 					startedAt: "2026-08-12T00:00:00.000Z",
-				});
+				}));
 			});
 			expect(current.status).toBe("running");
 			expect(current.messages).toHaveLength(1);
@@ -1728,13 +1728,13 @@ describe("useChatSession", () => {
 		vi.useFakeTimers();
 		try {
 			await act(async () =>
-				current.hydrateSession({
+				current.hydrateSession(withEnvironment({
 					sessionId,
 					origin: "cloud",
 					status: "running",
 					...cloudSessionConfig,
 					startedAt: "2026-09-01T00:00:00Z",
-				}),
+				})),
 			);
 			await act(async () => {
 				handlerFor("prompts_in_queue_state")({ sessionId, items: queued });
@@ -1817,7 +1817,7 @@ describe("useChatSession", () => {
 		vi.useFakeTimers();
 		try {
 			await act(async () => {
-				await current.hydrateSession({
+				await current.hydrateSession(withEnvironment({
 					sessionId: hydratedSessionId,
 					status: "idle",
 					provider: "cline",
@@ -1825,7 +1825,7 @@ describe("useChatSession", () => {
 					cwd: "/workspace/cline",
 					workspaceRoot: "/workspace/cline",
 					startedAt: "2026-08-12T00:00:00.000Z",
-				});
+				}));
 			});
 			const readsAfterHydration = readCount;
 
@@ -1900,7 +1900,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: hydratedSessionId,
 				status: "running",
 				provider: "cline",
@@ -1908,7 +1908,7 @@ describe("useChatSession", () => {
 				cwd: "/workspace/cline",
 				workspaceRoot: "/workspace/cline",
 				startedAt: "2026-08-12T00:00:00.000Z",
-			});
+			}));
 		});
 
 		const chatEventHandler = subscribeMock.mock.calls.find(
@@ -2815,14 +2815,14 @@ describe("useChatSession", () => {
 		vi.useFakeTimers();
 		try {
 			await act(async () => {
-				await current.hydrateSession({
+				await current.hydrateSession(withEnvironment({
 					sessionId: "cloud-transition",
 					origin: "cloud",
 					repoUrl: "https://github.com/cline/test",
 					status: "provisioning",
 					...cloudSessionConfig,
 					startedAt: "2026-08-17T00:00:00.000Z",
-				});
+				}));
 			});
 			expect(current.messages).toEqual([
 				expect.objectContaining({
@@ -3031,14 +3031,14 @@ describe("useChatSession", () => {
 
 		let hydration!: Promise<void>;
 		await act(async () => {
-			hydration = current.hydrateSession({
+			hydration = current.hydrateSession(withEnvironment({
 				sessionId: "ses-cloud",
 				origin: "cloud",
 				repoUrl: "https://github.com/cline/test",
 				status: "running",
 				...cloudSessionConfig,
 				startedAt: "2026-08-06T00:00:00.000Z",
-			});
+			}));
 			await requested;
 		});
 
@@ -3249,14 +3249,14 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: "ses-cloud",
 				origin: "cloud",
 				repoUrl: "https://github.com/cline/test",
 				status: "running",
 				...cloudSessionConfig,
 				startedAt: "2026-08-06T00:00:00.000Z",
-			});
+			}));
 		});
 
 		expect(current.status).toBe("running");
@@ -3286,7 +3286,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: "ses-cloud",
 				origin: "cloud",
 				repoUrl: "https://github.com/cline/test",
@@ -3299,7 +3299,7 @@ describe("useChatSession", () => {
 						branch: "feature/cloud",
 					},
 				},
-			});
+			}));
 		});
 
 		expect(current.config.branch).toBe("feature/cloud");
@@ -3471,7 +3471,7 @@ describe("useChatSession", () => {
 				reasoningEffort: "high",
 			}));
 		});
-		let sendPromise: Promise<void> | undefined;
+		let sendPromise: Promise<boolean> | undefined;
 		await act(async () => {
 			sendPromise = current.sendPrompt("Start the task");
 			await Promise.resolve();
@@ -3559,7 +3559,7 @@ describe("useChatSession", () => {
 			},
 		);
 
-		let sendPromise: Promise<void> | undefined;
+		let sendPromise: Promise<boolean> | undefined;
 		await act(async () => {
 			sendPromise = current.sendPrompt("Read this", [attachment]);
 			await Promise.resolve();
@@ -3575,7 +3575,7 @@ describe("useChatSession", () => {
 		expect(sentAttachments).toBeUndefined();
 
 		await act(async () => {
-			resolveUpload?.(new TextEncoder().encode("hello").buffer);
+			resolveUpload?.(new TextEncoder().encode("hello").buffer as ArrayBuffer);
 			await sendPromise;
 		});
 		expect(sentAttachments).toEqual({
@@ -4245,7 +4245,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => current.start(current.config));
-		let sendTask: Promise<void> | undefined;
+		let sendTask: Promise<boolean> | undefined;
 		await act(async () => {
 			sendTask = current.sendPrompt("write an essay");
 			await Promise.resolve();
@@ -4394,7 +4394,7 @@ describe("useChatSession", () => {
 
 	it("rejects hydration for a session owned by another environment", async () => {
 		await expect(
-			current.hydrateSession({
+			current.hydrateSession(withEnvironment({
 				sessionId: "remote-session",
 				environmentId: "pi-server",
 				status: "completed",
@@ -4403,7 +4403,7 @@ describe("useChatSession", () => {
 				cwd: "/home/pi/project",
 				workspaceRoot: "/home/pi/project",
 				startedAt: "2026-07-31T00:00:00.000Z",
-			}),
+			})),
 		).rejects.toThrow("belongs to environment pi-server, not local");
 		expect(current.sessionId).toBeNull();
 		expect(current.config.environmentId).toBe("local");
@@ -4446,7 +4446,7 @@ describe("useChatSession", () => {
 			},
 		);
 
-		let sendTask: Promise<void> | undefined;
+		let sendTask: Promise<boolean> | undefined;
 		await act(async () => {
 			sendTask = current.sendPrompt("Track this completed turn");
 			await Promise.resolve();
@@ -4613,7 +4613,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: hydratedSessionId,
 				environmentId: "local",
 				status: "completed",
@@ -4622,7 +4622,7 @@ describe("useChatSession", () => {
 				cwd: "/workspace/cline",
 				workspaceRoot: "/workspace/cline",
 				startedAt: "2026-07-31T00:00:00.000Z",
-			});
+			}));
 		});
 
 		expect(current.summary).toMatchObject({
@@ -4701,7 +4701,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: hydratedSessionId,
 				status: "running",
 				provider: "cline",
@@ -4709,7 +4709,7 @@ describe("useChatSession", () => {
 				cwd: "/workspace/cline",
 				workspaceRoot: "/workspace/cline",
 				startedAt: "2026-08-11T00:00:00.000Z",
-			});
+			}));
 		});
 
 		await vi.waitFor(() =>
@@ -4779,7 +4779,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: hydratedSessionId,
 				status: "completed",
 				provider: "openrouter",
@@ -4787,7 +4787,7 @@ describe("useChatSession", () => {
 				cwd: "/workspace/cline",
 				workspaceRoot: "/workspace/cline",
 				startedAt: "2026-07-31T00:00:00.000Z",
-			});
+			}));
 		});
 		expect(current.config).toMatchObject({
 			provider: "openrouter",
@@ -5357,7 +5357,7 @@ describe("useChatSession", () => {
 		);
 
 		await act(async () => {
-			await current.hydrateSession({
+			await current.hydrateSession(withEnvironment({
 				sessionId: "ses-cloud",
 				origin: "cloud",
 				repoUrl: "https://github.com/cline/test",
@@ -5367,10 +5367,10 @@ describe("useChatSession", () => {
 				cwd: "/workspace",
 				workspaceRoot: "/workspace",
 				startedAt: "2026-08-17T00:00:00.000Z",
-			});
+			}));
 		});
 
-		let sendPromise!: Promise<void>;
+		let sendPromise!: Promise<boolean>;
 		await act(async () => {
 			sendPromise = current.sendPrompt("Answer once");
 			await sendStarted;
@@ -5538,7 +5538,7 @@ describe("useChatSession", () => {
 			},
 		);
 
-		let sendPromise: Promise<void> | undefined;
+		let sendPromise: Promise<boolean> | undefined;
 		await act(async () => {
 			sendPromise = current.sendPrompt("First prompt");
 		});
@@ -5596,10 +5596,10 @@ describe("useChatSession", () => {
 				startedAt: "2026-09-10T00:00:00.000Z",
 			});
 			await act(async () => {
-				await current.hydrateSession(history("another-session"));
+				await current.hydrateSession(withEnvironment(history("another-session")));
 			});
 			await act(async () => {
-				await current.hydrateSession(history(failedSessionId));
+				await current.hydrateSession(withEnvironment(history(failedSessionId)));
 			});
 			expect(
 				current.messages.filter((message) => message.role === "error"),
@@ -6176,8 +6176,8 @@ describe("useChatSession", () => {
 			},
 		);
 
-		let firstSend: Promise<void> | undefined;
-		let secondSend: Promise<void> | undefined;
+		let firstSend: Promise<boolean> | undefined;
+		let secondSend: Promise<boolean> | undefined;
 		await act(async () => {
 			firstSend = current.sendPrompt("First prompt");
 			await Promise.resolve();
@@ -6269,8 +6269,8 @@ describe("useChatSession", () => {
 			},
 		);
 
-		let firstSend: Promise<void> | undefined;
-		let secondSend: Promise<void> | undefined;
+		let firstSend: Promise<boolean> | undefined;
+		let secondSend: Promise<boolean> | undefined;
 		await act(async () => {
 			firstSend = current.sendPrompt("First prompt", [attachment]);
 			await Promise.resolve();
@@ -6282,7 +6282,7 @@ describe("useChatSession", () => {
 		expect(sends).toHaveLength(0);
 
 		await act(async () => {
-			resolveUpload?.(new TextEncoder().encode("hello").buffer);
+			resolveUpload?.(new TextEncoder().encode("hello").buffer as ArrayBuffer);
 			await Promise.all([firstSend, secondSend]);
 		});
 		expect(sends.map(({ prompt, delivery }) => ({ prompt, delivery }))).toEqual(
@@ -6638,7 +6638,7 @@ describe("coerced-queue first turn vs stale send response", () => {
 	// function resolving to a bare promise would make callers adopt (await)
 	// that promise, deadlocking on the deliberately unresolved send RPC.
 	async function dispatchPrompt(prompt: string) {
-		let sendPromise: Promise<void> = Promise.resolve();
+		let sendPromise: Promise<boolean> = Promise.resolve(false);
 		await act(async () => {
 			sendPromise = current.sendPrompt(prompt);
 			// Drain the start/send dispatch chain (startSession RPC, attachment
@@ -7450,17 +7450,17 @@ describe("reasoning ownership and pre-task Analysis", () => {
  it("restores each chat independently and survives remount without overwriting its selection", async () => {
   runtime();
   for (const [id, effort] of [["a", "medium"], ["b", "high"], ["c", "xhigh"]] as const) {
-   await act(async () => current.hydrateSession(history(id)));
+   await act(async () => current.hydrateSession(withEnvironment(history(id))));
    await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: effort }));
   }
   for (const [id, effort] of [["a", "medium"], ["c", "xhigh"], ["b", "high"]]) {
-   await act(async () => current.hydrateSession(history(id)));
+   await act(async () => current.hydrateSession(withEnvironment(history(id))));
    expect(current.config.reasoningEffort).toBe(effort);
   }
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<HookHarness />));
-  await act(async () => current.hydrateSession(history("c")));
+  await act(async () => current.hydrateSession(withEnvironment(history("c"))));
   expect(current.config.reasoningEffort).toBe("xhigh");
   await act(async () => current.sendPrompt("Check my selection"));
   const sends = invokeMock.mock.calls.filter(([cmd, args]) => cmd === "chat_session_command" && args?.request?.action === "send");
@@ -7471,7 +7471,7 @@ describe("reasoning ownership and pre-task Analysis", () => {
   invokeMock.mockImplementation(async (cmd: string) => cmd === "chat_session_command" ? attached.promise : []);
   let hydration!: Promise<void>;
   await act(async () => {
-   hydration = current.hydrateSession(history("slow"));
+   hydration = current.hydrateSession(withEnvironment(history("slow")));
    expect(await current.sendPrompt("must not run")).toBe(false);
    current.updateReasoning({ thinking: true, reasoningEffort: "low" });
   });
@@ -7489,8 +7489,8 @@ describe("reasoning ownership and pre-task Analysis", () => {
    return (args?.request as { sessionId?: string })?.sessionId === "old" ? old.promise : { thinking: true, reasoningEffort: "low" };
   });
   let hydration!: Promise<void>;
-  await act(async () => { hydration = current.hydrateSession(history("old")); await Promise.resolve(); });
-  await act(async () => current.hydrateSession(history("destination")));
+  await act(async () => { hydration = current.hydrateSession(withEnvironment(history("old"))); await Promise.resolve(); });
+  await act(async () => current.hydrateSession(withEnvironment(history("destination"))));
   await act(async () => { old.resolve({ thinking: true, reasoningEffort: "low" }); await hydration; });
   expect(current.sessionId).toBe("destination");
   expect(current.config.reasoningEffort).toBe("xhigh");
@@ -7498,7 +7498,7 @@ describe("reasoning ownership and pre-task Analysis", () => {
  it("keeps draft defaults separate from existing chats and clears effort on Auto", async () => {
   runtime();
   await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: "medium" }));
-  await act(async () => current.hydrateSession(history("existing")));
+  await act(async () => current.hydrateSession(withEnvironment(history("existing"))));
   await act(async () => current.updateReasoning({ thinking: true, reasoningEffort: "xhigh" }));
   await act(async () => current.reset());
   expect(current.config.reasoningEffort).toBe("medium");
@@ -7529,3 +7529,8 @@ describe("reasoning ownership and pre-task Analysis", () => {
   expect(invokeMock.mock.calls.some(([cmd, args]) => cmd === "chat_session_command" && args?.request?.action === "send")).toBe(false);
  });
 });
+
+function withEnvironment<T extends object>(session:T):T & {environmentId:string;workspaceRoot:string;cwd:string;provider:string;model:string} {
+ const cwd="cwd" in session && typeof session.cwd === "string"?session.cwd:"";
+ return {provider:"cline",model:"test",cwd,workspaceRoot:cwd,...session,environmentId:("environmentId" in session && typeof session.environmentId === "string")?session.environmentId:"local"};
+}

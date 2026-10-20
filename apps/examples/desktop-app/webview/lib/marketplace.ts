@@ -134,7 +134,7 @@ export async function fetchMarketplaceCatalog(): Promise<MarketplaceCatalog> {
 		// Fall back to the statically exported route when the sidecar is unavailable.
 	}
 
-	let data: unknown;
+	let rawData: unknown;
 	let lastError: unknown;
 	for (const url of urls) {
 		try {
@@ -144,22 +144,24 @@ export async function fetchMarketplaceCatalog(): Promise<MarketplaceCatalog> {
 			if (!response.ok) {
 				throw new Error(`Failed to fetch marketplace: ${response.status}`);
 			}
-			data = await response.json();
+			rawData = await response.json();
 			break;
 		} catch (error) {
 			lastError = error;
 		}
 	}
 
-	if (data === undefined) {
+	if (rawData === undefined) {
 		throw lastError instanceof Error
 			? lastError
 			: new Error("Failed to fetch marketplace");
 	}
 
+ if(!rawData || typeof rawData!=="object" || Array.isArray(rawData))throw new Error("Invalid marketplace catalog");
+ const data=rawData as Record<string,unknown>;
 	const baseUrl = typeof data?.baseUrl === "string" ? data.baseUrl : undefined;
 	const rawCounts =
-		typeof data?.counts === "object" && data.counts !== null ? data.counts : {};
+		typeof data.counts === "object" && data.counts !== null && !Array.isArray(data.counts) ? data.counts as Record<string,unknown> : {};
 
 	const tags: MarketplaceTag[] = Array.isArray(data?.tags)
 		? data.tags
@@ -185,7 +187,7 @@ export async function fetchMarketplaceCatalog(): Promise<MarketplaceCatalog> {
 
 	const entries: MarketplaceEntry[] = Array.isArray(data?.entries)
 		? data.entries
-				.map((entry: unknown) => {
+				.map((entry: unknown): MarketplaceEntry | null => {
 					if (!entry || typeof entry !== "object") return null;
 					const candidate = entry as Record<string, unknown>;
 					const install =

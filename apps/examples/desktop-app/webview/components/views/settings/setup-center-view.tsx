@@ -283,7 +283,7 @@ export function SetupCenter() {
 		<PageFrame>
 			<PageHeader
 				title="Setup Center"
-				subtitle="Install supported private engine packs, then verify actual capabilities. Licenses and device authorization stay explicit."
+				description="Install supported private engine packs, then verify actual capabilities. Licenses and device authorization stay explicit."
 			/>
 			<div className="space-y-6 p-6">
 				<BackendConnectionStatus />

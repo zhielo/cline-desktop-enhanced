@@ -19,8 +19,7 @@ type TranscriptionStreamPart =
 	| { type: "transcript-partial"; id?: string; text: string }
 	| { type: "transcript-final"; id?: string; text: string }
 	| { type: "finish"; text: string }
-	| { type: "error"; error: unknown }
-	| { type: string };
+	| { type: "error"; error: unknown };
 
 export type StreamingSpeechSession = {
 	done: Promise<void>;
@@ -125,8 +124,15 @@ async function startPcmCapture(
 
 function parseStreamPart(value: unknown): TranscriptionStreamPart | null {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-	const type = (value as { type?: unknown }).type;
-	return typeof type === "string" ? (value as TranscriptionStreamPart) : null;
+ const p=value as Record<string,unknown>;
+ switch(p.type) {
+ case "stream-start":return {type:p.type};
+ case "transcript-delta":return typeof p.delta==="string"?{type:p.type,delta:p.delta}:null;
+ case "transcript-partial":case "transcript-final":return typeof p.text==="string"?{type:p.type,text:p.text,...(typeof p.id==="string"?{id:p.id}:{})}:null;
+ case "finish":return {type:p.type,text:typeof p.text==="string"?p.text:""};
+ case "error":return {type:p.type,error:p.error};
+ default:return null;
+ }
 }
 
 export async function startVercelStreamingTranscription(options: {

@@ -5,12 +5,12 @@ import type {
 	AgendaTaskListInput,
 	AgendaTaskRecord,
 	AgendaTaskRunRecord,
-	DesktopDebugLogPayload,
 	HubTaskCreateInput,
 	HubTaskUpdateInput,
 } from "@cline/shared";
 import { HUB_SESSION_LIFECYCLE_TIMEOUT_MS } from "@cline/shared/browser";
 import type {
+	DesktopDebugLogPayload,
 	DesktopTransportEvent,
 	DesktopTransportMessage,
 	DesktopTransportRequest,

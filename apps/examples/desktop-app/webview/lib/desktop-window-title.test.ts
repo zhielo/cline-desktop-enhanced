@@ -8,7 +8,7 @@ const { invoke, setTitle } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/desktop-client", () => ({
 	desktopClient: { invoke },
-	isTauriAvailable: () => window.__TAURI_INTERNALS__ !== undefined,
+	isTauriAvailable: () => (window as Window & {__TAURI_INTERNALS__?:unknown}).__TAURI_INTERNALS__ !== undefined,
 }));
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () => ({ setTitle }),

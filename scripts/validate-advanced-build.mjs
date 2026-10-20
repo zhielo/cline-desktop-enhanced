@@ -140,6 +140,8 @@ async function main() {
     job("Test Windows workflow hardening", ["test", "scripts/windows-hardening.test.mjs"]),
     job("Test consolidated runner", ["test", "scripts/validate-advanced-build.test.mjs", "scripts/verification-speed.test.mjs"]),
     job("Type-check desktop", ["x", "tsc", "-p", "apps/examples/desktop-app/tsconfig.dev.json", "--noEmit"]),
+    job("Type-check complete desktop WebView including fixtures", ["x", "tsc", "-p", "apps/examples/desktop-app/webview/tsconfig.json", "--noEmit"]),
+    job("Test audit repair contracts", ["x", "vitest", "run", "shared/analysis-budgets.test.ts", "webview/lib/chat-media-schema.test.ts", "sidecar/task-validation-policy.test.ts", "--config", "vitest.config.mts"], desktop),
     job("Type-check core", ["x", "tsc", "-p", "sdk/packages/core/tsconfig.build.json", "--noEmit"]),
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),
     job("Test real Windows AppContainer execution boundary", ["test", "scripts/isolation-host-failure.test.ts", "scripts/javascript-isolation.test.ts"], desktop),

@@ -201,7 +201,6 @@ export function TaskReportPanel({
 			className={cn(
 				"sticky top-11 z-20 overflow-hidden rounded-xl border bg-background/95 shadow-sm backdrop-blur-xl",
 				state.tone === "active" && "border-blue-500/30",
-				state.tone === "success" && "border-emerald-500/30",
 				state.tone === "warning" && "border-amber-500/35",
 				state.tone === "destructive" && "border-destructive/40",
 				state.tone === "muted" && "border-border/70",
@@ -218,8 +217,6 @@ export function TaskReportPanel({
 						"grid size-9 shrink-0 place-items-center rounded-xl border",
 						state.tone === "active" &&
 							"border-blue-500/25 bg-blue-500/10 text-blue-500",
-						state.tone === "success" &&
-							"border-emerald-500/25 bg-emerald-500/10 text-emerald-500",
 						state.tone === "warning" &&
 							"border-amber-500/25 bg-amber-500/10 text-amber-500",
 						state.tone === "destructive" &&
@@ -244,8 +241,6 @@ export function TaskReportPanel({
 								"shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
 								state.tone === "active" &&
 									"border-blue-500/25 bg-blue-500/10 text-blue-600 dark:text-blue-400",
-								state.tone === "success" &&
-									"border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 								state.tone === "warning" &&
 									"border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400",
 								state.tone === "destructive" &&

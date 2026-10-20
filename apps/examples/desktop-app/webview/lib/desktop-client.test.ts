@@ -73,7 +73,7 @@ const sockets: FakeWebSocket[] = [];
 const RECONNECT_FIRST_DELAY_MS = 800;
 const originalWebSocket = globalThis.WebSocket;
 const originalFetch = globalThis.fetch;
-const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+const fetchMock = vi.fn<(input:RequestInfo | URL,init?:RequestInit)=>Promise<Response>>(async () => new Response(null, { status: 202 }));
 
 async function connectLatestSocket(options?: {
 	sendError?: Error;
