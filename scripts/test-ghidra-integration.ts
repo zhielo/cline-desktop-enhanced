@@ -4,9 +4,11 @@ import { mkdtemp, writeFile, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReverseEngineeringExecutor } from "../sdk/packages/core/src/extensions/tools/executors/reverse-engineering";
+import { ghidraAnalysisCacheRoot } from "../sdk/packages/core/src/extensions/tools/executors/ghidra-project-path";
 import fixture from "./fixtures/owned-native-elf.json";
 const root = await mkdtemp(join(tmpdir(), "cline ghidra acceptance-"));
 const execute = createReverseEngineeringExecutor();
+const previousCache = process.env.CLINE_RE_CACHE_DIR;
 try {
 	const target = join(root, "owned.so"),
 		output = join(root, "project");
@@ -68,6 +70,26 @@ try {
 		throw new Error("Owned pseudocode missing");
 	if (!fourth.stdout.includes("Owned no-op completed"))
 		throw new Error("Second script directory was not executed");
+	// Exercise the production default-root builder with an isolated owned home.
+	// Previously the shared ~/.cline default failed before import.
+	const cache = ghidraAnalysisCacheRoot(root, undefined);
+	process.env.CLINE_RE_CACHE_DIR = cache;
+	const cached = await run({ output_directory: undefined });
+	if (
+		cached.reusedAnalysis ||
+		cached.outputDirectory !== join(cache, fixture.sha256, "ghidra")
+	)
+		throw new Error("Ghidra-specific persistent cache path was not used");
+	const reused = await run({ output_directory: undefined });
+	if (!reused.reusedAnalysis)
+		throw new Error("Persistent Ghidra cache was not reused");
+	try {
+		await run({ output_directory: join(root, ".cline", "project") });
+		throw new Error("Dot-prefixed Ghidra output was accepted");
+	} catch (error) {
+		if (!(error instanceof Error) || !error.message.includes("dot-prefixed"))
+			throw error;
+	}
 	console.log(
 		JSON.stringify(
 			{
@@ -80,6 +102,8 @@ try {
 					"exact-program-cache-reuse",
 					"renamed-program-reimport",
 					"selected-decompilation-and-two-script-directories",
+					"ghidra-specific-persistent-cache-and-reuse",
+					"dot-prefixed-project-path-preflight",
 				],
 				scope: "Owned x86-64 static fixture only; no target execution",
 			},
@@ -88,5 +112,7 @@ try {
 		),
 	);
 } finally {
+	if (previousCache === undefined) delete process.env.CLINE_RE_CACHE_DIR;
+	else process.env.CLINE_RE_CACHE_DIR = previousCache;
 	await rm(root, { recursive: true, force: true });
 }

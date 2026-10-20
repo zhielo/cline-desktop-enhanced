@@ -67,6 +67,12 @@ describe("reverse-engineering discovery", () => {
 		expect(result.capabilities).toHaveProperty("androidStudio.plugins");
 		expect(result.capabilities).toHaveProperty("supplementalTools");
 		expect(result.capabilities).toHaveProperty("toolSelectionGuide");
+		expect(result.capabilities.ghidraCacheDirectory).toBe(
+			path.resolve(
+				process.env.CLINE_RE_CACHE_DIR ??
+					path.join(os.homedir(), "cline-analysis-cache", "reverse-engineering"),
+			),
+		);
 	});
 });
 

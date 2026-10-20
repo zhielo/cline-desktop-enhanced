@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -12,8 +13,15 @@ import {
 	verifyGhidraAnalysis,
 	GHIDRA_VERIFICATION_SCRIPT,
 } from "./ghidra-verification";
+vi.mock("node:os", async (importOriginal) => {
+	const actual = await importOriginal<typeof os>();
+	return { ...actual, homedir: vi.fn(actual.homedir) };
+});
+const realHome = os.homedir();
 const roots: string[] = [];
 afterEach(async () => {
+	vi.restoreAllMocks();
+	vi.mocked(os.homedir).mockReturnValue(realHome);
 	vi.unstubAllEnvs();
 	await Promise.all(
 		roots.splice(0).map((p) => fs.rm(p, { recursive: true, force: true })),
@@ -104,6 +112,43 @@ async function mock(body: string) {
 			),
 	};
 }
+it.skipIf(process.platform === "win32")(
+	"uses a non-dot default Ghidra cache and reuses its verified project",
+	async () => {
+		const f = await mock(receiptMock);
+		vi.mocked(os.homedir).mockReturnValue(f.dir);
+		vi.stubEnv("CLINE_RE_CACHE_DIR", undefined);
+		const first = await f.run({ output_directory: undefined });
+		expect(first.succeeded).toBe(true);
+		expect(first.persistent).toBe(true);
+		expect(first.outputDirectory).toBe(
+			path.join(f.dir, "cline-analysis-cache", "reverse-engineering", first.sha256, "ghidra"),
+		);
+		expect(first.args[0]).toBe(first.outputDirectory);
+		expect(first.reusedAnalysis).toBe(false);
+		const second = await f.run({ output_directory: undefined });
+		expect(second.succeeded).toBe(true);
+		expect(second.reusedAnalysis).toBe(true);
+		expect(second.args).toContain("-process");
+		expect((await f.run({ output_directory: first.outputDirectory })).reusedAnalysis)
+			.toBe(true);
+		expect(await fs.readdir(f.dir)).not.toContain(".cline");
+	},
+);
+it.skipIf(process.platform === "win32")(
+	"rejects explicit incompatible output/cache paths before creating projects",
+	async () => {
+		const f = await mock(receiptMock);
+		const hidden = path.join(f.dir, ".cline");
+		await expect(f.run({ output_directory: path.join(hidden, "project") }))
+			.rejects.toThrow("dot-prefixed");
+		vi.stubEnv("CLINE_RE_CACHE_DIR", hidden);
+		await expect(f.run({ output_directory: undefined }))
+			.rejects.toThrow("CLINE_RE_CACHE_DIR");
+		expect(await fs.readdir(f.dir)).not.toContain(".cline");
+		expect((await f.run()).succeeded).toBe(true);
+	},
+);
 it.skipIf(process.platform === "win32")(
 	"rejects zero exit without project or receipt",
 	async () => {

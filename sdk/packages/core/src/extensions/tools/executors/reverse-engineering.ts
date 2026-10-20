@@ -3,6 +3,10 @@ import {
 	prepareGhidraVerification,
 	verifyGhidraAnalysis,
 } from "./ghidra-verification";
+import {
+	ghidraAnalysisCacheRoot,
+	validateGhidraProjectDirectory,
+} from "./ghidra-project-path";
 import { compareProjectVersions } from "./project-versions";
 import { planRuntimeObservation } from "./runtime-observation-plan";
 import { verifyCandidate, validateDexBytes } from "./candidate-verification";
@@ -200,11 +204,15 @@ async function canonicalFuturePath(candidate: string): Promise<string> {
 async function enforceOutputPath(
 	candidate: string,
 	acknowledgeExternal: boolean | undefined,
+	engine?: Engine,
 ): Promise<OutputScope> {
 	const canonical = await canonicalFuturePath(candidate);
 	const configuredRoot = process.env.CLINE_RE_OUTPUT_ROOT;
 	const managedRoots = [
 		analysisCacheRoot(),
+		...(engine === "ghidra"
+			? [ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR)]
+			: []),
 		os.tmpdir(),
 		...(configuredRoot ? [configuredRoot] : []),
 	];
@@ -1964,10 +1972,11 @@ async function resolveAnalysisDirectory(
 		return {
 			outputDir,
 			persistent: true,
-			outputScope: await enforceOutputPath(outputDir, acknowledgeExternal),
+			outputScope: await enforceOutputPath(outputDir, acknowledgeExternal, engine),
 		};
 	}
 	if (!reuseAnalysis) {
+		if (engine === "ghidra") await validateGhidraProjectDirectory(os.tmpdir());
 		return {
 			outputDir: await fs.mkdtemp(path.join(os.tmpdir(), "cline-re-")),
 			persistent: false,
@@ -1975,7 +1984,13 @@ async function resolveAnalysisDirectory(
 		};
 	}
 	return {
-		outputDir: path.join(analysisCacheRoot(), hash, engine),
+		outputDir: path.join(
+			engine === "ghidra"
+				? ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR)
+				: analysisCacheRoot(),
+			hash,
+			engine,
+		),
 		persistent: true,
 		outputScope: "managed",
 	};
@@ -2354,6 +2369,7 @@ async function installationCapabilities(
 				"inspect and scan_strings before expensive decompilation",
 		},
 		cacheDirectory: analysisCacheRoot(),
+		ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
 	};
 }
 
@@ -2376,6 +2392,8 @@ async function discoverCapabilities(
 			"",
 		idaSelectionExplicit: Boolean(process.env.CLINE_IDA_SELECTED_HOME),
 		jadx: process.env.JADX_HOME ?? "",
+		cacheDirectory: analysisCacheRoot(),
+		ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
 	});
 	const cached = discoveryCache.get(cacheKey);
 	if (cached && cached.expiresAt > Date.now()) {
@@ -2426,6 +2444,7 @@ async function discoverCapabilities(
 					supplementalTools: {},
 					toolSelectionGuide: {},
 					cacheDirectory: analysisCacheRoot(),
+					ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
 				} satisfies Record<string, unknown>);
 			if (deep.error) probeErrors.deepHealth = deep.error;
 		} else {
@@ -2442,6 +2461,7 @@ async function discoverCapabilities(
 						"Run deep discovery to verify versions, GUI tools, plugins, decompilers, and supplemental utilities.",
 				},
 				cacheDirectory: analysisCacheRoot(),
+				ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
 			};
 		}
 		return {
@@ -3769,6 +3789,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				engine,
 				input.acknowledge_external_output,
 			);
+		if (engine === "ghidra") await validateGhidraProjectDirectory(outputDir);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 		const timeoutMs = input.timeout_ms ?? (engine === "ida" ? DEFAULT_IDA_TIMEOUT_MS : 3_600_000);
 		if (engine === "ida" && !gui)
