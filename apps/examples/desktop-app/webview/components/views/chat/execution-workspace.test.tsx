@@ -83,7 +83,7 @@ it("drops stale prepared plans when the workspace changes", async () => {
 		.spyOn(desktopClient, "invoke")
 		.mockImplementation(async (command) =>
 			command === "prepare_execution_pipeline"
-				? ((await new Promise((r) => {
+				? ((await new Promise<unknown>((r) => {
 						finish = r;
 					})) as never)
 				: ([] as never),

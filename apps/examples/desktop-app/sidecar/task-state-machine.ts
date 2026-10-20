@@ -35,7 +35,7 @@ export type DurableTaskStepKind = "work" | "repair" | "verification";
 
 export type DurableTaskValidation = {
 	command: string;
-	status: "pending" | "running" | "passed" | "failed" | "skipped";
+	status: "pending" | "running" | "passed" | "failed" | "skipped" | "cancelled";
 	startedAtMs?: number;
 	completedAtMs?: number;
 	exitCode?: number;
@@ -274,9 +274,14 @@ function validateSteps(steps: DurableTaskStep[]): string | undefined {
 				step.validation.some(
 					(item) =>
 						!item.command.trim() ||
-						!["pending", "running", "passed", "failed", "skipped"].includes(
-							item.status,
-						),
+						![
+							"pending",
+							"running",
+							"passed",
+							"failed",
+							"skipped",
+							"cancelled",
+						].includes(item.status),
 				))
 		) {
 			return `Invalid validation state for task step: ${step.id}`;
@@ -431,7 +436,8 @@ export function recordDurableTaskValidation(input: {
 						: {}),
 					...(input.status === "passed" ||
 					input.status === "failed" ||
-					input.status === "skipped"
+					input.status === "skipped" ||
+					input.status === "cancelled"
 						? { completedAtMs: atMs }
 						: {}),
 					...(input.exitCode !== undefined ? { exitCode: input.exitCode } : {}),
@@ -440,18 +446,21 @@ export function recordDurableTaskValidation(input: {
 			: item,
 	);
 	const failed = validations.some((item) => item.status === "failed");
+	const cancelled = validations.some((item) => item.status === "cancelled");
 	const finished = validations.every((item) =>
-		["passed", "failed", "skipped"].includes(item.status),
+		["passed", "failed", "skipped", "cancelled"].includes(item.status),
 	);
 	const nextSteps = input.state.steps.map((item) =>
 		item.id === input.stepId
 			? {
 					...item,
-					status: failed
-						? ("failed" as const)
-						: finished
-							? ("completed" as const)
-							: ("in_progress" as const),
+					status: cancelled
+						? ("cancelled" as const)
+						: failed
+							? ("failed" as const)
+							: finished
+								? ("completed" as const)
+								: ("in_progress" as const),
 					validation: validations,
 					...(finished ? { completedAtMs: atMs } : {}),
 				}
@@ -462,11 +471,13 @@ export function recordDurableTaskValidation(input: {
 		previous: input.state,
 		atMs,
 		reason: `validation.${input.status}:${input.stepId}`,
-		repair: failed
-			? { ...input.state.repair, state: "repair_required" }
-			: finished
-				? undefined
-				: { ...input.state.repair, state: "verifying" },
+		repair: cancelled
+			? undefined
+			: failed
+				? { ...input.state.repair, state: "repair_required" }
+				: finished
+					? undefined
+					: { ...input.state.repair, state: "verifying" },
 		steps: nextSteps,
 	});
 }

@@ -1222,3 +1222,5 @@ export {
 	batchReportRef,
 	isBatchStaticOperation,
 } from "./extensions/tools/batch-analysis-schema";
+
+export { resolvePermissionProfile, type PermissionProfile } from "./extensions/tools/permission-profile";

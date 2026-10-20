@@ -143,16 +143,9 @@ beforeEach(() => {
 afterEach(async () => {
 	await act(async () => root.unmount());
 	container.remove();
-	delete (
-		window as typeof window & { MediaRecorder?: typeof FakeMediaRecorder }
-	).MediaRecorder;
-	delete (
-		window as typeof window & {
-			SpeechRecognition?: typeof FakeSpeechRecognition;
-		}
-	).SpeechRecognition;
-	delete (window as typeof window & { AudioContext?: typeof AudioContext })
-		.AudioContext;
+	Reflect.deleteProperty(window,"MediaRecorder");
+	Reflect.deleteProperty(window,"SpeechRecognition");
+	Reflect.deleteProperty(window,"AudioContext");
 	vi.restoreAllMocks();
 });
 

@@ -94,7 +94,7 @@ it("ignores a stale plan after changing workspace", async () => {
 		.spyOn(desktopClient, "invoke")
 		.mockImplementation(async (command) =>
 			command === "prepare_apk_incident"
-				? ((await new Promise((res) => {
+				? ((await new Promise<unknown>((res) => {
 						resolvePlan = res;
 					})) as never)
 				: ([] as never),

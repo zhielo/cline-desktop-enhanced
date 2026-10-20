@@ -107,7 +107,7 @@ type GlobalSettingsResponse = {
 	tools?: Partial<Record<"web_search", { enabled: boolean }>>;
 };
 
-type PermissionProfileName = GlobalSettingsResponse["permissionProfile"];
+type PermissionProfileName = NonNullable<GlobalSettingsResponse["permissionProfile"]>;
 
 const PERMISSION_PROFILE_DESCRIPTIONS: Record<PermissionProfileName, string> = {
 	"read-only":

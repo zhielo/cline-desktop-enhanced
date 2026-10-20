@@ -1,5 +1,13 @@
+import {
+	allowsAutomaticTaskValidation,
+	automaticValidationCwd,
+} from "./task-validation-policy";
 import { randomUUID } from "node:crypto";
-import { hostToolObservation, TaskObservationSchema, validationScope } from "../shared/task-observation";
+import {
+	hostToolObservation,
+	TaskObservationSchema,
+	validationScope,
+} from "../shared/task-observation";
 import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -65,7 +73,73 @@ const hubClientInitialization = new WeakMap<
 	Promise<NodeHubClient>
 >();
 const approvalReadinessUpdates = new WeakMap<SidecarContext, Promise<void>>();
-const activeTaskValidations = new Set<string>();
+type ActiveTaskValidation = {
+	controller: AbortController;
+	done: Promise<unknown>;
+};
+const activeTaskValidations = new WeakMap<
+	SidecarContext,
+	Map<string, ActiveTaskValidation>
+>();
+const pendingValidationPlans = new WeakMap<
+	SidecarContext,
+	Map<string, { toolCallId: string; state: DurableTaskState }>
+>();
+function rememberValidationPlan(
+	ctx: SidecarContext,
+	sessionId: string,
+	toolCallId: string,
+	toolName: string,
+	task: { taskEvent?: Record<string, unknown> },
+) {
+	if (
+		!TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase()) ||
+		task.taskEvent?.type !== "plan.updated"
+	)
+		return;
+	const state = ctx.liveSessions.get(sessionId)?.taskState;
+	if (!state) return;
+	let plans = pendingValidationPlans.get(ctx);
+	if (!plans) {
+		plans = new Map();
+		pendingValidationPlans.set(ctx, plans);
+	}
+	plans.set(sessionId, { toolCallId, state });
+}
+function completeValidationPlan(
+	ctx: SidecarContext,
+	sessionId: string,
+	toolCallId: string | undefined,
+	toolName: string,
+	error: unknown,
+) {
+	if (!toolCallId || !TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) return;
+	const plans = pendingValidationPlans.get(ctx),
+		pending = plans?.get(sessionId);
+	if (pending?.toolCallId !== toolCallId) return;
+	plans?.delete(sessionId);
+	if (!error && ctx.liveSessions.get(sessionId)?.taskState === pending.state)
+		schedulePendingTaskValidations(ctx, sessionId);
+}
+function validationsFor(ctx: SidecarContext) {
+	let active = activeTaskValidations.get(ctx);
+	if (!active) {
+		active = new Map();
+		activeTaskValidations.set(ctx, active);
+	}
+	return active;
+}
+export async function cancelSessionTaskValidations(
+	ctx: SidecarContext,
+	sessionId: string,
+	reason = "Session cancelled",
+): Promise<void> {
+	pendingValidationPlans.get(ctx)?.delete(sessionId);
+	const active = validationsFor(ctx).get(sessionId);
+	if (!active) return;
+	active.controller.abort(new Error(reason));
+	await active.done;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers — WebSocket broadcast
@@ -116,9 +190,14 @@ export function getEnvironmentContexts(ctx: SidecarContext): SidecarContext[] {
 	getEnvironmentContext(owner, LOCAL_ENVIRONMENT_ID);
 	return [...(environmentContexts.get(owner)?.values() ?? [])];
 }
-function clearEnvironmentSessions(ctx: SidecarContext, reason: string): void {
-	for (const [id, session] of ctx.liveSessions)
+async function clearEnvironmentSessions(
+	ctx: SidecarContext,
+	reason: string,
+): Promise<void> {
+	for (const [id, session] of ctx.liveSessions) {
+		await cancelSessionTaskValidations(ctx, id, reason);
 		discardAllTrackedAttachments(id, session);
+	}
 	ctx.liveSessions.clear();
 	ctx.streamIndices.clear();
 	ctx.sessionEnvironmentIds.clear();
@@ -655,32 +734,48 @@ function schedulePendingTaskValidations(
 	const state = session?.taskState;
 	if (!session || !state) return;
 	if (
-		session.config.mode !== "yolo" &&
-		session.config.autoApproveTools !== true
-	) {
+		!allowsAutomaticTaskValidation(session.config) ||
+		["aborted", "stopped", "failed", "error"].includes(session.status)
+	)
 		return;
-	}
 	if (
 		(session.environmentId ?? LOCAL_ENVIRONMENT_ID) !== LOCAL_ENVIRONMENT_ID
 	) {
 		return;
 	}
 	const stepId = validationCandidates(state)[0];
-	if (!stepId || activeTaskValidations.has(sessionId)) return;
+	if (!stepId) return;
+	const previous = validationsFor(ctx).get(sessionId);
+	if (previous) {
+		// A successfully accepted replacement plan waits for the old process to stop.
+		if (previous.controller.signal.aborted)
+			void previous.done.then(() => {
+				if (ctx.liveSessions.get(sessionId)?.taskState === state)
+					schedulePendingTaskValidations(ctx, sessionId);
+			});
+		return;
+	}
 	const step = state.steps.find((item) => item.id === stepId);
-	const cwd =
-		step?.worktree?.trim() ||
-		(typeof session.config.cwd === "string" ? session.config.cwd.trim() : "") ||
-		(typeof session.config.workspaceRoot === "string"
-			? session.config.workspaceRoot.trim()
-			: "");
+	const cwd = automaticValidationCwd(session.config, step?.worktree);
 	if (!cwd) return;
-	activeTaskValidations.add(sessionId);
+	const controller = new AbortController();
+	const entry: ActiveTaskValidation = { controller, done: Promise.resolve() };
+	validationsFor(ctx).set(sessionId, entry);
 	let expectedState = state;
-	void runDurableTaskValidations({
+	entry.done = runDurableTaskValidations({
 		state,
 		stepId,
 		cwd,
+		signal: controller.signal,
+		authorize: () => {
+			const current = ctx.liveSessions.get(sessionId);
+			return (
+				!!current &&
+				!controller.signal.aborted &&
+				allowsAutomaticTaskValidation(current.config) &&
+				!["aborted", "stopped", "failed", "error"].includes(current.status)
+			);
+		},
 		onState(nextState) {
 			const current = ctx.liveSessions.get(sessionId);
 			if (!current || current.taskState !== expectedState) {
@@ -700,16 +795,48 @@ function schedulePendingTaskValidations(
 					toolName: "task_validation",
 					input: { planId: nextState.planId, stepId },
 					taskEvent: {
-                        ...durableTaskPlanEvent(nextState),
-                        observation: TaskObservationSchema.safeParse({
-                            version:"task-observation/v1",id:toolCallId,sessionId,toolCallId,toolName:"task_validation",stepId,planId:nextState.planId,
-                            source:"host-validation",recordedAtMs:nextState.updatedAtMs,
-                            execution: nextState.steps.find(s=>s.id===stepId)?.validation?.some(v=>v.status==="running"||v.status==="pending") ? "running" : "finished",
-                            outcome: nextState.steps.find(s=>s.id===stepId)?.validation?.every(v=>v.status==="passed"&&v.exitCode===0) ? "bounded-checks-passed" : nextState.steps.find(s=>s.id===stepId)?.validation?.some(v=>v.status==="failed") ? "failed" : "unverified",
-                            checkCount: nextState.steps.find(s=>s.id===stepId)?.validation?.length ?? 0,
-                            validationScope: validationScope(nextState.steps.find(s=>s.id===stepId)!),
-                        }).data,
-                    },
+						...durableTaskPlanEvent(nextState),
+						observation: TaskObservationSchema.safeParse({
+							version: "task-observation/v1",
+							id: toolCallId,
+							sessionId,
+							toolCallId,
+							toolName: "task_validation",
+							stepId,
+							planId: nextState.planId,
+							source: "host-validation",
+							recordedAtMs: nextState.updatedAtMs,
+							execution:
+								nextState.steps.find((s) => s.id === stepId)?.status ===
+								"cancelled"
+									? "cancelled"
+									: nextState.steps
+												.find((s) => s.id === stepId)
+												?.validation?.some(
+													(v) =>
+														v.status === "running" || v.status === "pending",
+												)
+										? "running"
+										: "finished",
+							outcome: nextState.steps
+								.find((s) => s.id === stepId)
+								?.validation?.every(
+									(v) => v.status === "passed" && v.exitCode === 0,
+								)
+								? "bounded-checks-passed"
+								: nextState.steps
+											.find((s) => s.id === stepId)
+											?.validation?.some((v) => v.status === "failed")
+									? "failed"
+									: "unverified",
+							checkCount:
+								nextState.steps.find((s) => s.id === stepId)?.validation
+									?.length ?? 0,
+							validationScope: validationScope(
+								nextState.steps.find((s) => s.id === stepId)!,
+							),
+						}).data,
+					},
 				}),
 			);
 			emitChunk(
@@ -732,8 +859,10 @@ function schedulePendingTaskValidations(
 			});
 		})
 		.finally(() => {
-			activeTaskValidations.delete(sessionId);
-			schedulePendingTaskValidations(ctx, sessionId);
+			if (validationsFor(ctx).get(sessionId) === entry)
+				validationsFor(ctx).delete(sessionId);
+			if (!controller.signal.aborted)
+				schedulePendingTaskValidations(ctx, sessionId);
 		});
 }
 
@@ -769,7 +898,18 @@ function captureTaskToolStart(
 		...(taskStepId ? { taskStepId } : {}),
 		taskEvent: {
 			type: "tool.started",
-            ...(sessionId ? {observation:hostToolObservation({sessionId,toolCallId,toolName,stepId:taskStepId,planId:session?.taskState?.planId,running:true})} : {}),
+			...(sessionId
+				? {
+						observation: hostToolObservation({
+							sessionId,
+							toolCallId,
+							toolName,
+							stepId: taskStepId,
+							planId: session?.taskState?.planId,
+							running: true,
+						}),
+					}
+				: {}),
 			toolCallId,
 			toolName,
 			...(taskStepId ? { stepId: taskStepId } : {}),
@@ -783,8 +923,8 @@ function captureTaskToolEnd(
 	toolName: string,
 	error: unknown,
 	durationMs?: number,
-    sessionId?: string,
-    output?: unknown,
+	sessionId?: string,
+	output?: unknown,
 ): { taskStepId?: string; taskEvent?: Record<string, unknown> } {
 	if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) return {};
 	const taskStepId = session?.taskToolStepIds?.get(toolCallId);
@@ -799,7 +939,20 @@ function captureTaskToolEnd(
 		...(taskStepId ? { taskStepId } : {}),
 		taskEvent: {
 			type: errorMessage ? "tool.failed" : "tool.completed",
-            ...(sessionId ? {observation:hostToolObservation({sessionId,toolCallId,toolName,stepId:taskStepId,planId:session?.taskState?.planId,failed:Boolean(error),output,durationMs})} : {}),
+			...(sessionId
+				? {
+						observation: hostToolObservation({
+							sessionId,
+							toolCallId,
+							toolName,
+							stepId: taskStepId,
+							planId: session?.taskState?.planId,
+							failed: Boolean(error),
+							output,
+							durationMs,
+						}),
+					}
+				: {}),
 			toolCallId,
 			toolName,
 			...(taskStepId ? { stepId: taskStepId } : {}),
@@ -831,6 +984,12 @@ function handleAgentEvent(
 			} else if (event.contentType === "tool") {
 				const toolName = event.toolName || "tool";
 				const toolCallId = event.toolCallId || `${toolName}-${nowMs()}`;
+				if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase()))
+					void cancelSessionTaskValidations(
+						ctx,
+						sessionId,
+						"Task plan changed",
+					);
 				const task = captureTaskToolStart(
 					ctx.liveSessions.get(sessionId),
 					toolCallId,
@@ -838,6 +997,7 @@ function handleAgentEvent(
 					event.input,
 					sessionId,
 				);
+				rememberValidationPlan(ctx, sessionId, toolCallId, toolName, task);
 				emitChunk(
 					ctx,
 					sessionId,
@@ -849,9 +1009,6 @@ function handleAgentEvent(
 						...task,
 					}),
 				);
-				if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) {
-					schedulePendingTaskValidations(ctx, sessionId);
-				}
 			}
 			break;
 		}
@@ -892,8 +1049,8 @@ function handleAgentEvent(
 							toolName,
 							event.error,
 							event.durationMs,
-                            sessionId,
-                            event.output,
+							sessionId,
+							event.output,
 						)
 					: {};
 				emitChunk(
@@ -908,6 +1065,13 @@ function handleAgentEvent(
 						durationMs: event.durationMs,
 						...task,
 					}),
+				);
+				completeValidationPlan(
+					ctx,
+					sessionId,
+					toolCallId,
+					toolName,
+					event.error,
 				);
 			}
 			break;
@@ -1206,7 +1370,7 @@ export async function disposeSidecarContext(
 			}
 		}
 		scoped.pendingApprovals.clear();
-		clearEnvironmentSessions(scoped, reason);
+		await clearEnvironmentSessions(scoped, reason);
 	}
 
 	for (const client of ctx.wsClients) {
@@ -1690,6 +1854,8 @@ export function handleHubLiveEvent(
 				typeof event.payload?.toolName === "string"
 					? event.payload.toolName
 					: "tool";
+			if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase()))
+				void cancelSessionTaskValidations(ctx, sessionId, "Task plan changed");
 			const task = captureTaskToolStart(
 				session,
 				toolCallId,
@@ -1697,6 +1863,7 @@ export function handleHubLiveEvent(
 				event.payload?.input,
 				sessionId,
 			);
+			rememberValidationPlan(ctx, sessionId, toolCallId, toolName, task);
 			emitChunk(
 				ctx,
 				sessionId,
@@ -1708,9 +1875,7 @@ export function handleHubLiveEvent(
 					...task,
 				}),
 			);
-			if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) {
-				schedulePendingTaskValidations(ctx, sessionId);
-			}
+
 			return;
 		}
 		case "tool.updated": {
@@ -1746,7 +1911,17 @@ export function handleHubLiveEvent(
 					? event.payload.error
 					: undefined;
 			const task = toolCallId
-				? captureTaskToolEnd(session, toolCallId, toolName, error, typeof event.payload?.durationMs === "number" ? event.payload.durationMs : undefined, sessionId, event.payload?.output)
+				? captureTaskToolEnd(
+						session,
+						toolCallId,
+						toolName,
+						error,
+						typeof event.payload?.durationMs === "number"
+							? event.payload.durationMs
+							: undefined,
+						sessionId,
+						event.payload?.output,
+					)
 				: {};
 			emitChunk(
 				ctx,
@@ -1759,6 +1934,13 @@ export function handleHubLiveEvent(
 					error,
 					...task,
 				}),
+			);
+			completeValidationPlan(
+				ctx,
+				sessionId,
+				toolCallId,
+				toolName,
+				event.payload?.error,
 			);
 			return;
 		}
@@ -1822,6 +2004,8 @@ export function handleHubLiveEvent(
 						: event.event === "run.failed"
 							? "error"
 							: "completed";
+			if (event.event !== "run.completed")
+				void cancelSessionTaskValidations(ctx, sessionId, reason);
 			session.status = reason;
 			session.busy = false;
 			session.endedAt = nowMs();
@@ -2097,7 +2281,7 @@ export async function disconnectRemoteSessionRuntime(
 	const owner = contextOwners.get(ctx) ?? ctx;
 	const scoped = environmentContexts.get(owner)?.get(environmentId);
 	if (scoped)
-		clearEnvironmentSessions(scoped, "Remote environment disconnected");
+		await clearEnvironmentSessions(scoped, "Remote environment disconnected");
 	environmentContexts.get(owner)?.delete(environmentId);
 	if (binding?.kind === "ssh") {
 		ctx.runtimeBindings.delete(environmentId);

@@ -786,7 +786,7 @@ export function FunctionsView({
   }, [activeProject?.name, history]);
 
   const launchTemplate = useCallback(
-    (template: Pick<FunctionTemplate, "title" | "prompt" | "mode">) => {
+    (template: Pick<FunctionTemplate, "title" | "prompt" | "mode"> & {historyPrompt?:string}) => {
       if (!connected || !onLaunchFunction) return;
       const destination =
         activeProject?.destination.trim() || defaultDestination.trim();

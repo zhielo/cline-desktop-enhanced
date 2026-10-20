@@ -49,6 +49,7 @@ import {
 } from "./cloud-sessions";
 import {
 	cancelSidecarMistakeQuestions,
+	cancelSessionTaskValidations,
 	emitChunk,
 	findSessionRuntimeBinding,
 	getEnvironmentContext,
@@ -717,8 +718,11 @@ function buildCoreSessionConfig(
 		providerConfig: config.providerConfig,
 		...(workspaceRoot ? { workspaceRoot } : {}),
 		...(cwd ? { cwd } : {}),
-		systemPrompt: [suppliedSystemPrompt, bridgeContract,
-            "First-party desktop analysis: reverse_engineer javascript_analysis is enabled only by the owning session Analysis mode. It parses confined JS/TS/Electron/ASAR without target execution. Use analysis_evidence receiptId views for bounded retained facts. Do not infer executed behavior from static calls, IPC candidates, loaded code, hashes or build success. Off blocks this parser only; runtime selection grants no extra permission. Missing capabilities must be reported, never silently approximated as verified."]
+		systemPrompt: [
+			suppliedSystemPrompt,
+			bridgeContract,
+			"First-party desktop analysis: reverse_engineer javascript_analysis is enabled only by the owning session Analysis mode. It parses confined JS/TS/Electron/ASAR without target execution. Use analysis_evidence receiptId views for bounded retained facts. Do not infer executed behavior from static calls, IPC candidates, loaded code, hashes or build success. Off blocks this parser only; runtime selection grants no extra permission. Missing capabilities must be reported, never silently approximated as verified.",
+		]
 			.filter(Boolean)
 			.join("\n\n"),
 		maxIterations: config.maxIterations ?? config.max_iterations,
@@ -829,12 +833,15 @@ export function mergeSessionConfig(
 		readAliasedString(updates, "provider", "providerId") ??
 		readAliasedString(currentConfig, "provider", "providerId");
 	const previous = { ...currentConfig };
- // Explicit Auto/None must clear the previous effort after JSON omits undefined.
- // A partial update with no thinking field still preserves runtime settings.
- if (typeof updates.thinking === "boolean" && !Object.hasOwn(updates, "reasoningEffort")) {
-  delete previous.reasoningEffort;
-  delete previous.thinkingBudgetTokens;
- }
+	// Explicit Auto/None must clear the previous effort after JSON omits undefined.
+	// A partial update with no thinking field still preserves runtime settings.
+	if (
+		typeof updates.thinking === "boolean" &&
+		!Object.hasOwn(updates, "reasoningEffort")
+	) {
+		delete previous.reasoningEffort;
+		delete previous.thinkingBudgetTokens;
+	}
 
 	if (hasProviderChanged(currentConfig, updates)) {
 		for (const key of [
@@ -1265,8 +1272,11 @@ async function handleAttach(
 		sessionId,
 		environmentId: binding.environmentId,
 		status: session.status,
-        thinking: typeof baseAttachedConfig.thinking === "boolean" ? baseAttachedConfig.thinking : undefined,
-        reasoningEffort: readReasoningEffort(baseAttachedConfig.reasoningEffort),
+		thinking:
+			typeof baseAttachedConfig.thinking === "boolean"
+				? baseAttachedConfig.thinking
+				: undefined,
+		reasoningEffort: readReasoningEffort(baseAttachedConfig.reasoningEffort),
 		provider: session.provider,
 		model: session.model,
 		cwd: session.cwd,
@@ -1517,6 +1527,11 @@ async function handleSend(
 	}
 	try {
 		if ((request.config || binding.kind === "ssh") && nextConfig) {
+			await cancelSessionTaskValidations(
+				ctx,
+				sessionId,
+				"Session configuration changed",
+			);
 			if (providerChanged && session) {
 				await rebuildSessionForProviderChange(
 					ctx,
@@ -1788,6 +1803,7 @@ async function handleStop(
 	const sessionId = request.sessionId?.trim();
 	if (!sessionId) throw new Error("sessionId is required");
 	cancelSidecarMistakeQuestions(ctx, sessionId, "Session stopped");
+	await cancelSessionTaskValidations(ctx, sessionId, "Session stopped");
 	await getSessionManager(ctx, sessionId, request.config).stop(sessionId);
 	const session = ctx.liveSessions.get(sessionId);
 	if (session) {
@@ -1804,6 +1820,7 @@ async function handleAbort(
 	const sessionId = request.sessionId?.trim();
 	if (!sessionId) throw new Error("sessionId is required");
 	cancelSidecarMistakeQuestions(ctx, sessionId, "Run aborted");
+	await cancelSessionTaskValidations(ctx, sessionId, "Run aborted");
 	await getSessionManager(ctx, sessionId, request.config).abort(
 		sessionId,
 		"user_abort",

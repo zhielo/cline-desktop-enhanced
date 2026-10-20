@@ -1,4 +1,5 @@
 "use client";
+import { resolveAnalysisTimeoutMs } from "../../../../shared/analysis-budgets";
 import { AndroidCandidateLifecycleCard } from "./android-candidate-lifecycle";
 import type { AndroidCandidateLifecycle } from "../../../../shared/android-candidate-lifecycle";
 import { CandidateOutcomeCard } from "./candidate-outcome";
@@ -451,7 +452,7 @@ function AnalysisWorkbenchContent({
 			...(target.trim() ? { target: target.trim() } : {}),
 			reuse_analysis: true,
 			report_format: "json",
-			timeout_ms: 120_000,
+			timeout_ms: resolveAnalysisTimeoutMs({ engine }),
 		};
 		return prepare(kind, request);
 	};

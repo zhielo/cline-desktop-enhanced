@@ -36,7 +36,7 @@ it("ignores a late evidence query when the workspace changes", async () => {
 	let finish!: (v: unknown) => void;
 	vi.spyOn(desktopClient, "invoke").mockImplementation(async (command) =>
 		command === "query_runtime_jni"
-			? ((await new Promise((r) => {
+			? ((await new Promise<unknown>((r) => {
 					finish = r;
 				})) as never)
 			: ([] as never),

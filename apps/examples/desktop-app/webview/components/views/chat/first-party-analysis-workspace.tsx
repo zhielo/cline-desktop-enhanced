@@ -613,7 +613,7 @@ export function FirstPartyAnalysisWorkspace({
 									</PreviewScrollRegion>
 									{project &&
 										selected &&
-										item &&
+										Boolean(item) &&
 										typeof item === "object" &&
 										(view === "artifacts" || view === "findings") && (
 											<button

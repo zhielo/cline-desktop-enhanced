@@ -74,17 +74,37 @@ export function taskReportView(
 	const remaining = steps
 		.filter((step) => step.status !== "completed")
 		.map((step) => `${step.label} — ${step.status}`);
+	// Only supersede a host receipt when a newer receipt belongs to the same
+	// plan, step and input/check scope. Unassigned or other-scope failures stay.
+	const currentEvidence = evidence.filter((item) => {
+		const o = item.observation;
+		if (
+			o?.source !== "host-validation" ||
+			o.planId !== report?.planId ||
+			!o.stepId ||
+			!o.validationScope
+		)
+			return true;
+		const latest = latestChecks.get(o.stepId);
+		return (
+			!latest ||
+			latest.validationScope !== o.validationScope ||
+			latest.recordedAtMs <= o.recordedAtMs
+		);
+	});
 	const failed =
 		status === "error" ||
 		status === "failed" ||
-		evidence.some((e) => e.status === "failed");
-	const partial = evidence.some(
+		currentEvidence.some(
+			(e) => e.status === "failed" || e.observation?.outcome === "failed",
+		);
+	const partial = currentEvidence.some(
 		(e) => e.outcome === "partial" || e.outcome === "inconclusive",
 	);
 	const blocked =
 		steps.some(
 			(s) => s.status === "blocked" || s.status === "waiting_for_user",
-		) || evidence.some((e) => e.outcome === "blocked");
+		) || currentEvidence.some((e) => e.outcome === "blocked");
 	const outcome = failed
 		? "Failed checks / unverified outcome"
 		: status === "cancelled"

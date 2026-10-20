@@ -58,6 +58,7 @@ describe("resolveCredentialError (cloud)", () => {
 function makeConfig(overrides: Partial<ChatSessionConfig>): ChatSessionConfig {
 	return {
 		workspaceRoot: "/tmp/project",
+ executionTarget:"local",environmentId:"local",
 		provider: "anthropic",
 		model: "claude-sonnet-4-5",
 		mode: "act",

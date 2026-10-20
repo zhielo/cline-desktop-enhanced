@@ -1,5 +1,5 @@
 import { validateImageMedia } from "@cline/shared/browser";
-import type { ChatMessageImage } from "@/lib/chat-schema";
+import { ChatMessageImageSchema, type ChatMessageImage } from "@/lib/chat-schema";
 import { desktopClient } from "@/lib/desktop-client";
 import { imageAttachmentMediaType } from "@/lib/image-attachments";
 import type { SerializedAttachmentFile, SerializedAttachments } from "./types";
@@ -110,11 +110,8 @@ export function toChatMessageImages(
 		if (!validation.ok) {
 			continue;
 		}
-		images.push({
-			id: `${idPrefix}_image_${index}`,
-			mediaType: validation.mediaType,
-			data: validation.base64,
-		});
+		const parsed=ChatMessageImageSchema.safeParse({id:`${idPrefix}_image_${index}`,mediaType:validation.mediaType,data:validation.base64});
+  if(parsed.success)images.push(parsed.data);
 	}
 	return images;
 }
