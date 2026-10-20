@@ -2,6 +2,14 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Six-defect desktop audit repair
+
+- Automatic task validation requires the current command/write/network capability profile and explicit auto-approval, a successful exact matching plan-tool completion, a local session, and a canonical workspace working directory. Plan/read-only/restricted profiles are not widened by auto-approval; reviewed tool calls remain the fallback. These are capability gates, not an OS sandbox.
+- Stop/Abort/configuration changes/environment disposal cancel and drain owned validation processes. Replaced plans cannot reuse a stale completion or turn a late zero exit into passed evidence.
+- Explicit IDA desktop requests default to a 75-minute overall approval envelope for the existing one-hour auto-analysis phase; other engines and explicit shorter budgets keep their limits. Fake-clock tests retain exact deadline enforcement.
+- Reports supersede old headline failures only with newer same-plan/step/scope host checks; history and unrelated failures remain. Chat media uses a canonical-schema adapter across Zod majors.
+- Full WebView typing (including fixtures) and strict Next.js builds are required. CI and the pinned finite release policy include the new frontend/audit gates; no acceptance checks are skipped. See `docs/desktop/audit-repair-contracts.md` for limitations and regression references.
+
 ## Bounded advanced candidates, graph tracing and reviewed batches
 
 - Advanced AI commands now expose `preview_binary_patch` / `patch_binary`, `preview_ast_transform` / `apply_ast_transform`, managed and JVM constant preview/apply pairs, `decompile_dotnet_method`, `read_jvm_method`, `trace_cross_language`, `trace_data_flow`, and independent `preview_candidate_batch` / `apply_candidate_batch` operations. Selection only prepares a request; the owning trusted idle session, mode, permission profile and separate one-use human execution approval remain mandatory. New writes are classified Modify, including batch writes.

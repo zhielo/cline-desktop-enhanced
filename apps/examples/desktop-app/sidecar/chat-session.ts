@@ -914,12 +914,7 @@ async function resolveSystemPrompt(config: JsonRecord): Promise<string> {
 					: undefined,
 		platform: process.platform || "unknown",
 	});
-	return (
-		prompt +
-		projectOutputInstructions(
-			String(config.workspaceRoot ?? config.workspace_root ?? "").trim() || cwd,
-		)
-	);
+	return prompt + projectOutputInstructions(String(config.workspaceRoot ?? config.workspace_root ?? "").trim() || cwd);
 }
 
 function resolveToolPolicies(
