@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hostToolObservation, TaskObservationSchema, validationScope } from "../shared/task-observation";
 import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -689,7 +690,7 @@ function schedulePendingTaskValidations(
 			expectedState = nextState;
 			current.activeTaskStepId = nextState.activeStepId;
 			persistDurableTaskState(sessionId, nextState);
-			const toolCallId = `task-validation:${stepId}:${nextState.updatedAtMs}`;
+			const toolCallId = `task-validation:${stepId}:${randomUUID()}`;
 			emitChunk(
 				ctx,
 				sessionId,
@@ -698,7 +699,17 @@ function schedulePendingTaskValidations(
 					toolCallId,
 					toolName: "task_validation",
 					input: { planId: nextState.planId, stepId },
-					taskEvent: durableTaskPlanEvent(nextState),
+					taskEvent: {
+                        ...durableTaskPlanEvent(nextState),
+                        observation: TaskObservationSchema.safeParse({
+                            version:"task-observation/v1",id:toolCallId,sessionId,toolCallId,toolName:"task_validation",stepId,planId:nextState.planId,
+                            source:"host-validation",recordedAtMs:nextState.updatedAtMs,
+                            execution: nextState.steps.find(s=>s.id===stepId)?.validation?.some(v=>v.status==="running"||v.status==="pending") ? "running" : "finished",
+                            outcome: nextState.steps.find(s=>s.id===stepId)?.validation?.every(v=>v.status==="passed"&&v.exitCode===0) ? "bounded-checks-passed" : nextState.steps.find(s=>s.id===stepId)?.validation?.some(v=>v.status==="failed") ? "failed" : "unverified",
+                            checkCount: nextState.steps.find(s=>s.id===stepId)?.validation?.length ?? 0,
+                            validationScope: validationScope(nextState.steps.find(s=>s.id===stepId)!),
+                        }).data,
+                    },
 				}),
 			);
 			emitChunk(
@@ -758,6 +769,7 @@ function captureTaskToolStart(
 		...(taskStepId ? { taskStepId } : {}),
 		taskEvent: {
 			type: "tool.started",
+            ...(sessionId ? {observation:hostToolObservation({sessionId,toolCallId,toolName,stepId:taskStepId,planId:session?.taskState?.planId,running:true})} : {}),
 			toolCallId,
 			toolName,
 			...(taskStepId ? { stepId: taskStepId } : {}),
@@ -771,6 +783,8 @@ function captureTaskToolEnd(
 	toolName: string,
 	error: unknown,
 	durationMs?: number,
+    sessionId?: string,
+    output?: unknown,
 ): { taskStepId?: string; taskEvent?: Record<string, unknown> } {
 	if (TASK_PLAN_TOOL_NAMES.has(toolName.toLowerCase())) return {};
 	const taskStepId = session?.taskToolStepIds?.get(toolCallId);
@@ -785,6 +799,7 @@ function captureTaskToolEnd(
 		...(taskStepId ? { taskStepId } : {}),
 		taskEvent: {
 			type: errorMessage ? "tool.failed" : "tool.completed",
+            ...(sessionId ? {observation:hostToolObservation({sessionId,toolCallId,toolName,stepId:taskStepId,planId:session?.taskState?.planId,failed:Boolean(error),output,durationMs})} : {}),
 			toolCallId,
 			toolName,
 			...(taskStepId ? { stepId: taskStepId } : {}),
@@ -877,6 +892,8 @@ function handleAgentEvent(
 							toolName,
 							event.error,
 							event.durationMs,
+                            sessionId,
+                            event.output,
 						)
 					: {};
 				emitChunk(
@@ -1729,7 +1746,7 @@ export function handleHubLiveEvent(
 					? event.payload.error
 					: undefined;
 			const task = toolCallId
-				? captureTaskToolEnd(session, toolCallId, toolName, error)
+				? captureTaskToolEnd(session, toolCallId, toolName, error, typeof event.payload?.durationMs === "number" ? event.payload.durationMs : undefined, sessionId, event.payload?.output)
 				: {};
 			emitChunk(
 				ctx,

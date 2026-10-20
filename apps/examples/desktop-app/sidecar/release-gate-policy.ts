@@ -82,6 +82,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-fresh-draft-analysis-visible-before-first-task",
 		"installed-browser-native-metadata-capture-cleanup-verified",
 		"owned-workspace-idle-session-opened",
+        "installed-task-report-offline-plan-partial-no-verification-no-execution-passed",
 		"installed-hybrid-mode-persistence-static-preflight-passed",
 		"installed-ai-batch-read-only-profile-denied",
 		"installed-hybrid-owned-isolated-execution-and-export-passed",
@@ -129,6 +130,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
+        "installed-task-report-restored-after-restart-no-replay-passed",
 		"installed-source-reference-restart-inert-explicit-recheck-clear-passed",
 		"hub-restart-saved-session-reattached-without-prompt-replay",
 		"full-to-core-rollback-preserved-owned-session",
@@ -141,8 +143,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"324cc282cd50728d248d3a9a38dbe128187b714ba1e09dc2ce824fe027c7f9ee",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"e852d5c5430d96b8dc1e4f2c7f546f3345dc47e47eabb680141695241e4ea49c",
+			"fa491f5b1052ef57cad6c0f034db83cd772d5830bd28bf2da1c08472f4fec4bb",
 		"scripts/validate-advanced-build.mjs":
-			"5893d30ed5de50aa967d335f63e949113a1036412c513525bef14ae7b647c039",
+			"e42e34b7a60ab26537d285b2cdaf2b69c2ecd3804a5999a4bdce89c784831a94",
 	},
 } as const;

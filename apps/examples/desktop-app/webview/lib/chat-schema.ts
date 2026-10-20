@@ -1,5 +1,6 @@
 import { GeneratedMediaSchema } from "@cline/shared/browser";
 import { z } from "zod";
+import { TaskObservationSchema } from "../../shared/task-observation";
 
 export const ChatSessionConfigSchema = z.object({
 	sessionId: z.string().min(1).optional(),
@@ -124,6 +125,8 @@ export const TaskPlanStepSchema = z.object({
 export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("plan.updated"),
+        hostValidations: z.array(TaskObservationSchema).max(100).optional().catch(undefined),
+        observation: TaskObservationSchema.optional().catch(undefined),
 		planId: z.string().min(1),
 		explanation: z.string().optional(),
 		state: TaskExecutionStatusSchema.optional(),
@@ -159,12 +162,14 @@ export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
 	}),
 	z.object({
 		type: z.literal("tool.started"),
+        observation: TaskObservationSchema.optional().catch(undefined),
 		toolCallId: z.string().min(1),
 		toolName: z.string().min(1),
 		stepId: z.string().min(1).optional(),
 	}),
 	z.object({
 		type: z.literal("tool.completed"),
+        observation: TaskObservationSchema.optional().catch(undefined),
 		toolCallId: z.string().min(1),
 		toolName: z.string().min(1),
 		stepId: z.string().min(1).optional(),
@@ -172,6 +177,7 @@ export const TaskProtocolEventSchema = z.discriminatedUnion("type", [
 	}),
 	z.object({
 		type: z.literal("tool.failed"),
+        observation: TaskObservationSchema.optional().catch(undefined),
 		toolCallId: z.string().min(1),
 		toolName: z.string().min(1),
 		stepId: z.string().min(1).optional(),

@@ -26,6 +26,7 @@ import {
 	nativeExecutionFailure,
 } from "@/lib/native-tool-progress";
 import { cn } from "@/lib/utils";
+import { TaskObservationSchema, reportedOutcome } from "../../../../../shared/task-observation";
 import { MemoizedMarkdown } from "../../../ui/markdown";
 import { CodeChangePreview } from "./code-change-preview";
 import { IS_DEBUG, STREAMING_TITLE_CLASS } from "./constants";
@@ -81,6 +82,9 @@ const ToolCallRow = memo(function ToolCallRow({
 	// A missing result can outlive its run. Only gate the running display;
 	// keep the message intact so a later result can still replace it.
 	const isRunning = inProgress && isRunActive;
+    const receipt=TaskObservationSchema.safeParse(message.meta?.taskEvent?.observation);
+    const observation=receipt.success && receipt.data.sessionId===message.sessionId && receipt.data.toolCallId===message.meta?.toolCallId && receipt.data.toolName===String(message.meta?.toolName??payload?.toolName??"") ? receipt.data : undefined;
+    const outcome=observation?.outcome??reportedOutcome(payload?.result);
 	const isCommand = summary.kind === "command";
 	// submit_and_exit carries the run's final answer (scheduled tasks end with
 	// it), so surface it expanded and rendered as markdown rather than leaving
@@ -203,7 +207,7 @@ const ToolCallRow = memo(function ToolCallRow({
 		toolName === "reverse_engineer" && !inProgress
 			? nativeExecutionFailure(payload?.result)
 			: null;
-	const hasError = Boolean(payload?.isError || nativeFailure);
+	const hasError = Boolean(payload?.isError || nativeFailure || outcome==="failed");
 	const Icon = getToolNameIcon(toolName);
 	const details = summary.details.map((detail, index) => ({
 		detail,
@@ -243,6 +247,7 @@ const ToolCallRow = memo(function ToolCallRow({
 				label={
 					<>
 						<ToolLabel isRunning={isRunning} parts={labelParts} />
+                        {!isSubmit&&<span className="ml-2 text-[10px] text-muted-foreground" data-testid="tool-outcome-status">{isRunning?"Running":inProgress?"No terminal receipt":hasError?"Failed":`Tool finished · ${outcome}`}{observation?.durationMs!==undefined?` · ${(observation.durationMs/1000).toFixed(1)}s`:""}</span>}
 						{nativeProgress && (
 							<span
 								className="ml-2 text-xs text-muted-foreground"

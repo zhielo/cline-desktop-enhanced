@@ -45,9 +45,11 @@ import { AnalysisWorkbench } from "./analysis-workbench";
 import { ArtifactContextMenu } from "./artifact-context-menu";
 import { EditorIcon } from "./editor-icons";
 import { WorkspaceTerminal } from "./workspace-terminal";
+import { ChatReports } from "./task-report-details";
+import type { ChatMessage, ChatSessionStatus } from "@/lib/chat-schema";
 
 type DiffViewProps = {
- sessionId?:string; initialTab?:"changes"|"analysis";
+ sessionId?:string; initialTab?:"changes"|"analysis"|"reports"; messages?:ChatMessage[]; status?:ChatSessionStatus;
 	environmentId: string;
 	fileDiffs: SessionFileDiff[];
 	cwd?: string;
@@ -59,7 +61,7 @@ type ReviewScope = "all" | "staged" | "unstaged";
 type WorkspaceFileResult = { root: string; files: string[]; limit: number };
 
 export function DiffView({
- sessionId,initialTab="changes",
+ sessionId,initialTab="changes",messages=[],status="idle",
 	environmentId,
 	fileDiffs,
 	cwd,
@@ -73,7 +75,7 @@ export function DiffView({
 	const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
 	const [pendingRevert, setPendingRevert] = useState<string[] | null>(null);
 	const [activeTab, setActiveTab] = useState<
-		"changes" | "files" | "terminal" | "analysis"
+		"changes" | "files" | "terminal" | "analysis" | "reports"
 	>(initialTab);
 	const [fileQuery, setFileQuery] = useState("");
 	const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
@@ -217,7 +219,7 @@ export function DiffView({
 		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-3 py-1.5">
 				<div className="flex items-center gap-1">
-					{(["changes", "files", "terminal", "analysis"] as const).map(
+					{(["analysis", "reports", "changes", "files", "terminal"] as const).map(
 						(tab) => (
 							<button
 								className={cn(
@@ -399,7 +401,7 @@ export function DiffView({
 						</div>
 					</ScrollArea>
 				</>
-			) : activeTab === "terminal" ? (
+			) : activeTab === "reports" ? (<div className="min-h-0 flex-1 overflow-auto"><ChatReports key={sessionId} messages={messages} status={status}/></div>) : activeTab === "terminal" ? (
 				<WorkspaceTerminal cwd={cwd} environmentId={environmentId} />
 			) : (
 				<AnalysisWorkbench cwd={cwd} environmentId={environmentId} sessionId={sessionId} />

@@ -20,11 +20,12 @@ import type { ChatSessionStatus } from "@/lib/chat-schema";
 import { desktopClient } from "@/lib/desktop-client";
 import type { SessionFileDiff } from "@/lib/session-diff";
 import {
-	formatTaskReportText,
-	type SessionTaskReport,
+		type SessionTaskReport,
 } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
 import { ArtifactContextMenu } from "./artifact-context-menu";
+import { TaskReportDetails } from "./task-report-details";
+import { formatFinalReport, taskReportView } from "@/lib/task-report-view";
 
 function completionState(status: ChatSessionStatus) {
 	if (status === "failed" || status === "error") {
@@ -43,7 +44,7 @@ function completionState(status: ChatSessionStatus) {
 	}
 	return {
 		icon: CheckCircle2,
-		label: "Task completed",
+		label: "Execution finished — review outcome",
 		tone: "text-emerald-600 dark:text-emerald-400",
 	};
 }
@@ -134,20 +135,11 @@ export function SessionCompletionCard({
 	);
 
 	const copySummary = useCallback(async () => {
-		const lines = [
-			state.label,
-			report?.explanation ?? "",
-			`Turns: ${turns} · Tools: ${tools} · Files: ${totalFiles}`,
-			...fileDiffs.map(
-				(file) => `${file.path} (+${file.additions} -${file.deletions})`,
-			),
-			...artifacts.map((path) => `Artifact: ${path}`),
-			report ? `\n${formatTaskReportText(report)}` : "",
-		].filter(Boolean);
-		await navigator.clipboard.writeText(lines.join("\n"));
+
+		try { await navigator.clipboard.writeText(formatFinalReport(taskReportView(report,status))); } catch { toast({variant:"destructive",title:"Could not copy report",description:"Use the report export controls instead."});return; }
 		setCopied(true);
 		window.setTimeout(() => setCopied(false), 1600);
-	}, [artifacts, fileDiffs, report, state.label, tools, totalFiles, turns]);
+	}, [report, status]);
 
 	return (
 		<section
@@ -286,6 +278,7 @@ export function SessionCompletionCard({
 				</div>
 			) : null}
 
+            <details className="p-3"><summary className="cursor-pointer py-2 text-sm">Final report and exports</summary><TaskReportDetails report={report} status={status}/></details>
 			<footer className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
 				{fileDiffs.length > 0 && onOpenDiff ? (
 					<Button onClick={onOpenDiff} size="sm" variant="outline">

@@ -7,6 +7,7 @@ import { SharedSourceEvidencePanel } from "./source-evidence-selection";
 import { AnalysisProjectSelectionProvider, analysisProjectScope, SharedArtifactSelection, useAnalysisProjectTarget } from "./analysis-project-selection";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
+import { AnalysisResultView } from "./analysis-result-view";
 import { GuidedInvestigation } from "./guided-investigation";
 
 import {
@@ -139,6 +140,13 @@ const modes: Array<{
 	{ id: "diagnostics", icon: Wrench, label: "Diagnostics" },
 ];
 
+const navigationGroups = [
+ {label:"Overview",ids:["guide","tasks","approvals"]},
+ {label:"Tools",ids:["advanced-commands","android","analyze","first-party"]},
+ {label:"Evidence",ids:["investigation","incidents","notebook","graph","evidence"]},
+ {label:"Runtime · opt-in",ids:["execution","runtime","debug","terminal"]},
+ {label:"Diagnostics",ids:["diagnostics"]},
+];
 function pretty(value: unknown): string {
 	if (typeof value === "string") return value;
 	return JSON.stringify(value, null, 2);
@@ -517,7 +525,7 @@ function AnalysisWorkbenchContent({
 	return (
 		<section aria-label="Analysis workbench" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 			<div className="flex max-h-[25%] shrink-0 flex-wrap items-center gap-1 overflow-auto border-b border-border px-3 py-2">
-				{modes.map((item) => (
+				{navigationGroups.map(group=><fieldset key={group.label} className="flex flex-wrap gap-1 rounded border border-border/60 px-1 pb-1"><legend className="px-1 text-[10px] text-muted-foreground">{group.label}</legend>{modes.filter(item=>group.ids.includes(item.id)).map((item) => (
 					<button
 						className={cn(
 							"flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm",
@@ -532,7 +540,7 @@ function AnalysisWorkbenchContent({
 						<item.icon className="h-3.5 w-3.5" />
 						{item.label}
 					</button>
-				))}
+				))}</fieldset>)}
 				<button
 					aria-label="Refresh diagnostics"
 					className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
@@ -545,10 +553,11 @@ function AnalysisWorkbenchContent({
 					/>
 				</button>
 			</div>
-			<section aria-label="Analysis selection details" className="max-h-[40%] min-h-0 shrink-0 overflow-auto">
+			<details aria-label="Analysis selection details" className="max-h-[40%] min-h-0 shrink-0 overflow-auto" open>
+                <summary className="cursor-pointer px-3 py-1 text-xs">Target, source evidence and readiness scope</summary>
 				<SharedArtifactSelection />
 				<SharedSourceEvidencePanel sessionId={sessionId} environmentId={environmentId} />
-			</section>
+			</details>
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
 					{(mode === "notebook" || mode === "graph") && (
@@ -1226,13 +1235,7 @@ function AnalysisWorkbenchContent({
 						Supervised output
 					</div>
                     {result && typeof result === "object" && "plan" in result && result.plan && typeof result.plan === "object" && "candidateOutcome" in result.plan ? <CandidateOutcomeCard outcome={(result.plan as TaskPlan).candidateOutcome} status={(result.plan as TaskPlan).status} /> : null}
-					<pre className="min-h-48 whitespace-pre-wrap break-words rounded-lg border border-border bg-background p-4 font-mono text-xs leading-5">
-						{busy
-							? "Running bounded operation…"
-							: result === null
-								? "Task results, evidence hashes, tool versions and generated paths appear here."
-								: pretty(result)}
-					</pre>
+                    <AnalysisResultView value={result} busy={busy}/>
 				</div>
 			</div>
 		</section>

@@ -623,7 +623,10 @@ describe("ChatMessages tool disclosures", () => {
 		for (const path of ["one.ts", "two.ts", "three.ts", "four.ts"]) {
 			expect(container.textContent).toContain(`Edited file ${path}`);
 		}
-		expect(container.textContent).not.toContain("·");
+		for (const row of container.querySelectorAll(".cline-chat-tool")) {
+            expect(row.textContent).not.toContain("Edited file ·");
+            expect(row.textContent).not.toContain("Read 2 files ·");
+        }
 	});
 
 	it("leads a command row with the action and shows output on expand", async () => {
@@ -2593,4 +2596,16 @@ describe("transcript artifact workspace context", () => {
 			environmentId: "local",
 		});
 	});
+});
+
+it("opens read-only Reports and resets its destination when switching sessions",async()=>{
+ const onOpenAnalysis=vi.fn(),onProceedWhileRunning=vi.fn();
+ const messages:ChatMessage[]=[{id:"u1",sessionId:"session-1",role:"user",content:"Inspect owned report",createdAt:1},{id:"t1",sessionId:"session-1",role:"tool",content:JSON.stringify({toolName:"read_files",result:{status:"partial"}}),createdAt:2,meta:{toolName:"read_files",toolCallId:"r1"}}];
+ await renderMessages(messages,{onOpenAnalysis,onProceedWhileRunning});
+ const destinations=()=>container.querySelector('[aria-label="Task destinations"]')!;
+ const button=(label:string)=>[...destinations().querySelectorAll('button')].find(b=>b.textContent===label)!;
+ await act(async()=>button("Reports").click());expect(container.querySelector('[aria-label="Session reports"]')).not.toBeNull();expect(container.textContent).toContain("Partial / unverified");expect(onProceedWhileRunning).not.toHaveBeenCalled();
+ await act(async()=>button("Analysis").click());expect(onOpenAnalysis).toHaveBeenCalledOnce();
+ await renderMessages(messages.map(m=>({...m,sessionId:"session-2"})),{sessionId:"session-2",onOpenAnalysis,onProceedWhileRunning});
+ expect(container.querySelector('[aria-label="Session reports"]')).toBeNull();expect(button("Chat").getAttribute("aria-pressed")).toBe("true");expect(onProceedWhileRunning).not.toHaveBeenCalled();
 });

@@ -61,12 +61,14 @@ import {
 import { ToolMessageBlock } from "./messages/tool-message-block";
 import { buildToolPresentation } from "./messages/tool-summaries";
 import { WorkBlock } from "./messages/work-block";
+import { ChatReports } from "./task-report-details";
 import { SessionCompletionCard } from "./session-completion-card";
 import { TranscriptRow } from "./transcript-row";
 import { SessionContent } from "./session-content";
 import { ArtifactWorkspaceProvider } from "@/lib/artifact-workspace";
 
 type ChatMessagesProps = {
+    onOpenAnalysis?: () => void;
 	sessionId: string | null;
 	environmentId?: string;
 	cwd?: string;
@@ -249,6 +251,7 @@ function SessionRunBar({
 }
 
 function ChatMessagesImpl({
+    onOpenAnalysis,
 	sessionId,
 	environmentId = "local",
 	cwd,
@@ -376,6 +379,8 @@ function ChatMessagesImpl({
 			}),
 		[messages, collapseTrailingRun],
 	);
+	const [reportsSession,setReportsSession] = useState<string|null>(null);
+    const reportsOpen=reportsSession===(sessionId??"draft");
 	const taskReport = useMemo(
 		() => buildSessionTaskReport(messages, status),
 		[messages, status],
@@ -709,8 +714,15 @@ function ChatMessagesImpl({
 	);
 
 	return (
+        <div className="flex h-full min-h-0 flex-col">
+        {hasMessages && <nav aria-label="Task destinations" className="flex shrink-0 gap-2 border-b px-4 py-2 text-xs">
+          <button type="button" aria-pressed={!reportsOpen} className="min-h-11 rounded border px-3 py-2 text-sm" onClick={()=>setReportsSession(null)}>Chat</button>
+          {onOpenAnalysis&&<button type="button" className="min-h-11 rounded border px-3 py-2 text-sm" onClick={onOpenAnalysis}>Analysis</button>}
+          <button type="button" aria-pressed={reportsOpen} className="min-h-11 rounded border px-3 py-2 text-sm" onClick={()=>setReportsSession(sessionId??"draft")}>Reports</button>
+        </nav>}
+        {reportsOpen&&<div className="min-h-0 flex-1 overflow-auto"><ChatReports key={sessionId} messages={messages} status={status}/></div>}
 		<Conversation
-			className="relative isolate h-full min-h-0 min-w-0 overflow-hidden"
+			className={cn("relative isolate min-h-0 min-w-0 flex-1 overflow-hidden",reportsOpen&&"hidden")}
 			key={sessionId ?? "new-chat"}
 		>
 			<ConversationViewport
@@ -1095,6 +1107,7 @@ function ChatMessagesImpl({
 				</AlertDialogContent>
 			</AlertDialog>
 		</Conversation>
+        </div>
 	);
 }
 
