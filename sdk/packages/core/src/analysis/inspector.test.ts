@@ -284,7 +284,10 @@ it("enforces the passive command set, drops replay and labels an emulated owned 
 				);
 				return;
 			}
-			const event = (value: string, timestamp = Date.now()) => ({
+			// Match CDP fractional epoch timestamps and the collector clock. Windows
+			// Date.now() can be coarsely quantized relative to performance.now().
+			const epochNow = () => performance.timeOrigin + performance.now();
+			const event = (value: string, timestamp = epochNow()) => ({
 				method: "Runtime.consoleAPICalled",
 				params: {
 					type: "log",
@@ -303,7 +306,7 @@ it("enforces the passive command set, drops replay and labels an emulated owned 
 					}),
 				);
 			if (m.method === "Runtime.enable") {
-				ws.send(JSON.stringify(event("REPLAY_SECRET", Date.now() - 10000)));
+				ws.send(JSON.stringify(event("REPLAY_SECRET", epochNow() - 10000)));
 				timers.push(
 					setTimeout(() => {
 						if (ws.readyState === 1)
@@ -353,7 +356,10 @@ it("enforces the passive command set, drops replay and labels an emulated owned 
 			"Debugger.getScriptSource",
 			"Debugger.disable",
 		]);
-		expect(result.console!.reports).toHaveLength(1);
+		expect(
+			result.console!.reports,
+			`Owned protocol capture: discarded=${result.console!.discarded}; reasons=${JSON.stringify(result.console!.discardReasons)}; matchedScripts=${result.scripts.filter((script) => script.staticMatch).length}`,
+		).toHaveLength(1);
 		expect(result.console!.reports[0].arguments[0].value).toBe(
 			"LIVE_PROTOCOL_CLAIM",
 		);

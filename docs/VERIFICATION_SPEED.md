@@ -70,3 +70,16 @@ Tests now cover 500 correlated calls on one socket, concurrent response ordering
 pending limits, endpoint rotation, redaction, malformed messages, handshake
 errors and deadline cleanup with no automatic replay. Fresh full installed
 acceptance is still required before merge.
+
+### Inspector protocol fixture clock
+
+The emulated owned Inspector fixture now emits CDP-style fractional epoch
+milliseconds using the same high-resolution clock as the collector. Mixing
+Windows' coarsely quantized `Date.now()` with fractional receipt timestamps can
+make a live fixture report appear to be in the future. Failure output now lists
+discard reasons and source-match counts. The production past/future guards,
+300-millisecond fixture observation window, 20-second test deadline, exact
+passive command sequence, replay rejection and source binding are unchanged.
+Five repeated local Inspector/collector runs passed (15 tests each); the full
+16-file static parser group passed with 109 tests and two platform skips.
+Fresh Windows execution remains necessary to validate the correction there.
