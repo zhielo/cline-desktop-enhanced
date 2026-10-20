@@ -16,6 +16,65 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
 
+/** Page-local acceptance transport. Reuse one authenticated socket rather than
+ * opening hundreds during the full journey. Correlate responses, never replay a
+ * request after errors, endpoint changes, timeouts or page/native restarts. This
+ * is a test driver only; product authentication and approvals are unchanged. */
+export function installedBrowserRpc({command,args,endpoint}: {
+  command:string; args:Record<string,unknown>; endpoint:string;
+}): Promise<unknown> {
+  type Pending = {resolve:(value:unknown)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>;message:string;sent:boolean};
+  type Transport = {endpoint:string;socket:WebSocket;pending:Map<string,Pending>;retired:boolean;retire:(error:Error)=>void};
+  const host=globalThis as typeof globalThis & {__clineInstalledAcceptanceRpcV1?:Transport};
+  const sanitize=(value:unknown)=>String(value??"Unknown backend error")
+    .replace(/approval_token=[^&\s]+/gi,"approval_token=[REDACTED]")
+    .replace(/Bearer\s+\S+/gi,"Bearer [REDACTED]")
+    .replace(/\b[0-9a-f]{32,}\b/gi,"[REDACTED]").slice(0,1500);
+  let state=host.__clineInstalledAcceptanceRpcV1;
+  if(state && state.endpoint!==endpoint){state.retire(new Error("Installed endpoint changed; outstanding RPC was not replayed"));state=undefined;}
+  if(state?.retired || state?.socket.readyState===WebSocket.CLOSED || state?.socket.readyState===WebSocket.CLOSING)state=undefined;
+  if(!state){
+    const socket=new WebSocket(endpoint);
+    const created:Transport={endpoint,socket,pending:new Map(),retired:false,retire:()=>{}};
+    created.retire=(error)=>{
+      if(created.retired)return;created.retired=true;
+      for(const entry of created.pending.values()){clearTimeout(entry.timer);entry.reject(error);}
+      created.pending.clear();
+      try{socket.close();}catch{/* failure still rejects; never retry */}
+    };
+    const send=(entry:Pending)=>{
+      if(entry.sent||created.retired)return;
+      entry.sent=true; // Mark before send: a throwing send must not be replayed.
+      try{socket.send(entry.message);}catch{created.retire(new Error("Installed RPC send failed; request was not replayed"));}
+    };
+    socket.onopen=()=>{for(const entry of created.pending.values())send(entry);};
+    socket.onmessage=(event)=>{
+      let reply:{type?:string;id?:string;ok?:boolean;result?:unknown;error?:unknown};
+      try{reply=JSON.parse(String(event.data));}catch{created.retire(new Error("Installed RPC received malformed transport data"));return;}
+      if(!reply||reply.type!=="response"||typeof reply.id!=="string")return;
+      const entry=created.pending.get(reply.id);if(!entry)return;
+      created.pending.delete(reply.id);clearTimeout(entry.timer);
+      if(reply.ok===true)entry.resolve(reply.result);
+      else entry.reject(new Error(`Installed command failed: ${sanitize(reply.error)}`));
+    };
+    socket.onerror=()=>created.retire(new Error("Installed authenticated transport failed; outstanding requests were not replayed"));
+    socket.onclose=(event)=>created.retire(new Error(`Installed authenticated transport closed (code ${event.code}, clean ${event.wasClean}); outstanding requests were not replayed`));
+    host.__clineInstalledAcceptanceRpcV1=created;state=created;
+  }
+  if(state.pending.size>=32)return Promise.reject(new Error("Installed RPC pending-request budget reached"));
+  const current=state,id=crypto.randomUUID();
+  let message:string;
+  try{message=JSON.stringify({type:"command",id,command,args});}catch{return Promise.reject(new Error("Installed RPC arguments could not be serialized"));}
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>current.retire(new Error(`Installed RPC timed out: ${command}; outstanding requests were not replayed`)),90_000);
+    const entry:Pending={resolve,reject,timer,message,sent:false};current.pending.set(id,entry);
+    if(current.socket.readyState===WebSocket.OPEN){
+      entry.sent=true;
+      try{current.socket.send(message);}catch{current.retire(new Error("Installed RPC send failed; request was not replayed"));}
+    }
+  });
+}
+
 /** The expanded v12 journey exceeded 384 RPC/native actions before its final
  * restart. Reserve bounded headroom for the complete journey, not dropped records
  * or skipped acceptance steps. At most 768 actions / 1536 running+terminal progress
@@ -639,48 +698,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			}).__TAURI_INTERNALS__;
 			return await native.invoke("get_desktop_backend_endpoint");
 		})), 95_000);
-		return (await acceptanceAction(`rpc-${command}`, () => page.evaluate(
-			async ({ command, args, endpoint }) => {
-				return await new Promise((resolve, reject) => {
-          const socket = new WebSocket(endpoint);
-          const id = crypto.randomUUID();
-					const timer = setTimeout(() => {
-            socket.close();
-            reject(new Error(`Installed RPC timed out: ${command}`));
-          }, 90_000);
-					const finish = () => {
-            clearTimeout(timer);
-            socket.close();
-          };
-          socket.onopen = () =>
-            socket.send(JSON.stringify({ type: "command", id, command, args }));
-          socket.onmessage = (event) => {
-            const reply = JSON.parse(String(event.data));
-            if (reply.type !== "response" || reply.id !== id) return;
-            finish();
-            if (reply.ok) resolve(reply.result);
-            else {
-              const detail = String(reply.error ?? "Unknown backend error")
-                .replace(
-                  /approval_token=[^&\s]+/gi,
-                  "approval_token=[REDACTED]",
-                )
-                .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
-                .replace(/\b[0-9a-f]{32,}\b/gi, "[REDACTED]")
-                .slice(0, 1500);
-              reject(
-                new Error(`Installed command failed: ${command}: ${detail}`),
-              );
-					}
-          };
-					socket.onerror = () => {
-            finish();
-            reject(new Error("Installed authenticated transport failed"));
-          };
-        });
-			},
-      { command, args, endpoint },
-    ))) as T;
+        return (await acceptanceAction(`rpc-${command}`, () => page.evaluate(
+            installedBrowserRpc, {command,args,endpoint},
+        ))) as T;
 	}
 	async function settings(page: Page, section: string) {
     await page

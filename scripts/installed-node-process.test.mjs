@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import {
 	withInstalledActionDeadline,
+ installedBrowserRpc,
  INSTALLED_ACTION_LIMIT,
  assertInstalledActionSequence,
 	ownedDescendantMetadata,
@@ -443,4 +444,77 @@ test("normal restart never converts nonzero, missing or timed-out native exit in
  assert.ok(!restart.includes("killOwnedProcess")&&!restart.includes("localStorage"));
  assert.ok(driver.includes('acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000)'));
  assert.ok(driver.includes("await stopOwnedApplication("),"forced failure cleanup remains separate");
+});
+
+// Deterministic transport fixtures: all requests reach a live-shaped protocol,
+// authentication failure never retries an approval or any other command.
+function installRpcSocketFixture() {
+ const original=globalThis.WebSocket,instances=[];
+ delete globalThis.__clineInstalledAcceptanceRpcV1;
+ class Socket {
+  static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;
+  readyState=0;messages=[];
+  constructor(endpoint){this.endpoint=endpoint;instances.push(this);}
+  open(){this.readyState=1;this.onopen?.();}
+  send(message){this.messages.push(JSON.parse(message));}
+  reply(request,result){this.onmessage?.({data:JSON.stringify({type:'response',id:request.id,ok:true,result})});}
+  close(){this.readyState=3;this.onclose?.({code:1000,wasClean:true});}
+ }
+ globalThis.WebSocket=Socket;
+ return {instances,restore(){globalThis.__clineInstalledAcceptanceRpcV1?.retire(new Error('fixture cleanup'));delete globalThis.__clineInstalledAcceptanceRpcV1;globalThis.WebSocket=original;}};
+}
+const fixtureRpc=(command='get_desktop_settings',endpoint='ws://127.0.0.1:1/transport?approval_token=fixture')=>installedBrowserRpc({command,args:{},endpoint});
+test('installed journey reuses one authenticated connection across 500 correlated RPCs',async()=>{
+ const f=installRpcSocketFixture();try{
+  for(let i=0;i<500;i++){
+   const request=fixtureRpc();const socket=f.instances[0];if(i===0)socket.open();socket.reply(socket.messages.at(-1),i);assert.equal(await request,i);
+  }
+  assert.equal(f.instances.length,1);assert.equal(f.instances[0].messages.length,500);assert.equal(globalThis.__clineInstalledAcceptanceRpcV1.pending.size,0);
+ }finally{f.restore();}
+});
+test('installed RPC multiplexes bounded concurrent requests and ignores unrelated events',async()=>{
+ const f=installRpcSocketFixture();try{
+  const pending=Array.from({length:32},()=>fixtureRpc());const socket=f.instances[0];
+  await assert.rejects(fixtureRpc(),/budget/);assert.equal(f.instances.length,1);socket.open();
+  socket.onmessage({data:JSON.stringify({type:'event',id:'unrelated'})});
+  for(let i=31;i>=0;i--)socket.reply(socket.messages[i],i);
+  assert.deepEqual(await Promise.all(pending),Array.from({length:32},(_,i)=>i));
+ }finally{f.restore();}
+});
+test('installed transport failure never replays a sent approval and clears pending state',async()=>{
+ const f=installRpcSocketFixture();try{
+  const promise=fixtureRpc('approve_analysis_task');const socket=f.instances[0];socket.open();socket.onerror();
+  await assert.rejects(promise,/not replayed/);assert.equal(socket.messages.length,1);assert.equal(f.instances.length,1);assert.equal(globalThis.__clineInstalledAcceptanceRpcV1.pending.size,0);
+ }finally{f.restore();}
+});
+test('installed endpoint rotation fails outstanding work rather than sending it to a new host',async()=>{
+ const f=installRpcSocketFixture();try{
+  const prior=fixtureRpc('approve_analysis_task');f.instances[0].open();
+  const rejected=assert.rejects(prior,/endpoint changed/);
+  const next=fixtureRpc('get_desktop_settings','ws://127.0.0.1:2/transport?approval_token=new');
+  await rejected;const socket=f.instances[1];socket.open();socket.reply(socket.messages[0],'fresh');assert.equal(await next,'fresh');
+  assert.deepEqual(socket.messages.map(x=>x.command),['get_desktop_settings']);
+ }finally{f.restore();}
+});
+test('installed malformed replies fail closed and command errors redact capabilities',async()=>{
+ const f=installRpcSocketFixture();try{
+  const promise=fixtureRpc();const socket=f.instances[0];socket.open();
+  socket.onmessage({data:JSON.stringify({type:'response',id:socket.messages[0].id,ok:false,error:'approval_token=secret Bearer abcdefghi'})});
+  await assert.rejects(promise,error=>!error.message.includes('secret')&&!error.message.includes('abcdefghi'));
+  const malformed=fixtureRpc('approve_analysis_task');socket.onmessage({data:'not-json'});await assert.rejects(malformed,/malformed/);
+  assert.equal(socket.messages.length,2);assert.equal(f.instances.length,1);
+ }finally{f.restore();}
+});
+test('installed RPC deadline clears transport without retrying a mutating request',async(t)=>{
+ const f=installRpcSocketFixture();t.mock.timers.enable({apis:['setTimeout']});try{
+  const promise=fixtureRpc('approve_analysis_task');const rejected=assert.rejects(promise,/timed out.*not replayed/);
+  const socket=f.instances[0];socket.open();t.mock.timers.tick(90_000);await rejected;
+  assert.equal(socket.messages.length,1);assert.equal(f.instances.length,1);assert.equal(globalThis.__clineInstalledAcceptanceRpcV1.pending.size,0);
+ }finally{f.restore();t.mock.timers.reset();}
+});
+test('installed handshake error sends no command and never automatically reconnects',async()=>{
+ const f=installRpcSocketFixture();try{
+  const request=fixtureRpc('approve_analysis_task');f.instances[0].onerror();await assert.rejects(request,/not replayed/);
+  assert.equal(f.instances.length,1);assert.equal(f.instances[0].messages.length,0);
+ }finally{f.restore();}
 });

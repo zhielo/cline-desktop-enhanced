@@ -50,3 +50,23 @@ Local checks for this change include the full workspace type check and lint
 cases across four groups, 48 workflow regressions and 45 release-gate tests.
 Local results never replace the fresh Windows installer, installed WebView
 acceptance, artifact digest validation or prospective merge-tree identity.
+
+### Installed acceptance transport
+
+The full installed journey must reuse one page-local authenticated WebSocket
+with correlated request IDs, not create and close a new connection for every
+RPC. Keep at most 32 pending calls and the existing 90-second call deadline.
+A handshake error, close, malformed reply, timeout or native endpoint rotation
+rejects outstanding calls without replaying them, including approval commands.
+A later explicit call can discover a new endpoint; earlier requests are never
+copied to it. Page reload/native restart creates a new page-local transport.
+Product capability authentication and approval boundaries remain unchanged.
+
+The failed frozen run built and smoke-tested the installer, then recorded an
+authenticated transport error during an approval call after the project-file
+inventory checks. This establishes a transport failure, not a compiler or
+installer failure; the original browser error did not expose a precise cause.
+Tests now cover 500 correlated calls on one socket, concurrent response ordering,
+pending limits, endpoint rotation, redaction, malformed messages, handshake
+errors and deadline cleanup with no automatic replay. Fresh full installed
+acceptance is still required before merge.
