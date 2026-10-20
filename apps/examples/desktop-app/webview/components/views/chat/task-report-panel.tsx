@@ -26,6 +26,7 @@ import {
 	type TaskReportStepStatus,
 } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
+import { taskReportView, isTaskActive } from "@/lib/task-report-view";
 
 function statusIcon(status: TaskReportStepStatus) {
 	switch (status) {
@@ -54,7 +55,7 @@ function evidenceIcon(status: TaskEvidenceStatus) {
 		case "failed":
 			return <AlertCircle className="size-3.5 text-destructive" />;
 		case "completed":
-			return <CheckCircle2 className="size-3.5 text-emerald-500" />;
+			return <CheckCircle2 className="size-3.5 text-blue-500" />;
 	}
 }
 
@@ -79,7 +80,7 @@ function reportState(report: SessionTaskReport, status?: ChatSessionStatus) {
 		report.steps.length > 0 &&
 		report.completedCount === report.steps.length
 	) {
-		return { label: "Complete", tone: "success" as const };
+		return { label: "Plan finished · outcome unverified", tone: "warning" as const };
 	}
 	if (
 		status === "running" ||
@@ -97,7 +98,7 @@ function reportState(report: SessionTaskReport, status?: ChatSessionStatus) {
 
 function stepTone(step: TaskReportStep) {
 	if (step.status === "completed") {
-		return "border-emerald-500/70 bg-emerald-500 text-white";
+		return "border-blue-500/70 bg-blue-500 text-white";
 	}
 	if (step.status === "in_progress") {
 		return "border-blue-500/70 bg-blue-500 text-white shadow-[0_0_0_4px_rgba(59,130,246,0.12)]";
@@ -149,7 +150,8 @@ export function TaskReportPanel({
 			report.steps.find((step) => step.status === "in_progress"),
 		[report.activeStepId, report.steps],
 	);
-	const state = reportState(report, status);
+	const view = taskReportView(report,status);
+    const state = !isTaskActive(status) ? {label:`${view.execution} · ${view.outcome}`,tone:"muted" as const} : reportState(report, status);
 	const latestActivity =
 		report.evidence.find((item) => item.status === "running") ??
 		report.evidence[0];
@@ -164,13 +166,13 @@ export function TaskReportPanel({
 		return grouped;
 	}, [report.evidence]);
 	const unassignedEvidence = useMemo(
-		() => report.evidence.filter((item) => !item.stepId),
+		() => report.evidence.filter((item) => !item.stepId).slice(0, 8),
 		[report.evidence],
 	);
 	const headline =
 		activeStep?.label ??
 		latestActivity?.label ??
-		(complete ? "All planned steps completed" : report.explanation);
+		(complete ? "All plan steps marked complete — review verification" : report.explanation);
 	const copyReport = async () => {
 		if (!navigator.clipboard?.writeText) {
 			setCopyState("failed");
@@ -271,7 +273,7 @@ export function TaskReportPanel({
 								role="progressbar"
 							>
 								<div
-									className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-500 ease-out"
+									className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-[width] duration-500 ease-out"
 									style={{ width: `${report.progressPercent}%` }}
 								/>
 							</div>
@@ -313,7 +315,8 @@ export function TaskReportPanel({
 										: "Copy report"}
 							</button>
 						</div>
-						{activeStep ? (
+                        <p className="mb-3 text-xs text-muted-foreground">Execution: {view.execution}. Outcome: {view.outcome}. Step counts are plan progress, not analysis coverage or verified outcomes. Full bounded evidence is available in Reports.</p>
+                        {activeStep && isTaskActive(status) ? (
 							<div className="mb-3 rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent px-3 py-2.5">
 								<div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-400">
 									<span className="relative flex size-2">
@@ -457,6 +460,7 @@ export function TaskReportPanel({
 												<p className="truncate text-xs font-medium">
 													{item.label}
 												</p>
+												<p className="text-xs text-muted-foreground">{item.status === "completed" ? "Tool finished" : item.status} · {item.outcome ?? "unverified"}</p>
 												{item.detail ? (
 													<p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
 														{item.detail}

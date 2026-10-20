@@ -1,3 +1,5 @@
+import { redactReportText, reportedOutcome, validationScope, TaskObservationSchema, type TaskObservation } from "../../shared/task-observation";
+import { extractArtifactPaths } from "./artifact-paths";
 import type { ChatMessage, ChatSessionStatus } from "@/lib/chat-schema";
 
 export type TaskReportStepStatus =
@@ -19,6 +21,7 @@ export type TaskReportStep = {
 	kind: TaskReportStepKind;
 	parentStepId?: string;
 	artifacts?: string[];
+    validationScope?: string;
 };
 
 export type TaskRepairState =
@@ -42,6 +45,8 @@ export type TaskEvidence = {
 	label: string;
 	detail?: string;
 	status: TaskEvidenceStatus;
+    observation?: TaskObservation;
+    outcome?: TaskObservation["outcome"];
 	toolName: string;
 	stepId?: string;
 	durationMs?: number;
@@ -50,6 +55,10 @@ export type TaskEvidence = {
 
 export type SessionTaskReport = {
 	mode: "plan" | "activity";
+    goal?: string;
+    planId?: string;
+    scopeChanges?: string[];
+    artifactReferences?: string[];
 	explanation?: string;
 	steps: TaskReportStep[];
 	evidence: TaskEvidence[];
@@ -103,7 +112,7 @@ export function formatTaskReportText(report: SessionTaskReport): string {
 			lines.push(`- ${evidence.status}: ${evidence.label}${detail}`);
 		}
 	}
-	return lines.join("\n");
+	return redactReportText(lines.join("\n"));
 }
 
 const PLAN_TOOL_NAMES = new Set([
@@ -262,6 +271,7 @@ function normalizeSteps(value: unknown, messageId: string): TaskReportStep[] {
 				label,
 				status,
 				kind: stepKind(step, label),
+                validationScope: validationScope({label,validationCommands:Array.isArray(step.validationCommands)?step.validationCommands.filter((v):v is string=>typeof v==="string"):Array.isArray(step.validation_commands)?step.validation_commands.filter((v):v is string=>typeof v==="string"):[],acceptanceCriteria:Array.isArray(step.acceptanceCriteria)?step.acceptanceCriteria.filter((v):v is string=>typeof v==="string"):[]}),
 				parentStepId:
 					typeof rawParentId === "string" && rawParentId.trim()
 						? rawParentId.trim()
@@ -405,25 +415,37 @@ function evidenceFromMessages(
 		if (message.role !== "tool") continue;
 		const payload = parsePayload(message.content);
 		const name = toolName(message, payload);
-		if (!name || PLAN_TOOL_NAMES.has(name)) continue;
+		if (message.meta?.taskEvent?.type === "plan.updated") {
+            const plan=message.meta.taskEvent;
+            const proofs=[...(plan.hostValidations??[]),...(plan.observation?[plan.observation]:[])];
+            for(const raw of proofs){const p=TaskObservationSchema.safeParse(raw);if(!p.success||p.data.sessionId!==message.sessionId||p.data.planId!==plan.planId||p.data.source!=="host-validation")continue;
+                const o=p.data;evidence.set(o.toolCallId,{id:o.toolCallId,label:"Host declared checks",toolName:o.toolName,stepId:o.stepId,observation:o,outcome:o.outcome,status:o.execution==="running"?"running":o.outcome==="failed"?"failed":"completed",createdAt:o.recordedAtMs});
+            }
+        }
+        if (!name || PLAN_TOOL_NAMES.has(name)) continue;
 		const input = asRecord(payload?.input);
 		const key = message.meta?.toolCallId ?? message.id;
 		const taskEvent = message.meta?.taskEvent;
-		const isError =
-			payload?.isError === true || taskEvent?.type === "tool.failed";
-		const running =
+		const parsedObservation = TaskObservationSchema.safeParse(taskEvent?.observation);
+        const observation = parsedObservation.success && parsedObservation.data.sessionId === message.sessionId && parsedObservation.data.toolCallId === key && parsedObservation.data.toolName === name ? parsedObservation.data : undefined;
+        const outcome = observation?.outcome ?? reportedOutcome(payload?.result);
+        const isError = payload?.isError === true || taskEvent?.type === "tool.failed" || outcome === "failed";
+		const running = observation ? observation.execution === "running" :
 			taskEvent?.type === "tool.started" ||
 			message.meta?.hookEventName === "tool_call_start" ||
-			(payload !== null && payload.result == null && !isError);
+			(payload !== null && payload.result == null && !isError && taskEvent?.type !== "tool.completed" && message.meta?.hookEventName !== "tool_call_end" && message.meta?.hookEventName !== "history_tool_result");
 		const stepId =
 			message.meta?.taskStepId ??
 			(taskEvent && "stepId" in taskEvent ? taskEvent.stepId : undefined);
-		evidence.set(key, {
+		const previous=evidence.get(key);
+        if(previous && previous.status!=="running" && running) continue;
+        evidence.set(key, {
 			id: key,
-			label: TOOL_LABELS[name] ?? titleCaseTool(name),
+			label: name.startsWith("subagent_") ? "Agent task" : TOOL_LABELS[name] ?? titleCaseTool(name),
 			detail: evidenceDetail(input),
 			status: isError ? "failed" : running ? "running" : "completed",
 			toolName: name,
+            observation, outcome,
 			stepId,
 			durationMs:
 				taskEvent && "durationMs" in taskEvent
@@ -434,12 +456,12 @@ function evidenceFromMessages(
 	}
 	return [...evidence.values()]
 		.sort((left, right) => right.createdAt - left.createdAt)
-		.slice(0, 5);
+		.slice(0, 200);
 }
 
 function currentRunStart(messages: ChatMessage[]): number {
 	for (let index = messages.length - 1; index >= 0; index--) {
-		if (messages[index]?.role === "user") return index + 1;
+		if (messages[index]?.role === "user" && messages[index]?.meta?.userRunSpan !== 0) return index + 1;
 	}
 	return 0;
 }
@@ -476,7 +498,7 @@ function buildActivityFallback(
  * UI state. The transcript remains the durable event log. Tool evidence is
  * scoped to the same turn and plan state is never inferred from assistant prose.
  */
-export function buildSessionTaskReport(
+function projectSessionTaskReport(
 	messages: ChatMessage[],
 	status?: ChatSessionStatus,
 ): SessionTaskReport | null {
@@ -526,6 +548,7 @@ export function buildSessionTaskReport(
 			: input;
 		return {
 			mode: "plan",
+            planId:planEvent?.planId,
 			explanation,
 			steps,
 			evidence: evidenceFromMessages(messages, runStartIndex),
@@ -539,4 +562,30 @@ export function buildSessionTaskReport(
 		};
 	}
 	return buildActivityFallback(messages, status, runStartIndex);
+}
+
+/** Strict session filtering prevents same-call IDs from crossing sessions. */
+export function buildSessionTaskReport(messages:ChatMessage[],status?:ChatSessionStatus):SessionTaskReport|null {
+ const last=messages.at(-1);const scoped=last?.sessionId ? messages.filter(m=>m.sessionId===last.sessionId) : messages;
+ const report=projectSessionTaskReport(scoped,status);if(!report)return null;
+ const begin=currentRunStart(scoped),goal=scoped[begin-1]?.content;
+ const revisions=scoped.slice(begin).filter(m=>m.meta?.taskEvent?.type==="plan.updated").map(m=>m.meta!.taskEvent!).filter((e):e is Extract<NonNullable<ChatMessage["meta"]>["taskEvent"],{type:"plan.updated"}>=>e.type==="plan.updated");
+ const changes:string[]=[];
+ for(let i=1;i<revisions.length;i++){
+  const old=new Map(revisions[i-1].steps.map(s=>[s.id,s.label]));const next=new Map(revisions[i].steps.map(s=>[s.id,s.label]));
+  for(const [id,label] of next)if(!old.has(id))changes.push(`Added: ${label}`);else if(old.get(id)!==label)changes.push(`Changed: ${old.get(id)} → ${label}`);
+  for(const [id,label]of old)if(!next.has(id))changes.push(`Removed from plan (not completed): ${label}`);
+ }
+ const artifactReferences=[...new Set(scoped.slice(begin).filter(m=>m.role==="assistant").slice(-200).flatMap(m=>extractArtifactPaths(m.content.slice(0,65536).replaceAll("`"," "))))].slice(0,100);
+ return {...report,artifactReferences,goal:goal?.slice(0,4000),scopeChanges:[...new Set(changes)].slice(-50)};
+}
+export function buildSessionTaskReports(messages:ChatMessage[],status?:ChatSessionStatus):SessionTaskReport[] {
+ const session=messages.at(-1)?.sessionId;
+ const scoped=session ? messages.filter(m=>m.sessionId===session):messages;
+ const groups:ChatMessage[][]=[];let current:ChatMessage[]=[];
+ for(const m of scoped){if(m.role==="user" && m.meta?.userRunSpan!==0 && current.length){groups.push(current);current=[];}current.push(m);}
+ if(current.length)groups.push(current);
+ return groups.slice(-50).flatMap((group,index,all)=>{
+  const report=buildSessionTaskReport(group,index===all.length-1?status:"idle");return report?[report]:[];
+ }).reverse();
 }

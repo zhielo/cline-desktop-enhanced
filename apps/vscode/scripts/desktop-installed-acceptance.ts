@@ -876,11 +876,18 @@ ConvertTo-Json -InputObject @($rows) -Compress
 					permissionProfile: "read-only",
 					// Empty new sessions intentionally persist lazily. Seed an owned
 					// transcript to exercise the existing durable recovery contract.
-            initialMessages: Array.from({length:120}, (_, index) => ({
+            initialMessages: [...Array.from({length:120}, (_, index) => ({
               id: `installer-owned-message-${index}`,
               role: "user",
               content: `Installer owned history row ${index}. ${"Owned offline transcript fixture. ".repeat(8)}`,
-            })).concat([{id: "installer-owned-artifact", role: "assistant", content: "Owned report: `./OWNED_SCROLL_REPORT.md`"}]),
+            })),
+              // Recorded, offline tool history only. These messages never execute a
+              // command and cannot supply host validation authority.
+              {id:"installer-report-plan",role:"assistant",content:[{type:"tool_use",id:"installer-report-plan-call",name:"update_plan",input:{steps:[{id:"owned-recorded-step",label:"Owned recorded step",status:"completed"}]}}]},
+              {id:"installer-report-plan-result",role:"user",content:[{type:"tool_result",tool_use_id:"installer-report-plan-call",content:'{"ok":true}'}]},
+              {id:"installer-report-tool",role:"assistant",content:[{type:"tool_use",id:"installer-report-tool-call",name:"read_files",input:{paths:["OWNED_SCROLL_REPORT.md"]}}]},
+              {id:"installer-report-tool-result",role:"user",content:[{type:"tool_result",tool_use_id:"installer-report-tool-call",content:'{"status":"partial","limitations":["Owned offline recorded fixture, not executed"]}'}]},
+              {id: "installer-owned-artifact", role: "assistant", content: "Owned report: `./OWNED_SCROLL_REPORT.md`"}],
 				},
 			},
       },
@@ -898,6 +905,19 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			.first()
       .click();
     stages.push("owned-workspace-idle-session-opened");
+    const verifyRecordedTaskReport=async()=>{
+      const destinations=page.getByRole("navigation",{name:"Task destinations",exact:true});
+      await destinations.getByRole("button",{name:"Reports",exact:true}).click();
+      const report=page.getByRole("region",{name:"Session reports",exact:true});
+      await report.getByRole("heading",{name:"Final task report",exact:true}).waitFor({timeout:30000});
+      await report.getByText("Outcome: Partial / unverified",{exact:true}).waitFor({timeout:30000});
+      await report.getByText("Owned recorded step (plan-marked complete)",{exact:true}).waitFor({timeout:30000});
+      await report.getByRole("button",{name:"Export JSON",exact:true}).waitFor({state:"visible",timeout:30000});
+      if(await report.getByText(/host-executed declared check\(s\) passed/).count())throw new Error("Recorded model plan incorrectly acquired host verification authority");
+      await destinations.getByRole("button",{name:"Chat",exact:true}).click();
+    };
+    await verifyRecordedTaskReport();
+    stages.push("installed-task-report-offline-plan-partial-no-verification-no-execution-passed");
     const analysisArgs={sessionId:session.sessionId,environmentId:"local"};
     const beforeAnalysis=await rpc<{mode:string}>(page,"first_party_analysis_status",analysisArgs);
     if(beforeAnalysis.mode!=="off")throw new Error("New session analysis must default Off");
@@ -1745,6 +1765,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
     // Save a real receipt selector through the visible UI before a real app/sidecar restart.
     // No preview, hashes, plan or execution token may enter device selection storage.
     await openInstalledSavedSession(page, /Installer owned session/);
+    await verifyRecordedTaskReport();
+    stages.push("installed-task-report-restored-after-restart-no-replay-passed");
     await page.getByRole("button", {name:"Open Analysis Workspace",exact:true}).click();
     await page.getByRole("button", {name:"App analysis",exact:true}).click();
     const restartSourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});

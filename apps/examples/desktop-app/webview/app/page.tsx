@@ -1283,7 +1283,7 @@ function ChatThreadPane({
 	}, []);
 	const [showDiffView, setShowDiffView] = useState(false);
 	const [workspaceInitialTab, setWorkspaceInitialTab] = useState<
-		"changes" | "analysis"
+		"changes" | "analysis" | "reports"
 	>("changes");
 	const [deletingSession, setDeletingSession] = useState(false);
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -2664,8 +2664,7 @@ function ChatThreadPane({
 					</button>
 					{!sessionId ? (
 						<span className="text-xs text-muted-foreground">
-							Applies before your first task. Permissions and approvals stay
-							unchanged.
+							Applies before your first task. Reasoning: {config.thinking===false?"Off":config.reasoningEffort??"Auto"}. Select effort in the composer. Permissions and approvals stay unchanged.
 						</span>
 					) : null}
 				</div>
@@ -2803,6 +2802,8 @@ function ChatThreadPane({
 							<DiffView
 								key={workspaceInitialTab}
 								initialTab={workspaceInitialTab}
+                                messages={displayedMessages}
+                                status={headerStatus}
 								sessionId={displayedSessionId ?? undefined}
 								cwd={config.cwd || config.workspaceRoot}
 								environmentId={environmentId}
@@ -2811,6 +2812,7 @@ function ChatThreadPane({
 							/>
 						) : (
 							<ChatMessages
+                                onOpenAnalysis={!isCloudSession?()=>{setWorkspaceInitialTab("analysis");setShowDiffView(true);}:undefined}
 								cwd={config.cwd || config.workspaceRoot}
 								environmentId={environmentId}
 								fileDiffs={fileDiffs}

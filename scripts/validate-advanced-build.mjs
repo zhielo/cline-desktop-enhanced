@@ -144,7 +144,7 @@ async function main() {
     job("Run required desktop sidecar regression suite", ["-F", "@cline/code", "test:sidecar"]),
     job("Test real Windows AppContainer execution boundary", ["test", "scripts/isolation-host-failure.test.ts", "scripts/javascript-isolation.test.ts"], desktop),
     job("Test Windows installer configuration", ["-F", "@cline/code", "test:windows-installer"]),
-    job("Test AI task report", ["x", "vitest", "run", "webview/lib/task-report.test.ts", "--config", "vitest.config.mts"], desktop),
+    job("Test AI task report", ["x", "vitest", "run", "shared/task-observation.test.ts", "sidecar/task-report-history.test.ts", "webview/lib/task-report.test.ts", "webview/lib/task-report-view.test.ts", "webview/lib/task-report-integration.test.ts", "webview/components/views/chat/task-report-details.test.tsx", "--config", "vitest.config.mts"], desktop),
     job("Test desktop authentication boundary", ["x", "vitest", "run",
       "sidecar/server.test.ts", "sidecar/server-auth.test.ts", "sidecar/transport-auth.test.ts",
       "--config", "vitest.config.mts"], desktop),

@@ -15,8 +15,6 @@ export function SessionContent({
 	status?: ChatSessionStatus;
 	taskReport?: SessionTaskReport | null;
 }) {
-	const showLiveReport =
-		status === "starting" || status === "running" || status === "stopping";
 	return (
 		<div
 			className={cn(
@@ -24,7 +22,7 @@ export function SessionContent({
 				className,
 			)}
 		>
-			{taskReport && showLiveReport ? (
+			{taskReport ? (
 				<div className="mb-4">
 					<TaskReportPanel
 						key={taskReport.sourceMessageId}

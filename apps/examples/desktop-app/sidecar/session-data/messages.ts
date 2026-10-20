@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { restoreTaskReportEvents } from "../task-report-history";
 import { dirname } from "node:path";
 import {
 	getUserRunSpan,
@@ -706,7 +707,7 @@ export async function readSessionMessages(
 		}
 	}
 
-	return out;
+	return isRemoteRead ? out : await restoreTaskReportEvents(sessionId, out);
 }
 
 export function persistSessionMessages(
