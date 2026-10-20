@@ -521,12 +521,12 @@ export function SetupCenter() {
 				{form && (
 					<div className="space-y-4">
 						<h2 className="text-lg font-semibold">Ghidra and Java</h2>
-						<p role="status">
+						<output className="block">
 							Ghidra: {status?.ghidra?.status ?? "Not tested"}
 							{status?.ghidra?.javaVersion
 								? ` — Java ${status.ghidra.javaVersion}`
 								: ""}
-						</p>
+						</output>
 						<p>
 							{status?.ghidra?.reason ??
 								"Ghidra has a separate explicit owned-fixture test; Python pack readiness does not cover it."}
