@@ -732,8 +732,8 @@ class NativeCallTraversalTests(unittest.TestCase):
 def fixture_shard(index, count):
     # Discover with unittest, not a second hard-coded inventory. Future cases
     # automatically belong to exactly one shard, including inherited tests.
-    if count != 4 or not 0 <= index < count:
-        raise ValueError('Expected one of four fixed fixture shards')
+    if count != 8 or not 0 <= index < count:
+        raise ValueError('Expected one of eight fixed fixture shards')
     def flatten(suite):
         for item in suite:
             if isinstance(item, unittest.TestSuite):
@@ -754,6 +754,6 @@ def fixture_shard(index, count):
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--fixture-shard':
         if len(sys.argv) != 4:
-            raise ValueError('Expected --fixture-shard INDEX 4')
+            raise ValueError('Expected --fixture-shard INDEX 8')
         sys.exit(fixture_shard(int(sys.argv[2]), int(sys.argv[3])))
     unittest.main()

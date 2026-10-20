@@ -18,13 +18,12 @@ export default defineConfig({
 		pool: "forks",
 		...(process.env.CI && process.platform === "win32"
 			? {
-					// Two workers, not one: serializing the whole suite here cost ~3
-					// minutes of Windows CI per run. The worker terminations that
-					// motivated serializing were timing fragility in the hub suites
-					// (a daemon shutdown that could exit before its HTTP response
-					// flushed, plus hang guards tight enough to trip on runner speed),
-					// which are fixed at the source rather than papered over here.
-					maxWorkers: 2,
+					// Native Python/Git/SQLite integration fixtures compete for CPU and
+					// filesystem startup on Windows hosted runners. Two forks caused
+					// repeatable 18s subprocess kills and 20s connector timeouts.
+					// Serialize files, not assertions; preserve the existing deadlines
+					// and execute the complete corpus once without retrying failures.
+					maxWorkers: 1,
 				}
 			: {}),
 	},
