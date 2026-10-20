@@ -18,6 +18,8 @@ export const RELEASE_GATE_POLICY = {
 		"Detect Changes",
 		"Validate and build Windows x64 setup.exe",
 		"Windows Android toolchain owned fixtures",
+		"Ghidra real owned fixtures (ubuntu-latest)",
+		"Ghidra real owned fixtures (windows-latest)",
 		"Windows isolated Execute boundary",
 		"Windows Binary Triage owned engines",
 		"Windows regression gates",
@@ -143,7 +145,7 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/build-custom-windows-installer.yml":
-			"324cc282cd50728d248d3a9a38dbe128187b714ba1e09dc2ce824fe027c7f9ee",
+			"690e8c97879b3b4f4ba4133c1585787bfefc69c55286ab645b266f767ce8a9c9",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"fa491f5b1052ef57cad6c0f034db83cd772d5830bd28bf2da1c08472f4fec4bb",
 		"scripts/validate-advanced-build.mjs":
