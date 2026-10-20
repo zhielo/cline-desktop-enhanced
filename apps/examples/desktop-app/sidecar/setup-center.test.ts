@@ -245,6 +245,18 @@ async function ownedGhidraSetup() {
 		process.platform === "win32" ? "java.exe" : "java",
 	);
 	await writeFile(java, "owned java");
+	await writeFile(
+		join(
+			home,
+			"support",
+			process.platform === "win32" ? "launch.bat" : "launch.sh",
+		),
+		"owned secondary launcher",
+	);
+	await writeFile(
+		join(home, "support", "LaunchSupport.jar"),
+		"owned launch support",
+	);
 	await saveSetupPreferences({ ...base, ghidraHome: home });
 	return { home, javaHome, java };
 }
@@ -273,6 +285,37 @@ it("Ghidra readiness requires explicit decompilation and invalidates changed Jav
 	expect(receipt.status).toBe("passed");
 	expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
 	expect((await getSetupCenterStatus()).ghidra.status).toBe("Ready");
+	for (const [file, original] of [
+		[
+			join(
+				home,
+				"support",
+				process.platform === "win32" ? "launch.bat" : "launch.sh",
+			),
+			"owned secondary launcher",
+		],
+		[join(home, "support", "LaunchSupport.jar"), "owned launch support"],
+	] as const) {
+		await writeFile(file, "changed launcher dependency");
+		expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
+		await writeFile(file, original);
+		expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
+	}
+	for (const name of [
+		"GHIDRA_JAVA_OPTIONS",
+		"GHIDRA_HEADLESS_JAVA_OPTIONS",
+		"GHIDRA_HEADLESS_MAXMEM",
+		"JAVA_TOOL_OPTIONS",
+		"JDK_JAVA_OPTIONS",
+		"_JAVA_OPTIONS",
+	]) {
+		const original = process.env[name];
+		vi.stubEnv(name, "changed owned startup configuration");
+		expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
+		if (original === undefined) delete process.env[name];
+		else process.env[name] = original;
+		expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
+	}
 	await writeFile(java, "changed java");
 	expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
 	await writeFile(java, "owned java");
