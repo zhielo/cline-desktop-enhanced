@@ -10,7 +10,7 @@ Validated on Linux against pinned REA source revision `d0067ba34a39ea47dd7e11bb2
 | Repository-wide TypeScript checks (`bun run types`) | Passed, including CLI/VS Code consumers and core smoke configurations |
 | Repository CI lint gate | Passed |
 | Desktop sidecar bundle | Passed |
-| Custom-fork preservation | 308 source contracts passed |
+| Custom-fork preservation | 309 source contracts passed |
 | Source provenance | 138 source/test files verified |
 | Analysis, tool schemas, permissions, routing and definitions regression | 548 passed; 1 Windows-only test skipped on Linux |
 | Exact upstream differential comparison | 12 owned file-local fixtures passed (one parameterized test) |

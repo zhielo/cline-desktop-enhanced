@@ -4,6 +4,8 @@ This file is the durable customization ledger for this repository. The source on
 
 ## Integrated semantic source port (partial REA migration)
 
+The finite release verifier requires both Linux and Windows semantic-parity checks and hash-pins the standalone semantic validation recipe as well as its installer dependency. Missing, skipped, failed, or altered semantic release evidence is rejected.
+
 - `javascript_analysis` optionally accepts `javascript_options.semanticGraph: true`; the desktop Analysis Workspace offers an explicit file-local semantic graph checkbox. No REA package, CLI, MCP server or separate runtime is installed or launched. The existing owned analysis worker runs directly imported source algorithms.
 - Source revision `d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f`, MIT notice, exact file hashes, compatibility-only adaptations and applicable upstream fixtures are recorded under `sdk/packages/core/src/analysis/semantic-engine/upstream/PROVENANCE.json`. `scripts/verify-semantic-port.mjs` prevents undocumented source drift.
 - Large semantic output transfers privately outside stdout, then persists atomically with its receipt. New canonical hashes do not replace legacy receipt hashes. Graphs are session/receipt-bound, capped at 128 MiB each and 512 MiB total, with no automatic evidence deletion. Existing source admission limits remain, so full artifact/source-selection parity is not claimed.

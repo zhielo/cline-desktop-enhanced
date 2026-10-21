@@ -18,6 +18,8 @@ export const RELEASE_GATE_POLICY = {
 		"Detect Changes",
 		"Validate and build Windows x64 setup.exe",
 		"Windows Android toolchain owned fixtures",
+		"semantic-source-validation / Semantic source parity (ubuntu-latest)",
+		"semantic-source-validation / Semantic source parity (windows-latest)",
 		"Ghidra real owned fixtures (ubuntu-latest)",
 		"Ghidra real owned fixtures (windows-latest)",
 		"Windows isolated Execute boundary",
@@ -55,8 +57,8 @@ export const RELEASE_GATE_POLICY = {
 		"Test Windows workflow hardening",
 		"Test consolidated runner",
 		"Type-check desktop",
-        "Type-check complete desktop WebView including fixtures",
-        "Test audit repair contracts",
+		"Type-check complete desktop WebView including fixtures",
+		"Test audit repair contracts",
 		"Type-check core",
 		"Run required desktop sidecar regression suite",
 		"Test real Windows AppContainer execution boundary",
@@ -86,7 +88,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-fresh-draft-analysis-visible-before-first-task",
 		"installed-browser-native-metadata-capture-cleanup-verified",
 		"owned-workspace-idle-session-opened",
-        "installed-task-report-offline-plan-partial-no-verification-no-execution-passed",
+		"installed-task-report-offline-plan-partial-no-verification-no-execution-passed",
 		"installed-hybrid-mode-persistence-static-preflight-passed",
 		"installed-ai-batch-read-only-profile-denied",
 		"installed-hybrid-owned-isolated-execution-and-export-passed",
@@ -134,7 +136,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
-        "installed-task-report-restored-after-restart-no-replay-passed",
+		"installed-task-report-restored-after-restart-no-replay-passed",
 		"installed-source-reference-restart-inert-explicit-recheck-clear-passed",
 		"hub-restart-saved-session-reattached-without-prompt-replay",
 		"full-to-core-rollback-preserved-owned-session",
@@ -144,8 +146,10 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+		".github/workflows/semantic-source-validation.yml":
+			"65ddb0731233739a5e973cedcdef11e023ec4118a62a88944fdfe6f66c7327cf",
 		".github/workflows/build-custom-windows-installer.yml":
-			"690e8c97879b3b4f4ba4133c1585787bfefc69c55286ab645b266f767ce8a9c9",
+			"0e8814bcf2a050b9afc4af7583e70fd0424788032a0b44e93e9fd09aba340bc1",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"fa491f5b1052ef57cad6c0f034db83cd772d5830bd28bf2da1c08472f4fec4bb",
 		"scripts/validate-advanced-build.mjs":

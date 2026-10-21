@@ -21,6 +21,14 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
+		path: "apps/examples/desktop-app/sidecar/release-gate-policy.ts",
+		markers: [
+			"semantic-source-validation / Semantic source parity (ubuntu-latest)",
+			"semantic-source-validation / Semantic source parity (windows-latest)",
+			".github/workflows/semantic-source-validation.yml",
+		],
+	},
+	{
 		path: "scripts/verify-semantic-port.mjs",
 		markers: ["Source digest mismatch", "Missing attribution"],
 	},

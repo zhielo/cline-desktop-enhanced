@@ -56,7 +56,7 @@ Run `node scripts/verify-semantic-port.mjs` to detect undocumented drift. Do not
 - `bun scripts/verify-custom-fork.ts`
 - Desktop tests include `first-party-analysis.test.tsx` and `sidecar/first-party-analysis.test.ts`.
 
-The parity test requires `CLINE_SEMANTIC_REFERENCE_ROOT` pointing to a separate checkout of the exact pinned reference. Its dependencies must resolve to identical analysis versions. The reference is development-only; do not install or launch REA in production. Without this variable, the parity test is explicitly skipped, not passed. The reusable source-validation workflow always supplies the pinned reference and runs on Linux and Windows before the installer job.
+The parity test requires `CLINE_SEMANTIC_REFERENCE_ROOT` pointing to a separate checkout of the exact pinned reference. Its dependencies must resolve to identical analysis versions. The reference is development-only; do not install or launch REA in production. Without this variable, the parity test is explicitly skipped, not passed. The finite release policy requires both semantic parity checks and pins both the installer and semantic validation recipes. The reusable source-validation workflow always supplies the pinned reference and runs on Linux and Windows before the installer job.
 
 The owned corpus covers local calls/closures, properties, promises, events, timers, child-process syntax, configuration/requests, Electron syntax, shadowing, dynamic keys, malformed input and nonexecution. Exact graph digests are compared; original source hashes are also checked. This establishes equality only for those file-local fixtures, not all JavaScript programs or all REA features.
 
