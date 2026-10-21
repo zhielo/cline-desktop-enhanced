@@ -1,0 +1,9488 @@
+{
+  "schema": "cline-rea-contract-dependencies/1",
+  "revision": "d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f",
+  "scope": "Static literal TypeScript import/export/import-type/require dependency closure, including types. Not provider scripts, dynamic imports, runtime closure or software inventory.",
+  "files": [
+    {
+      "path": "src/contracts/adb/adbToolContracts.ts",
+      "sha256": "51f2b3850eeb294288fe853a7a46dbf49de4e1a049526b07f9162f53d3706160",
+      "dependencies": [
+        {
+          "file": 75
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/analysisDetail.ts",
+      "sha256": "b14ce5d4b8d5548ea360b26c6eeb7bbbee9efc68804d3a25c180fb33872e0e1c",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/analysisSearchContract.ts",
+      "sha256": "313a4e946f8a2cdaac87d583e5c0ce9ee7bba2290bf7eeffa5c027d064504c9b",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/analysisViewApiSurfaceExample.ts",
+      "sha256": "3fec8ae2ad63a30c6e1fc8969d0222ada0126e2fa0b0f3104ecb779b5ed2f7f3",
+      "dependencies": []
+    },
+    {
+      "path": "src/contracts/analysisViewEnvironmentManifestExample.ts",
+      "sha256": "93bae14723d9b02753858a0d76661d56e57e0c485317115682547d90b2659152",
+      "dependencies": []
+    },
+    {
+      "path": "src/contracts/analysisViewToolContracts.ts",
+      "sha256": "6037b28ea967df4ffba905288b5d4583d3d8cb7d20563b64a83b639702bac50f",
+      "dependencies": [
+        {
+          "file": 3
+        },
+        {
+          "file": 4
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/android/androidToolContracts.ts",
+      "sha256": "d9fa03cad9fdb79336dab91a6b2f9527202d53bbe7b862e1c365d4ff9b9e3efe",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 131
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/apktool/apktoolToolContracts.ts",
+      "sha256": "c8114e24b2b30fe1ff2d4398245249d3105c75b5933f7b7274dba3d3d5fa3a1e",
+      "dependencies": [
+        {
+          "file": 134
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/applicationToolContracts.ts",
+      "sha256": "395e100a30f73cb7105e306e011717fd6db9825af8ef8d17aa1fc5e65b2036fb",
+      "dependencies": [
+        {
+          "file": 239
+        },
+        {
+          "file": 251
+        },
+        {
+          "file": 317
+        },
+        {
+          "file": 250
+        },
+        {
+          "file": 326
+        },
+        {
+          "file": 34
+        },
+        {
+          "file": 400
+        },
+        {
+          "file": 397
+        },
+        {
+          "file": 403
+        },
+        {
+          "file": 132
+        },
+        {
+          "file": 135
+        },
+        {
+          "file": 224
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 36
+        },
+        {
+          "file": 37
+        },
+        {
+          "file": 45
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/artifactComparisonExample.ts",
+      "sha256": "6f94e3a0df09f320277048e764c118d408771f8ce0b8c869f25becb8c0efd27d",
+      "dependencies": [
+        {
+          "file": 154
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/artifactToolContracts.ts",
+      "sha256": "88e19200b7317b96ebc1d0c3b9498ecf26c31e82a08c2f87cd6380aa8e6ca2d8",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 157
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 136
+        },
+        {
+          "file": 141
+        },
+        {
+          "file": 145
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 1
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/browserProviderToolContracts.ts",
+      "sha256": "552da9758f80d95a66d9e08bcfe423189f261a83127051780a1b26a00d360cc2",
+      "dependencies": [
+        {
+          "file": 12
+        },
+        {
+          "file": 13
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/browserScenarioToolContracts.ts",
+      "sha256": "ee8ac0f37a2779423c57112d67e07b01361e091675fa1a2ef995f03ebbc22f3e",
+      "dependencies": [
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 171
+        },
+        {
+          "file": 172
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/browserToolContracts.ts",
+      "sha256": "6e842dec583ef9dcd183cb7350ca7cddbf3b8a094a24b87ce497b1ee35ac5383",
+      "dependencies": [
+        {
+          "file": 64
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 426
+        },
+        {
+          "file": 181
+        },
+        {
+          "file": 433
+        },
+        {
+          "file": 164
+        },
+        {
+          "file": 173
+        },
+        {
+          "file": 437
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/captures/captureToolContracts.ts",
+      "sha256": "e7b26d24aaa79d859e7bf4daf8c9a4e94563e2b0cddc9797a48813db5873ce57",
+      "dependencies": [
+        {
+          "file": 188
+        },
+        {
+          "file": 187
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/cutterToolContracts.ts",
+      "sha256": "a48c67b22a677b1dabd8ed90ade65ef7e8cea4f7756183f6076f92bc8ace8844",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/desktopApplicationToolContracts.ts",
+      "sha256": "19ef5125e7948a194ded25eb4ae3a36050abf8fe691288f43053a0d224417c02",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 195
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 64
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/enhancedInputs.ts",
+      "sha256": "d3c9e498a61e9a09b12ca6ab5e7b3ec8c7ea87319e162656e09b95e542dc5712",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 368
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/enhancedToolContracts.ts",
+      "sha256": "abe7d716d59c9d138a1aba96d5d001ba034dc01998991f56819b4e4fa388b770",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 17
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 63
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 28
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/errorSchemas.ts",
+      "sha256": "334b0b668aa88939bf1195c814160231fb154e1563b37805b74b573d8fac406e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 80
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 79
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/evidenceInputContracts.ts",
+      "sha256": "cbedd17c6e033d4c41a2db2a561a78067fe9acc4cd85174012fd805e18ded93d",
+      "dependencies": [
+        {
+          "file": 204
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/evm/evmToolContracts.ts",
+      "sha256": "5d9fb775a49d39e61c7df38c89a32b2e297addd22c8b5503b6dea2c36257175e",
+      "dependencies": [
+        {
+          "file": 205
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/firmware/firmwareToolContracts.ts",
+      "sha256": "22d9b0a608a39709c8a13edd7ce1f952726992d2f233198551305ea2dfdf4eaf",
+      "dependencies": [
+        {
+          "file": 209
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/flutter/flutterToolContracts.ts",
+      "sha256": "6d84c520907310eae06b7650fa98aeac1d32e34ec087da2ce586b13d899a7e29",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 212
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/fridaRemoteAddress.ts",
+      "sha256": "c1eb00c3bc2c2fd1feae581340923d7b6da5c1f7cd4ea42b3eda7c729a6301d0",
+      "dependencies": []
+    },
+    {
+      "path": "src/contracts/fridaToolContracts.ts",
+      "sha256": "38fc8ee5bb074a88b5c6e59509a778af03d2fe1f15a92876cad56a6a23d6806f",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 24
+        },
+        {
+          "file": 213
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/functionComparisonExample.ts",
+      "sha256": "87b88d4153dab1ebf347b8a8cb5103a83725bad4e46a069c39d9fcad028c7406",
+      "dependencies": [
+        {
+          "file": 17
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/functionInstructionContract.ts",
+      "sha256": "022a33362adae18ed100d1ddf892f374b10fad847a74777d8145ca626e739b19",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/functionWorkflowToolContracts.ts",
+      "sha256": "da3c14a74bb5f0e9680040de067e4acb06c1d12c297ac02b253849fd5e53a322",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 17
+        },
+        {
+          "file": 62
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/gdbToolContracts.ts",
+      "sha256": "915d81c00f185bc758ebac19c286d2745eb38efcc29aedff975e0740c88c5422",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 190
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/go/goToolContracts.ts",
+      "sha256": "24a68b6e4de98cb17afd13c5d0c3537b4673f62194f8f18af6b431378d723d8c",
+      "dependencies": [
+        {
+          "file": 223
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/hopperMemoryContracts.ts",
+      "sha256": "3ab78aa122bd3e934bbfeb04eaea3ecb1c6b7ba88bde75a9538457a1063b21ce",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 63
+        },
+        {
+          "file": 348
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/il2cpp/il2cppToolContracts.ts",
+      "sha256": "2a01fa5be0b5fd6129422ec7f457f48b238a780d166b8716f80725d8201f4c69",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 228
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/investigationExamples.ts",
+      "sha256": "7dd6f7c547d3c4250c6c8c4d7b2bc0eec3185b133085227227b95de6fbfbaebe",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 383
+        },
+        {
+          "file": 381
+        },
+        {
+          "file": 26
+        },
+        {
+          "file": 380
+        },
+        {
+          "file": 215
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/applicationWorkflowInputContracts.ts",
+      "sha256": "ffac5675eaf90c04215b2e0bf46a5361469664b04fd10e22077fe85ba3b2596f",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 20
+        },
+        {
+          "file": 239
+        },
+        {
+          "file": 250
+        },
+        {
+          "file": 251
+        },
+        {
+          "file": 308
+        },
+        {
+          "file": 326
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/electronToolContracts.ts",
+      "sha256": "cc4d0c07c07296c477cc445d1803269bcf53c22e951eabd180c1662c76191c20",
+      "dependencies": [
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 198
+        },
+        {
+          "file": 232
+        },
+        {
+          "file": 231
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 235
+        },
+        {
+          "file": 270
+        },
+        {
+          "file": 40
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/javascriptApplicationWorkflowExamples.ts",
+      "sha256": "801f873d18b5ca26a7cf33a557991cbd4cc2b46d37a094003b8a5fb62261d2d2",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 261
+        },
+        {
+          "file": 40
+        },
+        {
+          "file": 406
+        },
+        {
+          "file": 270
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/javascriptExportShapeComparisonExample.ts",
+      "sha256": "8e30313187e8dce91b52795a5285e122fe95f6d91dc16a8ab03d269896ed26da",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 430
+        },
+        {
+          "file": 274
+        },
+        {
+          "file": 249
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 291
+        },
+        {
+          "file": 292
+        },
+        {
+          "file": 235
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/javascriptRecoveryToolContracts.ts",
+      "sha256": "402a1bf5f753c4226dcda7c77ebcd7173685b401ef3c08c63ba2fd65c5f27732",
+      "dependencies": [
+        {
+          "file": 257
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 64
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/javascriptRuntimeObservationToolContracts.ts",
+      "sha256": "9ae3c1418ee25b1ce700abed74f6508b9a35dad3304526426ebd6ddac4ff8d45",
+      "dependencies": [
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 260
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/javascript/javascriptRuntimeReconciliationExample.ts",
+      "sha256": "384c3cadd449002f9237aa9f62fd7aeae37601c4ac622f7040923801109dc9b3",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 430
+        },
+        {
+          "file": 291
+        },
+        {
+          "file": 292
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/jeb/jebToolContracts.ts",
+      "sha256": "62fb5f88c22e1fa1961ca4e70d04afc476bf0ccdd5e8e0c41bc94467bdf6ccd1",
+      "dependencies": [
+        {
+          "file": 327
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/managed/managedToolContracts.ts",
+      "sha256": "b5501d8b151edb998ddb32caff636792e81cbd8c54dc26cc246279de868952a5",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 1
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/managed/managedWorkflowExamples.ts",
+      "sha256": "ff06fc6fd9a93cb5f9f0ea0795ca2357acdc1741fc77c2a83f9df864404d7d5b",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 360
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/managed/managedWorkflowToolContracts.ts",
+      "sha256": "ec3a4737140eda5a10926fb6c05e299f33d8b94766df649690b031059e1b7d94",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 341
+        },
+        {
+          "file": 342
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 43
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/mobileApplicationGraphExamples.ts",
+      "sha256": "cbb828c2977230c5061121d3d91a8b079245e57e3ed2e464d8deee7836293fe2",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 154
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/model/modelToolContracts.ts",
+      "sha256": "b49dcb61bff5751554ab9484c1bc3ad26bbfb1528dea8fa723ae423ea0cae3e3",
+      "dependencies": [
+        {
+          "file": 345
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 344
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/native/binaryDiagnosticsToolContracts.ts",
+      "sha256": "513b1bcd78a1d197f4679c72d2781a511ad2f6ff30024202a30dfcf50f72b0e8",
+      "dependencies": [
+        {
+          "file": 372
+        },
+        {
+          "file": 347
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 370
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/native/functionMatchingContracts.ts",
+      "sha256": "d60168839c56b1877273b0e0a7e31d02433c287172f068ed7d8fa9ba2d06d23e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 20
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/native/nativeToolContracts.ts",
+      "sha256": "b0495a7771b8f95636726a5975653539c76fb29878291ee9cfcb724701ec4960",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 355
+        },
+        {
+          "file": 366
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 1
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/officialToolContracts.ts",
+      "sha256": "f51dab893918c833d1b3541395f3713f64e52255a8044e90f7f29c389223cc98",
+      "dependencies": [
+        {
+          "file": 1
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 359
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 63
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 358
+        },
+        {
+          "file": 361
+        },
+        {
+          "file": 27
+        },
+        {
+          "file": 31
+        },
+        {
+          "file": 2
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/pcap/pcapToolContracts.ts",
+      "sha256": "933f32c14d97503ae4ba68809b226ea32e67781f6f4e4c1a9cff4fc12d65a020",
+      "dependencies": [
+        {
+          "file": 376
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/providerSelection.ts",
+      "sha256": "dee1f9e16bb6b5324e6d3cd7bc5526e0177878320e06f569d93f9861cb4adc3c",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/reverseEngineeringToolContracts.ts",
+      "sha256": "ac23804eea8f1b364367b87c5d9da65a7ab6c0be46f8a29bd03d298be82115c0",
+      "dependencies": [
+        {
+          "file": 190
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 411
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/rizinDebugToolContracts.ts",
+      "sha256": "7f9f20c5f499852fb56301d0a84aaeddccc249c3195fb90d93fa0e4ab8b2925d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/rust/rustToolContracts.ts",
+      "sha256": "b0355e9b301391ea53120677c6e04c97b590535ad942253bb764758477730dbb",
+      "dependencies": [
+        {
+          "file": 412
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/sessionLifecycleInputs.ts",
+      "sha256": "dc4f78f218a41b774b505d0f860a29e3d96fd3c46f61d23cf58b665e10b871dd",
+      "dependencies": [
+        {
+          "file": 197
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 396
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 52
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/sessionStatusContract.ts",
+      "sha256": "acbfc4a22bb8ae3775b49d124407bc86a2ec566a269cf56f4faa088b93b38842",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/sessionToolContracts.ts",
+      "sha256": "681cd5e9b8a0f769232316c29be505c0827c1dd7f3d6cdfb352206cf8bfee000",
+      "dependencies": [
+        {
+          "file": 48
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 151
+        },
+        {
+          "file": 183
+        },
+        {
+          "file": 189
+        },
+        {
+          "file": 219
+        },
+        {
+          "file": 386
+        },
+        {
+          "file": 409
+        },
+        {
+          "file": 404
+        },
+        {
+          "file": 418
+        },
+        {
+          "file": 67
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 56
+        },
+        {
+          "file": 57
+        },
+        {
+          "file": 59
+        },
+        {
+          "file": 63
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/sessionToolSchemas.ts",
+      "sha256": "47ee121fee3a4ef72f562b449e23250b0ab68b058dac1d49f5cb932f3406f811",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 182
+        },
+        {
+          "file": 390
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 203
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/signals/signalToolContracts.ts",
+      "sha256": "3d021a94c531872d037f6ab15eba1f96e5c432a03a00368afd456173765b7c1c",
+      "dependencies": [
+        {
+          "file": 415
+        },
+        {
+          "file": 416
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/sqlite/sqliteToolContracts.ts",
+      "sha256": "ebeb961ff62b833536f94a1c81fc83e6625afa62a1ca4d2bcbd62baf12d8dfdd",
+      "dependencies": [
+        {
+          "file": 417
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/toolContractExamples.ts",
+      "sha256": "6027cc969a25aeff9625b1a4814fa20b00eb649fac54309626500efd67b17f6b",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 69
+        },
+        {
+          "file": 9
+        },
+        {
+          "file": 26
+        },
+        {
+          "file": 33
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/toolContractHelpers.ts",
+      "sha256": "21cc3daf079f3db274622e9bb6226b63590b164a066474350018e3d801dda4b5",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 62
+        },
+        {
+          "file": 64
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/toolContractTypes.ts",
+      "sha256": "45ee2c139f82fda31a78816b1dd6f4a82ab857d2ff27acc51020b47b01cfd34e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 66
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/toolContracts.ts",
+      "sha256": "1f0b8030117288859a4a6d10f3d6438fb06448c3561fb92a14edc5c6ffc51e3f",
+      "dependencies": [
+        {
+          "file": 14
+        },
+        {
+          "file": 60
+        },
+        {
+          "file": 71
+        },
+        {
+          "file": 21
+        },
+        {
+          "file": 16
+        },
+        {
+          "file": 30
+        },
+        {
+          "file": 46
+        },
+        {
+          "file": 32
+        },
+        {
+          "file": 55
+        },
+        {
+          "file": 61
+        },
+        {
+          "file": 5
+        },
+        {
+          "file": 47
+        },
+        {
+          "file": 49
+        },
+        {
+          "file": 10
+        },
+        {
+          "file": 42
+        },
+        {
+          "file": 22
+        },
+        {
+          "file": 6
+        },
+        {
+          "file": 7
+        },
+        {
+          "file": 51
+        },
+        {
+          "file": 23
+        },
+        {
+          "file": 41
+        },
+        {
+          "file": 0
+        },
+        {
+          "file": 44
+        },
+        {
+          "file": 11
+        },
+        {
+          "file": 35
+        },
+        {
+          "file": 39
+        },
+        {
+          "file": 8
+        },
+        {
+          "file": 74
+        },
+        {
+          "file": 73
+        },
+        {
+          "file": 72
+        },
+        {
+          "file": 38
+        },
+        {
+          "file": 50
+        },
+        {
+          "file": 18
+        },
+        {
+          "file": 58
+        },
+        {
+          "file": 15
+        },
+        {
+          "file": 53
+        },
+        {
+          "file": 29
+        },
+        {
+          "file": 54
+        },
+        {
+          "file": 25
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/toolEffects.ts",
+      "sha256": "9a7058de2e1e98320021128610c358850f2200bf19ad1283eb251e33174177bd",
+      "dependencies": []
+    },
+    {
+      "path": "src/contracts/toolOutputSchemaGroups.ts",
+      "sha256": "14449156b7dff0dd0450114b33e3c418932e2de027d80f1c371c5eeea22246d0",
+      "dependencies": [
+        {
+          "file": 350
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 354
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 362
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 348
+        },
+        {
+          "file": 203
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 396
+        },
+        {
+          "file": 359
+        },
+        {
+          "file": 364
+        },
+        {
+          "file": 366
+        },
+        {
+          "file": 368
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 358
+        },
+        {
+          "file": 355
+        },
+        {
+          "file": 361
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 409
+        },
+        {
+          "file": 201
+        },
+        {
+          "file": 383
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 353
+        },
+        {
+          "file": 360
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 155
+        },
+        {
+          "file": 143
+        },
+        {
+          "file": 141
+        },
+        {
+          "file": 145
+        },
+        {
+          "file": 136
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 336
+        },
+        {
+          "file": 341
+        },
+        {
+          "file": 342
+        },
+        {
+          "file": 331
+        },
+        {
+          "file": 151
+        },
+        {
+          "file": 219
+        },
+        {
+          "file": 182
+        },
+        {
+          "file": 189
+        },
+        {
+          "file": 183
+        },
+        {
+          "file": 418
+        },
+        {
+          "file": 404
+        },
+        {
+          "file": 19
+        },
+        {
+          "file": 408
+        },
+        {
+          "file": 369
+        },
+        {
+          "file": 363
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 378
+        },
+        {
+          "file": 198
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/toolOutputSchemaPrimitives.ts",
+      "sha256": "bdf7f047abdc2b6b724d9e099eafd9ed6ca0b7a293100a3c562097b258292ac5",
+      "dependencies": [
+        {
+          "file": 371
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 81
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 52
+        },
+        {
+          "file": 393
+        },
+        {
+          "file": 19
+        },
+        {
+          "file": 408
+        },
+        {
+          "file": 441
+        },
+        {
+          "file": 369
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/unknownContractExamples.ts",
+      "sha256": "2ff2cb1d184d85e99fe03db3fe137dd4449cefbce900a344cc2fd05ae4e44c31",
+      "dependencies": [
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/wasm/wasmComparisonContracts.ts",
+      "sha256": "fe1ee965e128ca04358af390337fe1adfcb59ef7c80e4400f286d0c754e5916f",
+      "dependencies": [
+        {
+          "file": 68
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 20
+        },
+        {
+          "file": 425
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 64
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/wasm/wasmToolContracts.ts",
+      "sha256": "8c48b56121425d62cd9ab3d3c0cf5d9f0dcc9932e21e2cddb5385fb164af4620",
+      "dependencies": [
+        {
+          "file": 70
+        },
+        {
+          "file": 424
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/webNetworkCaptureToolContracts.ts",
+      "sha256": "09110621c867687a3900f46c3b04258df131f5654c94eb917d57b5c486fca16f",
+      "dependencies": [
+        {
+          "file": 435
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 1
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/webRuntimeToolContracts.ts",
+      "sha256": "84184eb12e1a13e70ae51cce3b373b43ec6e2eddfd3a896407751ea359ef759f",
+      "dependencies": [
+        {
+          "file": 64
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 432
+        },
+        {
+          "file": 431
+        }
+      ]
+    },
+    {
+      "path": "src/contracts/webScriptToolContracts.ts",
+      "sha256": "f91855f866492f9a8d037e5281e516edc117a967a9f411edd5c0df8bf22578a1",
+      "dependencies": [
+        {
+          "file": 439
+        },
+        {
+          "file": 64
+        },
+        {
+          "file": 434
+        },
+        {
+          "file": 66
+        },
+        {
+          "file": 68
+        },
+        {
+          "file": 440
+        }
+      ]
+    },
+    {
+      "path": "src/domain/adb/adbDeviceAnalysis.ts",
+      "sha256": "30c22b71d124690d0c852dbe65c80a8032fbb98201ee2466275474d1b90f6848",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 419
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisErrorBase.ts",
+      "sha256": "f1c61f9f2bbfdfecde149fccd2c6471119972446c63040fe521be625702abcfe",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 378
+        },
+        {
+          "file": 349
+        },
+        {
+          "file": 356
+        },
+        {
+          "file": 231
+        },
+        {
+          "file": 260
+        },
+        {
+          "file": 161
+        },
+        {
+          "file": 439
+        },
+        {
+          "file": 257
+        },
+        {
+          "file": 172
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 232
+        },
+        {
+          "file": 133
+        },
+        {
+          "file": 209
+        },
+        {
+          "file": 75
+        },
+        {
+          "file": 360
+        },
+        {
+          "file": 366
+        },
+        {
+          "file": 347
+        },
+        {
+          "file": 372
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 426
+        },
+        {
+          "file": 432
+        },
+        {
+          "file": 431
+        },
+        {
+          "file": 364
+        },
+        {
+          "file": 352
+        },
+        {
+          "file": 208
+        },
+        {
+          "file": 434
+        },
+        {
+          "file": 435
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisErrorCore.ts",
+      "sha256": "d7d4baaeb2ef63b5e8af5c6a9403f8017cdcabbe1c03d9c1939ea1dd5f3972b6",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisErrorPresentation.ts",
+      "sha256": "4b05b308188d8cc7d3eec955f20c3877ced8de85f9800401c9a055c6bab4e635",
+      "dependencies": [
+        {
+          "file": 77
+        },
+        {
+          "file": 160
+        },
+        {
+          "file": 194
+        },
+        {
+          "file": 168
+        },
+        {
+          "file": 202
+        },
+        {
+          "file": 225
+        },
+        {
+          "file": 394
+        },
+        {
+          "file": 392
+        },
+        {
+          "file": 422
+        },
+        {
+          "file": 393
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 79
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisErrorProjection.ts",
+      "sha256": "5a56d2e10bdc885fbc566fea068a2f39e2a746ef7ef823d5ff9009c454d79a10",
+      "dependencies": [
+        {
+          "file": 156
+        },
+        {
+          "file": 80
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 78
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 160
+        },
+        {
+          "file": 194
+        },
+        {
+          "file": 168
+        },
+        {
+          "file": 202
+        },
+        {
+          "file": 225
+        },
+        {
+          "file": 392
+        },
+        {
+          "file": 394
+        },
+        {
+          "file": 422
+        },
+        {
+          "file": 393
+        },
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisErrorRecovery.ts",
+      "sha256": "b773ab1c0ddb0d0716a4b3bbed7f1cbbaf259edda44e7556a49438a7f317105a",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisProfile.ts",
+      "sha256": "cd091457ef6919163084034b6a3502c7f1c6ab1080cb616317902c6bbe03f6c0",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/EnvironmentManifestAccumulator.ts",
+      "sha256": "cac80eb8f23b06437f6d29554fa7e713ceab4331dbb6ce4024800cf9341127eb",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 328
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 86
+        },
+        {
+          "file": 99
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/EnvironmentStateAccumulator.ts",
+      "sha256": "31a91616222f1f2c4fdb9e2890d6106eb35a5992278d179120a56ae68bdeff47",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 207
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 82
+        },
+        {
+          "file": 84
+        },
+        {
+          "file": 99
+        },
+        {
+          "file": 103
+        },
+        {
+          "file": 125
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/EnvironmentStateExtraction.ts",
+      "sha256": "c7ab0b629f46c28431c72510b5e35aa7c6b2dbbfa3c7a2736079b58b8f63f7b1",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 103
+        },
+        {
+          "file": 130
+        },
+        {
+          "file": 102
+        },
+        {
+          "file": 101
+        },
+        {
+          "file": 105
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/WebNetworkApiSurfaceAccumulator.ts",
+      "sha256": "f364059be3ea1ce6cc31ce0fffe7cfbd29c2d5a9f915e62ce8cdd4939822602f",
+      "dependencies": [
+        {
+          "file": 76
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 86
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/WebNetworkProjectionAccumulator.ts",
+      "sha256": "8e71bb9552ce9ff41e04d2a35c9b82450da20f5c4117bc7d7796d4ed9eea4cb4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 210
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 89
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/analysisView.ts",
+      "sha256": "cbc4e54005b6d79191337bb3c86d2cdc038f361b72cf8ae326e00b9af771edc8",
+      "dependencies": [
+        {
+          "file": 118
+        },
+        {
+          "file": 96
+        },
+        {
+          "file": 107
+        },
+        {
+          "file": 190
+        },
+        {
+          "file": 108
+        },
+        {
+          "file": 119
+        },
+        {
+          "file": 123
+        },
+        {
+          "file": 121
+        },
+        {
+          "file": 362
+        },
+        {
+          "file": 330
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 98
+        },
+        {
+          "file": 195
+        },
+        {
+          "file": 114
+        },
+        {
+          "file": 111
+        },
+        {
+          "file": 113
+        },
+        {
+          "file": 323
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 347
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 155
+        },
+        {
+          "file": 235
+        },
+        {
+          "file": 230
+        },
+        {
+          "file": 95
+        },
+        {
+          "file": 112
+        },
+        {
+          "file": 128
+        },
+        {
+          "file": 120
+        },
+        {
+          "file": 106
+        },
+        {
+          "file": 94
+        },
+        {
+          "file": 116
+        },
+        {
+          "file": 117
+        },
+        {
+          "file": 127
+        },
+        {
+          "file": 115
+        },
+        {
+          "file": 110
+        },
+        {
+          "file": 129
+        },
+        {
+          "file": 85
+        },
+        {
+          "file": 82
+        },
+        {
+          "file": 83
+        },
+        {
+          "file": 100
+        },
+        {
+          "file": 104
+        },
+        {
+          "file": 122
+        },
+        {
+          "file": 124
+        },
+        {
+          "file": 93
+        },
+        {
+          "file": 97
+        },
+        {
+          "file": 109
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/analysisViewCoverage.ts",
+      "sha256": "2b56f95897ae4a7c33613de07a4ef5f76c2dc9339bdbbc4ff4838a3504b550b0",
+      "dependencies": [
+        {
+          "file": 186
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/analysisViewDataAdmission.ts",
+      "sha256": "4c3ffcbc21ac5221265a4318c8e0eb5668e9123c34da41f785403fc4cb71e0b6",
+      "dependencies": [
+        {
+          "external": "node:util/types"
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/analysisViewErrors.ts",
+      "sha256": "4e18979839110f6cc05d10485d609f270cd1d39539aec16706ffee634d0366c7",
+      "dependencies": [
+        {
+          "file": 77
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/analysisViewParent.ts",
+      "sha256": "4aa434622881bd0db798c89e64d943f8d1ee87ea331eb8809848f7bfc9ced67a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 230
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/analysisViewText.ts",
+      "sha256": "fe6fa7ee916322202bec1394e38857e381b92bce3d0835721ebbd21085dacd22",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/androidPackageView.ts",
+      "sha256": "adb4ee1d46895df1ce7629972b84080d7a00a3c70f840994a5a7d0bbc8db3ebc",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 131
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 92
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/artifactInventoryView.ts",
+      "sha256": "abdb76ce23093b1eeb0592c66a6b55398b4a6b131d6094d1b1c26596108c8fd9",
+      "dependencies": [
+        {
+          "file": 153
+        },
+        {
+          "file": 155
+        },
+        {
+          "file": 152
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 229
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 158
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/binaryLayoutView.ts",
+      "sha256": "0ebe3bac95d9e97cffc7763b446c5babdf6da8f6c69499f9c236ac70f6e6c1fd",
+      "dependencies": [
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 347
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/commandObservationView.ts",
+      "sha256": "10fcfb1f0df698fd4b3b880a115e3b24fa8eff4eb17f2c572bbc62104e6c7b76",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 190
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 230
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 91
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/dartAotView.ts",
+      "sha256": "d3be2beb60afd6adb93ecb9c243629bfef5d1e7cc34cead5ef01c0536ab00c3f",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 212
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/desktopApplicationView.ts",
+      "sha256": "c0dce28c0172222dae5faca4ced68122f05f92864e1bc97b6bb966ec194de94e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 195
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 410
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentManifestRules.ts",
+      "sha256": "16e6f0a8377af123c9307d4cd42c246d0b8fbe760f8a66b21f4e965ed9992b0b",
+      "dependencies": [
+        {
+          "file": 421
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentManifestView.ts",
+      "sha256": "8ebcde454b8351f66a122617ec33d836be1f04ee48ea5bc0120629860b83320d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 82
+        },
+        {
+          "file": 99
+        },
+        {
+          "file": 86
+        },
+        {
+          "file": 126
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentStateGate.ts",
+      "sha256": "f257f71d044c1623fd55a5e253a56137a16dd74d73505d5b80cb60b4857c4983",
+      "dependencies": [
+        {
+          "file": 191
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 103
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentStateMerge.ts",
+      "sha256": "1cff6393415f5961447fbb865ecc75ed855b19a66a34bc8d4d9864781b46dd4b",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 103
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentStateRules.ts",
+      "sha256": "2bd61ce7122e3980a44ef15d8a2313b872f2c26eb7e7c91d1a62d20156aca4fe",
+      "dependencies": [
+        {
+          "file": 191
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentStateView.ts",
+      "sha256": "df3a9b2de4d63fe6a9d784ef1083700a14211092a1e76ed62077f3015eb65c4e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 83
+        },
+        {
+          "file": 100
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/environmentStateWriteCutoffs.ts",
+      "sha256": "b07a5ead97e435ff6af334547cbba0e9d8cf966f9b1413e0851b71d38173e008",
+      "dependencies": [
+        {
+          "file": 130
+        },
+        {
+          "file": 103
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/evmInterfaceView.ts",
+      "sha256": "ae937acbf76e164f94955fd03409b2c6cbfef91e81fccdd85d2dc09a8274b946",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 205
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 92
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/fridaSessionStatusView.ts",
+      "sha256": "5db2d42fd308d28700aa9264c91e6ff36d4f95772a0977d0d24cc02cddbb0fb1",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 213
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 91
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/goBinaryView.ts",
+      "sha256": "b6724b80ea702a86991bc5d24308866f3146a28891dda802b8bf297b367e1c2e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 223
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 91
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/il2cppMetadataView.ts",
+      "sha256": "ee6eec450842b18809acae3351ba0872c75dc399a8b7eaaec1f25ca622b70130",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 228
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/interfaceBuilderView.ts",
+      "sha256": "e3e9837d510caaee0a1bc09120b1f2f7abe430bb6f69edb389fdc1016c8ea17d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 143
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 363
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/javascriptApplicationCoverage.ts",
+      "sha256": "1601b4f04062eb49e16fd8de817a45fd3962dae56bc619f0516a887a3b8f4089",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 235
+        },
+        {
+          "file": 292
+        },
+        {
+          "file": 323
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/javascriptApplicationView.ts",
+      "sha256": "a6f15630129fe9931e6a21dac0e392e88c7fa6cef4c03e09ca80afd618737ab1",
+      "dependencies": [
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 235
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 114
+        },
+        {
+          "file": 111
+        },
+        {
+          "file": 113
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 87
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/javascriptFactsView.ts",
+      "sha256": "8d793aa63b4462de5f933dffad0c24ad53700af0acd87c0e5f8d4ee181585a5d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 238
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/javascriptModuleReferences.ts",
+      "sha256": "934f502d14e68676f2c8189452ba8be801f4c5312138ddd5d75a03047d930cf4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 236
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/machoView.ts",
+      "sha256": "5b9fc409ce220e4a151aaf0da27944899c8a7b4d5ca1b3cdf1f45bbfedee04b6",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 360
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/managedArtifactView.ts",
+      "sha256": "e3fb4e4d04b0ac8575768c0538727fbc4f8e942903789d8ff9375c3357d0dc41",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/managedMemberView.ts",
+      "sha256": "a3f3fb8c3d5a7261843dc8b0424b68c6f80c68b6f26d3bc7643507e9e612485f",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 116
+        },
+        {
+          "file": 91
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/modelArtifactView.ts",
+      "sha256": "2b666c23007c1ad15f14925f8604039874782a8002f77272f02f61adcb0d0a22",
+      "dependencies": [
+        {
+          "file": 345
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 344
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/nativeFunctionMatchingView.ts",
+      "sha256": "916d7b9f43d234c9cd1632c8001d0f373d0a163dd9976b4c0c790257fc656af2",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 350
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/nativeFunctionView.ts",
+      "sha256": "1c4a5a9a2cdeced8100047b196b4ccb071961b14f286a6bb329c7aa1a50c12c1",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "file": 92
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/nativeInventoryView.ts",
+      "sha256": "8795c18fe0a7c97b8a841aa3cc1fc6efe08fa1bf9711c21b0183b2cdd1f1b180",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 362
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/pcapCaptureView.ts",
+      "sha256": "ae5341f2eb1bbe6992afc28ab50ac89ddbed109d2ecb0a81133734661a7172f9",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 376
+        },
+        {
+          "file": 230
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 92
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/protobufCaptureView.ts",
+      "sha256": "9a2a546d5b343b64c5f16c4ffae0f8ba8acb41f0b508d33703802325a2e6ed75",
+      "dependencies": [
+        {
+          "file": 229
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 391
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/qlogCaptureView.ts",
+      "sha256": "f82ec63e65545412a431ecb7a8c2280aa797c072ea38db9c14e62cd872e0b2d2",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 395
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 88
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/recordedResponseBody.ts",
+      "sha256": "12946b3f6676196d82e147a7593a50497454eaf23d12ac48efbc1b655d238a09",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 435
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/scenarioCaptureRecords.ts",
+      "sha256": "b4eebd3b121be4153dfdfae7ededc44ddebfeb63e401dc444bf3a0bced9046f4",
+      "dependencies": [
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 166
+        },
+        {
+          "file": 172
+        },
+        {
+          "file": 174
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 90
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 86
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/wasmArtifactView.ts",
+      "sha256": "5f4fd3162a5b4789bb436848769952fe8d33ed5013baded6afdc451b6cee5edf",
+      "dependencies": [
+        {
+          "file": 90
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 91
+        },
+        {
+          "file": 424
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 92
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/webNetworkApiSurfaceView.ts",
+      "sha256": "f06a08d85effa88cf02249ba440350f52342220f200af302fc79521aa5d89b60",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 85
+        },
+        {
+          "file": 86
+        },
+        {
+          "file": 130
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/webNetworkCaptureView.ts",
+      "sha256": "754476ccfe8db8b6908b314d17e2f677776408f3e8d5ce6408ae9f23a786c07e",
+      "dependencies": [
+        {
+          "file": 123
+        },
+        {
+          "file": 90
+        },
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 230
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 435
+        },
+        {
+          "file": 87
+        },
+        {
+          "file": 88
+        },
+        {
+          "file": 124
+        }
+      ]
+    },
+    {
+      "path": "src/domain/analysisView/webNetworkRouteTemplates.ts",
+      "sha256": "dd7c0eb19f2eb4d7ca708b12f8aef21f1b30f633ba88944f6549226e645fc940",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 405
+        }
+      ]
+    },
+    {
+      "path": "src/domain/android/androidAnalysis.ts",
+      "sha256": "9ed60f776cb5e0a9515f2c5fcab914487a14eccaeda9b09b03ac0d158e52cb4c",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/android/androidApplication.ts",
+      "sha256": "f360d71f33a813dc478da654b3b9d11bb06817571f91a2c1e2849253fd74a0a4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 158
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 374
+        },
+        {
+          "file": 343
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/android/androidPartialObservation.ts",
+      "sha256": "66c5ed9bc31635dc87057c135ca0e940d74aab701775c613db4ccd462762c197",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apktool/apktoolResourceAnalysis.ts",
+      "sha256": "d99e12675199a4bea281b48729d1b87e5b71544ea643e2186c790562bb20a5f9",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/appleApplication.ts",
+      "sha256": "a3718067f1eac06f9290406c2e8003ad4ec30ae70ce6fbb0d2c7aa96ed6bc613",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 137
+        },
+        {
+          "file": 374
+        },
+        {
+          "file": 158
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 163
+        },
+        {
+          "file": 343
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/appleAssetCatalog.ts",
+      "sha256": "96fdbeb5e9dd7b643fbcaeb867af93972ff737d59bf1dcbe2fc2024466014664",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 77
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/appleBundleAnatomy.ts",
+      "sha256": "cabdb8ea99d42fb4d8512f4448384662eede7c4258d5b445aa9a0c45345942eb",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 343
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/bundleResourceRoot.ts",
+      "sha256": "bca4a4dde0c9ccf6b03e340eef5afabfb14d050a6dcdb18359c4cb3730945b35",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/dyldEnvironment.ts",
+      "sha256": "fd06a1ec02cb88e79e1d693abb303d92338f4ac67b03d6d8a6f259affa27bbe9",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/apple/dyldPaths.ts",
+      "sha256": "f4b563410aa9c8f9bd58d26a4326c4224356eb074d7952e9aba96d501b4cc98d",
+      "dependencies": [
+        {
+          "file": 141
+        },
+        {
+          "file": 146
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/dylibResolution.ts",
+      "sha256": "511ed827de437c81450974ef571893f40d4fb6f0c826e40a7f2de983572cb445",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 140
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 139
+        },
+        {
+          "file": 142
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/dylibResolutionFindings.ts",
+      "sha256": "c7af9dd98b52d343d278682b529ebbac4f75bcbf2b6e5d91992f2a7714279382",
+      "dependencies": [
+        {
+          "file": 141
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/interfaceBuilderGraph.ts",
+      "sha256": "cd48234485e7c3efa5af448376a078a1ef1ba0d32c10c057edb6cd92b877799a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 148
+        },
+        {
+          "file": 144
+        },
+        {
+          "file": 363
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/interfaceBuilderKeyedArchive.ts",
+      "sha256": "d6a82a8436093e78969d9c910974ebc528394a4a88a80e3ff3992235ef726df8",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/keyedArchive.ts",
+      "sha256": "6e3498b1fb8604bbb90f6a52c27d0137401988cf2f6b68279c72e9a81741f3db",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 149
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/machoCpuIdentity.ts",
+      "sha256": "8fcce29606d9ad83acdc83ba481db4820daeaf1f9a74f2089e8d3b87e7fa756a",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/apple/machoTargetSelection.ts",
+      "sha256": "9002a8742b0239b9d2ffb6e1e0a0e2cb35b471894819fd552d85da0858dcbd87",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 81
+        },
+        {
+          "file": 162
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/plistNumbers.ts",
+      "sha256": "def7b8c59768a033a602b3eb36944b7151a36c5e31e2495c608f26b29c4cf792",
+      "dependencies": [
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/plistValue.ts",
+      "sha256": "2b84eb7a81b8c9e2e0a47137127b2e85c7f0c13ba608929ab82cab52c6840528",
+      "dependencies": [
+        {
+          "external": "node:util"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 150
+        }
+      ]
+    },
+    {
+      "path": "src/domain/apple/unknownPlistScalar.ts",
+      "sha256": "459a17dbdaa8a5619c45c4b9c78ec089258b582178c59521926a6233752fe520",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/artifactComparison.ts",
+      "sha256": "06cec1421c65c16565d6c48976a5fe46938548fbd2b3a993176a94af228cd217",
+      "dependencies": [
+        {
+          "file": 421
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 158
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 191
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactFormatMetadata.ts",
+      "sha256": "15fde89450a337f56c0af986ec6f283b4ad1e966e14d312d5244215950ef59e4",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactGraph.ts",
+      "sha256": "f6307bc5d6ce41b743c501d275a91b87289274f6473b8f7108ba297873b127a1",
+      "dependencies": [
+        {
+          "file": 156
+        },
+        {
+          "file": 152
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactIdentity.ts",
+      "sha256": "1b688a743aa85778a75c86f5c52159b29d8b38ca99c71d231320a55a7619f093",
+      "dependencies": [
+        {
+          "file": 156
+        },
+        {
+          "external": "node:path"
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 153
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactInspection.ts",
+      "sha256": "2366335ca62815732beb83f5a77d0d20dae565a4ba83fc18b65decf136332a69",
+      "dependencies": [
+        {
+          "file": 156
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactIntegrity.ts",
+      "sha256": "2493b07a57b890c109c26c0b27c8054fa9b83b973a80b00d46f84621db0a5435",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactIntegrityPolicy.ts",
+      "sha256": "c53a0233f1c7dd42f250a3a7b6d13e49fe009602ba5c082c7741e3aeb2e1a590",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactInventoryEvidence.ts",
+      "sha256": "a4072d7c34cf367f4846edc9fce6dc188af05df313e80b1a69e80acc07a07d12",
+      "dependencies": [
+        {
+          "file": 229
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 191
+        },
+        {
+          "file": 154
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 155
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactInventorySnapshot.ts",
+      "sha256": "40e4343ffae4af5361f059ab7d6c80cc48e6086f5a6791de5e3d62470ac1e495",
+      "dependencies": [
+        {
+          "file": 153
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactOperationError.ts",
+      "sha256": "6729a0822e1e7f007144d73bdd9845b469e1377fd1258e0ce526e8e04d9d0028",
+      "dependencies": [
+        {
+          "file": 156
+        },
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/artifactPartialObservation.ts",
+      "sha256": "e28dd8f4d7bd8520825721aca6918ad213a1bd2a17b64cc44d83c40e847f34c3",
+      "dependencies": [
+        {
+          "file": 159
+        },
+        {
+          "file": 153
+        }
+      ]
+    },
+    {
+      "path": "src/domain/binaryTargetTypes.ts",
+      "sha256": "a7dce6a722b5e931229ed0e9b5fe7338b60a12fdd28763fee385c25ed490648e",
+      "dependencies": [
+        {
+          "file": 441
+        }
+      ]
+    },
+    {
+      "path": "src/domain/bridgeCandidateProjection.ts",
+      "sha256": "5aa3aba6536da2f8849b409f4b7c3c799efed6e0a12dedd8d7a93cb1e178c04d",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserCaptureComparison.ts",
+      "sha256": "26715dad1cafddb5d6ce0a24e0e1f127b1d2f1b5fe7e3d1fe888b061142aec19",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 175
+        },
+        {
+          "file": 427
+        },
+        {
+          "file": 177
+        },
+        {
+          "file": 428
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserCompleteness.ts",
+      "sha256": "c412e93424c3ee8d85920558ae97ed9e1b1dd04c5b79dfe157ff271c2bfc91a9",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserNetworkEvidence.ts",
+      "sha256": "1480094ceb702baddcec14b61bee2f7e039bc7296f1c3103effb1bc78f0ab86d",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserObservation.ts",
+      "sha256": "1e4ed617e877b3afbe755d5b865cda3bc0d79ba4f698f246cf9d4e4e3344d749",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 423
+        },
+        {
+          "file": 405
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserObservationError.ts",
+      "sha256": "47c67a6dbdcaf96b6f480281e4b144505ce448eeab1781a1946ce8aa9599ff9b",
+      "dependencies": [
+        {
+          "file": 169
+        },
+        {
+          "file": 76
+        },
+        {
+          "file": 77
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserObservationErrors.ts",
+      "sha256": "15d179b6aad70f985909478c70b686febd2255b32287c2b197059b0439032ed0",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/browserObservationSchemas.ts",
+      "sha256": "c7d41afbc8e6c7c1434c48a81bbdce58f84eb5e7470c1d94db61cc1fc69dd2a7",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 430
+        },
+        {
+          "file": 328
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenario.ts",
+      "sha256": "4b61a6381168ea30e5638d4c430e6c81720a1c833843c2e62ff145c1a2131bae",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 180
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioCapture.ts",
+      "sha256": "8e544a2a4ca07226bbd8e6d5e1ee461025219220bc75610eb60c1f524892e510",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 166
+        },
+        {
+          "file": 173
+        },
+        {
+          "file": 174
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioCaptureLimits.ts",
+      "sha256": "28d5b8d2a8a7de99b64c37ec64a52cd4ca439dcafc5a7ae392120cfd7510302d",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioCaptureValues.ts",
+      "sha256": "fbb8cf9816c3ef519372881971db51525d6c5668b861539cc68a81a7691cfd7a",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 166
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 437
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioDiff.ts",
+      "sha256": "a6e7c8250b04fbfb9b4ce2d2d63be335d9328e1d96d8d4a4614bd0164fff756b",
+      "dependencies": [
+        {
+          "file": 172
+        },
+        {
+          "file": 174
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 176
+        },
+        {
+          "file": 177
+        },
+        {
+          "file": 179
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioDiffEvidence.ts",
+      "sha256": "8188e79949e965e935232a5b3e28ab0ec3dea6cb666c07bf85b8c29d8a7cf491",
+      "dependencies": [
+        {
+          "file": 174
+        },
+        {
+          "file": 172
+        },
+        {
+          "file": 178
+        },
+        {
+          "file": 177
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioDiffValues.ts",
+      "sha256": "2fb850074b5be86f258b8b27baac5bf645b50d1dd72e2dd0902b4835ccf7de6a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 172
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioNetworkComparison.ts",
+      "sha256": "923764bea5651029e6d4e6d40211f52549e6b41d85ce79749079eefc91346a59",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 172
+        },
+        {
+          "file": 177
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 179
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioNormalization.ts",
+      "sha256": "5d6541d5c6cfef10b3893444f7996327b5cbdb53d2cbd51d55fb46195a4d4510",
+      "dependencies": [
+        {
+          "file": 184
+        },
+        {
+          "file": 177
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserScenarioValues.ts",
+      "sha256": "a0146e1dbb6e822db8422d1c7dd4aecd1e390bc2a922fc5636015715a55cc614",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 419
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 166
+        },
+        {
+          "file": 174
+        },
+        {
+          "file": 173
+        },
+        {
+          "file": 167
+        }
+      ]
+    },
+    {
+      "path": "src/domain/browserSession.ts",
+      "sha256": "620762cf2be16107f7cc6cb6a03eb4aa4154af2110a4ce5f01ea97c1f72b6931",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 170
+        }
+      ]
+    },
+    {
+      "path": "src/domain/bundleComparison.ts",
+      "sha256": "9ee32c322ab335576c9a0055341915ab4a6be5993d500ddf943835abf37751de",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 201
+        },
+        {
+          "file": 409
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 193
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/callPathSchemas.ts",
+      "sha256": "08b9a9d30165411dc7c490930650931abef6e5d15615c33e4b5546a54915a97c",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 351
+        }
+      ]
+    },
+    {
+      "path": "src/domain/canonicalDigest.ts",
+      "sha256": "9d1ca03e3994cca139a69f7b510aea51777ea1f67b7e5ee9e2d7adf1935b8284",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/canonicalJsonDigestSteps.ts",
+      "sha256": "b6f2d0ec8659fec8a7747a84994cb4c2b17ffc1771f5be2a0520c17b5da053f3",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/canonicalOrdering.ts",
+      "sha256": "0dd709b38c66d5e6e008c5120d41d8788a9e45fc6a403748b66f1e57a1e106bb",
+      "dependencies": [
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/captures/packetCapture.ts",
+      "sha256": "8046b62baac2bcb2be2a2edb56b2b048de0144ac1989f7145796172392508221",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 211
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/captures/packetFields.ts",
+      "sha256": "61cf2b7a8d1bc7a55989e4297938069328805d2d987ad722f10e47ba173b29f1",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 187
+        }
+      ]
+    },
+    {
+      "path": "src/domain/changedBehavior.ts",
+      "sha256": "28798a8edcc61377c98137d5aafacb0c253d6f42a80de6b43574e31f54fdcee0",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 151
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 192
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 219
+        },
+        {
+          "file": 384
+        },
+        {
+          "file": 383
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/commandObservation.ts",
+      "sha256": "dade2200a6d536106b2bc303c93ba57129cda5f51bdba4d1fc1d98f30bd7ad16",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/comparisonSemantics.ts",
+      "sha256": "6a9c186f8401aa89869172831003779b1bdb1a02a7372000330b5c950c52b5c2",
+      "dependencies": [
+        {
+          "external": "canonicalize"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/comparisonSourceEvidence.ts",
+      "sha256": "52e0607ab2211550f9ab1faf935ec41352cb4b6a48733ee3c3d0a92f32df33f8",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 200
+        }
+      ]
+    },
+    {
+      "path": "src/domain/comparisonStatus.ts",
+      "sha256": "70694d72deace32608a33172d7e5a48292991ab180bd80a43a97020580fb4eee",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/configurationErrors.ts",
+      "sha256": "93cfb880ab7cc3951c91107377e723a165bcb3bac69cf4b13c9207f6a2d27907",
+      "dependencies": [
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/desktopApplication.ts",
+      "sha256": "2f6d84767e32b703512902be8104abd7a6c8c54c4a891b2aa5a998a3c6674b50",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 153
+        }
+      ]
+    },
+    {
+      "path": "src/domain/digests.ts",
+      "sha256": "94e86b9d1c4488cd5fa94cf80121fb3a21bbc0dc9ce0cef38bd1113ec2ac5f40",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/dosCom.ts",
+      "sha256": "8e2b0bc95dc3e759045b230ea443d69d3022a1f5b69bf8b6bee2fa8d772c75a4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 410
+        }
+      ]
+    },
+    {
+      "path": "src/domain/electron/electronFuses.ts",
+      "sha256": "882793db3cf919e1a64e0cdbe6ad94cb074ddd7cee4ffa12d10d4373b417203e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/emptyArraySchema.ts",
+      "sha256": "ebbc623c4f0b7f4222d3743078000fc33dc9184bb26ce96f3d124e3eb87b4509",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evidence.ts",
+      "sha256": "4ec207e2efe6728454e25b16c186368fd3d4e7d4e50cabc613e8d09d3a7426c5",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 185
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 81
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 408
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evidenceBundle.ts",
+      "sha256": "e0daab738dbbbda38d4d1f15faedb8571cd1afaccdc3972b0bddc32870bfc3e2",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 409
+        },
+        {
+          "file": 229
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evidenceErrors.ts",
+      "sha256": "da5b122f884ea4b1ed955cdda277056ddebca8792492e355b3fcd9fbc9d4c095",
+      "dependencies": [
+        {
+          "file": 76
+        },
+        {
+          "file": 77
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evidenceRecordSummary.ts",
+      "sha256": "5bafe4187357e02d3d94a812de4e0dc3a751a9219208d9a281faf0f6a7d2a5a1",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 201
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evidenceReference.ts",
+      "sha256": "c608b1d3dbae0c8e6d2f15c96e391e89d531323bbff37e2d0e79693e3ae2a240",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 200
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evm/evmInterface.ts",
+      "sha256": "b3e1a19b2c24eea516fd6e430822a6f74979f8e09a96fd0ef730dbf4f2e614f4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 206
+        }
+      ]
+    },
+    {
+      "path": "src/domain/evm/solidityMetadata.ts",
+      "sha256": "ba07507046ab0e961bc18c669f9ad192891c5b786c13b35a28c6bb6b47d404eb",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/exactJsonNumber.ts",
+      "sha256": "a0042b25453cc196028118262f791c499187bccde61454f789716a3340558908",
+      "dependencies": [
+        {
+          "external": "lossless-json"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 413
+        }
+      ]
+    },
+    {
+      "path": "src/domain/fileSnapshotObservation.ts",
+      "sha256": "72e307106964cbfe0f7218af99f646024e0120e895b9bef51149e09af8557e13",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/firmware/firmwareAnalysis.ts",
+      "sha256": "6eaaf5eebfa00e48ce9f5709c07b7a182258d573585d43c866430766debaf79b",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/fixedAllowanceRemediation.ts",
+      "sha256": "5ce384211e5c4cab33d92011849bc3c2052606d96d8356b65067f30a5299822a",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/fixedTupleSchema.ts",
+      "sha256": "97f5afff68f960667ab93d09dbdcfb37e084c3cd35bc4985efa74c1c835d4d64",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/flutter/flutterBuildAnalysis.ts",
+      "sha256": "47936b74af2d6c7b6d6650e1cdca2b9d0c47f1ea5270ad0823bddf9c70db72bc",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/fridaSessionStatus.ts",
+      "sha256": "68691a4522832f23716f8afcd199426767a0a020b05628973c9aa99af25241c2",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionCallCoverage.ts",
+      "sha256": "0f4dda42e4faff684a1c9d714c6eb1d875206ea0e946c3e304bedc0d51db76b8",
+      "dependencies": [
+        {
+          "file": 408
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 186
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionComparison.ts",
+      "sha256": "59974f2e1be581891f98835db979e9b34389a3ddec79aa758f46c1fb9af34817",
+      "dependencies": [
+        {
+          "file": 191
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 220
+        },
+        {
+          "file": 217
+        },
+        {
+          "file": 219
+        },
+        {
+          "file": 218
+        },
+        {
+          "file": 216
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionComparisonDimensions.ts",
+      "sha256": "ac48043309f4e3110ba7b3b1e33978d2ecc0de6bf72df29c46821feb5c4ac21d",
+      "dependencies": [
+        {
+          "file": 191
+        },
+        {
+          "file": 221
+        },
+        {
+          "external": "diff"
+        },
+        {
+          "file": 220
+        },
+        {
+          "file": 217
+        },
+        {
+          "file": 219
+        },
+        {
+          "file": 218
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionComparisonNormalization.ts",
+      "sha256": "21c0391881f0c10cf0a3d97830bd7da65451fdb304e0a8dfdf0cb4f9ad11305b",
+      "dependencies": [
+        {
+          "file": 191
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 220
+        },
+        {
+          "file": 219
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionComparisonResults.ts",
+      "sha256": "0ff66f3f9580eaaf1deba6ad8edc8c668cbf86ebc65490c40db3af28fa4610a1",
+      "dependencies": [
+        {
+          "file": 184
+        },
+        {
+          "file": 219
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionComparisonSchemas.ts",
+      "sha256": "a6f9bd0551ac8b149f912ef52aa74bd62ec21e0471f928409e7226986d3bdfee",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 218
+        },
+        {
+          "file": 204
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionDossierEvidence.ts",
+      "sha256": "7790146747a623216821b25e7d3b62e75f0498c5c39cf850f0ded2f7af911452",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 227
+        },
+        {
+          "file": 214
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionReferenceComparison.ts",
+      "sha256": "3d7016d3bdb0bb328498a9ba1fde7e17ee83de5ebc74b0c9f59dcaf78a161054",
+      "dependencies": [
+        {
+          "file": 191
+        },
+        {
+          "file": 220
+        },
+        {
+          "file": 217
+        },
+        {
+          "file": 222
+        },
+        {
+          "file": 351
+        }
+      ]
+    },
+    {
+      "path": "src/domain/functionReferenceCompatibility.ts",
+      "sha256": "e1517269c65b0942debcc77904e9a5e2ccf6ef94d792c7d25ddae5f830d73d23",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/go/goBinary.ts",
+      "sha256": "76d8d51323d3d41eef7b9efd6f5622b05eaaa5d27acd481508dc90b0c0b1e5a6",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 419
+        }
+      ]
+    },
+    {
+      "path": "src/domain/harmony/harmonyApplication.ts",
+      "sha256": "3c980e036c4fc62b03dddfdfbd649b71a0296bea3fd6fe71058d97ceb4a68c4f",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 158
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 374
+        },
+        {
+          "file": 343
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/hopperErrors.ts",
+      "sha256": "2effc6666a8e3d0b5381e8be316fdb2cdf63d3ae87af3291fe04f7a80e0b0026",
+      "dependencies": [
+        {
+          "file": 76
+        },
+        {
+          "file": 393
+        },
+        {
+          "file": 226
+        }
+      ]
+    },
+    {
+      "path": "src/domain/hopperStartupFailure.ts",
+      "sha256": "52202e225b329872595c7dcbefa5fc472de4ee12c1365b6eb40935cf6feae3d8",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/hopperValues.ts",
+      "sha256": "67171ef5f033a196b4b7b417810eea7ea422eb91af4f65f04e88d492b56fef0f",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 211
+        },
+        {
+          "file": 346
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 410
+        },
+        {
+          "file": 353
+        },
+        {
+          "file": 367
+        },
+        {
+          "file": 357
+        },
+        {
+          "file": 77
+        }
+      ]
+    },
+    {
+      "path": "src/domain/il2cpp/il2cppMetadata.ts",
+      "sha256": "f418ee5b0b1f71e9665083f6548899f440209e4116a55db9742d9651d4bddb0d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 419
+        }
+      ]
+    },
+    {
+      "path": "src/domain/immutableJson.ts",
+      "sha256": "514414edcc3d43b4581b2cdc170909084ff0642442a330e73b6b4dc552537741",
+      "dependencies": [
+        {
+          "external": "node:util/types"
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/inputIssueProjection.ts",
+      "sha256": "476b57829c52b670a5e65db07a465a4371c184d1007840a586efbe030a07276a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 77
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/electronActiveObservation.ts",
+      "sha256": "d97da4b7845e393fa1e38d23a6029d1b7aaeecdd0e41265dedd57cd9788b8b9c",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/electronObservation.ts",
+      "sha256": "6f9e82e138e360ae16359ece9e37163b29cdc1a3c80b460b3973f7a0e8b92391",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 430
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/electronStaticAnalysisTypes.ts",
+      "sha256": "cefa700ec44d78bc9715b1b68cc26fc57ff10e143f7650622f2f7de200f3da2f",
+      "dependencies": [
+        {
+          "file": 325
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptAnalysisResourceControls.ts",
+      "sha256": "29bd0c1377ac7733dafee5292b6533f82b98564b82084674d86b6cfd1c0ca925",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 236
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptApplicationAnalysis.ts",
+      "sha256": "534c4a4a65913dcd1a02f2579a063a00013ecc63d39c7a51703702fecf519cc4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 291
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 153
+        },
+        {
+          "file": 157
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 234
+        },
+        {
+          "file": 323
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptApplicationEvidenceSchemas.ts",
+      "sha256": "b5229e409aa0b2a9e1470254ca93ab987ca26f1bc9e9f94ab44e89c749df59ca",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptApplicationGraph.ts",
+      "sha256": "2b98df498d2e12973ae14d5e3e94144c181ecdb286867caaa352849e48105f1a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 442
+        },
+        {
+          "file": 185
+        },
+        {
+          "file": 191
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 238
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptApplicationGraphSchemas.ts",
+      "sha256": "a89656b54aa74ff62d00b4601527c66c07201ab315d000380b9b5d45decb966c",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 321
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptApplicationVersionComparisonSchemas.ts",
+      "sha256": "8bec19a33ee34620d310ffe120a60b9f7b8c599ab353f428b32b20568aeba38e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptArtifactFiles.ts",
+      "sha256": "9c8c98d02cceaf5efdfe2de692db4e816cc928245aa8f661a7d968d53b655d05",
+      "dependencies": [
+        {
+          "file": 323
+        },
+        {
+          "file": 153
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptAstValues.ts",
+      "sha256": "ee75d8cce81ac14c78712143767a65d312bc6eb1896276bfe20fe306b2d8b4e5",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptBootstrap.ts",
+      "sha256": "4d1932928e3367e516483c92193a5cf4850dc2721595253525fe7ea72d523e78",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 316
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptBootstrapIntegrity.ts",
+      "sha256": "1ca8f0703d8a3b9b6c12511bd788146771ab68ff17f7b627eed74f5968870519",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 242
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 324
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptBuiltinResourceMethods.ts",
+      "sha256": "ecf046c228db6489d7d56d5552d441582d0014fd9801281ad5290037d1adacac",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/javascript/javascriptBundledRequireOrigin.ts",
+      "sha256": "e5bacf475192a17c58b6b6b23ecefee0f0dd46d76c1e163b98fc5bd2f1237aa1",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 242
+        },
+        {
+          "file": 243
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 248
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 318
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptCommonJsExportReceivers.ts",
+      "sha256": "e4753c7ad9d620385369dbc68c9466c7f8dda1d3e7bbb90e8f215598b13a507b",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 273
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 303
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptElectronAppPathChanges.ts",
+      "sha256": "f7dc89af63f1ec413cdfc0812ccd7cc4eacf1769debf55c99ef4bf9793531808",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 272
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 303
+        },
+        {
+          "file": 313
+        },
+        {
+          "file": 311
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 309
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 254
+        },
+        {
+          "file": 246
+        },
+        {
+          "file": 318
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptElectronMemberWrites.ts",
+      "sha256": "78c2f5dbe36880077904b8c49ba6305cd5b80bde7bd984517fc18df0b524907e",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 318
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptExportReturnShapeProjection.ts",
+      "sha256": "9d7dc60560cc1afa6301721ae476d8860a119f4a5863bac8dbb299734f44ef54",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 314
+        },
+        {
+          "file": 325
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptExportShapeComparisonSchemas.ts",
+      "sha256": "5d878e1ecaa2c828bbd21506f3f8c27c05629a048304eab1359cb06a6fb0d4ed",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptFeatureTraceSchemas.ts",
+      "sha256": "7777fba1e2dd88e0d47db7df9f9447622f7fdcc2748fe27521408f332cd7e201",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptGraphqlOperations.ts",
+      "sha256": "6a325fd57aca918ae9e442bf942485e2b510b634647d8b245b9af25fcf5b9401",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 258
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptIntrinsicInvocation.ts",
+      "sha256": "367c050205c2b56e199a6a54e31bc08c0ac308dc142ca0edd86f6e2eb0b47ffa",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 248
+        },
+        {
+          "file": 241
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptModuleDeclaration.ts",
+      "sha256": "45555bc3284189cb29b2b8e5aae06e7b672fb88cf794157d959fd31b5224fc59",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptModuleInterop.ts",
+      "sha256": "cbe5bae1b3b1b8cf60e3fea6d94508734aede5cd2cef67cc92a3ee93f6e613fd",
+      "dependencies": [
+        {
+          "external": "@babel/parser"
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 248
+        },
+        {
+          "file": 253
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 309
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptModuleResolutionMode.ts",
+      "sha256": "cf578a84426270a2906181b764bbd8623939043aeb6c6befa17625c7c6f6605f",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "file": 240
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRecovery.ts",
+      "sha256": "9be6718fdc5bff055a5440a705af1d9a8b8b6a4a8c9724830d84338b0dd140a4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 235
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRpcEndpoints.ts",
+      "sha256": "808aa8a1f1bd7591b2903f5837e8df1c070a5b8264446095ad4244a18c2977aa",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 252
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeLoadState.ts",
+      "sha256": "dd6663f6afc5f61dabb6834ed6727eb4b0b81d7702f9e3d33202c731cb70035c",
+      "dependencies": [
+        {
+          "file": 238
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 267
+        },
+        {
+          "file": 270
+        },
+        {
+          "file": 269
+        },
+        {
+          "file": 271
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeObservation.ts",
+      "sha256": "c7c44be91b62edd668ba5dfd557c29bddeba168f3e5324b29bceaf87250f4dd6",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliation.ts",
+      "sha256": "3c6dba282c1ccf4608300ae7b2e9952c4325539f2934c6751e4f5c95126a402a",
+      "dependencies": [
+        {
+          "file": 259
+        },
+        {
+          "file": 264
+        },
+        {
+          "file": 266
+        },
+        {
+          "file": 267
+        },
+        {
+          "file": 263
+        },
+        {
+          "file": 268
+        },
+        {
+          "file": 270
+        },
+        {
+          "file": 269
+        },
+        {
+          "file": 271
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationActive.ts",
+      "sha256": "06fbe7817aebb9353d9514d93d69be7c2f1880fe059cad5cdfb74330c8414d45",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 330
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 265
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 231
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 263
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationCaptureParsing.ts",
+      "sha256": "0690abaedb74f033af7e87471e65c12cb83f27d3a18abcbd9c26c1a5204a0a0e",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 232
+        },
+        {
+          "file": 260
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 262
+        },
+        {
+          "file": 265
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationGraph.ts",
+      "sha256": "0da33bb6f66bf19b2ae2fea6a56ba50dc1909b779af5b11413784e7fdf09a9ae",
+      "dependencies": [
+        {
+          "file": 237
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 267
+        },
+        {
+          "file": 263
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 269
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationInputValidation.ts",
+      "sha256": "8b22e6afebb8e8b23009563bb7d1c194130587aaa9ba3115022c83e9437c926b",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationMatching.ts",
+      "sha256": "72e4b6c1b39c9f684db67a5bb5d3235eb76645d2de4991278b9ee9e064841ba5",
+      "dependencies": [
+        {
+          "file": 237
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 267
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 270
+        },
+        {
+          "file": 269
+        },
+        {
+          "file": 271
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationParsing.ts",
+      "sha256": "8dca015c7e9cf0c444ae7e40ca97fedc353ad660d4502905a20f9b1cf55042c9",
+      "dependencies": [
+        {
+          "file": 184
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 235
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 270
+        },
+        {
+          "file": 265
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationResult.ts",
+      "sha256": "38c1d5001d522a7569a47958546461df47d13b0f2f1ce61b45d207f36bae4cd6",
+      "dependencies": [
+        {
+          "file": 237
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 259
+        },
+        {
+          "file": 266
+        },
+        {
+          "file": 267
+        },
+        {
+          "file": 263
+        },
+        {
+          "file": 270
+        },
+        {
+          "file": 269
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationRuntime.ts",
+      "sha256": "32c97d64b4b3b076ef3a3dfa40baca18c4236238fed44b38d599ce0e6fc8b9f3",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 263
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeReconciliationSchemas.ts",
+      "sha256": "79881572873ce46b804f9cf769b0d2190676395ce643522c878c0e8128fb09c2",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 154
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 260
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 423
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptRuntimeStaticCandidates.ts",
+      "sha256": "b834d73939be80d647bd9c26948be672b8021d89044cf21167e20a9358291a91",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 154
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 267
+        },
+        {
+          "file": 269
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticAliasSelections.ts",
+      "sha256": "b96fd4fabb8de30def20600cd5b9c5766de96caf01c0bff8048c2681b46f350c",
+      "dependencies": [
+        {
+          "file": 306
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticAmbientWrites.ts",
+      "sha256": "2208acdca3981609d4f6e89ec93a6160454fdd58438cd1aedee4b767dbbde317",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 248
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 294
+        },
+        {
+          "file": 313
+        },
+        {
+          "file": 309
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticAnalysis.ts",
+      "sha256": "486e10137bc7a048e547e7a6848e8103095ede01e057df8a208b55a4de14ca31",
+      "dependencies": [
+        {
+          "file": 301
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 286
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 245
+        },
+        {
+          "file": 296
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 273
+        },
+        {
+          "file": 254
+        },
+        {
+          "file": 314
+        },
+        {
+          "file": 285
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 248
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 281
+        },
+        {
+          "file": 311
+        },
+        {
+          "file": 322
+        },
+        {
+          "file": 258
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 246
+        },
+        {
+          "file": 247
+        },
+        {
+          "file": 256
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticAsyncEffects.ts",
+      "sha256": "4574a7888af4efc303ba9c0bee31b7301966cc0cbb0240536be514897f1711c1",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 278
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 282
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticCallResolution.ts",
+      "sha256": "d1d6ac419f77ce4afb855dbe10c30765004e17b421008c8a1ed8335d34e65f94",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 324
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticCallableResults.ts",
+      "sha256": "decfcfdd7d8957345ab1f664ac0546db46168db45f7d5385f4a0ccd60efea82a",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 318
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticCallableStack.ts",
+      "sha256": "a5bbc719710f04184605f387a6becc074acf4774b23963116a5161bccb977f06",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 286
+        },
+        {
+          "file": 304
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticCalls.ts",
+      "sha256": "11ef9c4a314820813ae4eba71a1c4f5c0d852f013a275d330412c1af89a4d4b9",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 278
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 276
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 282
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticChildProcesses.ts",
+      "sha256": "4c6a07652a42f00f0a63ffe7e65bce1d59fe5f978003f8bb0b7c9155a8f62306",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 278
+        },
+        {
+          "file": 287
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 282
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticCoverage.ts",
+      "sha256": "6455347af629f4a118595aec99ffb00b3349646f85e2d83b473108fb4b39e3db",
+      "dependencies": [
+        {
+          "file": 325
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticDataEffectHelpers.ts",
+      "sha256": "173f38a76b20d2dd04bc952ce383194a5984160cb1b17aa6ea18277eab389e94",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 244
+        },
+        {
+          "file": 307
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 278
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 241
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticDataEffects.ts",
+      "sha256": "ff0ceffce8a0a83d99a93569a5689f9e2af17abaf2e5d6472010ad8573047226",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 282
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 302
+        },
+        {
+          "file": 319
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticDependencies.ts",
+      "sha256": "7cfd9d316c515bf1973ee4f498c948740b926e17c1b3f2954f7584883b820c41",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticDerivedAnalysis.ts",
+      "sha256": "ce27b7e37b14eb2843baa27b09e04654af576c82a126042146da7589c0306f0b",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 275
+        },
+        {
+          "file": 279
+        },
+        {
+          "file": 280
+        },
+        {
+          "file": 288
+        },
+        {
+          "file": 283
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 305
+        },
+        {
+          "file": 300
+        },
+        {
+          "file": 312
+        },
+        {
+          "file": 316
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticEvaluationOrder.ts",
+      "sha256": "e34bb8b2521c7b0ca224d3f4ba28f3ed63e8ab6bb82f6ecd7abe9fc0e2da7098",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticExpressionShapes.ts",
+      "sha256": "de75defa31eb12411733c840fe4eaf3dbbe505640ddc405c16f1b2f59d048238",
+      "dependencies": [
+        {
+          "file": 301
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 254
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 311
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 322
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticFingerprints.ts",
+      "sha256": "c622127a48f8348098d94ef4593205de539c7c64e61a72522e463cd28ecccdd4",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 279
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 318
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticGetterQueries.ts",
+      "sha256": "2e055809f5c0d66aae4d3b4b5cbcee3b38f784967162991728682a4268c00f11",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticGetterResults.ts",
+      "sha256": "0c63a5d56310f6501ce8e0bebd458ff2c4f43b4eb54312b9589607471987beba",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 277
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 309
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 289
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticGraph.ts",
+      "sha256": "9182e7ce6325e4b759fc4ac399854b92270f664ea32cc053d1acb095f8b11f3d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 191
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 185
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 442
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 292
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticGraphSchemas.ts",
+      "sha256": "c26d6a61a164ceab0599275f8ad1a45db20e780b82cf58d853991f507c2e5a17",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticIr.ts",
+      "sha256": "9f96644c72871b3fe3a7b868aaefcc1bff415723dbede7817d9b3e732caf0256",
+      "dependencies": [
+        {
+          "file": 325
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 281
+        },
+        {
+          "file": 256
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticIterationSources.ts",
+      "sha256": "c0ea37cfe733f01e15e9954dbd324f0c852c9ce0fd9df4b11523635f14f5e8c5",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 309
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticMapOperations.ts",
+      "sha256": "4962bec4b60c8610fd2f62cd97d14af21aa55a1597b49f2272965f71bf21a29e",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 273
+        },
+        {
+          "file": 301
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 316
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticMemberMutations.ts",
+      "sha256": "4157a3dc27e7bdf2a418b3c8a0aa320f9fe9d952ed32614b14b024b546c0a0e5",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 295
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 315
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 294
+        },
+        {
+          "file": 277
+        },
+        {
+          "file": 313
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 309
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 241
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticMutationInitializers.ts",
+      "sha256": "e871e3124cd1c5799177276c797cbed0f66dd812aee03c42fa3fd6fa67e88204",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 286
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticMutationValues.ts",
+      "sha256": "7a3b2c72f3d69cff766d30ca17e6875c95209fa4e4493b3a041088353a580b05",
+      "dependencies": [
+        {
+          "file": 319
+        },
+        {
+          "file": 306
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticObjectReferences.ts",
+      "sha256": "a3ce2e1b4b34eeefd1fa39dcb0273fb073255a064469f6c4aa3c36377d03e27e",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 289
+        },
+        {
+          "file": 290
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticObjects.ts",
+      "sha256": "d94c753dd723c8243793404f32de2d369120e5d7a253b1928f28795d7b058a34",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 278
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 324
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticOpaqueEffects.ts",
+      "sha256": "3c38e68b15e8114ce6522a7441df871cde91bb08de7d318c2877a086173c4c09",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 273
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 316
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticPrimitives.ts",
+      "sha256": "899eeb6ccdf666f504f8b722327599997c924c8e4fb13a1cbd13edaf08c96640",
+      "dependencies": [
+        {
+          "file": 319
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 307
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticProjectedSources.ts",
+      "sha256": "6f7f86022c95c3f3c66ccff961637e05ac690fefdbaf6abdfbc4473e7d56938e",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 311
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 309
+        },
+        {
+          "file": 294
+        },
+        {
+          "file": 272
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticProjection.ts",
+      "sha256": "dda0cec818fd90ce4420d8ddd4e4c612a8c33a6bf633c12e7432ba51ba1271f4",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 254
+        },
+        {
+          "file": 246
+        },
+        {
+          "file": 306
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticPromises.ts",
+      "sha256": "034cb7e62c276fd9cb91775abe1e5982ec787894a83888e6c0c6cbed68aab856",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 278
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 282
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticPropertyPaths.ts",
+      "sha256": "88abc1658bef591f7f1e683161e29daad04372567c02dfb760a7ddc39254ac5f",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticProvenance.ts",
+      "sha256": "8c6df21010180d0165a753093120278edc140f6d66fef6a880c71c999ba2c206",
+      "dependencies": [
+        {
+          "file": 293
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticQuerySchemas.ts",
+      "sha256": "0547977e3e27b1dc68a94a28843b05e7c8543d426a8d2e70452453f60216ee47",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 292
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticReferenceSources.ts",
+      "sha256": "bb1cec553dfbda37b1ab5c34f9f0d1bfe1d6b317047d77a5ff2b10a037f24f4f",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 315
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 297
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticRequireOrigin.ts",
+      "sha256": "fc7da4f8e4d3aa35bb10c1df1b252f4933019564e11529e2dc91a6a7ba29f44a",
+      "dependencies": [
+        {
+          "file": 303
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 318
+        },
+        {
+          "file": 244
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 255
+        },
+        {
+          "file": 313
+        },
+        {
+          "file": 294
+        },
+        {
+          "file": 309
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 272
+        },
+        {
+          "file": 311
+        },
+        {
+          "file": 273
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticResourceLimits.ts",
+      "sha256": "12e838c7fe895aba21b06fffdfcaf045ff8366e46c4c76600703605339f0738b",
+      "dependencies": [
+        {
+          "file": 319
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticResources.ts",
+      "sha256": "8724fc0e22648299dcd4b3b975eadf54da2e3c550888073728ac1a0f8c6641c3",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 244
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 273
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 282
+        },
+        {
+          "file": 324
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticReturnedReferences.ts",
+      "sha256": "3dfa30b7d5f7ce283bce51e20275940ee5e72c81788c5dd85f3790a7a62dee55",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 277
+        },
+        {
+          "file": 253
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 309
+        },
+        {
+          "file": 299
+        },
+        {
+          "file": 303
+        },
+        {
+          "file": 311
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 272
+        },
+        {
+          "file": 316
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticReturns.ts",
+      "sha256": "61032e7c51b70914e364b005d16aa00b5074e3df4152509b94dbd37326dd587b",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 315
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 250
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 304
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 320
+        },
+        {
+          "file": 324
+        },
+        {
+          "file": 281
+        },
+        {
+          "file": 277
+        },
+        {
+          "file": 297
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticSlots.ts",
+      "sha256": "49c733ab75486f252f0fecb86e1d13b4bce9abe2e0ca4daaae2df819b9b92e8a",
+      "dependencies": [
+        {
+          "file": 319
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticState.ts",
+      "sha256": "ccc3f3436d7942e3f4cac96016cee90028174e1e8c0c80ce85b84d39e0041a49",
+      "dependencies": [
+        {
+          "file": 301
+        },
+        {
+          "file": 294
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 306
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 256
+        },
+        {
+          "file": 319
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticTraceSchemas.ts",
+      "sha256": "79aa19233b0a71a461444846e5ebecb7c031bc9cc54762f3813f036873670bdf",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 308
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticTraversal.ts",
+      "sha256": "ac44a9e643510ca02306084480402b4284ae88b91918ed253273e3b089f56a70",
+      "dependencies": [
+        {
+          "external": "@babel/types"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticValueTypes.ts",
+      "sha256": "f6248b9881343f05aa33a08e35a63c69c196c7caf660bcec348700e49f8a25d5",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/javascript/javascriptSemanticValues.ts",
+      "sha256": "d4e6dcf80616fc552f53589989ed5f14b925b3d30e6b0839cb4c8b88bdff2ade",
+      "dependencies": [
+        {
+          "file": 301
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 284
+        },
+        {
+          "file": 297
+        },
+        {
+          "file": 315
+        },
+        {
+          "file": 298
+        },
+        {
+          "file": 293
+        },
+        {
+          "file": 319
+        },
+        {
+          "file": 316
+        },
+        {
+          "file": 310
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 307
+        },
+        {
+          "file": 302
+        },
+        {
+          "file": 311
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSourceMapPaths.ts",
+      "sha256": "52dea977dad8fa3837ae960ed5d874b0d5fd857f4780dcd9634f21bd178e26ab",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "external": "node:url"
+        },
+        {
+          "external": "@jridgewell/trace-mapping"
+        },
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSourceParser.ts",
+      "sha256": "201da6791aa6cc805580d75af4a3679e2b1de34430795391fced14a0c38d5d76",
+      "dependencies": [
+        {
+          "external": "@babel/parser"
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 254
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptSourceSelection.ts",
+      "sha256": "850ffc1e022e76f80f4b05c3f447befc002e9c6e927c2273f320fb788041b05b",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptStaticAnalysisHelpers.ts",
+      "sha256": "d6737881196cce169ecff22b44459142caf12a220f7aafe4f77c37cf03639bb8",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "node:path"
+        },
+        {
+          "external": "node:url"
+        },
+        {
+          "external": "@babel/types"
+        },
+        {
+          "file": 325
+        },
+        {
+          "file": 241
+        },
+        {
+          "file": 274
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/javascriptStaticAnalysisTypes.ts",
+      "sha256": "7bf6513fec180a722a420c4af702ad326e02458287a0095ba117a0c7a54e6dd8",
+      "dependencies": [
+        {
+          "file": 233
+        }
+      ]
+    },
+    {
+      "path": "src/domain/javascript/sourceToBundleComparisonSchemas.ts",
+      "sha256": "2f10916c10b38e00f0f0c61d53b4f22cf1ecb858921ccd8a8c5df6ad0377b7ba",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 406
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/jeb/jebAnalysis.ts",
+      "sha256": "09f49c27e83c46b7e2896d28bfc3c68b8a8dcc240b47df5e2860f6f94c27e119",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/jsonShape.ts",
+      "sha256": "56d3710a55a9e5f5705c9dca9fd378be88ad891f576c137b2537e6810a0f9120",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/jsonValue.ts",
+      "sha256": "868d1e8e47f0a46e21d30d0bcd85967eb971bf453e400a19df60610b8b3fadc0",
+      "dependencies": [
+        {
+          "external": "node:util"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 229
+        }
+      ]
+    },
+    {
+      "path": "src/domain/localPath.ts",
+      "sha256": "5b735752424822b56f501f16041ea1574a8d729be1fecd02c4e44d4095aba456",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedApplicationGraph.ts",
+      "sha256": "b62017ed0698cc94c2f24d4e598579f9b96f130c661cc4cba20db10e50a276c4",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 332
+        },
+        {
+          "file": 333
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 335
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedApplicationGraphCoverage.ts",
+      "sha256": "0c906054d3e60032b4a5cfe4e7b3d058666e925c6d0b2bbba178da7a881ae719",
+      "dependencies": [
+        {
+          "file": 236
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 335
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedApplicationGraphNodes.ts",
+      "sha256": "95a72722692febe7e2d3cd569cf6e04ed2019954df638cbf7ed22656adafc3f3",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "file": 237
+        },
+        {
+          "file": 236
+        },
+        {
+          "file": 238
+        },
+        {
+          "file": 332
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 335
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 331
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedArtifact.ts",
+      "sha256": "49a0c6880909b069fca8f227750b494b3f78bf95d67f76833df0f2e9f3ac6742",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedInspectionEvidence.ts",
+      "sha256": "8d913bc3e9dcfc8e86ffee15f52b1cf05a21517149ff78692c4d5856ee75f025",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedMemberComparison.ts",
+      "sha256": "881cbe151bd299a3f1c3af7d88329d11a5f62e30af4e2facc07bf6b896e958f4",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 337
+        },
+        {
+          "file": 338
+        },
+        {
+          "file": 339
+        },
+        {
+          "file": 340
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedMemberComparisonCoverage.ts",
+      "sha256": "74a81aa40e6b419c11b9e0cf60a015694ec56bad43ae1e124a344e6fcb6ca32d",
+      "dependencies": [
+        {
+          "file": 336
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 340
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedMemberComparisonItems.ts",
+      "sha256": "ecd35bef52c28ea87be901d54aac03de64945df148d1c6e62412c88eeffc11f0",
+      "dependencies": [
+        {
+          "external": "canonicalize"
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 336
+        },
+        {
+          "file": 339
+        },
+        {
+          "file": 340
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedMemberComparisonMatch.ts",
+      "sha256": "f8d4094f88c0bcfbd3c76f922aca5daadc234123fad79d62176c7e8aff4c194d",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 335
+        },
+        {
+          "file": 336
+        },
+        {
+          "file": 340
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedMemberSignatureIdentity.ts",
+      "sha256": "230dabe8bab58b72d83956808d34df3f5bbbeefdaabcc16b5c06d4a86fcb5e2c",
+      "dependencies": [
+        {
+          "file": 334
+        },
+        {
+          "file": 336
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedNativeVerificationSchemas.ts",
+      "sha256": "f288eac2cd72a6ffc9786defc3ef3d2830a09d01b114afc0b9a57789103ad907",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/managed/managedReconstruction.ts",
+      "sha256": "632ee654bf66a11a580492bc6ecd22597f66760b8aac3e434f60d006773f0403",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 334
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 335
+        }
+      ]
+    },
+    {
+      "path": "src/domain/mobileApplicationGraphProjection.ts",
+      "sha256": "53fc5a7dab21971bac979309ff5a20bb8511dcd5600b7ca1c4ca4dd7694b7644",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 158
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 163
+        }
+      ]
+    },
+    {
+      "path": "src/domain/model/modelArtifact.ts",
+      "sha256": "932fb45f0ea509350bc968b384373ee64bf82b18d4445feaa226f0f190778806",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/model/modelArtifactQuery.ts",
+      "sha256": "e277e21c1e5b588dd7e4185cc3f64ccf660394b4a8969fa03b2493608d530898",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 344
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/addressCoordinate.ts",
+      "sha256": "8555acfb7f2a8435e9a4a0de81e2df97d43d099aebcc36b629444179af265c1e",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/native/binaryLayout.ts",
+      "sha256": "63a6be226537fa4c1c24ba021578de8b2fc5589ee14e40931231f9dcad6846d0",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 229
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 419
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/bytePattern.ts",
+      "sha256": "a6b6f7580af183caf352587a37e0a54ac01bf120f05213db9d4deaaab5d954d7",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 346
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 410
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/fileOffsetPartialObservation.ts",
+      "sha256": "f1b8504d38b2610192e1a0a5dcdd8039cb10c314c9c3cc5cbea819ec7093491f",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/native/functionMatching.ts",
+      "sha256": "ce4e3f25023346f0ba9e6e666b501489ce03c8b61ac846eb0b6b5289e5b34f3b",
+      "dependencies": [
+        {
+          "file": 184
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 204
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeAddress.ts",
+      "sha256": "498bdb49f576ba7a46b10ef849bbcdc770ef32cdc5721c252b1324336b75e978",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeAotSnapshotObservation.ts",
+      "sha256": "e5e67e747ad43ff6f50a0002cb7de69d59429d500c9f0408419a88db324050d5",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 365
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeApiBoundary.ts",
+      "sha256": "d1a944858e3376d25210d7e3570720fa523f7bda35580230d5a068f2a970abea",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeByteRead.ts",
+      "sha256": "8fc545b4d7b897d9916173d28f83abfa9f153b78c1261855e71f378ac387e05e",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeCallObservation.ts",
+      "sha256": "4de47a08d4f740475b56382d6b9874b06177af15648efca45cd38074bb44f534",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeCallPartialObservation.ts",
+      "sha256": "7a33e0e8604bf7e52b5f41a16f6d484aa6c8a36d453cc06ccb879f4ca7a21509",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 355
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeCallReference.ts",
+      "sha256": "d63e54316bcc4763c36dbc53c75089aea6606ba53751102121221fc97875254d",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeDataType.ts",
+      "sha256": "77b847b1c844d8d59af7448094a55b3d1084ff6e152be6d0143ce235065e3118",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 365
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeFunctionAnnotations.ts",
+      "sha256": "c2ad333261b04547981f1d6a12f899dbe62c3da493d1764a1a60e4be1b291b31",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 227
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeInspection.ts",
+      "sha256": "2e2df51d9adfca15703bdd24eaee91fe4c020f88352e2ab9176cc5b0304d8012",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 138
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeInstruction.ts",
+      "sha256": "e27aae1068ca0d056e0c307d670282d121569c20c007010aa5e087db0df5cb64",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeInventory.ts",
+      "sha256": "a1817c3fb2c6c10bb1f808e7196737ba64f8fdcf44cbae888329f572b429f817",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 227
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeInvestigationGraph.ts",
+      "sha256": "0b25ae2f439945ea526618d7c7f5e6e3d4e2d01f999272eac44a8de93d5fadce",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 369
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeLoadImage.ts",
+      "sha256": "91d359e10ee01cde7d032594c2f3ffc2b49f69423f88762e0798084d1d9979d0",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 365
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 396
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeMetadataRecovery.ts",
+      "sha256": "3430585df9d6b3e03822bce53f799154e72edfbd1caab4a6c02335ed933a7e58",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeUiObservation.ts",
+      "sha256": "99ccf9970080b6c7e1bf8644af0c94b764f1109bf66e07f10608a5d7f7861c02",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 437
+        },
+        {
+          "file": 377
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeValueFlow.ts",
+      "sha256": "2ffefe2ed9ba304235481bb4065bee73930552955a2e1c76488a09d404d92e7a",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/nativeValueTrace.ts",
+      "sha256": "b04d6dc917ba5493eaf67419ffe092174ad23e49ecbbd045b94fe754bc6b57be",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 367
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/objcSwiftMetadata.ts",
+      "sha256": "20123673cb4b529d09d32cf415e380f56d2e59f1dec0954a83c9c8d46d9e54c0",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 420
+        },
+        {
+          "file": 357
+        },
+        {
+          "file": 147
+        },
+        {
+          "file": 421
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/peResources.ts",
+      "sha256": "19a96871c41df6fcc35cbcf32da855bcd933b82be0f5ae8201e25e967e879acc",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/procedureInfo.ts",
+      "sha256": "f8488c58b7e352183d56a619946de202241c48129926db3a967da66917ac8cec",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 227
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/recordedCrash.ts",
+      "sha256": "682cc86407e2260fd56149b5dd1443c2369ede5537aa15873f74d15ef9cb6746",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 419
+        },
+        {
+          "file": 373
+        }
+      ]
+    },
+    {
+      "path": "src/domain/native/recordedCrashNoteCoverage.ts",
+      "sha256": "2296b3c74b305974d33817fa3e226cb1fdaaf78cca6e224debac71344ef342df",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/nativeConvention.ts",
+      "sha256": "a6d2c46430f7e9cfee6f9fe35b199ec3be1fd80b3ad51298b16fa3611063423a",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/offsetDateTime.ts",
+      "sha256": "11dc46706654b9bad09e07d181a834a176b759e26f1c26d1efa7d86334949609",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/pcap/pcapAnalysis.ts",
+      "sha256": "9c330ef8bb8271b2ae8b529a2882be5362b23caee3db4993eedeb2e72dc85c8a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/pngHeader.ts",
+      "sha256": "ef54b81e8aa224b573f61e30689aaa53751377cb1551700e807a817c3ae955ae",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/process/processCapture.ts",
+      "sha256": "0e3b663edeb7ad5c5fdfbf4862801c0e23ae52b5bdde30f5f298dceb5da134ed",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 386
+        },
+        {
+          "file": 382
+        },
+        {
+          "file": 379
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processCaptureCoverage.ts",
+      "sha256": "7105a6654c24e45d8446a50e985bd99d0957f9a03a779b5d62f3df93a3198d60",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 378
+        },
+        {
+          "file": 385
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processCaptureExample.ts",
+      "sha256": "22440dd19e47ac0b36d406705ba6dd78420e984dd47a1a26caef24721fe749c4",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 386
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processCaptureParsing.ts",
+      "sha256": "1c1f3ca114add4e2cf9b2e5f03ae3575fa63425a5e9e87a369ba1c7d4d2186f4",
+      "dependencies": [
+        {
+          "file": 378
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processCaptureValidation.ts",
+      "sha256": "374fb96c42c30e90a5727ac6fa837a7dd07479508dde35bd77b5740e3b7e9098",
+      "dependencies": [
+        {
+          "file": 386
+        },
+        {
+          "file": 379
+        },
+        {
+          "file": 378
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processComparison.ts",
+      "sha256": "5574dd3e76433b2061ff2c62a5be862caa0f79d319eed1395df3e8e4fcdf72b6",
+      "dependencies": [
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 379
+        },
+        {
+          "file": 385
+        },
+        {
+          "file": 381
+        },
+        {
+          "file": 77
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 390
+        },
+        {
+          "file": 389
+        },
+        {
+          "file": 388
+        },
+        {
+          "file": 387
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processEvidenceProvider.ts",
+      "sha256": "7804d244455b9be25dbf240ce2bbff910686ae4902a785228119655798efb019",
+      "dependencies": [
+        {
+          "file": 200
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processObservation.ts",
+      "sha256": "2fb575bf68716c4eb1ee2e3db3a125a851abbd4957bdcc26ec80105488883bcb",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 378
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processScenario.ts",
+      "sha256": "340e00f1ecec6af80cf9b868f2d2559fc53ac6fd6fe2ba2682c702cd8ada506e",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processTraceComparison.ts",
+      "sha256": "c88d1975b4a2ab437b0a349e0a4c07bbe9b482ab167c3d19581feb2b7866212c",
+      "dependencies": [
+        {
+          "file": 381
+        },
+        {
+          "file": 389
+        },
+        {
+          "file": 390
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processTraceDimensionProjection.ts",
+      "sha256": "cd0565d63a752c31d5d10d2dbcc83c1b08698fc5499bc834237f654e2f3a04d4",
+      "dependencies": [
+        {
+          "file": 381
+        },
+        {
+          "file": 385
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processTraceEvaluation.ts",
+      "sha256": "b9c9963f19abb3af2182e7c7c848589703380697cd7393bf6b53abf6ed712a5a",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 381
+        },
+        {
+          "file": 379
+        },
+        {
+          "file": 385
+        },
+        {
+          "file": 390
+        }
+      ]
+    },
+    {
+      "path": "src/domain/process/processTraceSpecification.ts",
+      "sha256": "3ba49b8006e86d8da8bea36265082e7e5d3469c78494925aef4c82295408499d",
+      "dependencies": [
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 419
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 385
+        }
+      ]
+    },
+    {
+      "path": "src/domain/protobufWire.ts",
+      "sha256": "f6ee72d6a336bf0f21adc95d88353b5e2f66bac80bd11d266fb5b9a5a7f69fd7",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/providerAdapterError.ts",
+      "sha256": "87bc6fa59350acff9322ede7b99067c27c138cfe257d1b56adfdac31c4506200",
+      "dependencies": [
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/providerOperationHealth.ts",
+      "sha256": "6cc1fe39520c94da3ab6c16dcd739507ad5b5bcff22c1468dba17651bb83f356",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/providerSelectionError.ts",
+      "sha256": "b1005812461a1591d8f7e4fcde835f54328c9186b425e1ba565d20813afdb45a",
+      "dependencies": [
+        {
+          "file": 329
+        },
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/qlogCapture.ts",
+      "sha256": "0b72c176c2ed4f9096f114737a7b74761d2d3eb6098fefd512a789b836d3a41f",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/rawBinary.ts",
+      "sha256": "00bf51769b14f006511e66e13edd257d5cc4fffd1aef8c277b0692e30bdd304d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 162
+        },
+        {
+          "file": 197
+        },
+        {
+          "file": 410
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionCoverage.ts",
+      "sha256": "9d019c5db6590857f50f928f21d536b94c433730739bad7be8df90110c6d9ced",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 201
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 398
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 375
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionCoverageEvaluation.ts",
+      "sha256": "75fa731db4d7745fbc73f327d90838e50e02041072a6797431a01dfc540fc978",
+      "dependencies": [
+        {
+          "file": 397
+        },
+        {
+          "file": 399
+        },
+        {
+          "file": 375
+        },
+        {
+          "file": 401
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionCoverageEvidence.ts",
+      "sha256": "ffa77fbe049cbf21ed40d370ea833bb79338a8e5fc0be4f22f6db503f3bd8cf8",
+      "dependencies": [
+        {
+          "file": 200
+        },
+        {
+          "file": 397
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionCoverageInput.ts",
+      "sha256": "4b36f7cbcf46a00524abe4e3fe098762c219ef318b6e761b2ef4a8bb967bc9d0",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 397
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionCoverageVerifierResults.ts",
+      "sha256": "e64c84f7877f5b47c19c23f5d8fa6fff0cecd6af00a4bb0baebb2f47c1f23552",
+      "dependencies": [
+        {
+          "file": 397
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 375
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionObligationLedgerIntegrity.ts",
+      "sha256": "2c564dd99c5a5561503fc1d3aa233be194974e362007b1023e8081d128ad2516",
+      "dependencies": [
+        {
+          "file": 184
+        },
+        {
+          "file": 191
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 403
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionObligationLedgerSchemas.ts",
+      "sha256": "db5fec2d67b2d482bccd7f66c5299ef9ad251147a208c67b1ff661eb8548d2b1",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 419
+        },
+        {
+          "file": 201
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 191
+        },
+        {
+          "file": 402
+        }
+      ]
+    },
+    {
+      "path": "src/domain/reconstructionVerificationSchemas.ts",
+      "sha256": "552cf944751455f2d3593c97752c240ad767547f10675d4bb06698b9e87fe083",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 419
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 383
+        }
+      ]
+    },
+    {
+      "path": "src/domain/recordedTransportUrl.ts",
+      "sha256": "cca47d037ebcf3db6c2c17e88f236b76bd0d7231fb2892ae05b5fddf6b839667",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/referenceSourceGraph.ts",
+      "sha256": "60962a645fdc62916f5805edccfc92287cb1393c3d05f5cb4fe44521993cad3d",
+      "dependencies": [
+        {
+          "external": "node:path"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 191
+        },
+        {
+          "file": 184
+        },
+        {
+          "file": 407
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/referenceSourcePathIdentity.ts",
+      "sha256": "57ad77b70beb41707d0cf1256bc02c72729de08797336a4e85366b9f766e6f43",
+      "dependencies": [
+        {
+          "external": "node:path"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/relationshipCoverage.ts",
+      "sha256": "4578c04c21148da89a030279f05964cb050e6a8f93513950edc0808a50ae18be",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 211
+        }
+      ]
+    },
+    {
+      "path": "src/domain/residualUnknown.ts",
+      "sha256": "c12e3ee6005f7fba3ad8ea1ea2daf1478abe417848ce7ed9a696e94e620aa7ec",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 219
+        }
+      ]
+    },
+    {
+      "path": "src/domain/result.ts",
+      "sha256": "46d1417aa94e5093269858c11449369b278c8de44d7c4258b7443abae0c426a2",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/reverseEngineering.ts",
+      "sha256": "8f0905ac9d85d267857bec564117b295b7ae302647dd54543f12f783fd563609",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 190
+        }
+      ]
+    },
+    {
+      "path": "src/domain/rust/rustBinary.ts",
+      "sha256": "6942cf7186c63f47cc5c9bedc8f9cec694ffa18987429f3efaf0cbc2ef36cf59",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/safeJson.ts",
+      "sha256": "8c9722c4bbe1667cabeaf69710e10c1059f9b4f32b3d92d531bf94710563e059",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/signals/annotationTextWindow.ts",
+      "sha256": "6c43898ebe34778415ef37dbe96c83b91146372b2112575f3497daefdc724dbf",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/signals/signalDecoders.ts",
+      "sha256": "10e50e1c5b4cf31afcac76a538cf8d45276c81f85c2ad5749ec69bfbd4cfc766",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 416
+        }
+      ]
+    },
+    {
+      "path": "src/domain/signals/signalRecording.ts",
+      "sha256": "58da16f62882e196efdfdb34519664eb6aea529609e2921b50941d3fe5e597ee",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 414
+        }
+      ]
+    },
+    {
+      "path": "src/domain/sqlite/sqliteDatabase.ts",
+      "sha256": "ad07ed73c4b1e215840ef99cd7ae070425be8c5423f2a0d5247430446f6b457c",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/staticRuntimeCorrelation.ts",
+      "sha256": "17777294415a6ea649a5155e0ff36a1f7983bab374fd84bbd4823a6aecad22f3",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "canonicalize"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 151
+        },
+        {
+          "file": 186
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 192
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 219
+        },
+        {
+          "file": 384
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 383
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/stringPatterns.ts",
+      "sha256": "752734d0f233f10d0dccbeb3ff11828501f8d7b7f612ee446b46b22aa8a2f83a",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/swiftSymbolClassification.ts",
+      "sha256": "d5e10d59aff7581884c8156e4ad19802fd2fcb18b2c47d9a25a17215a991a0fd",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/unicodeCodePointOrder.ts",
+      "sha256": "fdff9c493eec0fbca808c7975cd88abd9f1cb9398c333a3981f185c3eaee8cb5",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/unknownRegistryError.ts",
+      "sha256": "2a9c540c6549dfe24158da35250273227556206e9a66ab71b7baaf26fbe74d82",
+      "dependencies": [
+        {
+          "file": 76
+        }
+      ]
+    },
+    {
+      "path": "src/domain/urlComponents.ts",
+      "sha256": "4e58067167ca04c0b6eb9be476ef581060296ac93786ad240050b24f79c24085",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/wasm/wasmArtifact.ts",
+      "sha256": "b64beafc1454f79b89cc9f93056d766f09256236208477c40c41f93ec03b147d",
+      "dependencies": [
+        {
+          "file": 425
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "external": "node:crypto"
+        },
+        {
+          "file": 200
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/wasm/wasmInterface.ts",
+      "sha256": "a2125a86728491dd875f58249936d484fc44d04a81e205a0e6c0d7a0d187bdcf",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webBundleAnalysis.ts",
+      "sha256": "605e6d461724fd4cd2798d074b4f0cf1ef39644994150e5a6fad6cac848fc893",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 430
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webCaptureDiff.ts",
+      "sha256": "a742ff0d659b43b1a1960ee89f0b7f3e6dec68cf66106452fe1be86771cb932d",
+      "dependencies": [
+        {
+          "file": 184
+        },
+        {
+          "file": 421
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 428
+        },
+        {
+          "file": 433
+        },
+        {
+          "file": 429
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webCaptureDiffSchemas.ts",
+      "sha256": "b74ca0a6cc393538ecbc2b39846ed1d1dcf49416c02892c7e26aec63abb409ac",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 199
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 433
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webCaptureFrameComparison.ts",
+      "sha256": "d730bf3a483ea630398616b784f2d9578e2a9eea3252f30b341cb9ba276d02e9",
+      "dependencies": [
+        {
+          "file": 170
+        },
+        {
+          "file": 184
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webContentArtifact.ts",
+      "sha256": "a4ae3ed202f43d838a73024a5e0f09518006d11e26b21813943613acb1bbb982",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webEventListeners.ts",
+      "sha256": "e40253fb7118d3b911ffab68867fdeabcc15283b285f1fad9cb7dac182dda027",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 436
+        },
+        {
+          "file": 170
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webExecution.ts",
+      "sha256": "be2f15f8488d53e21ed8213d55c82a82e4ea24088717cbc12756f8859d552acb",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 436
+        },
+        {
+          "file": 170
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webMcpDiscovery.ts",
+      "sha256": "8cb2a6c377a34f1bbc3772bedd8c5a4d7b71fc1733f59f79c970c8a037e64560",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 170
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webModuleTrace.ts",
+      "sha256": "f24fade346c7c0d1991c0a0cfcebd1d5afe2c5e17bfe3b290289ea03af9b6253",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 439
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webNetworkCapture.ts",
+      "sha256": "1aa274be74ae8f6c20657c7208c1117801fd6096772af2787a482bd37d007dc8",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 329
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 391
+        },
+        {
+          "file": 395
+        },
+        {
+          "file": 229
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webRuntime.ts",
+      "sha256": "65b6bf70b1fff56aeeb67cce8970286dedcb576da228816c56b2137c1984f3f7",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 329
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webScreenshot.ts",
+      "sha256": "fc9845ea7f28c44c151226c4df6ef1c268b7680d3317891394b82dacfff781d8",
+      "dependencies": [
+        {
+          "external": "node:crypto"
+        },
+        {
+          "external": "zod"
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 167
+        },
+        {
+          "file": 170
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webScriptArtifacts.ts",
+      "sha256": "3d67a9cb967c22bc40e8ddd886d2fd71cd26eecde7fe8f521689490406ae408d",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 439
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webScriptExport.ts",
+      "sha256": "94353dd27ab67855182f5ab0751d52339a37fb2d6b02afd440180b38258e1950",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 165
+        },
+        {
+          "file": 174
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        }
+      ]
+    },
+    {
+      "path": "src/domain/webSourceLocation.ts",
+      "sha256": "3d9606f34d99b5b605b57710db88034058641db7c918b9863a18a4dedb79c4a7",
+      "dependencies": [
+        {
+          "external": "zod"
+        },
+        {
+          "file": 196
+        },
+        {
+          "file": 330
+        },
+        {
+          "file": 439
+        },
+        {
+          "file": 438
+        }
+      ]
+    },
+    {
+      "path": "src/domain/zipPackageFormat.ts",
+      "sha256": "d0e2821bcf64e796eda36f2f4c1346deffd5da42b776e100d358b946740ebbc3",
+      "dependencies": []
+    },
+    {
+      "path": "src/domain/zodCollectionSteps.ts",
+      "sha256": "9cb0c18a0f8b8c18e9096c1f88f49c33849f146db512f60b3cd93fbb6b2ebf8f",
+      "dependencies": [
+        {
+          "external": "zod"
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { assertAdmittedApplicationManifest } from "./application-bindings";
 import { mkdirSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
@@ -6,6 +7,7 @@ import {
 	type AnalysisMode,
 	AnalysisModeSchema,
 	type AnalysisReceipt,
+	byteDigest,
 	digest,
 } from "./contracts";
 import { digestCanonicalValue } from "./semantic-engine/upstream/src/domain/canonicalDigest";
@@ -29,7 +31,8 @@ export class FirstPartyAnalysisStore {
 				CREATE TABLE IF NOT EXISTS analysis_receipts(id TEXT PRIMARY KEY, session_id TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL);
 				CREATE INDEX IF NOT EXISTS analysis_receipt_session ON analysis_receipts(session_id);
  CREATE TABLE IF NOT EXISTS analysis_recovery(receipt_id TEXT PRIMARY KEY, body_hash TEXT NOT NULL, at TEXT NOT NULL, audit_hash TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS analysis_semantic_graphs(receipt_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, body TEXT NOT NULL);`);
+ CREATE TABLE IF NOT EXISTS analysis_semantic_graphs(receipt_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, body TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS analysis_application_graphs(receipt_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, body TEXT NOT NULL);`);
 		}
 		return this.db;
 	}
@@ -120,7 +123,11 @@ export class FirstPartyAnalysisStore {
 			throw e;
 		}
 	}
-	save(receipt: AnalysisReceipt, semanticGraph?: unknown) {
+	save(
+		receipt: AnalysisReceipt,
+		semanticGraph?: unknown,
+		applicationGraph?: unknown,
+	) {
 		if (receipt.result && receipt.resultHash !== digest(receipt.result))
 			throw new Error("Evidence result hash mismatch");
 		const db = this.database();
@@ -138,7 +145,7 @@ export class FirstPartyAnalysisStore {
 					throw new Error("Semantic graph exceeds storage budget");
 				const used = db
 					.prepare(
-						"SELECT COALESCE(SUM(length(CAST(body AS BLOB))),0) AS n FROM analysis_semantic_graphs",
+						"SELECT COALESCE(SUM(length(CAST(body AS BLOB))),0) AS n FROM (SELECT body FROM analysis_semantic_graphs UNION ALL SELECT body FROM analysis_application_graphs)",
 					)
 					.get();
 				if (Number(used?.n) + Buffer.byteLength(body) > 512 * 1024 * 1024)
@@ -150,6 +157,46 @@ export class FirstPartyAnalysisStore {
 				).run(receipt.id, receipt.sessionId, body);
 			} else if (semanticGraph !== undefined)
 				throw new Error("Unbound semantic evidence");
+			if (receipt.result?.applicationGraph) {
+				const summary = receipt.result.applicationGraph;
+				assertAdmittedApplicationManifest(
+					summary.sources,
+					receipt.result.artifacts,
+				);
+				const semantic = semanticGraph as
+					| { application_graph_id?: string; root_artifact_sha256?: string }
+					| undefined;
+				const app = applicationGraph as { graph_id?: string } | undefined;
+				if (
+					!app ||
+					!semantic ||
+					!receipt.result.semanticGraph ||
+					summary.semanticGraphHash !==
+						receipt.result.semanticGraph.graphHash ||
+					byteDigest(Buffer.from(JSON.stringify(summary.sources))) !==
+						summary.rootManifestHash ||
+					summary.graphHash !== digestCanonicalValue(app) ||
+					summary.graphId !== app.graph_id ||
+					semantic.application_graph_id !== app.graph_id ||
+					semantic.root_artifact_sha256 !== summary.rootManifestHash
+				)
+					throw new Error("Application evidence binding mismatch");
+				const body = JSON.stringify(applicationGraph);
+				const used = db
+					.prepare(
+						"SELECT COALESCE(SUM(length(CAST(body AS BLOB))),0) AS n FROM (SELECT body FROM analysis_semantic_graphs UNION ALL SELECT body FROM analysis_application_graphs)",
+					)
+					.get();
+				if (
+					Buffer.byteLength(body) > 128 * 1024 * 1024 ||
+					Number(used?.n) + Buffer.byteLength(body) > 512 * 1024 * 1024
+				)
+					throw new Error("Application graph storage budget exceeded");
+				db.prepare(
+					"INSERT INTO analysis_application_graphs(receipt_id,session_id,body) VALUES(?,?,?)",
+				).run(receipt.id, receipt.sessionId, body);
+			} else if (applicationGraph !== undefined)
+				throw new Error("Unbound application evidence");
 			const updated = db
 				.prepare(
 					"UPDATE analysis_receipts SET status=?,body=? WHERE id=? AND session_id=? AND status='running' AND NOT EXISTS (SELECT 1 FROM analysis_recovery WHERE receipt_id=analysis_receipts.id)",
@@ -188,6 +235,28 @@ export class FirstPartyAnalysisStore {
 			graph.graph_id !== receipt.result.semanticGraph.graphId
 		)
 			throw new Error("Stored semantic evidence integrity mismatch");
+		return graph;
+	}
+	applicationGraph(
+		sessionId: string,
+		id: string,
+	): Record<string, unknown> | undefined {
+		const receipt = this.get(sessionId, id);
+		const summary = receipt.result?.applicationGraph;
+		if (!summary) return undefined;
+		const row = this.database()
+			.prepare(
+				"SELECT body FROM analysis_application_graphs WHERE receipt_id=? AND session_id=?",
+			)
+			.get(id, sessionId);
+		if (!row || Buffer.byteLength(String(row.body)) > 128 * 1024 * 1024)
+			throw new Error("Application evidence missing or oversized");
+		const graph = JSON.parse(String(row.body)) as Record<string, unknown>;
+		if (
+			digestCanonicalValue(graph) !== summary.graphHash ||
+			graph.graph_id !== summary.graphId
+		)
+			throw new Error("Stored application evidence integrity mismatch");
 		return graph;
 	}
 	recovery(id: string) {

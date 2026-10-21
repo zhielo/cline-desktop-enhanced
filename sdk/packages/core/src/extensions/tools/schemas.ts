@@ -333,6 +333,7 @@ export const ReverseEngineeringInputSchema = z
 			.object({
 				compareTarget: z.string().min(1).max(4096).optional(),
 				semanticGraph: z.boolean().optional(),
+				applicationGraph: z.boolean().optional(),
 			})
 			.strict()
 			.optional(),

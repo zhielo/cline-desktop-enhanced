@@ -19,6 +19,7 @@ export type SourceArtifact = {
 	bytes: number;
 	source: string;
 	binary?: Uint8Array;
+	rawBytes?: Uint8Array;
 };
 /** Parses syntax only. Never imports, evaluates, transpiles or executes target source. */
 export function analyzeSources(

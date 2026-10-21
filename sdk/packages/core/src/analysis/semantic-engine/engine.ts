@@ -23,9 +23,14 @@ export {
 };
 export type { JavaScriptSemanticGraph };
 export type SemanticSummary = ReturnType<typeof semanticSummary>;
-export function semanticSummary(graph: JavaScriptSemanticGraph) {
+export function semanticSummary(
+	graph: JavaScriptSemanticGraph,
+	applicationBound = false,
+) {
 	return {
-		profile: SEMANTIC_PROFILE as typeof SEMANTIC_PROFILE,
+		profile: (applicationBound ? "cline-semantic/2" : SEMANTIC_PROFILE) as
+			| "cline-semantic/1"
+			| "cline-semantic/2",
 		upstreamRevision: SEMANTIC_REVISION,
 		graphId: graph.graph_id,
 		graphHash: digestCanonicalValue(graph),
@@ -34,11 +39,15 @@ export function semanticSummary(graph: JavaScriptSemanticGraph) {
 		unknowns: graph.unknowns.length,
 		fingerprints: graph.fingerprints.length,
 		coverage: graph.coverage,
-		scope: "file-local-semantics" as const,
+		scope: applicationBound
+			? ("application-bound-file-semantics" as const)
+			: ("file-local-semantics" as const),
 		limitations: [
 			"Static syntax and conservative relationship candidates, not observed execution or behavioral equivalence.",
 			"Graph root identifies the admitted path/hash manifest, not original application or container bytes.",
-			"This port projects file-local semantic graphs. Cross-module application linking, full REA application workflows and native analysis parity are not established.",
+			applicationBound
+				? "File-local semantic nodes are bound to the admitted application graph. This is not whole-program execution or native/runtime parity."
+				: "This port projects file-local semantic graphs. Cross-module application linking, full REA application workflows and native analysis parity are not established.",
 		],
 	};
 }

@@ -83,7 +83,8 @@
 		"typescript": "5.9.3",
 		"ws": "^8.20.0",
 		"yaml": "^2.8.2",
-		"zod": "^4.3.6"
+		"zod": "^4.3.6",
+		"parse5": "8.0.1"
 	},
 	"peerDependencies": {
 		"posthog-node": "^5.8.0"

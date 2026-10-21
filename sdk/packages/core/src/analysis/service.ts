@@ -1,3 +1,4 @@
+import { assertAdmittedApplicationManifest } from "./application-bindings";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
@@ -139,7 +140,10 @@ export async function runFirstPartyAnalysis(
 					const parsedResult = ResultSchema.parse(
 						JSON.parse(output.toString("utf8")),
 					);
-					if (!!input.semanticGraph !== !!parsedResult.semanticGraph)
+					if (
+						!!input.semanticGraph !== !!parsedResult.semanticGraph ||
+						!!input.applicationGraph !== !!parsedResult.applicationGraph
+					)
 						throw new Error("Requested semantic evidence was not returned");
 					receipt.result = parsedResult;
 					receipt.resultHash = digest(receipt.result);
@@ -150,6 +154,7 @@ export async function runFirstPartyAnalysis(
 				}
 			try {
 				let graph: unknown;
+				let application: unknown;
 				if (receipt.result?.semanticGraph) {
 					if (!semanticOutput) throw new Error("Unexpected semantic graph");
 					const {
@@ -170,17 +175,44 @@ export async function runFirstPartyAnalysis(
 						encoded.length > SEMANTIC_MAX_BYTES
 					)
 						throw new Error("Semantic transfer size changed");
+					const transferred = JSON.parse(encoded.toString("utf8"));
 					graph = javaScriptSemanticGraphSchema.parse(
-						JSON.parse(encoded.toString("utf8")),
+						receipt.result.applicationGraph
+							? transferred.semantic
+							: transferred,
 					);
+					if (receipt.result.applicationGraph) {
+						assertAdmittedApplicationManifest(
+							receipt.result.applicationGraph.sources,
+							receipt.result.artifacts,
+						);
+						const { parseJavaScriptApplicationGraph, applicationSummary } =
+							await import("./semantic-engine/application");
+						application = parseJavaScriptApplicationGraph(
+							transferred.application,
+						);
+						if (
+							digest(
+								applicationSummary(
+									application as Parameters<typeof applicationSummary>[0],
+									graph as Parameters<typeof applicationSummary>[1],
+									receipt.result.applicationGraph.sources,
+								),
+							) !== digest(receipt.result.applicationGraph)
+						)
+							throw new Error("Application summary integrity mismatch");
+					}
 					if (
 						digest(
-							semanticSummary(graph as Parameters<typeof semanticSummary>[0]),
+							semanticSummary(
+								graph as Parameters<typeof semanticSummary>[0],
+								!!receipt.result.applicationGraph,
+							),
 						) !== digest(receipt.result.semanticGraph)
 					)
 						throw new Error("Semantic summary integrity mismatch");
 				}
-				store.save(receipt, graph);
+				store.save(receipt, graph, application);
 			} catch {
 				receipt.status = "failed";
 				receipt.error =

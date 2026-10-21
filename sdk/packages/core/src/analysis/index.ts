@@ -24,6 +24,7 @@ export async function runAnalysisWorkerEntrypoint() {
 	return worker.runAnalysisWorkerEntrypoint();
 }
 
+import { queryApplicationEvidence } from "./application-query";
 import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
 import { javaScriptSemanticGraphSchema } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticGraph";
 import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
@@ -38,6 +39,8 @@ export function queryFirstPartyEvidence(
 	const q = EvidenceQuerySchema.parse(input),
 		receipt = store.get(sessionId, q.receiptId);
 	const result = receipt.result;
+	if (q.view.startsWith("application-"))
+		return queryApplicationEvidence(sessionId, q, store);
 	if (q.view.startsWith("semantic-")) {
 		const summary = result?.semanticGraph;
 		if (!summary || q.view === "semantic-summary")

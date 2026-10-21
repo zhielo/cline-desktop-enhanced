@@ -14,8 +14,17 @@ export const AnalysisInputSchema = z
 		target: z.string().min(1).max(4096),
 		compareTarget: z.string().min(1).max(4096).optional(),
 		semanticGraph: z.boolean().optional(),
+		applicationGraph: z.boolean().optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((v, ctx) => {
+		if (v.applicationGraph && !v.semanticGraph)
+			ctx.addIssue({
+				code: "custom",
+				message: "applicationGraph requires semanticGraph: true",
+				path: ["applicationGraph"],
+			});
+	});
 export type AnalysisInput = z.infer<typeof AnalysisInputSchema>;
 export const LIMITS = {
 	files: 128,
@@ -159,9 +168,36 @@ export const ResultSchema = z
 			})
 			.strict()
 			.optional(),
+		applicationGraph: z
+			.object({
+				profile: z.literal("cline-application/1"),
+				upstreamRevision: z.string().regex(/^[a-f0-9]{40}$/),
+				graphId: z.string().max(100),
+				graphHash: z.string().regex(/^[a-f0-9]{64}$/),
+				semanticGraphHash: z.string().regex(/^[a-f0-9]{64}$/),
+				rootManifestHash: z.string().regex(/^[a-f0-9]{64}$/),
+				sources: z
+					.array(
+						z
+							.object({
+								path: z.string().min(1).max(4096),
+								sha256: z.string().regex(/^[a-f0-9]{64}$/),
+								bytes: z.number().int().nonnegative().max(LIMITS.sourceBytes),
+							})
+							.strict(),
+					)
+					.max(LIMITS.files),
+				nodes: z.number().int().nonnegative(),
+				edges: z.number().int().nonnegative(),
+				coverage: z.unknown(),
+				scope: z.literal("admitted-application-sources"),
+				limitations: z.array(z.string().max(1000)).max(20),
+			})
+			.strict()
+			.optional(),
 		semanticGraph: z
 			.object({
-				profile: z.literal("cline-semantic/1"),
+				profile: z.enum(["cline-semantic/1", "cline-semantic/2"]),
 				upstreamRevision: z.string().regex(/^[a-f0-9]{40}$/),
 				graphId: z.string().max(100),
 				graphHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -170,7 +206,10 @@ export const ResultSchema = z
 				unknowns: z.number().int().nonnegative(),
 				fingerprints: z.number().int().nonnegative(),
 				coverage: z.unknown(),
-				scope: z.literal("file-local-semantics"),
+				scope: z.enum([
+					"file-local-semantics",
+					"application-bound-file-semantics",
+				]),
 				limitations: z.array(z.string().max(1000)).max(20),
 			})
 			.strict()

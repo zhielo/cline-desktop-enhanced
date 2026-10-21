@@ -10,9 +10,10 @@ import {
 } from "./contracts";
 import { analyzeSources, type SourceArtifact } from "./parser";
 
-const sourceName = (p: string) =>
+const sourceName = (p: string, extended = false) =>
 	/\.(?:[cm]?[jt]s|[jt]sx)$/i.test(p) ||
 	p.endsWith(".map") ||
+	(extended && /\.(?:json|html?|node)$/i.test(p)) ||
 	/\.(?:dll|exe)$/i.test(p) ||
 	path.basename(p) === "package.json";
 export function within(root: string, target: string) {
@@ -39,6 +40,7 @@ export async function readSources(
 	root: string,
 	target: string,
 	budget = { entries: 0, bytes: 0, files: 0 },
+	extended = false,
 ) {
 	const sources: SourceArtifact[] = [],
 		limitations: string[] = [];
@@ -91,8 +93,11 @@ export async function readSources(
 			path: name,
 			bytes: data.length,
 			sha256: byteDigest(data),
-			source: /\.(?:dll|exe)$/i.test(name) ? "" : data.toString("utf8"),
-			...(/\.(?:dll|exe)$/i.test(name) ? { binary: data } : {}),
+			source: /\.(?:dll|exe|node)$/i.test(name) ? "" : data.toString("utf8"),
+			...(!Buffer.from(data.toString("utf8")).equals(data)
+				? { rawBytes: data }
+				: {}),
+			...(/\.(?:dll|exe|node)$/i.test(name) ? { binary: data } : {}),
 		});
 	};
 	const asar = async (p: string) => {
@@ -143,7 +148,7 @@ export async function readSources(
 					walk(e.files, label, depth + 1);
 					continue;
 				}
-				if (!sourceName(name)) continue;
+				if (!sourceName(name, extended)) continue;
 				const offset =
 					typeof e.offset === "string" && /^\d+$/.test(e.offset)
 						? Number(e.offset)
@@ -214,7 +219,8 @@ export async function readSources(
 			const name = path.relative(root, p).split(path.sep).join("/");
 			try {
 				if (p.endsWith(".asar")) await asar(p);
-				else if (sourceName(p)) add(name, await read(p, LIMITS.sourceBytes));
+				else if (sourceName(p, extended))
+					add(name, await read(p, LIMITS.sourceBytes));
 			} catch (e) {
 				note(
 					`Unreadable/unsupported ${name}: ${e instanceof Error ? e.message : "read failure"}`,
@@ -238,7 +244,12 @@ export async function analyzeTarget(
 	const input = AnalysisInputSchema.parse(value),
 		root = await realpath(workspace);
 	const budget = { entries: 0, bytes: 0, files: 0 };
-	const current = await readSources(root, input.target, budget);
+	const current = await readSources(
+		root,
+		input.target,
+		budget,
+		!!input.applicationGraph,
+	);
 	const result = analyzeSources(current.sources, current.limitations);
 	result.counters.entries = budget.entries;
 	if (input.semanticGraph) {
@@ -250,13 +261,46 @@ export async function analyzeTarget(
 			);
 		const { analyzeSemanticSources, semanticSummary, SEMANTIC_MAX_BYTES } =
 			await import("./semantic-engine/engine");
-		const graph = await analyzeSemanticSources(current.sources);
-		const output = JSON.stringify(graph);
+		let application: unknown;
+		let graph: Awaited<ReturnType<typeof analyzeSemanticSources>>;
+		if (input.applicationGraph) {
+			const { analyzeApplicationSources, applicationSummary } = await import(
+				"./semantic-engine/application"
+			);
+			const target = await confinedTarget(root, input.target);
+			const prefix = path.relative(root, target).split(path.sep).join("/");
+			const normalized = current.sources.map((s) => ({
+				...s,
+				path:
+					s.path === prefix
+						? path.posix.basename(prefix)
+						: prefix && s.path.startsWith(prefix + "/")
+							? s.path.slice(prefix.length + 1)
+							: prefix && s.path.startsWith(prefix + "!/")
+								? s.path.slice(prefix.length + 2)
+								: s.path,
+			}));
+			const graphs = await analyzeApplicationSources(normalized);
+			graph = graphs.semantic;
+			application = graphs.application;
+			result.applicationGraph = applicationSummary(
+				graphs.application,
+				graph,
+				graphs.manifest,
+			);
+		} else graph = await analyzeSemanticSources(current.sources);
+		const output = JSON.stringify(
+			application ? { semantic: graph, application } : graph,
+		);
 		if (Buffer.byteLength(output) > SEMANTIC_MAX_BYTES)
 			throw new Error("Semantic graph transfer budget exceeded");
 		await writeFile(semanticOutput, output, { flag: "wx", mode: 0o600 });
-		result.semanticGraph = semanticSummary(graph);
-		if (current.limitations.length || graph.coverage.status !== "complete")
+		result.semanticGraph = semanticSummary(graph, !!input.applicationGraph);
+		if (
+			input.applicationGraph ||
+			current.limitations.length ||
+			graph.coverage.status !== "complete"
+		)
 			result.status = "partial";
 	}
 	if (input.compareTarget) {

@@ -5,6 +5,50 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "sdk/packages/core/src/analysis/application-bindings.ts",
+		markers: [
+			"assertAdmittedApplicationManifest",
+			"source inventory count",
+			"duplicate inventory",
+			"admitted source identities",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/semantic-engine/application.ts",
+		markers: [
+			"cline-application/1",
+			"Admitted source set only",
+			"Application source hash or byte count mismatch",
+			"...full.coverage",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/application-query.ts",
+		markers: [
+			"compareJavaScriptApplicationVersions",
+			"compareJavaScriptExportShapes",
+			"compareSourceToBundle",
+			"providerCalls: 0",
+			"verifiedBehavior: false",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/application-evidence-workflows.tsx",
+		markers: [
+			"Saved application workflows",
+			"Run saved application query",
+			"Next saved application page",
+		],
+	},
+	{
+		path: "docs/rea-migration/capabilities.json",
+		markers: [
+			"cline-rea-capability-inventory/1",
+			"partial-source-port",
+			"not-source-ported-or-audited",
+		],
+	},
+	{
 		path: "sdk/packages/core/src/analysis/semantic-engine/engine.ts",
 		markers: [
 			"cline-semantic/1",

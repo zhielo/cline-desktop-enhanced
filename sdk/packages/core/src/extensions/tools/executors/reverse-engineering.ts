@@ -2978,8 +2978,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					artifacts: receipt.result?.artifacts.length,
 					findings: receipt.result?.facts.length,
 					semanticGraph: receipt.result?.semanticGraph,
+					applicationGraph: receipt.result?.applicationGraph,
 					limitations: receipt.result?.limitations,
-					next: "Use analysis_evidence with this receiptId for bounded findings/artifacts/graph/verification views; semantic-* views are available when javascript_options.semanticGraph is true. No execution or behavior verification implied.",
+					next: "Use analysis_evidence with this receiptId for bounded findings/artifacts/graph/verification views; semantic-* views are available when javascript_options.semanticGraph is true; application-* views including saved feature traces, version/export comparisons and source-to-bundle comparisons require javascript_options.applicationGraph and semanticGraph true. No execution or behavior verification implied.",
 				});
 			} finally {
 				store.close();
