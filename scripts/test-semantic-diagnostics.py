@@ -2,6 +2,9 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
+import os
 import unittest
 
 spec = importlib.util.spec_from_file_location("summary", Path(__file__).with_name("summarize-semantic-tests.py"))
@@ -33,6 +36,15 @@ class DiagnosticsTests(unittest.TestCase):
         for text in ['<testsuites/>', '<broken', '<!DOCTYPE a><testsuite/>', '<testsuites><testsuite failures="1"><testcase/></testsuite></testsuites>']:
             with self.assertRaises(Exception):
                 self.parse(text)
+
+    def test_windows_console_encoding(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "result.xml"
+            path.write_text('<testsuites><testsuite failures="1"><testcase name="owned"><failure>expected → actual ⎯</failure></testcase></testsuite></testsuites>', encoding="utf-8")
+            result = subprocess.run([sys.executable, "-B", str(Path(__file__).with_name("summarize-semantic-tests.py")), str(path)], env={**os.environ, "PYTHONIOENCODING": "cp1252"}, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("::error title=Semantic regression failure::", result.stdout.decode("utf-8"))
+            self.assertIn("expected → actual ⎯", result.stdout.decode("utf-8"))
 
     def test_annotation_escape(self):
         self.assertEqual(summary.escape('a%\r\n::error::'), 'a%25%0D%0A::error::')

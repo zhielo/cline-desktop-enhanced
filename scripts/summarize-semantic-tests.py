@@ -14,9 +14,12 @@ def escape(value):
 
 def summarize(path):
     raw = Path(path).read_bytes()
-    if len(raw) > 16 * 1024 * 1024 or b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
+    if len(raw) > 16 * 1024 * 1024:
         raise ValueError("JUnit report exceeds safe diagnostic format")
-    root = ET.fromstring(raw)
+    text = raw.decode("utf-8-sig")
+    if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
+        raise ValueError("JUnit report exceeds safe diagnostic format")
+    root = ET.fromstring(text)
     cases = list(root.iter("testcase"))
     problems = []
     for case in cases:
@@ -38,6 +41,9 @@ def summarize(path):
 
 
 def main():
+    # Windows console code pages cannot encode Vitest Unicode diff markers.
+    # GitHub workflow commands are UTF-8 on every runner.
+    sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
     try:
         count, problems = summarize(sys.argv[1])
     except Exception as error:

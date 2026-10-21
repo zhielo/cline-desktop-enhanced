@@ -148,7 +148,7 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/semantic-source-validation.yml":
-			"81e5031063e2c3f5a72b3d492fcee277dd0c1a30e6591223419306cf25c27d7b",
+			"9bf4c84a47e3e302ba4c35eaa67d9cb650896c2d1caba1e6b49e884aca27b972",
 		".github/workflows/build-custom-windows-installer.yml":
 			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":

@@ -1,0 +1,4 @@
+
+# Public upstream Git SHA in the original scanner-scope fixture, not a credential.
+# Exact historical finding only; current fixture reads the revision from inventory.
+ca66b174c8aa6d5816fd7489ac4e6d9c5936e085:scripts/test-secret-scan-fixtures.mjs:sourcegraph-access-token:16
