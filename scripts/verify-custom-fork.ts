@@ -5,6 +5,16 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "scripts/prepare-ci-python.mjs",
+		markers: [
+			"cline-ci-python/v1",
+			"CI_PYTHON_PHASE=entry",
+			"timeout: 60_000",
+			"fixtureDeadlineChanged: false",
+			"CLINE_RE_PYTHON=${identity.executable}",
+		],
+	},
+	{
 		path: "scripts/test-secret-scan-fixtures.mjs",
 		markers: [
 			"token beside revision",
@@ -1467,6 +1477,8 @@ const requiredMarkers: Array<{
 			"bun install --frozen-lockfile",
 			"bun run types",
 			"run: bun run lint",
+			"node scripts/prepare-ci-python.mjs",
+			"node --test scripts/prepare-ci-python.test.mjs",
 		],
 	},
 	{

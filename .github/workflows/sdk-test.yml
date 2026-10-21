@@ -116,6 +116,15 @@ jobs:
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os != 'windows-latest' }}
               run: bun run test
 
+            - name: Test CI Python identity validation (Windows)
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'windows-latest' }}
+              run: node --test scripts/prepare-ci-python.test.mjs
+
+            - name: Initialize isolated Python fixture runtime (Windows)
+              if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'windows-latest' }}
+              timeout-minutes: 2
+              run: node scripts/prepare-ci-python.mjs
+
             - name: Run SDK Tests (Windows)
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'windows-latest' }}
               shell: pwsh

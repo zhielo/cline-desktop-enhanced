@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Windows SDK fixture interpreter initialization
+
+- Before Windows SDK tests, a separate bounded CI-only check starts the existing interpreter in isolated `-I -B` mode, initializes fixture-used standard-library modules, validates its reported absolute executable/version identity, and binds subsequent tests to that exact canonical executable through `CLINE_RE_PYTHON`. Startup phase markers distinguish interpreter entry from standard-library readiness on failure; raw environment or stderr content is not printed.
+- This does not install Python, load fixtures or target code, retry tests, change the 18-second Android fixture child deadlines, skip cases, or claim improved production cold-start performance. Initialization has its own 60-second bound and fails the job if unsuccessful. Package scheduling remains unchanged: the failed core suite was not overlapping other SDK packages.
+
 ## Migration CI diagnostics and narrowly scoped secret-scan exception
 
 - The pinned public REA revision is exempted only from the Sourcegraph token rule, on its exact `revision` JSON line in the two generated migration inventories. Other fields, revisions, files and actual token patterns remain scanned. One exact historical fingerprint records the same public revision in the first scanner-scope fixture; current fixtures read the revision from inventory instead of embedding it. Nine synthetic scope regressions run before both Windows secret scans; default rules and full-history scanning remain enabled.
