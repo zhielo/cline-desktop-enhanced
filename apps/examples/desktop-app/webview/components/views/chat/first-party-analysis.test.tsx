@@ -134,6 +134,56 @@ it("keeps saved evidence available in Off and never auto-runs inspection", async
 	).toBe(false);
 });
 
+it("selects a filterable application view before filtering saved verification evidence", async () => {
+	invoke.mockImplementation(async (command: string) =>
+		command === "first_party_analysis_evidence"
+			? { items: [], total: 0, nextOffset: null, verifiedBehavior: false }
+			: {
+					mode: "off",
+					receipts: [
+						{ id: "a", status: "completed", target: "app", createdAt: "now" },
+					],
+					readiness: {},
+				},
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="s" environmentId="local" />,
+		),
+	);
+	await act(async () => {
+		const select = el.querySelector<HTMLSelectElement>(
+			'[aria-label="Saved analysis receipt"]',
+		)!;
+		select.value = "a";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	const view = (name: string) =>
+		[...el.querySelectorAll("button")].find((b) => b.textContent === name)!;
+	await act(async () => view("verification").click());
+	expect(
+		el.querySelector('[aria-label="Filter analysis evidence"]'),
+	).toBeNull();
+	await act(async () => view("application-nodes").click());
+	expect(
+		el.querySelector('[aria-label="Filter analysis evidence"]'),
+	).not.toBeNull();
+	expect(invoke).toHaveBeenCalledWith("first_party_analysis_evidence", {
+		sessionId: "s",
+		environmentId: "local",
+		query: {
+			receiptId: "a",
+			view: "application-nodes",
+			filter: "",
+			offset: 0,
+			limit: 20,
+		},
+	});
+	expect(
+		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
+	).toBe(false);
+});
+
 it("reads bounded finding comparisons while Off without starting a worker", async () => {
 	invoke.mockImplementation(async (command: string) =>
 		command === "first_party_analysis_evidence"

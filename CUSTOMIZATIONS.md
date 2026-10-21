@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Installed application evidence view sequencing
+
+- The installed WebView journey selects the filterable application-nodes view before filling its evidence filter. The preceding verification view intentionally has no filter. This repairs a captured locator timeout without changing app behavior, adding force clicks/retries, increasing deadlines, skipping assertions or bypassing the installed release gate.
+- A UI regression checks that verification has no filter, switching views exposes it, and saved application evidence is queried while Off without starting inspection. The ordered installed interaction is preserved and the finite release policy pins the updated acceptance script.
+
 ## Windows SDK fixture interpreter initialization
 
 - Before Windows SDK tests, a separate bounded CI-only check starts the existing interpreter in isolated `-I -B` mode, initializes fixture-used standard-library modules, validates its reported absolute executable/version identity, and binds subsequent tests to that exact canonical executable through `CLINE_RE_PYTHON`. Startup phase markers distinguish interpreter entry from standard-library readiness on failure; raw environment or stderr content is not printed.

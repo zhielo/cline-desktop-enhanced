@@ -1045,8 +1045,9 @@ ConvertTo-Json -InputObject @($rows) -Compress
     const applicationReceiptId=await sourceWorkspace.getByLabel("Saved analysis receipt",{exact:true}).inputValue();
     const appSummary=await rpc<{available:boolean;summary:{profile:string;coverage:{status:string}}}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:applicationReceiptId,view:"application-summary"}});
     if(!appSummary.available||appSummary.summary.profile!=="cline-application/1"||appSummary.summary.coverage.status!=="partial")throw new Error("Installed application graph summary missing or overstated");
-    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("ipc-channel");
+    // Verification intentionally has no filter: select a filterable view first.
     await sourceWorkspace.getByRole("button",{name:"application-nodes",exact:true}).click();
+    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("ipc-channel");
     await sourceWorkspace.getByText('"ipc-channel"',{exact:false}).first().waitFor({timeout:30000});
     await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
     const appWorkflows=sourceWorkspace.getByLabel("Saved application workflows",{exact:true});

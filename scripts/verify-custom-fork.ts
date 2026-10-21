@@ -5,6 +5,12 @@ const requiredMarkers: Array<{
 	markers: string[];
 }> = [
 	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			'await sourceWorkspace.getByRole("button",{name:"application-nodes",exact:true}).click();\n    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("ipc-channel");',
+		],
+	},
+	{
 		path: "scripts/prepare-ci-python.mjs",
 		markers: [
 			"cline-ci-python/v1",
