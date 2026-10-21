@@ -12,10 +12,20 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 67);
+	assert.equal(r.installedStages, 68);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
+	[
+		"missing installed acquisition proof",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(s: string) =>
+					s !==
+					"installed-source-acquisition-hash-bound-saved-off-no-execution-passed",
+			);
+		},
+	],
 	[
 		"moved head",
 		(e) => {

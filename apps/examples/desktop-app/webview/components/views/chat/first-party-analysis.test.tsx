@@ -967,3 +967,60 @@ it("reads and switches individual saved fuse wires while Off without starting in
 		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
 	).toBe(false);
 });
+
+it("reads acquisition and original container evidence while Off without an analysis run", async () => {
+	invoke.mockImplementation(
+		async (command: string, args?: Record<string, unknown>) =>
+			command === "first_party_analysis_evidence"
+				? {
+						available: true,
+						selection: "explicit-workspace-target",
+						coverage: "partial",
+						providerCalls: 0,
+						targetExecuted: false,
+						verifiedBehavior: false,
+						items: [],
+						total: 0,
+						nextOffset: null,
+					}
+				: {
+						mode: "off",
+						receipts: [
+							{
+								id: "owned",
+								status: "partial",
+								target: "app.asar",
+								createdAt: "now",
+							},
+						],
+						readiness: {},
+					},
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="s" environmentId="local" />,
+		),
+	);
+	await act(async () => {
+		const select = el.querySelector("select")!;
+		select.value = "owned";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	for (const view of ["source-acquisition", "source-containers"]) {
+		const button = [...el.querySelectorAll("button")].find(
+			(b) => b.textContent === view,
+		)!;
+		await act(async () => button.click());
+		expect(
+			invoke.mock.calls.some(
+				([cmd, args]) =>
+					cmd === "first_party_analysis_evidence" &&
+					(args?.query as { view?: string })?.view === view,
+			),
+		).toBe(true);
+		expect(el.textContent).toContain('"targetExecuted": false');
+	}
+	expect(
+		invoke.mock.calls.some(([cmd]) => cmd === "first_party_analysis_run"),
+	).toBe(false);
+});

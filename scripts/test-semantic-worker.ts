@@ -108,6 +108,24 @@ try {
 		items: unknown[];
 	};
 	assert.equal(applicationTrace.providerCalls, 0);
+	const acquired = queryFirstPartyEvidence(
+		"owned-semantic-smoke",
+		{
+			receiptId: applicationReceipt.id,
+			view: "source-acquisition",
+			limit: 50,
+		},
+		store,
+	) as {
+		selectedPath: string;
+		providerCalls: number;
+		targetExecuted: boolean;
+		items: unknown[];
+	};
+	assert.equal(acquired.selectedPath, "application");
+	assert.equal(acquired.providerCalls, 0);
+	assert.equal(acquired.targetExecuted, false);
+	assert.ok(acquired.items.length > 1);
 	assert.ok(applicationTrace.summary.matched_seeds > 0);
 	assert.ok(applicationTrace.items.length <= 2);
 	assert.equal(

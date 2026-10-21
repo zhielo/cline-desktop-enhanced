@@ -82,6 +82,7 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
+		"installed-source-acquisition-hash-bound-saved-off-no-execution-passed",
 		"installed-application-graph-electron-saved-trace-no-execution-passed",
 		"installed-electron-fuses-explicit-read-only-hash-bound-saved-off-passed",
 		"installed-sidecar-isolated-hub-bootstrapped",
@@ -156,8 +157,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"bcb9f8d7c5b30a1a16f1eb8787f8ae8df90084cfde9aadaf22e33e70dd6e7df2",
+			"ffb15386752c53711c417850fad0a5353fa21c084f54800d9e2e471367b20b14",
 		"scripts/validate-advanced-build.mjs":
-			"5fe0020327e10e9f0101e8f9dd0b6f34c4d8554749e7555c18c8c8aed3192bca",
+			"7ce60defedc2831bb3b2f3966045594cafaa2ae9e6f30f0784fea9177d914d11",
 	},
 } as const;

@@ -1,0 +1,21 @@
+# Consolidated implementation acceptance boundary
+
+This is the execution matrix for the requested first-party integration. Keep one PR. No external REA installation, CLI, server or MCP dependency is permitted. Reusing MIT source must retain pinned provenance and attribution. Existing independent Cline capabilities do not become original REA source ports merely because their names overlap.
+
+| Priority | Current implementation | Required completion proof | Still open |
+| --- | --- | --- | --- |
+| Acquisition/source choice | Explicit confined source trees, supported JS/TS/metadata/native candidates and bounded ASAR reads; new acquisition ledger binds admitted files, original observed archive bytes and selected member ranges | Adversarial parsing, immutable originals, strict receipt projection, saved Off queries and real installed Windows directory/ASAR journey | General original-container acquisition, ZIP-to-source workflow, automatic bundle executable/source selection, linked/unpacked source admission and complete omission accounting |
+| Native analysis | Existing approved Ghidra/IDA operations and saved dossiers; real owned Ghidra fixture workflows already exist | Exact selectors, canonical artifact/procedure identity, native facets and coverage, evidence-cited paths/value flow, real engine fixture acceptance | Full original dossier/high-p-code/value-flow source migration and original call-path workflows; licensed IDA acceptance unavailable here |
+| Source recovery | Static source-map declarations, conservative source/application graphs and existing source comparisons | Readable module recovery into new no-overwrite outputs; exact provenance, byte-range/source-map links, parser validation and explicit uncertainty | Complete bundle recovery and validated Windows isolation/resource policy for a recovery engine; a source map declaration alone is not recovery |
+| Unified evidence | Session-owned retained static/runtime evidence, graph queries, comparisons, saved traces and explicit contradiction candidates | Every selected identity and receipt checked; unknown/mixed/incomplete inputs fail closed; no provider replay from saved reads | Remaining original reconciliation, reconstruction obligation/coverage verification and specialist evidence algorithms |
+| Guided use | Six namespaced instruction-only skills and guided workbench routes with installed resource/persistence checks | Installed workflows exercise actual capability, not just instruction-file presence; permissions and Off semantics retained | Extend guides only when corresponding algorithms are implemented; no claim that guides add engines |
+
+## Current acquisition slice
+
+The new code is a first-party foundation, not completion of the entire first row. It adds `source-acquisition` and `source-containers`, strict manifest/artifact projection, selected-target binding in the parent, stable descriptor/named-path read checks, aggregate ASAR admission shared across compared targets, atomic admission on malformed selected member ranges, strict UTF-8/pickle checks and explicit partial coverage. It neither writes extracted files nor executes targets. Legacy evidence without the manifest stays unavailable.
+
+Release requirements remain all registered checks, 36 core gates, six engine gates and now 68 installed stages, including `installed-source-acquisition-hash-bound-saved-off-no-execution-passed` and final owned-process cleanup. Policy recipe hashes must match the actual supervisor and acceptance driver. Source changes invalidate older-head release claims. A green installer validates its finite fixtures only.
+
+## Merge and claims
+
+Do not mark all rows complete or merge under the full-integration condition while their open items remain. Do not interpret the seven partial routes/212-contract inventory as a percentage of all app functionality. REA parity/superiority requires representative owned fixtures and measured correctness, coverage, task success, latency and usability—not tool counts. Licensed external engines remain optional, user-provided integrations. No global equivalence, arbitrary-target compatibility, publisher authenticity or zero-defect guarantee is established by this matrix.

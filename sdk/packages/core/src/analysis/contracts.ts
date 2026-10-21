@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { electronFuseReportSchema } from "./semantic-engine/upstream/src/domain/electron/electronFuses";
+import { AcquisitionSchema } from "./acquisition";
 
 import { ANALYSIS_PROFILE } from "./profile";
 export { ANALYSIS_PROFILE } from "./profile";
@@ -182,6 +183,7 @@ export const ResultSchema = z
 			.strict()
 			.optional(),
 		electronFuses: electronFuseReportSchema.optional(),
+		acquisition: AcquisitionSchema.optional(),
 		applicationGraph: z
 			.object({
 				profile: z.literal("cline-application/1"),
@@ -229,7 +231,23 @@ export const ResultSchema = z
 			.strict()
 			.optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((result, ctx) => {
+		if (!result.acquisition) return;
+		const artifacts = new Map(result.artifacts.map((a) => [a.path, a]));
+		if (
+			artifacts.size !== result.artifacts.length ||
+			result.acquisition.sources.length !== artifacts.size ||
+			result.acquisition.sources.some((s) => {
+				const a = artifacts.get(s.path);
+				return !a || a.sha256 !== s.sha256 || a.bytes !== s.bytes;
+			})
+		)
+			ctx.addIssue({
+				code: "custom",
+				message: "Acquisition/artifact projection mismatch",
+			});
+	});
 export type AnalysisResult = z.infer<typeof ResultSchema>;
 export type AnalysisReceipt = {
 	id: string;

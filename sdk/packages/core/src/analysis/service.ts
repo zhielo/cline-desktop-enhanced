@@ -4,7 +4,14 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import {
+	dirname,
+	isAbsolute,
+	join,
+	relative,
+	resolve as resolvePath,
+	sep,
+} from "node:path";
 import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 import {
 	ANALYSIS_PROFILE,
@@ -146,6 +153,15 @@ export async function runFirstPartyAnalysis(
 						!!input.electronFuses !== !!parsedResult.electronFuses
 					)
 						throw new Error("Requested semantic evidence was not returned");
+					if (parsedResult.acquisition) {
+						const selected = realpathSync(
+							resolvePath(receipt.workspace, input.target),
+						);
+						const label =
+							relative(receipt.workspace, selected).split(sep).join("/") || ".";
+						if (parsedResult.acquisition.selectedPath !== label)
+							throw new Error("Acquisition selected target mismatch");
+					}
 					if (parsedResult.electronFuses) {
 						const a = parsedResult.artifacts[0],
 							f = parsedResult.electronFuses.artifact;

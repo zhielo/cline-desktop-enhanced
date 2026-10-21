@@ -29,6 +29,7 @@ import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
 import { javaScriptSemanticGraphSchema } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticGraph";
 import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
 import { FirstPartyAnalysisStore } from "./store";
+import { ResultSchema } from "./contracts";
 
 export { EvidenceQuerySchema } from "./evidence-query";
 export function queryFirstPartyEvidence(
@@ -39,6 +40,28 @@ export function queryFirstPartyEvidence(
 	const q = EvidenceQuerySchema.parse(input),
 		receipt = store.get(sessionId, q.receiptId);
 	const result = receipt.result;
+	if (q.view === "source-acquisition" || q.view === "source-containers") {
+		const report = result?.acquisition
+			? ResultSchema.parse(result).acquisition
+			: undefined;
+		if (!report)
+			return { id: receipt.id, available: false, status: receipt.status };
+		return {
+			id: receipt.id,
+			available: true,
+			resultHash: receipt.resultHash,
+			manifestSha256: report.manifestSha256,
+			selectedPath: report.selectedPath,
+			selection: report.selection,
+			coverage: report.coverage,
+			containerCount: report.containers.length,
+			limitations: report.limitations,
+			providerCalls: 0,
+			targetExecuted: false,
+			verifiedBehavior: false,
+			...semanticEvidencePage(report, q),
+		};
+	}
 	if (q.view === "electron-fuses") {
 		const report = result?.electronFuses;
 		if (!report)

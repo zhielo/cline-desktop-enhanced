@@ -31,6 +31,8 @@ type View =
 	| "comparison"
 	| "timeline"
 	| "verification"
+	| "source-acquisition"
+	| "source-containers"
 	| "cross-domain"
 	| "dossiers"
 	| "disagreements"
@@ -626,6 +628,8 @@ export function FirstPartyAnalysisWorkspace({
 						"comparison",
 						"timeline",
 						"verification",
+						"source-acquisition",
+						"source-containers",
 						"cross-domain",
 						"dossiers",
 						"disagreements",
@@ -688,6 +692,32 @@ export function FirstPartyAnalysisWorkspace({
 				</ol>
 			) : (
 				<>
+					{(view === "source-acquisition" || view === "source-containers") &&
+						page && (
+							<PreviewScrollRegion
+								className="max-h-48"
+								aria-label="Acquisition scope and integrity"
+							>
+								<pre className="whitespace-pre-wrap break-all text-xs">
+									{JSON.stringify(
+										{
+											available: page.available,
+											manifestSha256: page.manifestSha256,
+											selectedPath: page.selectedPath,
+											selection: page.selection,
+											coverage: page.coverage,
+											containerCount: page.containerCount,
+											limitations: page.limitations,
+											providerCalls: page.providerCalls,
+											targetExecuted: page.targetExecuted,
+											verifiedBehavior: page.verifiedBehavior,
+										},
+										null,
+										2,
+									)}
+								</pre>
+							</PreviewScrollRegion>
+						)}
 					{view === "electron-fuses" && (
 						<label>
 							Fuse evidence section

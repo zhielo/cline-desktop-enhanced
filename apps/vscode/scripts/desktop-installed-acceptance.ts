@@ -1646,6 +1646,149 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			JSON.stringify({ receiptId: applicationReceiptId, summary: appSummary, trace: savedAppTrace }, null, 2),
 		)
 		stages.push("installed-application-graph-electron-saved-trace-no-execution-passed")
+		await sourceWorkspace.getByRole("button", { name: "source-acquisition", exact: true }).click()
+		await sourceWorkspace.getByLabel("Filter analysis evidence", { exact: true }).fill("")
+		await sourceWorkspace.getByText('"explicit-workspace-target"', { exact: false }).first().waitFor({ timeout: 30000 })
+		const acquired = await rpc<{
+			available: boolean
+			selectedPath: string
+			manifestSha256: string
+			coverage: string
+			providerCalls: number
+			targetExecuted: boolean
+			verifiedBehavior: boolean
+			items: { path: string; sha256: string; bytes: number; origin: { kind: string; path: string } }[]
+			nextOffset: number | null
+		}>(page, "first_party_analysis_evidence", {
+			...analysisArgs,
+			query: { receiptId: applicationReceiptId, view: "source-acquisition", limit: 50 },
+		})
+		if (
+			!acquired.available ||
+			acquired.selectedPath !== "owned-application-graph" ||
+			acquired.coverage !== "partial" ||
+			!/^[a-f0-9]{64}$/.test(acquired.manifestSha256) ||
+			acquired.providerCalls !== 0 ||
+			acquired.targetExecuted !== false ||
+			acquired.verifiedBehavior !== false ||
+			acquired.items.length < 3 ||
+			acquired.nextOffset !== null
+		)
+			throw new Error("Installed acquisition evidence missing or overstated")
+		for (const item of acquired.items) {
+			if (
+				item.origin.kind !== "file" ||
+				item.origin.path !== item.path ||
+				!item.path.startsWith("owned-application-graph/") ||
+				item.path.split("/").includes("..")
+			)
+				throw new Error("Installed acquisition file origin mismatch")
+			const bytes = await readFile(join(workspace, item.path))
+			if (item.bytes !== bytes.length || item.sha256 !== createHash("sha256").update(bytes).digest("hex"))
+				throw new Error("Installed acquisition byte identity mismatch")
+		}
+		await writeFile(
+			join(evidence, "source-acquisition-evidence.json"),
+			JSON.stringify({ receiptId: applicationReceiptId, evidence: acquired }, null, 2),
+		)
+
+		// Also prove physical archive provenance through the compiled installed reader.
+		await sourceWorkspace.getByLabel("Include application graph and Electron boundaries", { exact: true }).uncheck()
+		await sourceWorkspace.getByLabel("Include file-local semantic graph", { exact: true }).uncheck()
+		const acquisitionSource = Buffer.from(
+			`require('node:fs').writeFileSync(${JSON.stringify(applicationSentinel)},'BAD');throw new Error('MUST_NOT_EXECUTE');`,
+		)
+		const acquisitionJson = Buffer.from(
+			JSON.stringify({ files: { "main.cjs": { size: acquisitionSource.length, offset: "0" } } }),
+		)
+		const acquisitionPadding = (4 - (acquisitionJson.length % 4)) % 4
+		const acquisitionHeader = Buffer.alloc(16 + acquisitionJson.length + acquisitionPadding)
+		acquisitionHeader.writeUInt32LE(4, 0)
+		acquisitionHeader.writeUInt32LE(acquisitionHeader.length - 8, 4)
+		acquisitionHeader.writeUInt32LE(acquisitionHeader.length - 12, 8)
+		acquisitionHeader.writeUInt32LE(acquisitionJson.length, 12)
+		acquisitionJson.copy(acquisitionHeader, 16)
+		const acquisitionBytes = Buffer.concat([acquisitionHeader, acquisitionSource])
+		const acquisitionTarget = join(workspace, "owned-acquisition.ASAR")
+		await writeFile(acquisitionTarget, acquisitionBytes)
+		await page.getByLabel("Session Analysis mode", { exact: true }).selectOption("static")
+		await sourceWorkspace.getByLabel("JavaScript analysis target", { exact: true }).fill("owned-acquisition.ASAR")
+		await applicationRun.click({ timeout: 30000 })
+		await page.waitForFunction(
+			() => {
+				const s = document.querySelector<HTMLSelectElement>('[aria-label="Saved analysis receipt"]')
+				return (
+					!!s?.selectedOptions[0]?.textContent?.includes("owned-acquisition.ASAR") &&
+					!document.querySelector<HTMLButtonElement>('[aria-label="First-party Analysis Workspace"] button.bg-primary')
+						?.disabled
+				)
+			},
+			undefined,
+			{ timeout: 75000 },
+		)
+		const archiveReceiptId = await sourceWorkspace.getByLabel("Saved analysis receipt", { exact: true }).inputValue()
+		await page.getByLabel("Session Analysis mode", { exact: true }).selectOption("off")
+		await sourceWorkspace.getByRole("button", { name: "source-containers", exact: true }).click()
+		const archiveContainers = await rpc<{
+			providerCalls: number
+			targetExecuted: boolean
+			items: { path: string; sha256: string; bytes: number }[]
+		}>(page, "first_party_analysis_evidence", {
+			...analysisArgs,
+			query: { receiptId: archiveReceiptId, view: "source-containers", limit: 2 },
+		})
+		const archiveMembers = await rpc<{
+			providerCalls: number
+			targetExecuted: boolean
+			items: {
+				sha256: string
+				bytes: number
+				origin: { kind: string; containerPath: string; containerSha256: string; offset: number }
+			}[]
+		}>(page, "first_party_analysis_evidence", {
+			...analysisArgs,
+			query: { receiptId: archiveReceiptId, view: "source-acquisition", limit: 2 },
+		})
+		const archiveHash = createHash("sha256").update(acquisitionBytes).digest("hex")
+		await sourceWorkspace.getByText(archiveHash, { exact: false }).first().waitFor({ timeout: 30000 })
+		const archived = archiveContainers.items[0],
+			member = archiveMembers.items[0]
+		if (
+			archiveContainers.providerCalls !== 0 ||
+			archiveMembers.providerCalls !== 0 ||
+			archiveContainers.targetExecuted !== false ||
+			archiveMembers.targetExecuted !== false ||
+			archiveContainers.items.length !== 1 ||
+			archiveMembers.items.length !== 1 ||
+			archived?.path !== "owned-acquisition.ASAR" ||
+			archived.sha256 !== archiveHash ||
+			archived.bytes !== acquisitionBytes.length ||
+			member?.origin.kind !== "asar-member" ||
+			member.origin.containerPath !== archived.path ||
+			member.origin.containerSha256 !== archiveHash ||
+			member.origin.offset !== acquisitionHeader.length ||
+			member.bytes !== acquisitionSource.length ||
+			member.sha256 !== createHash("sha256").update(acquisitionSource).digest("hex") ||
+			!acquisitionBytes.equals(await readFile(acquisitionTarget))
+		)
+			throw new Error("Installed ASAR acquisition binding or original preservation failed")
+		if (
+			await stat(applicationSentinel).then(
+				() => true,
+				() => false,
+			)
+		)
+			throw new Error("Installed acquisition executed target source")
+		await writeFile(
+			join(evidence, "source-acquisition-evidence.json"),
+			JSON.stringify(
+				{ directory: acquired, archiveReceiptId, containers: archiveContainers, members: archiveMembers },
+				null,
+				2,
+			),
+		)
+		await sourceWorkspace.getByLabel("Saved analysis receipt", { exact: true }).selectOption(applicationReceiptId)
+		stages.push("installed-source-acquisition-hash-bound-saved-off-no-execution-passed")
 		await sourceWorkspace.getByLabel("Include application graph and Electron boundaries", { exact: true }).uncheck()
 		await sourceWorkspace.getByLabel("Include file-local semantic graph", { exact: true }).uncheck()
 		// Owned structural bytes only: the fixture has no executable entrypoint or code.

@@ -63,3 +63,14 @@ The previous file-local-only head `eb0a844f2987ed295591a9767bdeab07d247679f` pas
 - Full REA parity/superiority over owned fixtures and representative real engines. A contract name, copied type or green installer is not parity proof.
 
 Queries still validate/load bounded whole graphs rather than stream them. No fixed-RSS guarantee, new OS sandbox, automatic approval, or zero-problem guarantee is provided. Keep the consolidated PR draft and unmerged while the complete requested migration remains unfinished.
+
+
+## Hash-bound admitted-source acquisition
+
+New static-reader receipts retain a versioned acquisition manifest, explicit selected workspace target, exact admitted file hashes and observed ASAR container byte hashes. Selected ASAR members retain container identity and physical byte ranges; malformed selected-member ranges admit no earlier members from that archive. Files are checked against the opened descriptor and named-path identity after reading. ASAR suffix matching is case-insensitive. Existing limits are preserved, with an additional aggregate 64 MiB ASAR read cap.
+
+`analysis_evidence` views `source-acquisition` and `source-containers` paginate retained sources and original observed container identities. They remain session-owned and readable while Off, with zero provider calls and no target execution. Receipt schemas validate the acquisition commitment and artifact projection; the supervising parent also binds the selected path to the request. Legacy receipts without this manifest return unavailable, not invented provenance.
+
+This is a first-party acquisition-ledger improvement, not another original REA contract port. The seven partial-route inventory remains unchanged. Directory reads are not atomic whole-tree snapshots; archive publisher authenticity, linked/unpacked acquisition, excluded/unvisited files, automatic executable/bundle source selection and JavaScript bundle recovery remain unimplemented or unknown. The application graph still identifies a virtual admitted manifest, not original container bytes. Do not claim full acquisition, complete REA parity or current-head installed validation before CI passes.
+
+Acceptance adds `installed-source-acquisition-hash-bound-saved-off-no-execution-passed` without removing existing stages. The real installed journey compares every selected owned fixture's retained hash/size to filesystem bytes while Off and saves `source-acquisition-evidence.json`. This candidate requires all 68 installed stages and the unchanged core/engine gates.
