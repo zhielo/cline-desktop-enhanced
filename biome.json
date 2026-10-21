@@ -18,6 +18,12 @@
     },
     "overrides": [
         {
+            "includes": ["sdk/packages/core/src/analysis/semantic-engine/upstream/**"],
+            "formatter": {"enabled": false},
+            "linter": {"enabled": false},
+            "assist": {"enabled": false}
+        },
+        {
             "includes": [
                 "apps/vscode/**"
             ],

@@ -343,87 +343,271 @@ it.each([
 });
 
 async function prepareOwnedScenario() {
- await act(async () => root.render(<ActiveJavaScriptScenario sessionId="s" environmentId="local" enabled={true} />));
- await act(async () => {
-  const input=el.querySelector<HTMLInputElement>('[aria-label="Isolated JavaScript target"]')!;
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"owned.cjs");
-  input.dispatchEvent(new Event("input",{bubbles:true}));
- });
- await act(async () => Array.from(el.querySelectorAll("button")).find(b=>b.textContent?.includes("Prepare independently"))!.click());
- await vi.waitFor(()=>expect(el.textContent).toContain("Approve Execute and run once"));
+	await act(async () =>
+		root.render(
+			<ActiveJavaScriptScenario
+				sessionId="s"
+				environmentId="local"
+				enabled={true}
+			/>,
+		),
+	);
+	await act(async () => {
+		const input = el.querySelector<HTMLInputElement>(
+			'[aria-label="Isolated JavaScript target"]',
+		)!;
+		Object.getOwnPropertyDescriptor(
+			HTMLInputElement.prototype,
+			"value",
+		)!.set!.call(input, "owned.cjs");
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	await act(async () =>
+		Array.from(el.querySelectorAll("button"))
+			.find((b) => b.textContent?.includes("Prepare independently"))!
+			.click(),
+	);
+	await vi.waitFor(() =>
+		expect(el.textContent).toContain("Approve Execute and run once"),
+	);
 }
 it("invalidates independent Execute approval on session change before run", async () => {
- let release!: (v:unknown)=>void;
- invoke.mockImplementation((command:string) => command.endsWith("_prepare") ? Promise.resolve({id:"p",requestHash:"h",requirements:["independent-execute-approval"],request:{operation:"js_isolated_execute",target:"owned.cjs"}}) : command==="approve_analysis_task" ? new Promise(r=>{release=r;}) : Promise.resolve({}));
- vi.spyOn(window,"confirm").mockReturnValue(true);
- await prepareOwnedScenario();
- await act(async () => Array.from(el.querySelectorAll("button")).find(b=>b.textContent?.includes("Approve Execute"))!.click());
- expect(invoke.mock.calls.some(c=>c[0]==="approve_analysis_task")).toBe(true);
- await act(async () => root.render(<ActiveJavaScriptScenario sessionId="other" environmentId="local" enabled={true} />));
- await act(async () => release({executionToken:"old-token"}));
- expect(invoke.mock.calls.some(c=>String(c[0]).endsWith("_run"))).toBe(false);
+	let release!: (v: unknown) => void;
+	invoke.mockImplementation((command: string) =>
+		command.endsWith("_prepare")
+			? Promise.resolve({
+					id: "p",
+					requestHash: "h",
+					requirements: ["independent-execute-approval"],
+					request: { operation: "js_isolated_execute", target: "owned.cjs" },
+				})
+			: command === "approve_analysis_task"
+				? new Promise((r) => {
+						release = r;
+					})
+				: Promise.resolve({}),
+	);
+	vi.spyOn(window, "confirm").mockReturnValue(true);
+	await prepareOwnedScenario();
+	await act(async () =>
+		Array.from(el.querySelectorAll("button"))
+			.find((b) => b.textContent?.includes("Approve Execute"))!
+			.click(),
+	);
+	expect(invoke.mock.calls.some((c) => c[0] === "approve_analysis_task")).toBe(
+		true,
+	);
+	await act(async () =>
+		root.render(
+			<ActiveJavaScriptScenario
+				sessionId="other"
+				environmentId="local"
+				enabled={true}
+			/>,
+		),
+	);
+	await act(async () => release({ executionToken: "old-token" }));
+	expect(invoke.mock.calls.some((c) => String(c[0]).endsWith("_run"))).toBe(
+		false,
+	);
 });
 it("editing target discards prepared Execute plan and never executes automatically", async () => {
- invoke.mockResolvedValue({id:"p",requestHash:"h",requirements:[],request:{operation:"js_isolated_execute"}});
- await prepareOwnedScenario();
- expect(el.textContent).toContain("Approve Execute and run once");
- await act(async () => {
-  const input=el.querySelector<HTMLInputElement>('[aria-label="Isolated JavaScript target"]')!;
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"changed.cjs");
-  input.dispatchEvent(new Event("input",{bubbles:true}));
- });
- expect(el.textContent).not.toContain("Approve Execute and run once");
- expect(invoke.mock.calls.some(c=>c[0]==="approve_analysis_task"||String(c[0]).endsWith("_run"))).toBe(false);
+	invoke.mockResolvedValue({
+		id: "p",
+		requestHash: "h",
+		requirements: [],
+		request: { operation: "js_isolated_execute" },
+	});
+	await prepareOwnedScenario();
+	expect(el.textContent).toContain("Approve Execute and run once");
+	await act(async () => {
+		const input = el.querySelector<HTMLInputElement>(
+			'[aria-label="Isolated JavaScript target"]',
+		)!;
+		Object.getOwnPropertyDescriptor(
+			HTMLInputElement.prototype,
+			"value",
+		)!.set!.call(input, "changed.cjs");
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	expect(el.textContent).not.toContain("Approve Execute and run once");
+	expect(
+		invoke.mock.calls.some(
+			(c) => c[0] === "approve_analysis_task" || String(c[0]).endsWith("_run"),
+		),
+	).toBe(false);
 });
-it("Hybrid selection is explicit and does not auto-run inspection or execution",async()=>{
- await act(async()=>root.render(<AnalysisModeControl sessionId="s" environmentId="local" status="completed" />));
- const confirm=vi.spyOn(window,"confirm").mockReturnValue(true);
- await act(async()=>{const select=el.querySelector("select")!;select.value="hybrid";select.dispatchEvent(new Event("change",{bubbles:true}));});
- expect(confirm).toHaveBeenCalledWith(expect.stringContaining("prior static evidence"));expect(el.querySelector("select")?.value).toBe("hybrid");
- expect(invoke.mock.calls.map(c=>c[0]).every(c=>["first_party_analysis_status","first_party_analysis_mode"].includes(c))).toBe(true);
+it("Hybrid selection is explicit and does not auto-run inspection or execution", async () => {
+	await act(async () =>
+		root.render(
+			<AnalysisModeControl
+				sessionId="s"
+				environmentId="local"
+				status="completed"
+			/>,
+		),
+	);
+	const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+	await act(async () => {
+		const select = el.querySelector("select")!;
+		select.value = "hybrid";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	expect(confirm).toHaveBeenCalledWith(
+		expect.stringContaining("prior static evidence"),
+	);
+	expect(el.querySelector("select")?.value).toBe("hybrid");
+	expect(
+		invoke.mock.calls
+			.map((c) => c[0])
+			.every((c) =>
+				["first_party_analysis_status", "first_party_analysis_mode"].includes(
+					c,
+				),
+			),
+	).toBe(true);
 });
 
 it("offers draft Analysis before any session without invoking tools or granting permissions", async () => {
- const change = vi.fn();
- await act(async () => root.render(<AnalysisModeControl environmentId="local" draftMode="off" onDraftModeChange={change} />));
- expect(el.querySelector("select")?.disabled).toBe(false);
- await act(async () => { const select = el.querySelector("select")!; select.value = "static"; select.dispatchEvent(new Event("change", { bubbles: true })); });
- expect(change).toHaveBeenCalledWith("static");
- expect(invoke).not.toHaveBeenCalled();
- vi.spyOn(window, "confirm").mockReturnValue(false);
- await act(async () => { const select = el.querySelector("select")!; select.value = "hybrid"; select.dispatchEvent(new Event("change", { bubbles: true })); });
- expect(change).toHaveBeenCalledTimes(1);
- expect(invoke).not.toHaveBeenCalled();
+	const change = vi.fn();
+	await act(async () =>
+		root.render(
+			<AnalysisModeControl
+				environmentId="local"
+				draftMode="off"
+				onDraftModeChange={change}
+			/>,
+		),
+	);
+	expect(el.querySelector("select")?.disabled).toBe(false);
+	await act(async () => {
+		const select = el.querySelector("select")!;
+		select.value = "static";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	expect(change).toHaveBeenCalledWith("static");
+	expect(invoke).not.toHaveBeenCalled();
+	vi.spyOn(window, "confirm").mockReturnValue(false);
+	await act(async () => {
+		const select = el.querySelector("select")!;
+		select.value = "hybrid";
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	expect(change).toHaveBeenCalledTimes(1);
+	expect(invoke).not.toHaveBeenCalled();
 });
 
 it("gives mounted draft and session controls distinct accessible identities", async () => {
- await act(async () => root.render(<><AnalysisModeControl sessionId="s" environmentId="local" status="completed" /><AnalysisModeControl environmentId="local" onDraftModeChange={vi.fn()} /></>));
- const session = el.querySelector('select[aria-label="Session Analysis mode"]')!;
- const draft = el.querySelector('select[aria-label="Draft Analysis mode"]')!;
- expect(session).not.toBeNull(); expect(draft).not.toBeNull();
- expect(session.id).not.toBe(draft.id);
- expect(el.querySelectorAll('button[aria-label="Open Analysis Workspace"]')).toHaveLength(1);
- expect(el.querySelectorAll('button[aria-label="Open draft Analysis workspace"]')).toHaveLength(1);
- expect([...el.querySelectorAll("select")].filter(control => control.id === session.id)).toHaveLength(1);
- expect([...el.querySelectorAll("select")].filter(control => control.id === draft.id)).toHaveLength(1);
+	await act(async () =>
+		root.render(
+			<>
+				<AnalysisModeControl
+					sessionId="s"
+					environmentId="local"
+					status="completed"
+				/>
+				<AnalysisModeControl
+					environmentId="local"
+					onDraftModeChange={vi.fn()}
+				/>
+			</>,
+		),
+	);
+	const session = el.querySelector(
+		'select[aria-label="Session Analysis mode"]',
+	)!;
+	const draft = el.querySelector('select[aria-label="Draft Analysis mode"]')!;
+	expect(session).not.toBeNull();
+	expect(draft).not.toBeNull();
+	expect(session.id).not.toBe(draft.id);
+	expect(
+		el.querySelectorAll('button[aria-label="Open Analysis Workspace"]'),
+	).toHaveLength(1);
+	expect(
+		el.querySelectorAll('button[aria-label="Open draft Analysis workspace"]'),
+	).toHaveLength(1);
+	expect(
+		[...el.querySelectorAll("select")].filter(
+			(control) => control.id === session.id,
+		),
+	).toHaveLength(1);
+	expect(
+		[...el.querySelectorAll("select")].filter(
+			(control) => control.id === draft.id,
+		),
+	).toHaveLength(1);
 });
 
 it("allows draft path selection locally without a session, host calls or runtime authority", async () => {
- await act(async () => root.render(<FirstPartyAnalysisWorkspace environmentId="local" />));
- const target = el.querySelector<HTMLInputElement>('input[aria-label="JavaScript analysis target"]')!;
- expect(target.value).toBe(".");
- await act(async () => {
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")?.set?.call(target,"owned.ts");
-  target.dispatchEvent(new Event("input",{bubbles:true}));
- });
- expect(target.value).toBe("owned.ts");
- const inspect = [...el.querySelectorAll("button")].find(b=>b.textContent?.includes("Inspect static sources"))!;
- expect(inspect.disabled).toBe(true);
- await act(async () => inspect.click());
- expect(el.textContent).toContain("Path selection only");
- expect(el.querySelector('input[aria-label="Inspector source target"]')).toBeNull();
- expect(invoke).not.toHaveBeenCalled();
- await act(async () => root.render(<FirstPartyAnalysisWorkspace environmentId="ssh:remote" />));
- expect(el.querySelector('input[aria-label="JavaScript analysis target"]')).toBeNull();
- expect(invoke).not.toHaveBeenCalled();
+	await act(async () =>
+		root.render(<FirstPartyAnalysisWorkspace environmentId="local" />),
+	);
+	const target = el.querySelector<HTMLInputElement>(
+		'input[aria-label="JavaScript analysis target"]',
+	)!;
+	expect(target.value).toBe(".");
+	await act(async () => {
+		Object.getOwnPropertyDescriptor(
+			HTMLInputElement.prototype,
+			"value",
+		)?.set?.call(target, "owned.ts");
+		target.dispatchEvent(new Event("input", { bubbles: true }));
+	});
+	expect(target.value).toBe("owned.ts");
+	const inspect = [...el.querySelectorAll("button")].find((b) =>
+		b.textContent?.includes("Inspect static sources"),
+	)!;
+	expect(inspect.disabled).toBe(true);
+	await act(async () => inspect.click());
+	expect(el.textContent).toContain("Path selection only");
+	expect(
+		el.querySelector('input[aria-label="Inspector source target"]'),
+	).toBeNull();
+	expect(invoke).not.toHaveBeenCalled();
+	await act(async () =>
+		root.render(<FirstPartyAnalysisWorkspace environmentId="ssh:remote" />),
+	);
+	expect(
+		el.querySelector('input[aria-label="JavaScript analysis target"]'),
+	).toBeNull();
+	expect(invoke).not.toHaveBeenCalled();
+});
+it("only requests integrated semantics after explicit selection and preserves the existing analysis route", async () => {
+	invoke.mockImplementation(async (command: string) =>
+		command === "first_party_analysis_run"
+			? { id: "owned-semantic", status: "partial" }
+			: { mode: "static", receipts: [], readiness: {} },
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="s" environmentId="local" />,
+		),
+	);
+	const toggle = [
+		...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+	].find((input) =>
+		input.parentElement?.textContent?.includes(
+			"Include file-local semantic graph",
+		),
+	);
+	expect(toggle).toBeDefined();
+	expect(toggle?.checked).toBe(false);
+	expect(
+		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
+	).toBe(false);
+	await act(async () => toggle!.click());
+	const run = [...el.querySelectorAll("button")].find(
+		(b) => b.textContent === "Inspect static sources",
+	)!;
+	await act(async () => run.click());
+	expect(invoke).toHaveBeenCalledWith(
+		"first_party_analysis_run",
+		{
+			sessionId: "s",
+			environmentId: "local",
+			input: { target: ".", semanticGraph: true },
+		},
+		{ timeoutMs: 330000 },
+	);
+	expect(el.textContent).toContain("semantic-nodes");
 });
