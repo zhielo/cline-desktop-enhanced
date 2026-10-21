@@ -1,10 +1,11 @@
+import { strict as assert } from "node:assert";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { strict as assert } from "node:assert";
-import { FirstPartyAnalysisStore } from "../sdk/packages/core/src/analysis/store";
-import { runFirstPartyAnalysis } from "../sdk/packages/core/src/analysis/service";
 import { queryFirstPartyEvidence } from "../sdk/packages/core/src/analysis/index";
+import { runFirstPartyAnalysis } from "../sdk/packages/core/src/analysis/service";
+import { FirstPartyAnalysisStore } from "../sdk/packages/core/src/analysis/store";
+
 const root = await realpath(
 	await mkdtemp(join(tmpdir(), "cline-semantic-smoke-")),
 );

@@ -1,33 +1,34 @@
-export {
-	assertInspectorOwner,
-	sameInspectorSourcePath,
-	InspectorRequestSchema,
-	observeJavaScriptInspector,
-} from "./inspector";
-export {
-	UnifiedEvidenceStore,
-	unifiedEvidenceView,
-	nativeDossiers,
-	dossierDisagreements,
-} from "./unified-evidence";
-export { recoverFirstPartyReservation } from "./recovery";
 export * from "./contracts";
 export * from "./hybrid";
-export { FirstPartyAnalysisStore } from "./store";
 export {
+	assertInspectorOwner,
+	InspectorRequestSchema,
+	observeJavaScriptInspector,
+	sameInspectorSourcePath,
+} from "./inspector";
+export { recoverFirstPartyReservation } from "./recovery";
+export {
+	cancelFirstPartyAnalysis,
 	configureFirstPartyAnalysisHost,
 	runFirstPartyAnalysis,
-	cancelFirstPartyAnalysis,
 } from "./service";
+export { FirstPartyAnalysisStore } from "./store";
+export {
+	dossierDisagreements,
+	nativeDossiers,
+	UnifiedEvidenceStore,
+	unifiedEvidenceView,
+} from "./unified-evidence";
 export async function runAnalysisWorkerEntrypoint() {
 	const worker = await import("./worker");
 	return worker.runAnalysisWorkerEntrypoint();
 }
 
-import { FirstPartyAnalysisStore } from "./store";
 import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
-import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
 import { javaScriptSemanticGraphSchema } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticGraph";
+import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
+import { FirstPartyAnalysisStore } from "./store";
+
 export { EvidenceQuerySchema } from "./evidence-query";
 export function queryFirstPartyEvidence(
 	sessionId: string,
@@ -128,11 +129,10 @@ export function queryFirstPartyEvidence(
 	};
 }
 
-export {
-	ScenarioExpectationSchema,
-	reconcileProcessScenario,
-} from "./scenario";
-
 export { correlateSavedEvidence } from "./correlation";
+export {
+	reconcileProcessScenario,
+	ScenarioExpectationSchema,
+} from "./scenario";
 
 export { semanticSourceNotices } from "./semantic-engine/notices";

@@ -1,14 +1,15 @@
 "use client";
-import {
-	useAnalysisProjectTarget,
-	useAnalysisProjectSelection,
-} from "./analysis-project-selection";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PreviewScrollRegion } from "@/components/ui/preview-scroll-region";
 import { desktopClient } from "@/lib/desktop-client";
-import { InvestigationWorkflow } from "./investigation-workflow";
 import { ActiveJavaScriptScenario } from "./active-javascript-scenario";
 import type { AnalysisMode } from "./analysis-mode-control";
+import {
+	useAnalysisProjectSelection,
+	useAnalysisProjectTarget,
+} from "./analysis-project-selection";
+import { InvestigationWorkflow } from "./investigation-workflow";
+
 type Summary = {
 	id: string;
 	status: string;

@@ -2,11 +2,14 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/desktop-client", () => ({ desktopClient: { invoke } }));
+
 import { ActiveJavaScriptScenario } from "./active-javascript-scenario";
 import { AnalysisModeControl } from "./analysis-mode-control";
 import { FirstPartyAnalysisWorkspace } from "./first-party-analysis-workspace";
+
 let el: HTMLDivElement, root: Root;
 beforeEach(() => {
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

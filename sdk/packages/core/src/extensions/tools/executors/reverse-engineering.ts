@@ -1,45 +1,3 @@
-import {
-	ghidraScriptPath,
-	prepareGhidraVerification,
-	verifyGhidraAnalysis,
-} from "./ghidra-verification";
-import {
-	ghidraAnalysisCacheRoot,
-	validateGhidraProjectDirectory,
-} from "./ghidra-project-path";
-import { compareProjectVersions } from "./project-versions";
-import { planRuntimeObservation } from "./runtime-observation-plan";
-import { verifyCandidate, validateDexBytes } from "./candidate-verification";
-import { sha256Directory } from "./android-project-files";
-import { androidProjectCandidate } from "./android-project-candidate";
-import { exportEvidenceArchive } from "./evidence-archive";
-import { freshCrossLanguage } from "./fresh-cross-language";
-import { INVESTIGATION_COMMANDS } from "../investigation-workflows-schema";
-import { investigationWorkflow } from "./investigation-workflows";
-import { ReverseEngineeringInputSchema } from "../schemas";
-import { CANDIDATE_COMMANDS } from "../advanced-candidates-schema";
-import { advancedCandidate, decompileManagedSelection } from "./advanced-candidates";
-import { candidateBatch } from "./candidate-batch";
-import { traceSourceSink } from "./source-sink-trace";
-import { freshSourceFlow } from "./source-investigation";
-import { traceEvidence } from "./evidence-trace";
-import { candidateHash, readCandidateFile } from "./candidate-files";
-import { inspectJvmMethod } from "./jvm-method";
-import { disassembleDexDirectory } from "./dex-directory";
-import { analysisCommandCatalog, normalizeAnalysisCommand, planInvestigation } from "../analysis-commands";
-import { smaliPatch } from "./smali-patch";
-import {
-	bundledAndroidTool,
-	bundledAndroidTools,
-	runAndroidTool,
-	androidCommandIdentity,
-} from "./android-toolchain";
-import { loadTargetedNativeEvidence } from "./targeted-native-evidence";
-import {
-	runFirstPartyAnalysis,
-	queryFirstPartyEvidence,
-	FirstPartyAnalysisStore,
-} from "../../../analysis/index";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -47,13 +5,30 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { inflateRaw } from "node:zlib";
+import {
+	FirstPartyAnalysisStore,
+	queryFirstPartyEvidence,
+	runFirstPartyAnalysis,
+} from "../../../analysis/index";
+import { CANDIDATE_COMMANDS } from "../advanced-candidates-schema";
+import {
+	analysisCommandCatalog,
+	normalizeAnalysisCommand,
+	planInvestigation,
+} from "../analysis-commands";
+import { INVESTIGATION_COMMANDS } from "../investigation-workflows-schema";
 import { NativeProjectEditSchema } from "../native-project-edits-schema";
+import { ReverseEngineeringInputSchema } from "../schemas";
 import type { ReverseEngineeringExecutor } from "../types";
 import {
 	type AdvancedResult,
 	advancedEvidenceBundle,
 	runAdvancedAnalysis,
 } from "./advanced-analysis";
+import {
+	advancedCandidate,
+	decompileManagedSelection,
+} from "./advanced-candidates";
 import { graphResult } from "./analysis-evidence-graph";
 import {
 	prepareNotebook,
@@ -67,6 +42,30 @@ import {
 	queryInvestigation,
 	readInvestigationResult,
 } from "./android-investigation-index";
+import { androidProjectCandidate } from "./android-project-candidate";
+import { sha256Directory } from "./android-project-files";
+import {
+	androidCommandIdentity,
+	bundledAndroidTool,
+	bundledAndroidTools,
+	runAndroidTool,
+} from "./android-toolchain";
+import { candidateBatch } from "./candidate-batch";
+import { candidateHash, readCandidateFile } from "./candidate-files";
+import { validateDexBytes, verifyCandidate } from "./candidate-verification";
+import { disassembleDexDirectory } from "./dex-directory";
+import { exportEvidenceArchive } from "./evidence-archive";
+import { traceEvidence } from "./evidence-trace";
+import { freshCrossLanguage } from "./fresh-cross-language";
+import {
+	ghidraAnalysisCacheRoot,
+	validateGhidraProjectDirectory,
+} from "./ghidra-project-path";
+import {
+	ghidraScriptPath,
+	prepareGhidraVerification,
+	verifyGhidraAnalysis,
+} from "./ghidra-verification";
 import {
 	idaDatabaseKey,
 	prepareIdaAttempt,
@@ -79,6 +78,8 @@ import {
 	idaProgressPrelude,
 	runObservedIda,
 } from "./ida-job-diagnostics";
+import { investigationWorkflow } from "./investigation-workflows";
+import { inspectJvmMethod } from "./jvm-method";
 import {
 	guardManagedBatchArguments,
 	ManagedEnginePool,
@@ -95,7 +96,12 @@ import {
 	NATIVE_GHIDRA_EDIT_SCRIPT,
 	nativeIdaEditScript,
 } from "./native-project-edit-scripts";
+import { compareProjectVersions } from "./project-versions";
+import { planRuntimeObservation } from "./runtime-observation-plan";
+import { smaliPatch } from "./smali-patch";
 import { scanSmali } from "./smali-search";
+import { freshSourceFlow } from "./source-investigation";
+import { traceSourceSink } from "./source-sink-trace";
 import {
 	commandAvailable,
 	launchDetachedGui,
@@ -106,6 +112,7 @@ import {
 	TARGETED_GHIDRA_SCRIPT,
 	targetedIdaScript,
 } from "./targeted-decompiler-scripts";
+import { loadTargetedNativeEvidence } from "./targeted-native-evidence";
 
 import { readWindowsRegistryValue } from "./windows-tool-environment";
 
@@ -418,7 +425,9 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 	if (engine === "ghidra") {
 		const selectedHome = process.env.CLINE_GHIDRA_SELECTED_HOME?.trim();
 		if (selectedHome && !path.isAbsolute(selectedHome))
-			throw new Error("Explicit Ghidra selection must be an absolute installation folder");
+			throw new Error(
+				"Explicit Ghidra selection must be an absolute installation folder",
+			);
 		const home =
 			selectedHome ?? process.env.GHIDRA_HOME ?? process.env.GHIDRA_INSTALL_DIR;
 		const roots = [...(home ? [home] : []), ...discoveredRoots];
@@ -442,8 +451,10 @@ async function executableCandidates(engine: Engine): Promise<string[]> {
 			]),
 			...(selectedHome
 				? []
-				: [win ? "analyzeHeadless.bat" : "analyzeHeadless",
-					win ? "ghidraRun.bat" : "ghidraRun"]),
+				: [
+						win ? "analyzeHeadless.bat" : "analyzeHeadless",
+						win ? "ghidraRun.bat" : "ghidraRun",
+					]),
 		];
 	}
 	if (engine === "ida") {
@@ -778,7 +789,6 @@ async function sha256(filePath: string): Promise<string> {
 		stream.once("end", () => resolve(hash.digest("hex")));
 	});
 }
-
 
 async function toolIdentity(engine: Engine, command: string | undefined) {
 	if (!command)
@@ -1972,7 +1982,11 @@ async function resolveAnalysisDirectory(
 		return {
 			outputDir,
 			persistent: true,
-			outputScope: await enforceOutputPath(outputDir, acknowledgeExternal, engine),
+			outputScope: await enforceOutputPath(
+				outputDir,
+				acknowledgeExternal,
+				engine,
+			),
 		};
 	}
 	if (!reuseAnalysis) {
@@ -2369,7 +2383,10 @@ async function installationCapabilities(
 				"inspect and scan_strings before expensive decompilation",
 		},
 		cacheDirectory: analysisCacheRoot(),
-		ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
+		ghidraCacheDirectory: ghidraAnalysisCacheRoot(
+			os.homedir(),
+			process.env.CLINE_RE_CACHE_DIR,
+		),
 	};
 }
 
@@ -2383,7 +2400,8 @@ async function discoverCapabilities(
 		ghidra:
 			process.env.CLINE_GHIDRA_SELECTED_HOME ??
 			process.env.GHIDRA_HOME ??
-			process.env.GHIDRA_INSTALL_DIR ?? "",
+			process.env.GHIDRA_INSTALL_DIR ??
+			"",
 		ghidraSelectionExplicit: Boolean(process.env.CLINE_GHIDRA_SELECTED_HOME),
 		ida:
 			process.env.CLINE_IDA_SELECTED_HOME ??
@@ -2393,7 +2411,10 @@ async function discoverCapabilities(
 		idaSelectionExplicit: Boolean(process.env.CLINE_IDA_SELECTED_HOME),
 		jadx: process.env.JADX_HOME ?? "",
 		cacheDirectory: analysisCacheRoot(),
-		ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
+		ghidraCacheDirectory: ghidraAnalysisCacheRoot(
+			os.homedir(),
+			process.env.CLINE_RE_CACHE_DIR,
+		),
 	});
 	const cached = discoveryCache.get(cacheKey);
 	if (cached && cached.expiresAt > Date.now()) {
@@ -2444,7 +2465,10 @@ async function discoverCapabilities(
 					supplementalTools: {},
 					toolSelectionGuide: {},
 					cacheDirectory: analysisCacheRoot(),
-					ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
+					ghidraCacheDirectory: ghidraAnalysisCacheRoot(
+						os.homedir(),
+						process.env.CLINE_RE_CACHE_DIR,
+					),
 				} satisfies Record<string, unknown>);
 			if (deep.error) probeErrors.deepHealth = deep.error;
 		} else {
@@ -2461,7 +2485,10 @@ async function discoverCapabilities(
 						"Run deep discovery to verify versions, GUI tools, plugins, decompilers, and supplemental utilities.",
 				},
 				cacheDirectory: analysisCacheRoot(),
-				ghidraCacheDirectory: ghidraAnalysisCacheRoot(os.homedir(), process.env.CLINE_RE_CACHE_DIR),
+				ghidraCacheDirectory: ghidraAnalysisCacheRoot(
+					os.homedir(),
+					process.env.CLINE_RE_CACHE_DIR,
+				),
 			};
 		}
 		return {
@@ -2531,93 +2558,394 @@ async function validateDexOutput(file: string) {
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		const started = Date.now();
- if(input.advanced_options?.android_calls && !(input.operation==="trace_android_method" || input.operation==="advanced_analysis"&&input.advanced_action==="android_method"))throw new Error("android_calls budgets require Android method relationship analysis");
- if(input.advanced_options?.entrypoints && !(["find_android_entrypoints","map_attack_surface"].includes(input.operation) || input.operation==="advanced_analysis"&&input.advanced_action==="android_entrypoints"))throw new Error("entrypoints budgets require the Android entrypoint action");
+		if (
+			input.advanced_options?.android_calls &&
+			!(
+				input.operation === "trace_android_method" ||
+				(input.operation === "advanced_analysis" &&
+					input.advanced_action === "android_method")
+			)
+		)
+			throw new Error(
+				"android_calls budgets require Android method relationship analysis",
+			);
+		if (
+			input.advanced_options?.entrypoints &&
+			!(
+				["find_android_entrypoints", "map_attack_surface"].includes(
+					input.operation,
+				) ||
+				(input.operation === "advanced_analysis" &&
+					input.advanced_action === "android_entrypoints")
+			)
+		)
+			throw new Error(
+				"entrypoints budgets require the Android entrypoint action",
+			);
 
- if(input.advanced_options?.entrypoints && input.operation==="map_attack_surface" && !input.target?.toLowerCase().endsWith(".apk"))throw new Error("entrypoints budgets require an APK target for map_attack_surface");
- if(input.version_comparison && input.operation !== "compare_versions")throw new Error("version_comparison is accepted only by compare_versions");
- if(input.operation === "compare_versions" && input.version_comparison){
-  const allowed=new Set(["operation","target","compare_target","version_comparison","timeout_ms","engine","report_format","discovery_depth"]);
-  if(Object.entries(input).some(([key,value])=>value!==undefined&&!allowed.has(key)) || input.engine!=="auto" || input.report_format!=="json" || input.discovery_depth!=="fast")throw new Error("Project version comparison rejects legacy overrides and unrelated options");
-  return JSON.stringify(await compareProjectVersions(input,context.signal));
- }
- if (input.source_flow && input.operation !== "trace_data_flow") throw new Error("source_flow is accepted only by trace_data_flow");
- if (input.operation === "trace_data_flow" && input.source_flow) {
-  if(input.evidence_trace || input.source_sink || input.cross_language || input.advanced_action || input.advanced_options)throw new Error("Fresh source flow rejects imported graph and engine overrides");
-  return JSON.stringify(await freshSourceFlow(input, context.signal));
- }
- if(input.cross_language && input.operation !== "trace_cross_language")throw new Error("cross_language is accepted only by trace_cross_language");
- if(input.advanced_options?.jni_trace && (input.operation!=="advanced_analysis"||input.advanced_action!=="android_relationships"))throw new Error("jni_trace requires the fixed android_relationships action");
- if(input.operation === "trace_cross_language" && input.cross_language){
-  if(input.evidence_trace || input.advanced_options || input.advanced_action)throw new Error("Fresh cross-language mode rejects imported graph and advanced overrides");
-  return JSON.stringify(await freshCrossLanguage(input,async(request,signal)=>JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request),{...context,signal})),context.signal));
- }
+		if (
+			input.advanced_options?.entrypoints &&
+			input.operation === "map_attack_surface" &&
+			!input.target?.toLowerCase().endsWith(".apk")
+		)
+			throw new Error(
+				"entrypoints budgets require an APK target for map_attack_surface",
+			);
+		if (input.version_comparison && input.operation !== "compare_versions")
+			throw new Error(
+				"version_comparison is accepted only by compare_versions",
+			);
+		if (input.operation === "compare_versions" && input.version_comparison) {
+			const allowed = new Set([
+				"operation",
+				"target",
+				"compare_target",
+				"version_comparison",
+				"timeout_ms",
+				"engine",
+				"report_format",
+				"discovery_depth",
+			]);
+			if (
+				Object.entries(input).some(
+					([key, value]) => value !== undefined && !allowed.has(key),
+				) ||
+				input.engine !== "auto" ||
+				input.report_format !== "json" ||
+				input.discovery_depth !== "fast"
+			)
+				throw new Error(
+					"Project version comparison rejects legacy overrides and unrelated options",
+				);
+			return JSON.stringify(
+				await compareProjectVersions(input, context.signal),
+			);
+		}
+		if (input.source_flow && input.operation !== "trace_data_flow")
+			throw new Error("source_flow is accepted only by trace_data_flow");
+		if (input.operation === "trace_data_flow" && input.source_flow) {
+			if (
+				input.evidence_trace ||
+				input.source_sink ||
+				input.cross_language ||
+				input.advanced_action ||
+				input.advanced_options
+			)
+				throw new Error(
+					"Fresh source flow rejects imported graph and engine overrides",
+				);
+			return JSON.stringify(await freshSourceFlow(input, context.signal));
+		}
+		if (input.cross_language && input.operation !== "trace_cross_language")
+			throw new Error(
+				"cross_language is accepted only by trace_cross_language",
+			);
+		if (
+			input.advanced_options?.jni_trace &&
+			(input.operation !== "advanced_analysis" ||
+				input.advanced_action !== "android_relationships")
+		)
+			throw new Error(
+				"jni_trace requires the fixed android_relationships action",
+			);
+		if (input.operation === "trace_cross_language" && input.cross_language) {
+			if (
+				input.evidence_trace ||
+				input.advanced_options ||
+				input.advanced_action
+			)
+				throw new Error(
+					"Fresh cross-language mode rejects imported graph and advanced overrides",
+				);
+			return JSON.stringify(
+				await freshCrossLanguage(
+					input,
+					async (request, signal) =>
+						JSON.parse(
+							await createReverseEngineeringExecutor()(
+								ReverseEngineeringInputSchema.parse(request),
+								{ ...context, signal },
+							),
+						),
+					context.signal,
+				),
+			);
+		}
 
- if(input.operation === "identify_artifact" && (input.advanced_action || input.advanced_options)) throw new Error("identify_artifact accepts only artifact_discovery budgets, not advanced overrides");
- if(input.artifact_discovery && input.operation !== "identify_artifact") throw new Error("artifact_discovery is accepted only by identify_artifact");
- if (input.runtime_observation_plan && input.operation !== "plan_runtime_observation") throw new Error("runtime_observation_plan is only accepted by plan_runtime_observation");
- if (input.operation === "plan_runtime_observation") return JSON.stringify(await planRuntimeObservation(input, context.signal));
-  if (input.candidate_validation && input.operation !== "validate_candidate") throw new Error("candidate_validation is only accepted by validate_candidate");
-  if (input.candidate_review && input.operation !== "review_candidate_changes") throw new Error("candidate_review is only accepted by review_candidate_changes");
-  if (["validate_candidate", "review_candidate_changes"].includes(input.operation)) return JSON.stringify(await verifyCandidate(input, async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request), {...context, signal})), context.signal));
-  if(input.android_project_patch&&!["preview_android_candidate","build_android_candidate"].includes(input.operation))throw new Error("android_project_patch is accepted only by Android project preview/build commands");
- if(input.operation==="export_evidence_bundle"&&input.evidence_archive){
-  if(!input.output_file)throw new Error("Evidence archive output_file required");
-  const outputScope=await enforceOutputPath(input.output_file,input.acknowledge_external_output);
-  return withAnalysisLock(input.target??"",async()=>JSON.stringify({...await exportEvidenceArchive(input,context.signal),outputScope}),context.signal);
- }
-  if(input.operation==="preview_android_candidate"||(input.operation==="build_android_candidate"&&input.android_project_patch)){
-   if(!input.output_file)throw new Error("New candidate output_file required");
-   const outputScope=await enforceOutputPath(input.output_file,input.acknowledge_external_output);
-   return withAnalysisLock(input.target??"",async()=>JSON.stringify({...await androidProjectCandidate(input,async(request,signal)=>JSON.parse(await createReverseEngineeringExecutor()(ReverseEngineeringInputSchema.parse(request),{...context,signal})),context.signal),outputScope}),context.signal);
-  }
+		if (
+			input.operation === "identify_artifact" &&
+			(input.advanced_action || input.advanced_options)
+		)
+			throw new Error(
+				"identify_artifact accepts only artifact_discovery budgets, not advanced overrides",
+			);
+		if (input.artifact_discovery && input.operation !== "identify_artifact")
+			throw new Error(
+				"artifact_discovery is accepted only by identify_artifact",
+			);
+		if (
+			input.runtime_observation_plan &&
+			input.operation !== "plan_runtime_observation"
+		)
+			throw new Error(
+				"runtime_observation_plan is only accepted by plan_runtime_observation",
+			);
+		if (input.operation === "plan_runtime_observation")
+			return JSON.stringify(
+				await planRuntimeObservation(input, context.signal),
+			);
+		if (input.candidate_validation && input.operation !== "validate_candidate")
+			throw new Error(
+				"candidate_validation is only accepted by validate_candidate",
+			);
+		if (
+			input.candidate_review &&
+			input.operation !== "review_candidate_changes"
+		)
+			throw new Error(
+				"candidate_review is only accepted by review_candidate_changes",
+			);
+		if (
+			["validate_candidate", "review_candidate_changes"].includes(
+				input.operation,
+			)
+		)
+			return JSON.stringify(
+				await verifyCandidate(
+					input,
+					async (request, signal) =>
+						JSON.parse(
+							await createReverseEngineeringExecutor()(
+								ReverseEngineeringInputSchema.parse(request),
+								{ ...context, signal },
+							),
+						),
+					context.signal,
+				),
+			);
+		if (
+			input.android_project_patch &&
+			!["preview_android_candidate", "build_android_candidate"].includes(
+				input.operation,
+			)
+		)
+			throw new Error(
+				"android_project_patch is accepted only by Android project preview/build commands",
+			);
+		if (
+			input.operation === "export_evidence_bundle" &&
+			input.evidence_archive
+		) {
+			if (!input.output_file)
+				throw new Error("Evidence archive output_file required");
+			const outputScope = await enforceOutputPath(
+				input.output_file,
+				input.acknowledge_external_output,
+			);
+			return withAnalysisLock(
+				input.target ?? "",
+				async () =>
+					JSON.stringify({
+						...(await exportEvidenceArchive(input, context.signal)),
+						outputScope,
+					}),
+				context.signal,
+			);
+		}
+		if (
+			input.operation === "preview_android_candidate" ||
+			(input.operation === "build_android_candidate" &&
+				input.android_project_patch)
+		) {
+			if (!input.output_file)
+				throw new Error("New candidate output_file required");
+			const outputScope = await enforceOutputPath(
+				input.output_file,
+				input.acknowledge_external_output,
+			);
+			return withAnalysisLock(
+				input.target ?? "",
+				async () =>
+					JSON.stringify({
+						...(await androidProjectCandidate(
+							input,
+							async (request, signal) =>
+								JSON.parse(
+									await createReverseEngineeringExecutor()(
+										ReverseEngineeringInputSchema.parse(request),
+										{ ...context, signal },
+									),
+								),
+							context.signal,
+						)),
+						outputScope,
+					}),
+				context.signal,
+			);
+		}
 		if (input.operation === "annotate_analysis_project")
 			input = { ...input, operation: "project_edit" };
-		if ((INVESTIGATION_COMMANDS as readonly string[]).includes(input.operation)) {
-			return JSON.stringify(await investigationWorkflow(
-				input,
-				async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(
-					ReverseEngineeringInputSchema.parse(request), { ...context, signal },
-				)),
-				context.signal,
-			));
+		if (
+			(INVESTIGATION_COMMANDS as readonly string[]).includes(input.operation)
+		) {
+			return JSON.stringify(
+				await investigationWorkflow(
+					input,
+					async (request, signal) =>
+						JSON.parse(
+							await createReverseEngineeringExecutor()(
+								ReverseEngineeringInputSchema.parse(request),
+								{ ...context, signal },
+							),
+						),
+					context.signal,
+				),
+			);
 		}
-  input = normalizeAnalysisCommand(input);
-  if ((CANDIDATE_COMMANDS as readonly string[]).includes(input.operation)) {
-   if (!input.output_file) throw new Error("Candidate output_file required");
-   const outputScope = await enforceOutputPath(input.output_file, input.acknowledge_external_output);
-   return withAnalysisLock(input.target ?? "", async () => JSON.stringify({...await advancedCandidate(input, context.signal), outputScope}), context.signal);
-  }
-  if(input.operation === "audit_candidate_batch") {
-   if(!input.target)throw new Error("Manifest target required");
-   return withAnalysisLock(input.target, async()=>JSON.stringify(await candidateBatch(input,context.signal)),context.signal);
-  }
-  if (["preview_candidate_batch", "apply_candidate_batch"].includes(input.operation)) {
-   if (!input.target) throw new Error("Manifest target required");
-   const outputScope = await enforceOutputPath(path.join(path.dirname(input.target), ".candidate-output-scope"), input.acknowledge_external_output);
-   return withAnalysisLock(input.target, async () => JSON.stringify({...await candidateBatch(input, context.signal), outputScope}), context.signal);
-  }
-  if (["trace_source_sink", "trace_cross_language", "trace_data_flow", "decompile_dotnet_method", "read_jvm_method"].includes(input.operation)) {
-   if (!input.target) throw new Error("Explicit target required");
-   const bytes = await readCandidateFile(input.target, 16 * 1024 * 1024, context.signal);
-   if (["trace_source_sink", "trace_cross_language", "trace_data_flow"].includes(input.operation)) {
-    if(bytes.length > 4*1024*1024)throw new Error("Evidence graph exceeds 4 MiB budget");
-    const document=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
-    return JSON.stringify({...input.operation==="trace_source_sink" ? traceSourceSink(document,input.source_sink) : traceEvidence(document,input.evidence_trace,input.operation==="trace_data_flow"),inputSha256:candidateHash(bytes)});
-   }
-   if(input.operation==="decompile_dotnet_method")return JSON.stringify({...decompileManagedSelection(bytes,input.managed_method),inputSha256:candidateHash(bytes)});
-   if(!input.jvm_method)throw new Error("Exact JVM method selector required");
-   const method=inspectJvmMethod(bytes,input.jvm_method.method_name,input.jvm_method.descriptor);
-   return JSON.stringify({...method,bytes:undefined,byteLength:method.bytes.length,hex:method.bytes.subarray(0,4096).toString("hex"),truncated:method.bytes.length>4096,status:method.bytes.length>4096?"partial":"completed",inputSha256:candidateHash(bytes)});
-  }
-  if (input.operation === "baksmali_dir") return JSON.stringify(await disassembleDexDirectory(input, async (request, signal) => JSON.parse(await createReverseEngineeringExecutor()(request, { ...context, signal })), context.signal));
-  if (input.operation === "analysis_command_catalog") return JSON.stringify(analysisCommandCatalog());
-  if (["plan_investigation", "plan_batch"].includes(input.operation)) return JSON.stringify(planInvestigation(input));
-  if (["preview_smali_patch", "patch_smali_method", "patch_smali"].includes(input.operation)) {
-   if (!input.output_file || !path.isAbsolute(input.output_file)) throw new Error("Absolute candidate output_file required");
-   const outputScope = await enforceOutputPath(input.output_file, input.acknowledge_external_output);
-   return withAnalysisLock(input.target ?? "", async () => JSON.stringify({ ...(await smaliPatch(input, context.signal)), outputScope }), context.signal);
-  }
+		input = normalizeAnalysisCommand(input);
+		if ((CANDIDATE_COMMANDS as readonly string[]).includes(input.operation)) {
+			if (!input.output_file) throw new Error("Candidate output_file required");
+			const outputScope = await enforceOutputPath(
+				input.output_file,
+				input.acknowledge_external_output,
+			);
+			return withAnalysisLock(
+				input.target ?? "",
+				async () =>
+					JSON.stringify({
+						...(await advancedCandidate(input, context.signal)),
+						outputScope,
+					}),
+				context.signal,
+			);
+		}
+		if (input.operation === "audit_candidate_batch") {
+			if (!input.target) throw new Error("Manifest target required");
+			return withAnalysisLock(
+				input.target,
+				async () => JSON.stringify(await candidateBatch(input, context.signal)),
+				context.signal,
+			);
+		}
+		if (
+			["preview_candidate_batch", "apply_candidate_batch"].includes(
+				input.operation,
+			)
+		) {
+			if (!input.target) throw new Error("Manifest target required");
+			const outputScope = await enforceOutputPath(
+				path.join(path.dirname(input.target), ".candidate-output-scope"),
+				input.acknowledge_external_output,
+			);
+			return withAnalysisLock(
+				input.target,
+				async () =>
+					JSON.stringify({
+						...(await candidateBatch(input, context.signal)),
+						outputScope,
+					}),
+				context.signal,
+			);
+		}
+		if (
+			[
+				"trace_source_sink",
+				"trace_cross_language",
+				"trace_data_flow",
+				"decompile_dotnet_method",
+				"read_jvm_method",
+			].includes(input.operation)
+		) {
+			if (!input.target) throw new Error("Explicit target required");
+			const bytes = await readCandidateFile(
+				input.target,
+				16 * 1024 * 1024,
+				context.signal,
+			);
+			if (
+				[
+					"trace_source_sink",
+					"trace_cross_language",
+					"trace_data_flow",
+				].includes(input.operation)
+			) {
+				if (bytes.length > 4 * 1024 * 1024)
+					throw new Error("Evidence graph exceeds 4 MiB budget");
+				const document = JSON.parse(
+					new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+				);
+				return JSON.stringify({
+					...(input.operation === "trace_source_sink"
+						? traceSourceSink(document, input.source_sink)
+						: traceEvidence(
+								document,
+								input.evidence_trace,
+								input.operation === "trace_data_flow",
+							)),
+					inputSha256: candidateHash(bytes),
+				});
+			}
+			if (input.operation === "decompile_dotnet_method")
+				return JSON.stringify({
+					...decompileManagedSelection(bytes, input.managed_method),
+					inputSha256: candidateHash(bytes),
+				});
+			if (!input.jvm_method)
+				throw new Error("Exact JVM method selector required");
+			const method = inspectJvmMethod(
+				bytes,
+				input.jvm_method.method_name,
+				input.jvm_method.descriptor,
+			);
+			return JSON.stringify({
+				...method,
+				bytes: undefined,
+				byteLength: method.bytes.length,
+				hex: method.bytes.subarray(0, 4096).toString("hex"),
+				truncated: method.bytes.length > 4096,
+				status: method.bytes.length > 4096 ? "partial" : "completed",
+				inputSha256: candidateHash(bytes),
+			});
+		}
+		if (input.operation === "baksmali_dir")
+			return JSON.stringify(
+				await disassembleDexDirectory(
+					input,
+					async (request, signal) =>
+						JSON.parse(
+							await createReverseEngineeringExecutor()(request, {
+								...context,
+								signal,
+							}),
+						),
+					context.signal,
+				),
+			);
+		if (input.operation === "analysis_command_catalog")
+			return JSON.stringify(analysisCommandCatalog());
+		if (["plan_investigation", "plan_batch"].includes(input.operation))
+			return JSON.stringify(planInvestigation(input));
+		if (
+			["preview_smali_patch", "patch_smali_method", "patch_smali"].includes(
+				input.operation,
+			)
+		) {
+			if (!input.output_file || !path.isAbsolute(input.output_file))
+				throw new Error("Absolute candidate output_file required");
+			const outputScope = await enforceOutputPath(
+				input.output_file,
+				input.acknowledge_external_output,
+			);
+			return withAnalysisLock(
+				input.target ?? "",
+				async () =>
+					JSON.stringify({
+						...(await smaliPatch(input, context.signal)),
+						outputScope,
+					}),
+				context.signal,
+			);
+		}
 		if (
 			input.operation === "javascript_analysis" ||
 			input.operation === "analysis_evidence"
@@ -3111,7 +3439,12 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						exitCode: result.exitCode,
 						cancelled: result.cancelled,
 						timedOut: result.timedOut,
-						...(signing ? {} : { stdout: result.stdout.slice(0, 16000), stderr: result.stderr.slice(0, 16000) }),
+						...(signing
+							? {}
+							: {
+									stdout: result.stdout.slice(0, 16000),
+									stderr: result.stderr.slice(0, 16000),
+								}),
 						coverage: signing
 							? "Signing failed; private signer diagnostics omitted"
 							: "Alignment failed",
@@ -3792,7 +4125,9 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			);
 		if (engine === "ghidra") await validateGhidraProjectDirectory(outputDir);
 		await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
-		const timeoutMs = input.timeout_ms ?? (engine === "ida" ? DEFAULT_IDA_TIMEOUT_MS : 3_600_000);
+		const timeoutMs =
+			input.timeout_ms ??
+			(engine === "ida" ? DEFAULT_IDA_TIMEOUT_MS : 3_600_000);
 		if (engine === "ida" && !gui)
 			context.emitUpdate?.({
 				stream: "stdout",
@@ -4126,7 +4461,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					existingManifest?.analysisOptionsHash === optionsHash &&
 					(engine !== "ghidra" ||
 						(typeof existingManifest.target === "string" &&
-							path.basename(existingManifest.target) === path.basename(target)));
+							path.basename(existingManifest.target) ===
+								path.basename(target)));
 				const projectName = `cline-${hash.slice(0, 16)}`;
 				const ghidraProject = path.join(outputDir, `${projectName}.gpr`);
 				const idaDatabase = path.join(outputDir, "analysis.i64");
@@ -4143,7 +4479,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						reusedAnalysis = args[0] === ghidraProject;
 					} else {
 						const projectExists =
-							input.reuse_analysis !== false && sameArtifact &&
+							input.reuse_analysis !== false &&
+							sameArtifact &&
 							(await exists(ghidraProject));
 						reusedAnalysis = projectExists;
 						args = projectExists
@@ -4337,12 +4674,16 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						: undefined;
 				const databaseVerified =
 					engine === "ghidra" && ghidraVerification
-						? await verifyGhidraAnalysis(ghidraProject, ghidraVerification, hash)
+						? await verifyGhidraAnalysis(
+								ghidraProject,
+								ghidraVerification,
+								hash,
+							)
 						: engine !== "ida" ||
 							Boolean(
 								databaseStat?.isFile() &&
-								!databaseStat.isSymbolicLink() &&
-								databaseStat.size > 0,
+									!databaseStat.isSymbolicLink() &&
+									databaseStat.size > 0,
 							);
 				const artifactVerified =
 					databaseVerified &&
@@ -4354,9 +4695,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					!result.timedOut &&
 					!result.cancelled &&
 					!result.outputDrainTimedOut &&
-					!(engine === "ghidra" &&
+					!(
+						engine === "ghidra" &&
 						(result.truncated ||
-						 /REPORT SCRIPT ERROR|REPORT: (?:Post-)?Analysis (?:timed out|failed)|REPORT: Save failed/i.test(`${result.stdout}\n${result.stderr}`))) &&
+							/REPORT SCRIPT ERROR|REPORT: (?:Post-)?Analysis (?:timed out|failed)|REPORT: Save failed/i.test(
+								`${result.stdout}\n${result.stderr}`,
+							))
+					) &&
 					artifactVerified;
 				const selectedNativeEvidence =
 					succeeded &&

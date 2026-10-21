@@ -2,13 +2,13 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
 import { resolveClineDataDir } from "@cline/shared/storage";
-import { digestCanonicalValue } from "./semantic-engine/upstream/src/domain/canonicalDigest";
 import {
-	AnalysisModeSchema,
 	type AnalysisMode,
+	AnalysisModeSchema,
 	type AnalysisReceipt,
 	digest,
 } from "./contracts";
+import { digestCanonicalValue } from "./semantic-engine/upstream/src/domain/canonicalDigest";
 
 /** Private, cross-process durable receipts; never writes into the inspected target. */
 export class FirstPartyAnalysisStore {

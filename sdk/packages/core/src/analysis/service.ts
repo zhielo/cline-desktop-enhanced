@@ -1,20 +1,20 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { mkdtemp, readFile, rm, lstat } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
+import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 import {
 	ANALYSIS_PROFILE,
 	AnalysisInputSchema,
+	type AnalysisReceipt,
+	digest,
 	LIMITS,
 	ResultSchema,
-	digest,
-	type AnalysisReceipt,
 } from "./contracts";
-import { FirstPartyAnalysisStore } from "./store";
 import { analysisHostIdentity, ownershipBinding } from "./recovery";
-import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
+import { FirstPartyAnalysisStore } from "./store";
 
 type WorkerHost = { executable: string; args: string[] };
 export function configureFirstPartyAnalysisHost(host: WorkerHost) {

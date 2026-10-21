@@ -1,23 +1,24 @@
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { analyzeSources } from "./parser";
-import { analyzeTarget } from "./worker";
-import { FirstPartyAnalysisStore } from "./store";
-import { queryFirstPartyEvidence } from "./index";
-import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
 import {
 	ANALYSIS_PROFILE,
+	type AnalysisReceipt,
 	byteDigest,
 	digest,
-	type AnalysisReceipt,
 } from "./contracts";
+import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
+import { queryFirstPartyEvidence } from "./index";
+import { analyzeSources } from "./parser";
 import {
 	analyzeSemanticSources,
 	semanticSummary,
 } from "./semantic-engine/engine";
+import { FirstPartyAnalysisStore } from "./store";
+import { analyzeTarget } from "./worker";
+
 let root: string;
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "cline-semantic-test-"));
