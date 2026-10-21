@@ -8,6 +8,7 @@ import {
 	useAnalysisProjectSelection,
 	useAnalysisProjectTarget,
 } from "./analysis-project-selection";
+import { ApplicationEvidenceWorkflows } from "./application-evidence-workflows";
 import { InvestigationWorkflow } from "./investigation-workflow";
 
 type Summary = {
@@ -33,6 +34,9 @@ type View =
 	| "cross-domain"
 	| "dossiers"
 	| "disagreements"
+	| "application-summary"
+	| "application-nodes"
+	| "application-edges"
 	| "semantic-summary"
 	| "semantic-nodes"
 	| "semantic-relations"
@@ -57,6 +61,7 @@ export function FirstPartyAnalysisWorkspace({
 		[target, setTarget] = useAnalysisProjectTarget("."),
 		[compareTarget, setCompareTarget] = useState("");
 	const [semanticGraph, setSemanticGraph] = useState(false);
+	const [applicationGraph, setApplicationGraph] = useState(false);
 	const [inspectorTarget, setInspectorTarget] = useState(""),
 		[inspectorPid, setInspectorPid] = useState(""),
 		[inspectorEndpoint, setInspectorEndpoint] = useState("");
@@ -93,6 +98,7 @@ export function FirstPartyAnalysisWorkspace({
 		let disposed = false;
 		setStatus(null);
 		setSemanticGraph(false);
+		setApplicationGraph(false);
 		inspectorRevision.current++;
 		setCaptureConsole(false);
 		setRunning(false);
@@ -210,6 +216,7 @@ export function FirstPartyAnalysisWorkspace({
 						target,
 						...(compareTarget ? { compareTarget } : {}),
 						...(semanticGraph ? { semanticGraph: true } : {}),
+						...(applicationGraph ? { applicationGraph: true } : {}),
 					},
 				},
 				{ timeoutMs: semanticGraph ? 330000 : 75000 },
@@ -377,10 +384,22 @@ export function FirstPartyAnalysisWorkspace({
 					<input
 						type="checkbox"
 						checked={semanticGraph}
-						disabled={running}
+						disabled={running || applicationGraph}
 						onChange={(e) => setSemanticGraph(e.target.checked)}
 					/>
 					Include file-local semantic graph
+				</label>
+				<label className="flex items-center gap-2 text-xs">
+					<input
+						type="checkbox"
+						checked={applicationGraph}
+						disabled={running}
+						onChange={(e) => {
+							setApplicationGraph(e.target.checked);
+							if (e.target.checked) setSemanticGraph(true);
+						}}
+					/>
+					Include application graph and Electron boundaries
 				</label>
 				<button
 					type="button"
@@ -399,10 +418,11 @@ export function FirstPartyAnalysisWorkspace({
 			</div>
 			{semanticGraph && (
 				<p className="text-xs text-muted-foreground">
-					Directly integrated source analysis; no REA installation. Static
-					file-local relationships only, not full application or native-analysis
-					parity. Clear the comparison target before requesting a semantic
-					graph.
+					Directly integrated source analysis; no REA installation. The optional
+					application graph links admitted modules, Electron boundaries and
+					bundle facts. Unselected files, runtime behavior and native parity
+					remain unverified. Clear the comparison target before requesting a
+					semantic graph.
 				</p>
 			)}
 			<details className="space-y-2 text-xs">
@@ -573,6 +593,9 @@ export function FirstPartyAnalysisWorkspace({
 						"cross-domain",
 						"dossiers",
 						"disagreements",
+						"application-summary",
+						"application-nodes",
+						"application-edges",
 						"semantic-summary",
 						"semantic-nodes",
 						"semantic-relations",
@@ -595,6 +618,15 @@ export function FirstPartyAnalysisWorkspace({
 					</button>
 				))}
 			</nav>
+			{sessionId && selected && (
+				<ApplicationEvidenceWorkflows
+					key={`${environmentId}:${sessionId}:${selected}`}
+					sessionId={sessionId}
+					environmentId={environmentId}
+					receiptId={selected}
+					receipts={status?.receipts ?? []}
+				/>
+			)}
 			{view === "timeline" ? (
 				<ol className="space-y-2 text-xs">
 					{status?.receipts.map((r) => (

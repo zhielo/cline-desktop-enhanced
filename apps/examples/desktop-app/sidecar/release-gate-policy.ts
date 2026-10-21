@@ -81,6 +81,7 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
+		"installed-application-graph-electron-saved-trace-no-execution-passed",
 		"installed-sidecar-isolated-hub-bootstrapped",
 		"installed-webview-rendered",
 		"installed-fresh-advanced-command-catalog-visible-without-execution",
@@ -147,11 +148,11 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/semantic-source-validation.yml":
-			"65ddb0731233739a5e973cedcdef11e023ec4118a62a88944fdfe6f66c7327cf",
+			"f9a795b9e0280314aa6d794aa508f9286470bc9e12647ce404fd20201f4dcd96",
 		".github/workflows/build-custom-windows-installer.yml":
 			"0e8814bcf2a050b9afc4af7583e70fd0424788032a0b44e93e9fd09aba340bc1",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"fa491f5b1052ef57cad6c0f034db83cd772d5830bd28bf2da1c08472f4fec4bb",
+			"0af0338d663b456932ffbeb1f9cabccba59a7aaf12a19a57f840a3d0afc67b82",
 		"scripts/validate-advanced-build.mjs":
 			"0e1d9c3b694d3da51b607a501fead2c14073b1aa2f8020bb54887d3ed122ec28",
 	},

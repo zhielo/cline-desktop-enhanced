@@ -39,7 +39,11 @@ jobs:
         shell: bash
         run: |
           node -e 'require("node:fs").symlinkSync(require("node:path").resolve("sdk/packages/core/node_modules"), ".semantic-reference/node_modules", process.platform === "win32" ? "junction" : "dir")'
-      - name: Analysis regression and exact file-local parity
+      - name: Verify complete pinned public capability inventory
+        env:
+          CLINE_SEMANTIC_REFERENCE_ROOT: ${{ github.workspace }}/.semantic-reference
+        run: bun scripts/rea-capability-inventory.mjs --check
+      - name: Analysis regression and exact source projection parity
         working-directory: sdk/packages/core
         env:
           CLINE_SEMANTIC_REFERENCE_ROOT: ${{ github.workspace }}/.semantic-reference

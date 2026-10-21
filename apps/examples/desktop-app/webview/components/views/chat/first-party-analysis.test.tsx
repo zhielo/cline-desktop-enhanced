@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/desktop-client", () => ({ desktopClient: { invoke } }));
 
+import { ApplicationEvidenceWorkflows } from "./application-evidence-workflows";
 import { ActiveJavaScriptScenario } from "./active-javascript-scenario";
 import { AnalysisModeControl } from "./analysis-mode-control";
 import { FirstPartyAnalysisWorkspace } from "./first-party-analysis-workspace";
@@ -613,4 +614,171 @@ it("only requests integrated semantics after explicit selection and preserves th
 		{ timeoutMs: 330000 },
 	);
 	expect(el.textContent).toContain("semantic-nodes");
+});
+
+it("requires explicit application opt-in, binds semantic analysis and resets it on session change", async () => {
+	invoke.mockImplementation(async (command: string) =>
+		command === "first_party_analysis_run"
+			? { id: "app-receipt", status: "partial" }
+			: { mode: "static", receipts: [], readiness: {} },
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="owner" environmentId="local" />,
+		),
+	);
+	const boxes = [
+		...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+	];
+	const application = boxes.find((b) =>
+		b.parentElement?.textContent?.includes("Include application graph"),
+	)!;
+	const semantic = boxes.find((b) =>
+		b.parentElement?.textContent?.includes("Include file-local"),
+	)!;
+	expect(application.checked).toBe(false);
+	expect(semantic.checked).toBe(false);
+	await act(async () => application.click());
+	expect(application.checked).toBe(true);
+	expect(semantic.checked).toBe(true);
+	expect(semantic.disabled).toBe(true);
+	expect(
+		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
+	).toBe(false);
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "Inspect static sources")!
+			.click(),
+	);
+	expect(invoke).toHaveBeenCalledWith(
+		"first_party_analysis_run",
+		expect.objectContaining({
+			sessionId: "owner",
+			input: expect.objectContaining({
+				semanticGraph: true,
+				applicationGraph: true,
+			}),
+		}),
+		{ timeoutMs: 330000 },
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="other" environmentId="local" />,
+		),
+	);
+	expect(
+		[...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+			(b) =>
+				b.parentElement?.textContent?.includes("Include application graph"),
+		)!.checked,
+	).toBe(false);
+});
+
+it("queries saved application workflows only on explicit action and pages the committed query", async () => {
+	invoke.mockResolvedValue({ items: [{ owned: true }], nextOffset: 20 });
+	await act(async () =>
+		root.render(
+			<ApplicationEvidenceWorkflows
+				receiptId="left"
+				sessionId="owner"
+				environmentId="local"
+				receipts={[
+					{ id: "left", target: "same" },
+					{ id: "right", target: "other" },
+				]}
+			/>,
+		),
+	);
+	expect(invoke).not.toHaveBeenCalled();
+	const setText = async (label: string, value: string) =>
+		act(async () => {
+			const input = el.querySelector<HTMLInputElement>(
+				`input[aria-label="${label}"]`,
+			)!;
+			Object.getOwnPropertyDescriptor(
+				HTMLInputElement.prototype,
+				"value",
+			)!.set!.call(input, value);
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		});
+	const select = async (label: string, value: string) =>
+		act(async () => {
+			const input = el.querySelector<HTMLSelectElement>(
+				`select[aria-label="${label}"]`,
+			)!;
+			input.value = value;
+			input.dispatchEvent(new Event("change", { bubbles: true }));
+		});
+	await setText("Application feature seed", "owned:add");
+	expect(invoke).not.toHaveBeenCalled();
+	const run = () =>
+		[...el.querySelectorAll("button")].find(
+			(b) => b.textContent === "Run saved application query",
+		)!;
+	await act(async () => run().click());
+	expect(invoke).toHaveBeenLastCalledWith("first_party_analysis_evidence", {
+		sessionId: "owner",
+		environmentId: "local",
+		query: {
+			receiptId: "left",
+			view: "application-trace",
+			offset: 0,
+			limit: 20,
+			applicationTrace: {
+				seed: {
+					kind: "channel",
+					value: "owned:add",
+					match: "exact",
+					case_sensitive: false,
+				},
+				direction: "both",
+			},
+		},
+	});
+	await setText("Application feature seed", "not-submitted");
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "Next saved application page")!
+			.click(),
+	);
+	expect(invoke.mock.lastCall?.[1].query.applicationTrace.seed.value).toBe(
+		"owned:add",
+	);
+	expect(invoke.mock.lastCall?.[1].query.offset).toBe(20);
+	await select("Application workflow", "application-comparison");
+	expect(
+		el.querySelector(
+			'select[aria-label="Application comparison receipt"] option[value="left"]',
+		),
+	).toBeNull();
+	await select("Application comparison receipt", "right");
+	await act(async () => run().click());
+	expect(invoke.mock.lastCall?.[1].query).toEqual({
+		receiptId: "left",
+		view: "application-comparison",
+		offset: 0,
+		limit: 20,
+		compareReceiptId: "right",
+	});
+	await select("Application workflow", "application-exports");
+	await setText("Left export module", "api.cjs");
+	await setText("Right export module", "api.cjs");
+	await setText("Left export name", "add");
+	await setText("Right export name", "add");
+	await act(async () => run().click());
+	expect(invoke.mock.lastCall?.[1].query.exportSelectors).toEqual({
+		left: { modulePath: "api.cjs", exportName: "add" },
+		right: { modulePath: "api.cjs", exportName: "add" },
+	});
+	invoke.mockRejectedValueOnce(new Error("Receipt not found"));
+	await act(async () => run().click());
+	expect(el.querySelector('[role="alert"]')?.textContent).toBe(
+		"Receipt not found",
+	);
+	expect(
+		el.querySelector('section[aria-label="Saved application workflow result"]'),
+	).toBeNull();
+	expect(
+		invoke.mock.calls.every((c) => c[0] === "first_party_analysis_evidence"),
+	).toBe(true);
 });
