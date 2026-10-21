@@ -77,6 +77,7 @@ export function firstPartyReadiness() {
 		staticFixture: fixtureReceipt ?? { status: "not-tested" },
 		targetSupported:
 			"Determined per request; bounded JS/TS/package/source-map/ASAR and managed PE metadata/IL bytes",
+		semanticGraph: "Optional integrated file-local semantic graph and saved provenance/influence/caller/ownership queries; no REA runtime. Installed parity not established by inventory. Native/application workflows remain separate.",
 		localSemantics:
 			"Closed-inventory relative ES bindings/reexports, const scalar object reads and simple pure-return substitutions; no complete program semantics",
 		sourceMaps:

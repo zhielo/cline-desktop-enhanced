@@ -2,6 +2,15 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Integrated semantic source port (partial REA migration)
+
+- `javascript_analysis` optionally accepts `javascript_options.semanticGraph: true`; the desktop Analysis Workspace offers an explicit file-local semantic graph checkbox. No REA package, CLI, MCP server or separate runtime is installed or launched. The existing owned analysis worker runs directly imported source algorithms.
+- Source revision `d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f`, MIT notice, exact file hashes, compatibility-only adaptations and applicable upstream fixtures are recorded under `sdk/packages/core/src/analysis/semantic-engine/upstream/PROVENANCE.json`. `scripts/verify-semantic-port.mjs` prevents undocumented source drift.
+- Large semantic output transfers privately outside stdout, then persists atomically with its receipt. New canonical hashes do not replace legacy receipt hashes. Graphs are session/receipt-bound, capped at 128 MiB each and 512 MiB total, with no automatic evidence deletion. Existing source admission limits remain, so full artifact/source-selection parity is not claimed.
+- Saved semantic-summary/nodes/relations/unknowns/fingerprints/contexts and bounded semantic-trace sections are available through `analysis_evidence`, including in Off. Results retain static-inference limitations. Queries currently validate/load the bounded whole graph before returning a bounded page; this is not a streaming-query or fixed-RSS guarantee.
+- Semantic analysis has a five-minute worker deadline; process separation is not a kernel memory sandbox. Semantic version comparisons are rejected rather than silently using a reduced implementation. Existing source inspection remains the default.
+- A blocking Linux/Windows source-parity workflow compares owned file-local fixtures with a separately checked-out pinned source reference, never a production dependency. An owned worker smoke verifies persistence and tracing. This does not establish full application graph, source recovery, native, managed, runtime/reconstruction, external-engine or installed-Windows parity. See `docs/INTEGRATED_SEMANTIC_SOURCE.md`.
+
 ## Six-defect desktop audit repair
 
 - Automatic task validation requires the current command/write/network capability profile and explicit auto-approval, a successful exact matching plan-tool completion, a local session, and a canonical workspace working directory. Plan/read-only/restricted profiles are not widened by auto-approval; reviewed tool calls remain the fallback. These are capability gates, not an OS sandbox.

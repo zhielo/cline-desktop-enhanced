@@ -31,7 +31,13 @@ type View =
 	| "verification"
 	| "cross-domain"
 	| "dossiers"
-	| "disagreements";
+	| "disagreements"
+	| "semantic-summary"
+	| "semantic-nodes"
+	| "semantic-relations"
+	| "semantic-unknowns"
+	| "semantic-fingerprints"
+	| "semantic-contexts";
 type PageResult = {
 	items?: unknown[];
 	nextOffset?: number | null;
@@ -49,6 +55,7 @@ export function FirstPartyAnalysisWorkspace({
 	const [status, setStatus] = useState<Status | null>(null),
 		[target, setTarget] = useAnalysisProjectTarget("."),
 		[compareTarget, setCompareTarget] = useState("");
+	const [semanticGraph, setSemanticGraph] = useState(false);
 	const [inspectorTarget, setInspectorTarget] = useState(""),
 		[inspectorPid, setInspectorPid] = useState(""),
 		[inspectorEndpoint, setInspectorEndpoint] = useState("");
@@ -84,6 +91,7 @@ export function FirstPartyAnalysisWorkspace({
 	useEffect(() => {
 		let disposed = false;
 		setStatus(null);
+		setSemanticGraph(false);
 		inspectorRevision.current++;
 		setCaptureConsole(false);
 		setRunning(false);
@@ -197,9 +205,13 @@ export function FirstPartyAnalysisWorkspace({
 				{
 					sessionId,
 					environmentId,
-					input: { target, ...(compareTarget ? { compareTarget } : {}) },
+					input: {
+						target,
+						...(compareTarget ? { compareTarget } : {}),
+						...(semanticGraph ? { semanticGraph: true } : {}),
+					},
 				},
-				{ timeoutMs: 75000 },
+				{ timeoutMs: semanticGraph ? 330000 : 75000 },
 			);
 			setSelected(receipt.id);
 			setOffset(0);
@@ -360,17 +372,38 @@ export function FirstPartyAnalysisWorkspace({
 					onChange={(e) => setCompareTarget(e.target.value)}
 					placeholder="Optional previous version"
 				/>
+				<label className="flex items-center gap-2 text-xs">
+					<input
+						type="checkbox"
+						checked={semanticGraph}
+						disabled={running}
+						onChange={(e) => setSemanticGraph(e.target.checked)}
+					/>
+					Include file-local semantic graph
+				</label>
 				<button
 					type="button"
 					className="rounded bg-primary px-3 py-2 text-xs text-primary-foreground disabled:opacity-50"
 					disabled={
-						running || !status || status.mode === "off" || !target.trim()
+						running ||
+						!status ||
+						status.mode === "off" ||
+						!target.trim() ||
+						(semanticGraph && !!compareTarget.trim())
 					}
 					onClick={() => void run()}
 				>
 					Inspect static sources
 				</button>
 			</div>
+			{semanticGraph && (
+				<p className="text-xs text-muted-foreground">
+					Directly integrated source analysis; no REA installation. Static
+					file-local relationships only, not full application or native-analysis
+					parity. Clear the comparison target before requesting a semantic
+					graph.
+				</p>
+			)}
 			<details className="space-y-2 text-xs">
 				<summary>
 					Separately approved passive Node Inspector observation
@@ -539,6 +572,12 @@ export function FirstPartyAnalysisWorkspace({
 						"cross-domain",
 						"dossiers",
 						"disagreements",
+						"semantic-summary",
+						"semantic-nodes",
+						"semantic-relations",
+						"semantic-unknowns",
+						"semantic-fingerprints",
+						"semantic-contexts",
 					] as View[]
 				).map((v) => (
 					<button
