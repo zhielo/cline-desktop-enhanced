@@ -832,3 +832,138 @@ it("queries saved application workflows only on explicit action and pages the co
 		invoke.mock.calls.every((c) => c[0] === "first_party_analysis_evidence"),
 	).toBe(true);
 });
+
+it("requires explicit fuse-only selection, prevents mixed options and resets on session change", async () => {
+	invoke.mockImplementation(async (command: string) =>
+		command === "first_party_analysis_run"
+			? { id: "fuse-receipt", status: "partial" }
+			: { mode: "static", receipts: [], readiness: {} },
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="owner" environmentId="local" />,
+		),
+	);
+	const box = () =>
+		[...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+			(b) =>
+				b.parentElement?.textContent?.includes(
+					"Inspect executable Electron fuses only",
+				),
+		)!;
+	expect(box().checked).toBe(false);
+	expect(
+		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
+	).toBe(false);
+	await act(async () => box().click());
+	expect(
+		el.querySelector<HTMLInputElement>(
+			'[aria-label="JavaScript comparison target"]',
+		)?.disabled,
+	).toBe(true);
+	expect(
+		[...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+			(b) => b.parentElement?.textContent?.includes("Include file-local"),
+		)?.disabled,
+	).toBe(true);
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "Inspect executable fuses")!
+			.click(),
+	);
+	expect(invoke).toHaveBeenCalledWith(
+		"first_party_analysis_run",
+		{
+			sessionId: "owner",
+			environmentId: "local",
+			input: { target: ".", electronFuses: true },
+		},
+		{ timeoutMs: 75000 },
+	);
+	expect(el.textContent).toContain("No automatic .app selection");
+	expect(el.textContent).toContain("electron-fuses");
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="other" environmentId="local" />,
+		),
+	);
+	expect(box().checked).toBe(false);
+});
+
+it("reads and switches individual saved fuse wires while Off without starting inspection", async () => {
+	invoke.mockImplementation(async (command: string) =>
+		command === "first_party_analysis_status"
+			? {
+					mode: "off",
+					readiness: {},
+					receipts: [
+						{
+							id: "owned-fuses",
+							target: "owned.exe",
+							status: "partial",
+							createdAt: "owned-time",
+						},
+					],
+				}
+			: {
+					available: true,
+					artifact: { sha256: "owned-hash" },
+					items: [],
+					limitations: ["Static bytes only"],
+					verifiedBehavior: false,
+				},
+	);
+	await act(async () =>
+		root.render(
+			<FirstPartyAnalysisWorkspace sessionId="owner" environmentId="local" />,
+		),
+	);
+	const receipt = el.querySelector<HTMLSelectElement>(
+		'[aria-label="Saved analysis receipt"]',
+	)!;
+	await act(async () => {
+		receipt.value = "owned-fuses";
+		receipt.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	await act(async () =>
+		[...el.querySelectorAll("button")]
+			.find((b) => b.textContent === "electron-fuses")!
+			.click(),
+	);
+	expect(invoke).toHaveBeenCalledWith("first_party_analysis_evidence", {
+		sessionId: "owner",
+		environmentId: "local",
+		query: {
+			receiptId: "owned-fuses",
+			view: "electron-fuses",
+			filter: "",
+			offset: 0,
+			limit: 20,
+			fuseSection: "slices",
+		},
+	});
+	const section = el.querySelector<HTMLSelectElement>(
+		'[aria-label="Fuse evidence section"]',
+	)!;
+	await act(async () => {
+		section.value = "sentinels";
+		section.dispatchEvent(new Event("change", { bubbles: true }));
+	});
+	expect(invoke).toHaveBeenCalledWith("first_party_analysis_evidence", {
+		sessionId: "owner",
+		environmentId: "local",
+		query: {
+			receiptId: "owned-fuses",
+			view: "electron-fuses",
+			filter: "",
+			offset: 0,
+			limit: 20,
+			fuseSection: "sentinels",
+		},
+	});
+	expect(el.textContent).toContain("Static bytes only");
+	expect(el.textContent).toContain("owned-hash");
+	expect(
+		invoke.mock.calls.some((c) => c[0] === "first_party_analysis_run"),
+	).toBe(false);
+});

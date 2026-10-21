@@ -1,6 +1,19 @@
 # Integrated source-port validation record
 
-## Current local application-graph expansion
+## Current Electron fuse source slice — local checks
+
+The pinned original streaming fuse reader and report derivation are integrated into the existing session-owned worker. No REA runtime is installed. The adapter selects one confined regular PE/ELF/Mach-O executable; automatic macOS app-bundle resolution and the complete provider lifecycle remain outside this port.
+
+- Provenance: **329** original/adapted source and fixture files verified; the 38 additional fuse-reader dependency/fixture files are exact pinned bytes.
+- Focused parser, receipt, budget, path-redirection, architecture and original-source parity checks pass. The differential corpus covers PE machines, ELF byte orders, thin/universal Mach-O, unknown/truncated wires and multiple/absent sentinels.
+- Complete analysis suite before the final additional architecture assertion: **509 passed; one existing platform skip**, 56 files. The final focused corpus passes the additional architecture assertion; do not count it as another complete-suite run.
+- Complete chat UI suite before the final saved-wire browsing regression: **307 passed**, 21 files. The final first-party UI suite passes **21 tests**, including explicit fuse-only selection, session reset and read-only saved-wire browsing Off.
+- Complete SDK build and workspace types pass. Unchanged lint passes after restoring the sandbox's missing `bunx` launcher; no lint rule was changed. **332** custom-fork preservation contracts and the complete pinned migration inventory pass. Release collector/verifier regressions: **48 passed**.
+- Owned real-worker smoke passes, including fuse receipt persistence and saved implication reads Off. A separately compiled Linux sidecar probe and complete sidecar regression are recorded separately when completed; local checks are not installed-Windows evidence.
+
+The finite policy now requires **67 installed stages**. The new stage explicitly invokes fuse-only inspection in the installed UI, verifies exact original bytes/hash/size, reads raw wires and derived implications Off, and leaves final owned-process cleanup mandatory. A fresh exact-head Windows build and unmodified collector verification remain required before this slice is release-validated. Earlier skill-only installers do not include it. Full REA parity/superiority remains unproven.
+
+## Historical local application-graph expansion
 
 Linux development results against pinned REA revision `d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f`:
 

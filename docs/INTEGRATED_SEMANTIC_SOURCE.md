@@ -74,7 +74,7 @@ Both graphs and receipt finalize in one transaction after parent-side schema/has
 
 ## Complete contract inventory, not a parity claim
 
-`docs/rea-migration/capabilities.json` records all 212 public contracts from the pinned upstream registry. The companion dependency index covers static literal imports, including types, not provider script/runtime dependencies. Each contract retains its effect audit, description, source location, lexical upstream test mentions and explicit source-migration status. Six contracts have partial source-port routes; the others are deliberately not certified by this audit, even where Cline has an independent overlapping tool.
+`docs/rea-migration/capabilities.json` records all 212 public contracts from the pinned upstream registry. The companion dependency index covers static literal imports, including types, not provider script/runtime dependencies. Each contract retains its effect audit, description, source location, lexical upstream test mentions and explicit source-migration status. Seven contracts have partial source-port routes; the others are deliberately not certified by this audit, even where Cline has an independent overlapping tool.
 
 Regenerate/check using Bun with `CLINE_SEMANTIC_REFERENCE_ROOT` set to the exact pinned development checkout:
 
@@ -115,3 +115,11 @@ The parity test requires `CLINE_SEMANTIC_REFERENCE_ROOT` pointing to a separate 
 The owned corpus covers local calls/closures, properties, promises, events, timers, child-process syntax, configuration/requests, Electron syntax, shadowing, dynamic keys, malformed input and nonexecution. Exact graph digests are compared; original source hashes are also checked. The additional application parity corpus compares original application and semantic graph digests for the same admitted inventory plus saved feature/version/export algorithm outputs. Applicable upstream graph/source-map/module/version/uncertainty tests run unchanged. This establishes equality only for those fixtures and projection inputs, not full upstream acquisition, all JavaScript programs or all REA features.
 
 Installed Windows acceptance, licensed-engine compatibility, whole-application parity and superiority remain separate release obligations. This patch must remain draft until its required CI and release obligations are reviewed.
+
+## Direct Electron fuse inspection
+
+Select one explicit regular executable in the session workspace and use `javascript_analysis` with `javascript_options: {electronFuses: true}`. Do not combine graphs or a comparison target. The existing analysis mode/permission/session gates apply. Desktop App analysis exposes **Inspect executable Electron fuses only**; it never starts the selected executable or alters fuse bytes. No REA installation is required.
+
+Read the returned receipt through `analysis_evidence` with `view: "electron-fuses"`, optionally `fuseSection: "slices"`, `"sentinels"` or `"runtime_implications"`, plus normal offset/limit/filter. Saved queries remain available Off. Oversized slice displays are omitted explicitly; the individual-sentinels view exposes bounded raw wires without truncating retained evidence. Runtime implications are derivations, not observed target execution or Inspector readiness.
+
+The pinned source reader supports PE, ELF, thin/universal Mach-O, architecture facts and all fuse sentinel occurrences. It preserves missing/ambiguous/truncated/unknown states and ELF ASAR-enforcement uncertainty. Limits: 1 GiB input, 256 KiB scan windows, 32 sentinels per slice, existing 60-second owned-worker deadline and 4 MiB response cap. File selection is workspace-confined; automatic `.app` bundle resolution and fuse writing are not ported. The migration inventory therefore records this as a partial-source-port, not full provider parity.

@@ -142,9 +142,26 @@ export async function runFirstPartyAnalysis(
 					);
 					if (
 						!!input.semanticGraph !== !!parsedResult.semanticGraph ||
-						!!input.applicationGraph !== !!parsedResult.applicationGraph
+						!!input.applicationGraph !== !!parsedResult.applicationGraph ||
+						!!input.electronFuses !== !!parsedResult.electronFuses
 					)
 						throw new Error("Requested semantic evidence was not returned");
+					if (parsedResult.electronFuses) {
+						const a = parsedResult.artifacts[0],
+							f = parsedResult.electronFuses.artifact;
+						if (
+							parsedResult.status !== "partial" ||
+							parsedResult.artifacts.length !== 1 ||
+							!a ||
+							a.role !== "electron-fuse-container" ||
+							a.sha256 !== f.sha256 ||
+							a.bytes !== f.bytes ||
+							parsedResult.counters.bytes !== f.bytes ||
+							parsedResult.facts.length ||
+							parsedResult.edges.length
+						)
+							throw new Error("Fuse receipt projection mismatch");
+					}
 					receipt.result = parsedResult;
 					receipt.resultHash = digest(receipt.result);
 					receipt.status = receipt.result.status;

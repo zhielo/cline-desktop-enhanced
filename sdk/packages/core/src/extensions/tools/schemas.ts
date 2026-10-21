@@ -334,6 +334,7 @@ export const ReverseEngineeringInputSchema = z
 				compareTarget: z.string().min(1).max(4096).optional(),
 				semanticGraph: z.boolean().optional(),
 				applicationGraph: z.boolean().optional(),
+				electronFuses: z.boolean().optional(),
 			})
 			.strict()
 			.optional(),

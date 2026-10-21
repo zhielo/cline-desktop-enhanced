@@ -39,6 +39,36 @@ export function queryFirstPartyEvidence(
 	const q = EvidenceQuerySchema.parse(input),
 		receipt = store.get(sessionId, q.receiptId);
 	const result = receipt.result;
+	if (q.view === "electron-fuses") {
+		const report = result?.electronFuses;
+		if (!report)
+			return { id: receipt.id, available: false, status: receipt.status };
+		return {
+			id: receipt.id,
+			available: true,
+			resultHash: receipt.resultHash,
+			artifact: report.artifact,
+			section: q.fuseSection ?? "slices",
+			limitations: report.limitations.slice(0, 20).map((s) => s.slice(0, 1000)),
+			omittedLimitations: Math.max(0, report.limitations.length - 20),
+			providerCalls: 0,
+			targetExecuted: false,
+			verifiedBehavior: false,
+			...semanticEvidencePage(
+				{
+					...report,
+					sentinels: report.slices.flatMap((slice) =>
+						slice.sentinels.map((sentinel) => ({
+							slice_index: slice.index,
+							architecture: slice.architecture,
+							...sentinel,
+						})),
+					),
+				},
+				q,
+			),
+		};
+	}
 	if (q.view.startsWith("application-"))
 		return queryApplicationEvidence(sessionId, q, store);
 	if (q.view.startsWith("semantic-")) {

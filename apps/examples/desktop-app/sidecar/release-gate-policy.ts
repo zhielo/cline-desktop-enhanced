@@ -83,6 +83,7 @@ export const RELEASE_GATE_POLICY = {
 	],
 	installedStages: [
 		"installed-application-graph-electron-saved-trace-no-execution-passed",
+		"installed-electron-fuses-explicit-read-only-hash-bound-saved-off-passed",
 		"installed-sidecar-isolated-hub-bootstrapped",
 		"installed-webview-rendered",
 		"installed-fresh-advanced-command-catalog-visible-without-execution",
@@ -155,7 +156,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"f5d7824e6bf07610504d79cc218c5491054e84be7843952a397350bb746f1139",
+			"cec26d92f07d07aa0417fe4d50133c6b290d83d08b6aab5d29f1c8b355b6d0c9",
 		"scripts/validate-advanced-build.mjs":
 			"17d4cf434e7ca82f075ffb3227bde1e770d93bb6b1845c1a369bf446ff9adc84",
 	},

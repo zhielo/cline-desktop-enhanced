@@ -74,7 +74,7 @@ export function firstPartyReadiness() {
 		parser: "TypeScript 5.9.3",
 		staticFixture: fixtureReceipt ?? { status: "not-tested" },
 		targetSupported:
-			"Determined per request; bounded JS/TS/package/source-map/ASAR and managed PE metadata/IL bytes",
+			"Determined per request; bounded JS/TS/package/source-map/ASAR and managed PE metadata/IL bytes; explicit streaming Electron fuse inspection for one regular PE/ELF/Mach-O executable",
 		semanticGraph:
 			"Optional integrated file-local semantic graph and saved provenance/influence/caller/ownership queries; no REA runtime. Installed parity not established by inventory. Native/application workflows remain separate.",
 		localSemantics:

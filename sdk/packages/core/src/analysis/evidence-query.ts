@@ -11,6 +11,7 @@ export const EvidenceQuerySchema = z
 				"graph",
 				"comparison",
 				"verification",
+				"electron-fuses",
 				"application-summary",
 				"application-nodes",
 				"application-edges",
@@ -30,6 +31,9 @@ export const EvidenceQuerySchema = z
 		offset: z.number().int().min(0).max(1_000_000).default(0),
 		limit: z.number().int().min(1).max(50).default(20),
 		filter: z.string().max(200).default(""),
+		fuseSection: z
+			.enum(["slices", "sentinels", "runtime_implications"])
+			.optional(),
 		trace: javaScriptSemanticQueryInputSchema.optional(),
 		applicationTrace: z
 			.object({
@@ -74,6 +78,11 @@ export const EvidenceQuerySchema = z
 	})
 	.strict()
 	.superRefine((value, ctx) => {
+		if (value.fuseSection && value.view !== "electron-fuses")
+			ctx.addIssue({
+				code: "custom",
+				message: "fuseSection is only for electron-fuses",
+			});
 		if (
 			(value.view === "application-trace") !==
 			(value.applicationTrace !== undefined)
@@ -153,16 +162,18 @@ export function semanticEvidencePage(
 		"semantic-contexts": "evidence_contexts",
 	};
 	const key =
-		input.view === "semantic-trace"
-			? input.traceSection
-			: input.view === "application-trace"
-				? (input.applicationSection ?? "nodes")
-				: input.view === "application-comparison" ||
-						input.view === "application-source-bundle"
-					? (input.applicationSection ?? "items")
-					: input.view === "application-exports"
-						? (input.applicationSection ?? "changes")
-						: keys[input.view];
+		input.view === "electron-fuses"
+			? (input.fuseSection ?? "slices")
+			: input.view === "semantic-trace"
+				? input.traceSection
+				: input.view === "application-trace"
+					? (input.applicationSection ?? "nodes")
+					: input.view === "application-comparison" ||
+							input.view === "application-source-bundle"
+						? (input.applicationSection ?? "items")
+						: input.view === "application-exports"
+							? (input.applicationSection ?? "changes")
+							: keys[input.view];
 	if (!key || !Array.isArray(graph[key]))
 		throw new Error("Semantic view unavailable");
 	const all = graph[key] as unknown[];

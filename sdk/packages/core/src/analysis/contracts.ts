@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { electronFuseReportSchema } from "./semantic-engine/upstream/src/domain/electron/electronFuses";
 
 export const ANALYSIS_PROFILE = "cline-js-static/7";
 export const AnalysisModeSchema = z.enum([
@@ -15,9 +16,20 @@ export const AnalysisInputSchema = z
 		compareTarget: z.string().min(1).max(4096).optional(),
 		semanticGraph: z.boolean().optional(),
 		applicationGraph: z.boolean().optional(),
+		electronFuses: z.boolean().optional(),
 	})
 	.strict()
 	.superRefine((v, ctx) => {
+		if (
+			v.electronFuses &&
+			(v.semanticGraph || v.applicationGraph || v.compareTarget !== undefined)
+		)
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"Electron fuse inspection requires one executable and cannot combine graphs or comparison",
+				path: ["electronFuses"],
+			});
 		if (v.applicationGraph && !v.semanticGraph)
 			ctx.addIssue({
 				code: "custom",
@@ -168,6 +180,7 @@ export const ResultSchema = z
 			})
 			.strict()
 			.optional(),
+		electronFuses: electronFuseReportSchema.optional(),
 		applicationGraph: z
 			.object({
 				profile: z.literal("cline-application/1"),

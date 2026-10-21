@@ -2,6 +2,14 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Direct Electron fuse source port
+
+- `javascript_analysis` accepts explicit `javascript_options.electronFuses: true` for one confined regular PE/ELF/Mach-O executable, including universal Mach-O slices. It uses the pinned original streaming reader, format/architecture decoders, wire-state names, implication rules and descriptor cleanup—not a REA install, backend, MCP server or executable plugin. Existing source analysis remains the default. Fuse mode cannot combine graphs or comparison.
+- The existing session mode, local ownership, permission and fixed child-process controls still apply. The reader caps one input at 1 GiB, searches in 256 KiB windows and rejects more than 32 sentinels per slice; the existing 60-second worker deadline and 4 MiB response cap remain unchanged. This is streaming file admission, not a fixed-RSS or kernel-sandbox guarantee.
+- Parent admission requires the requested fuse result to be present (and absent otherwise), a partial status, one matching hash/byte-count artifact projection, exact read-byte counters and no synthetic JS facts/edges. Full validated wire reports persist under the receipt hash. Session-owned `electron-fuses` evidence stays readable while Off, with bounded slices, individual sentinels and runtime-implication pages. Missing, multiple, removed, unknown-version, unknown-byte and truncated states remain explicit; Linux embedded-ASAR enforcement stays unknown.
+- Desktop controls provide explicit fuse-only selection, disable incompatible options and reset on session/environment changes. The evidence view exposes artifact identity, limitations, raw wires and derived implications. No fuse is written and no target is launched. No automatic macOS .app resolution, Inspector readiness, application security or complete REA parity is claimed.
+- Exact-source PE/ELF/thin/universal Mach-O fixture parity and worker/receipt/schema/UI regressions block CI. An additional installed Windows stage requires explicit UI invocation, exact original-byte preservation and hash/size binding, raw wires plus derived evidence while Off. This stage remains pending until a fresh current-head installer run succeeds.
+
 ## Bundled investigation skills (instruction-only)
 
 - Six original workflow guides ship inside the app as the pinned portable Agent Plugin `cline-investigation`: artifact routing, Electron/application evidence, saved application comparisons, native investigation, Android investigation and candidate review. This is not a REA install, CLI, MCP server or executable plugin. The guides invoke only actual advertised Cline tools, preserve receipts/hashes/unknowns, and never grant approval, install engines or certify behavior.

@@ -2979,6 +2979,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					findings: receipt.result?.facts.length,
 					semanticGraph: receipt.result?.semanticGraph,
 					applicationGraph: receipt.result?.applicationGraph,
+					electronFuses: receipt.result?.electronFuses ? {artifact:receipt.result.electronFuses.artifact, slices:receipt.result.electronFuses.slices.length, next:"analysis_evidence electron-fuses; fuseSection slices, sentinels or runtime_implications"} : undefined,
 					limitations: receipt.result?.limitations,
 					next: "Use analysis_evidence with this receiptId for bounded findings/artifacts/graph/verification views; semantic-* views are available when javascript_options.semanticGraph is true; application-* views including saved feature traces, version/export comparisons and source-to-bundle comparisons require javascript_options.applicationGraph and semanticGraph true. No execution or behavior verification implied.",
 				});

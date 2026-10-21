@@ -4,6 +4,12 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/analysis/electron-fuses.ts",markers:["readElectronFuseImage", "resources.close()", 'status: "partial"', "electronFuseReportSchema.parse"]},
+ {path:"sdk/packages/core/src/analysis/service.ts",markers:["!!input.electronFuses !== !!parsedResult.electronFuses", "Fuse receipt projection mismatch"]},
+ {path:"sdk/packages/core/src/analysis/electron-fuses.test.ts",markers:["chunk-boundary sentinels", "fails closed when the owned child", "unknown wire versions"]},
+ {path:"sdk/packages/core/src/analysis/semantic-engine/electron-fuses-parity.test.ts",markers:["CLINE_SEMANTIC_REFERENCE_ROOT", "universalFuseImage", "original.readElectronFuseImage"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-electron-fuses-explicit-read-only-hash-bound-saved-off-passed", "Installed fuse inspection modified the original"]},
+
 	{path:"apps/examples/desktop-app/sidecar/investigation-skills.ts",markers:["verifyInvestigationSkillPack", "resolveDisabledAgentPluginNames", "loaded.mcpServers.length", "targetExecuted: false", "installedPresent"]},
 	{path:"apps/examples/desktop-app/sidecar/chat-session.ts",markers:["localInvestigationSkills", "agentPluginPaths: inspectInvestigationSkillPack(true).paths", 'binding.kind === "local"']},
 	{path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["bundledInvestigationSkills: bundled.pack", 'agentPluginPaths: inspectInvestigationSkillPack(ctx.activeEnvironmentId === "local").paths']},

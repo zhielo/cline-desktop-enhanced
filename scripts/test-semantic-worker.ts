@@ -14,6 +14,7 @@ import { runFirstPartyAnalysis } from "../sdk/packages/core/src/analysis/service
 import { FirstPartyAnalysisStore } from "../sdk/packages/core/src/analysis/store";
 
 import { ownedApplication } from "../sdk/packages/core/src/analysis/semantic-engine/application.fixture";
+import { ownedFusePe } from "../sdk/packages/core/src/analysis/electron-fuses.fixture";
 
 const root = await realpath(
 	await mkdtemp(join(tmpdir(), "cline-semantic-smoke-")),
@@ -116,6 +117,33 @@ try {
 		),
 		false,
 	);
+	store.setMode("owned-semantic-smoke", root, "static");
+	await writeFile(join(root, "owned-fuses.exe"), ownedFusePe());
+	const fuseReceipt = await runFirstPartyAnalysis(
+		"owned-semantic-smoke",
+		{ target: "owned-fuses.exe", electronFuses: true },
+		undefined,
+		store,
+		host,
+	);
+	assert.equal(fuseReceipt.status, "partial", fuseReceipt.error);
+	assert.equal(
+		fuseReceipt.result?.electronFuses?.slices[0].sentinels[0].fuses[0].name,
+		"RunAsNode",
+	);
+	store.setMode("owned-semantic-smoke", root, "off");
+	const fusePage = queryFirstPartyEvidence(
+		"owned-semantic-smoke",
+		{
+			receiptId: fuseReceipt.id,
+			view: "electron-fuses",
+			fuseSection: "runtime_implications",
+			limit: 2,
+		},
+		store,
+	) as { items: unknown[]; targetExecuted: boolean };
+	assert.equal(fusePage.items.length, 2);
+	assert.equal(fusePage.targetExecuted, false);
 	console.log(
 		JSON.stringify({
 			status: "passed",

@@ -243,6 +243,10 @@ export async function analyzeTarget(
 ): Promise<AnalysisResult> {
 	const input = AnalysisInputSchema.parse(value),
 		root = await realpath(workspace);
+	if (input.electronFuses) {
+		const { inspectOwnedElectronFuses } = await import("./electron-fuses");
+		return inspectOwnedElectronFuses(root, input.target);
+	}
 	const budget = { entries: 0, bytes: 0, files: 0 };
 	const current = await readSources(
 		root,

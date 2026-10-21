@@ -34,6 +34,7 @@ type View =
 	| "cross-domain"
 	| "dossiers"
 	| "disagreements"
+	| "electron-fuses"
 	| "application-summary"
 	| "application-nodes"
 	| "application-edges"
@@ -62,6 +63,8 @@ export function FirstPartyAnalysisWorkspace({
 		[compareTarget, setCompareTarget] = useState("");
 	const [semanticGraph, setSemanticGraph] = useState(false);
 	const [applicationGraph, setApplicationGraph] = useState(false);
+	const [electronFuses, setElectronFuses] = useState(false);
+	const [fuseSection, setFuseSection] = useState("slices");
 	const [inspectorTarget, setInspectorTarget] = useState(""),
 		[inspectorPid, setInspectorPid] = useState(""),
 		[inspectorEndpoint, setInspectorEndpoint] = useState("");
@@ -99,6 +102,8 @@ export function FirstPartyAnalysisWorkspace({
 		setStatus(null);
 		setSemanticGraph(false);
 		setApplicationGraph(false);
+		setElectronFuses(false);
+		setFuseSection("slices");
 		inspectorRevision.current++;
 		setCaptureConsole(false);
 		setRunning(false);
@@ -147,7 +152,14 @@ export function FirstPartyAnalysisWorkspace({
 				...(["cross-domain", "dossiers", "disagreements"].includes(view)
 					? { receiptId: selected, view, offset }
 					: {
-							query: { receiptId: selected, view, filter, offset, limit: 20 },
+							query: {
+								receiptId: selected,
+								view,
+								filter,
+								offset,
+								limit: 20,
+								...(view === "electron-fuses" ? { fuseSection } : {}),
+							},
 						}),
 			})
 			.then((r) => {
@@ -160,7 +172,7 @@ export function FirstPartyAnalysisWorkspace({
 		return () => {
 			disposed = true;
 		};
-	}, [selected, sessionId, environmentId, view, filter, offset]);
+	}, [selected, sessionId, environmentId, view, filter, offset, fuseSection]);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: Changes to the static basis/question/mode invalidate reviewed runtime authority.
 	useEffect(() => {
 		inspectorRevision.current++;
@@ -217,6 +229,7 @@ export function FirstPartyAnalysisWorkspace({
 						...(compareTarget ? { compareTarget } : {}),
 						...(semanticGraph ? { semanticGraph: true } : {}),
 						...(applicationGraph ? { applicationGraph: true } : {}),
+						...(electronFuses ? { electronFuses: true } : {}),
 					},
 				},
 				{ timeoutMs: semanticGraph ? 330000 : 75000 },
@@ -374,6 +387,7 @@ export function FirstPartyAnalysisWorkspace({
 			<div className="flex flex-wrap gap-2">
 				{targetInput}
 				<input
+					disabled={running || electronFuses}
 					aria-label="JavaScript comparison target"
 					className="rounded border bg-background p-2 text-xs"
 					value={compareTarget}
@@ -384,7 +398,7 @@ export function FirstPartyAnalysisWorkspace({
 					<input
 						type="checkbox"
 						checked={semanticGraph}
-						disabled={running || applicationGraph}
+						disabled={running || applicationGraph || electronFuses}
 						onChange={(e) => setSemanticGraph(e.target.checked)}
 					/>
 					Include file-local semantic graph
@@ -393,13 +407,24 @@ export function FirstPartyAnalysisWorkspace({
 					<input
 						type="checkbox"
 						checked={applicationGraph}
-						disabled={running}
+						disabled={running || electronFuses}
 						onChange={(e) => {
 							setApplicationGraph(e.target.checked);
 							if (e.target.checked) setSemanticGraph(true);
 						}}
 					/>
 					Include application graph and Electron boundaries
+				</label>
+				<label className="flex items-center gap-2 text-xs">
+					<input
+						type="checkbox"
+						checked={electronFuses}
+						disabled={
+							running || semanticGraph || applicationGraph || !!compareTarget
+						}
+						onChange={(e) => setElectronFuses(e.target.checked)}
+					/>
+					Inspect executable Electron fuses only
 				</label>
 				<button
 					type="button"
@@ -413,9 +438,20 @@ export function FirstPartyAnalysisWorkspace({
 					}
 					onClick={() => void run()}
 				>
-					Inspect static sources
+					{electronFuses
+						? "Inspect executable fuses"
+						: "Inspect static sources"}
 				</button>
 			</div>
+			{electronFuses && (
+				<p className="text-xs text-muted-foreground">
+					Select one regular PE/ELF/Mach-O executable inside this workspace (up
+					to 1 GiB; existing worker deadline). No automatic .app selection,
+					target launch or fuse modification. Unknown, missing and multiple
+					sentinel states remain explicit. Runtime implications are derived, not
+					observed behavior.
+				</p>
+			)}
 			{semanticGraph && (
 				<p className="text-xs text-muted-foreground">
 					Directly integrated source analysis; no REA installation. The optional
@@ -593,6 +629,7 @@ export function FirstPartyAnalysisWorkspace({
 						"cross-domain",
 						"dossiers",
 						"disagreements",
+						"electron-fuses",
 						"application-summary",
 						"application-nodes",
 						"application-edges",
@@ -651,6 +688,42 @@ export function FirstPartyAnalysisWorkspace({
 				</ol>
 			) : (
 				<>
+					{view === "electron-fuses" && (
+						<label>
+							Fuse evidence section
+							<select
+								aria-label="Fuse evidence section"
+								value={fuseSection}
+								onChange={(e) => {
+									setFuseSection(e.target.value);
+									setOffset(0);
+								}}
+							>
+								<option value="slices">Slices and raw wires</option>
+								<option value="sentinels">Individual raw wires</option>
+								<option value="runtime_implications">
+									Derived runtime implications
+								</option>
+							</select>
+						</label>
+					)}
+					{view === "electron-fuses" && page && (
+						<PreviewScrollRegion className="max-h-48">
+							<pre className="whitespace-pre-wrap break-all text-xs">
+								{JSON.stringify(
+									{
+										available: page.available,
+										artifact: page.artifact,
+										limitations: page.limitations,
+										omittedLimitations: page.omittedLimitations,
+										verifiedBehavior: page.verifiedBehavior,
+									},
+									null,
+									2,
+								)}
+							</pre>
+						</PreviewScrollRegion>
+					)}
 					{view !== "verification" ? (
 						<input
 							aria-label="Filter analysis evidence"
