@@ -22,6 +22,8 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.toolchain.outputs.version }}
+      - name: Test semantic diagnostic parser
+        run: python scripts/test-semantic-diagnostics.py
       - name: Install locked application dependencies
         run: bun install --frozen-lockfile
       - name: Verify port provenance
@@ -48,6 +50,9 @@ jobs:
         env:
           CLINE_SEMANTIC_REFERENCE_ROOT: ${{ github.workspace }}/.semantic-reference
         run: bun x vitest run src/analysis --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=junit --outputFile.junit=semantic-results.xml
+      - name: Publish bounded semantic failure diagnostics
+        if: ${{ always() }}
+        run: python scripts/summarize-semantic-tests.py sdk/packages/core/semantic-results.xml
       - name: Owned worker and evidence smoke
         run: bun scripts/test-semantic-worker.ts
       - name: Upload analysis test report

@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Migration CI diagnostics and narrowly scoped secret-scan exception
+
+- The pinned public REA revision is exempted only from the Sourcegraph token rule, on its exact `revision` JSON line in the two generated migration inventories. Other fields, revisions, files and actual token patterns remain scanned. Nine synthetic scope regressions run before both Windows secret scans; default rules and full-history scanning remain enabled.
+- Semantic CI always publishes bounded JUnit failure/error annotations, retains the complete report artifact, and fails diagnostic parsing on missing/malformed/unsafe reports. Python is standard-library CI tooling only, not an app prerequisite. The original Vitest exit status still blocks release; tests are not retried or skipped to mask failures.
+
 ## Integrated application graph and saved application workflows (partial REA migration)
 
 - Explicit `javascript_options.applicationGraph: true` additionally requires `semanticGraph: true`; both default off. The installed desktop checkbox binds those choices visibly, never silently enables Analysis mode or approves execution. The owned worker directly imports the pinned source algorithms; no REA install, CLI, server or separate runtime is introduced.
