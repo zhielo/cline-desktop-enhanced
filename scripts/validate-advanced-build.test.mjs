@@ -183,3 +183,17 @@ test("CI summaries retain failed/blocked statuses without leaking log contents o
  assert.ok(text.includes("validation: failed"));assert.ok(text.includes("| failed | 1 |"));assert.ok(text.includes("| later | blocked | — |"));assert.ok(!text.includes("SECRET"));assert.ok(!text.includes("<>"));
  assert.ok(formatValidationSummary(report,"not-a-commit\nSECRET").includes("Source commit: unavailable"));
 });
+
+
+test("shipped investigation skills are a blocking core and installed gate before Hub startup",()=>{
+ const runner=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");
+ assert.ok(runner.includes('job("Test bundled investigation skills"'));
+ assert.ok(runner.includes('"sidecar/commands-skills.test.ts"'));
+ const sidecar=readFileSync(new URL("../apps/examples/desktop-app/sidecar/index.ts",import.meta.url),"utf8");
+ assert.ok(sidecar.indexOf('process.argv.includes("--cline-investigation-skills-selfcheck")')<sidecar.indexOf("configureFirstPartyAnalysisHost({"));
+ const acceptance=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ assert.ok(acceptance.indexOf('startAcceptanceProcess(sidecar, ["--cline-investigation-skills-selfcheck"]')<acceptance.indexOf('"--remote-hub-ensure"'));
+ for(const stage of ["installed-bundled-investigation-skills-instruction-only-namespace-disable-passed","installed-bundled-investigation-skills-disable-persisted-restart-passed"])
+  assert.ok(acceptance.includes(stage));
+ assert.ok(acceptance.includes('verifyInstalledInvestigationCatalog(await readSkills(),false,installedSkillRoot)'));
+});

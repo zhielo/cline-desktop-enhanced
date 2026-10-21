@@ -44,6 +44,7 @@ export const RELEASE_GATE_POLICY = {
 		"Test advanced candidate and evidence commands",
 		"Test Android toolchain safeguards",
 		"Test Binary Triage Pack and guided investigation",
+		"Test bundled investigation skills",
 		"Type-check complete workspace including tests and smoke declarations",
 		"Lint complete workspace",
 		"Test first-party static parser, evidence and supervised workers",
@@ -89,6 +90,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-fresh-draft-analysis-visible-before-first-task",
 		"installed-browser-native-metadata-capture-cleanup-verified",
 		"owned-workspace-idle-session-opened",
+		"installed-bundled-investigation-skills-instruction-only-namespace-disable-passed",
 		"installed-task-report-offline-plan-partial-no-verification-no-execution-passed",
 		"installed-hybrid-mode-persistence-static-preflight-passed",
 		"installed-ai-batch-read-only-profile-denied",
@@ -135,6 +137,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-android-manifest-dex-callback-candidates-origin-ambiguity-no-execution-passed",
 		"installed-android-resource-member-sha256-xml-structure-budgets-no-execution-passed",
 		"installed-combined-project-version-hashes-api-categories-budgets-no-execution-passed",
+		"installed-bundled-investigation-skills-disable-persisted-restart-passed",
 		"full-pack-selection-and-receipts-survived-restart",
 		"restart-setting-and-session-persistence-passed",
 		"installed-task-report-restored-after-restart-no-replay-passed",
@@ -152,8 +155,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"a3d776e415922a5c533efe74628ee996908f974e490c30e54ea321c3b53fe662",
+			"f5d7824e6bf07610504d79cc218c5491054e84be7843952a397350bb746f1139",
 		"scripts/validate-advanced-build.mjs":
-			"0e1d9c3b694d3da51b607a501fead2c14073b1aa2f8020bb54887d3ed122ec28",
+			"17d4cf434e7ca82f075ffb3227bde1e770d93bb6b1845c1a369bf446ff9adc84",
 	},
 } as const;

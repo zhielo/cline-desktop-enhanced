@@ -15,3 +15,9 @@ bun scripts/rea-capability-inventory.mjs --check
 ```
 
 This audit is development-only, not a production dependency. No REA installation, CLI, MCP server or separate analysis runtime is added. The source-validation workflow checks the committed audit on Linux and Windows. `INTEGRATED_SEMANTIC_SOURCE.md` describes the actual app routes and limitations.
+
+## Shipped workflow guidance
+
+The original `cline-investigation` portable skill pack supplies six instruction-only guides over existing Cline routes. It is authored for this app, not a copied REA MCP/CLI setup recipe. It adds no external REA runtime, executable plugin, engine or approval bypass. Packaged resource hashes, local-only session projection, namespace/disable behavior and installed restart acceptance are explicit release gates. See `../INTEGRATED_SEMANTIC_SOURCE.md` for commands and limitations.
+
+This does **not** change any of the 212 contract migration statuses. In particular, native, managed, runtime reconciliation, acquisition/reconstruction and specialist algorithm ports do not become complete because a guide describes their supported Cline alternatives. A successful instruction selfcheck does not certify a model-driven investigation or superiority to REA.

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cline-investigation",
+  "version": "1.0.0",
+  "description": "Shipped instruction-only Cline investigation workflows. Does not install engines, add MCP tools, execute targets or grant approval.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "cline",
+    "investigation",
+    "static-analysis",
+    "skills"
+  ]
+}

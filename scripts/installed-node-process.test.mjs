@@ -22,6 +22,7 @@ import {
 	verifyInstalledAnalysisProfile,
  openInstalledSavedSession,
  verifyInstalledSourceReferenceStorage,
+ verifyInstalledInvestigationCatalog,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("owned native tree is stopped before CDP can tear down its WebView children", async () => {
@@ -517,4 +518,26 @@ test('installed handshake error sends no command and never automatically reconne
   const request=fixtureRpc('approve_analysis_task');f.instances[0].onerror();await assert.rejects(request,/not replayed/);
   assert.equal(f.instances.length,1);assert.equal(f.instances[0].messages.length,0);
  }finally{f.restore();}
+});
+
+
+test("installed skill catalog requires fixed namespaced instructions and plugin-only controls", () => {
+ const names=["investigate-artifact","analyze-electron","compare-applications","investigate-native","investigate-android","review-candidate"];
+ const root="/owned/installed/investigation-skills";
+ const skills=names.map(name=>({id:`cline-investigation:${name}`,description:"Owned guide",instructions:"Retain the receipt",enabled:true,agentPlugin:true,pluginName:"cline-investigation"}));
+ const catalog={bundledInvestigationSkills:{status:"available",root,paths:[root],skills:names},skills,
+  runtimeCommands:skills.map(s=>({...s,name:s.id.split(":")[1],kind:"skill"})),
+  plugins:[{name:"cline-investigation",path:root,enabled:true,agentPlugin:true,toggleable:true}]};
+ assert.equal(verifyInstalledInvestigationCatalog(catalog,true,root),root);
+ for(const mutate of [c=>c.skills.pop(),c=>c.skills.push(c.skills[0]),c=>c.skills[0].agentPlugin=false,
+  c=>c.skills[0].instructions="",c=>c.skills[0].pluginName="other",c=>c.runtimeCommands.pop(),
+  c=>c.runtimeCommands[0].kind="workflow",c=>c.plugins[0].enabled=false,c=>c.plugins[0].path="/other",
+  c=>c.bundledInvestigationSkills.status="unavailable",c=>c.bundledInvestigationSkills.paths.push("/other")]) {
+  const changed=structuredClone(catalog);mutate(changed);
+  assert.throws(()=>verifyInstalledInvestigationCatalog(changed,true,root));
+ }
+ const off=structuredClone(catalog);off.plugins[0].enabled=false;off.skills=[];off.runtimeCommands=[];
+ assert.equal(verifyInstalledInvestigationCatalog(off,false,root),root);
+ off.skills=[skills[0]];assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
+ off.skills=[];off.runtimeCommands=catalog.runtimeCommands;assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
 });

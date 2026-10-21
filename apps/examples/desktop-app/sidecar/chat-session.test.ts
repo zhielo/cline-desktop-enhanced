@@ -1,3 +1,4 @@
+import { inspectInvestigationSkillPack } from "./investigation-skills";
 import {
 	existsSync,
 	mkdirSync,
@@ -178,6 +179,7 @@ describe("starting SSH sessions", () => {
 			}),
 		);
 		expect(start.mock.calls[0]?.[0]).not.toHaveProperty("initialMessages");
+		expect(start.mock.calls[0]?.[0]).not.toHaveProperty("config.agentPluginPaths");
 		expect(ctx.liveSessions.get(sessionId)?.messages).toEqual([]);
 		expect(ctx.sessionEnvironmentIds.get(sessionId)).toBe(environmentId);
 	});
@@ -347,6 +349,7 @@ describe("pathless session starts", () => {
 				expect(input.config).not.toHaveProperty("workspaceRoot");
 				expect(input.config).not.toHaveProperty("enableSpawnAgent");
 				expect(input.config).not.toHaveProperty("enableAgentTeams");
+				expect(input.config.agentPluginPaths).toEqual(inspectInvestigationSkillPack(true).paths);
 				expect(input.config).toMatchObject({
 					checkpoint: { enabled: true },
 					compaction: { enabled: true },
@@ -557,6 +560,7 @@ describe("session forks", () => {
 					omitCheckpointMessageFromSession: true,
 				},
 				start: expect.objectContaining({
+					config: expect.objectContaining({agentPluginPaths: inspectInvestigationSkillPack(true).paths}),
 					sessionMetadata: expect.objectContaining({
 						conversationId: "conversation-root",
 						fork: expect.objectContaining({
@@ -1258,6 +1262,7 @@ describe("session forks", () => {
 				handleChatSessionCommand(ctx, restoreRequest),
 			).resolves.toMatchObject({ sessionId });
 			expect(restore).toHaveBeenCalledTimes(1);
+			expect(restore).toHaveBeenCalledWith(expect.objectContaining({start:expect.objectContaining({config:expect.objectContaining({agentPluginPaths:inspectInvestigationSkillPack(true).paths})})}));
 		} finally {
 			if (originalDataDir === undefined) {
 				delete process.env.CLINE_SESSION_DATA_DIR;
@@ -1868,6 +1873,7 @@ describe("first-send connection updates", () => {
 						providerId: "cline",
 						modelId: "anthropic/claude-sonnet-4.6",
 						sessionId,
+						agentPluginPaths: inspectInvestigationSkillPack(true).paths,
 					}),
 				}),
 			);

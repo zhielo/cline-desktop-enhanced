@@ -242,6 +242,11 @@ async function runEntrypoint(): Promise<void> {
         await runAnalysisWorkerEntrypoint();
         return;
     }
+    if (process.argv.includes("--cline-investigation-skills-selfcheck")) {
+        const { selfcheckInvestigationSkills } = await import("./investigation-skills");
+        process.stdout.write(JSON.stringify(await selfcheckInvestigationSkills())+"\n");
+        return;
+    }
     const entry = (globalThis as {Bun?:{main?:string}}).Bun?.main;
     configureFirstPartyAnalysisHost({executable:process.execPath,
         args:entry && !entry.startsWith("/$bunfs/") ? [entry] : []});

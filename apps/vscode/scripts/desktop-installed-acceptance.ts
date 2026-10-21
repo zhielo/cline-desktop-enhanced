@@ -16,6 +16,39 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Locator, type Page } from "playwright";
 
+const INSTALLED_INVESTIGATION_PLUGIN = "cline-investigation";
+const INSTALLED_INVESTIGATION_NAMES = ["investigate-artifact", "analyze-electron", "compare-applications", "investigate-native", "investigate-android", "review-candidate"];
+type InstalledInvestigationCatalog = {
+  bundledInvestigationSkills: {status:string;root?:string;paths:string[];skills:string[]};
+  skills: Array<{id:string;description?:string;instructions?:string;enabled?:boolean;agentPlugin?:boolean;pluginName?:string}>;
+  runtimeCommands: Array<{id:string;name:string;kind:string;instructions:string}>;
+  plugins: Array<{name:string;path:string;enabled:boolean;agentPlugin:boolean;toggleable:boolean;loadError?:string}>;
+};
+/** Assertions consume only catalog metadata/instructions, never invoke a model or target. */
+export function verifyInstalledInvestigationCatalog(catalog: InstalledInvestigationCatalog, enabled: boolean, expectedRoot: string) {
+  const pack = catalog.bundledInvestigationSkills;
+  if(pack.status!=="available" || pack.root!==expectedRoot || JSON.stringify(pack.paths)!==JSON.stringify([expectedRoot]) ||
+    JSON.stringify(pack.skills)!==JSON.stringify(INSTALLED_INVESTIGATION_NAMES))
+    throw new Error("Installed investigation resource identity missing or changed");
+  const plugins=catalog.plugins.filter(p=>p.name===INSTALLED_INVESTIGATION_PLUGIN);
+  if(plugins.length!==1 || plugins[0].path!==expectedRoot || !plugins[0].agentPlugin || !plugins[0].toggleable ||
+    plugins[0].enabled!==enabled || plugins[0].loadError)
+    throw new Error("Installed investigation plugin state mismatch");
+  const expected=INSTALLED_INVESTIGATION_NAMES.map(name=>`${INSTALLED_INVESTIGATION_PLUGIN}:${name}`);
+  const skills=catalog.skills.filter(s=>s.id.startsWith(`${INSTALLED_INVESTIGATION_PLUGIN}:`));
+  const commands=catalog.runtimeCommands.filter(s=>s.id.startsWith(`${INSTALLED_INVESTIGATION_PLUGIN}:`));
+  if(!enabled) {
+    if(skills.length || commands.length) throw new Error("Disabled installed investigation skills remained available");
+  } else {
+    if(JSON.stringify(skills.map(s=>s.id).sort())!==JSON.stringify([...expected].sort()) ||
+      JSON.stringify(commands.map(s=>s.id).sort())!==JSON.stringify([...expected].sort()) ||
+      skills.some(s=>s.enabled===false || s.agentPlugin!==true || s.pluginName!==INSTALLED_INVESTIGATION_PLUGIN || !s.description || !s.instructions?.includes("receipt")) ||
+      commands.some(s=>s.kind!=="skill" || !s.instructions.includes("receipt")))
+      throw new Error("Installed investigation instruction catalog incomplete");
+  }
+  return plugins[0].path;
+}
+
 /** Page-local acceptance transport. Reuse one authenticated socket rather than
  * opening hundreds during the full journey. Correlate responses, never replay a
  * request after errors, endpoint changes, timeouts or page/native restarts. This
@@ -760,6 +793,25 @@ ConvertTo-Json -InputObject @($rows) -Compress
   }
 
 	try {
+    const skillSelfcheck = startAcceptanceProcess(sidecar, ["--cline-investigation-skills-selfcheck"], workspace, environment);
+    let skillSelfcheckResult: Record<string, unknown>;
+    try {
+      const code = await withInstalledActionDeadline("installed-investigation-skills-selfcheck", () => skillSelfcheck.exited, 60_000);
+      await withInstalledActionDeadline("installed-investigation-skills-selfcheck-stdio", () => skillSelfcheck.closed, 10_000);
+      if(code!==0) throw new Error("Installed investigation skill selfcheck failed");
+      skillSelfcheckResult=JSON.parse(skillSelfcheck.diagnostics.stdoutTail.trim());
+      if(skillSelfcheckResult.status!=="passed" || skillSelfcheckResult.plugin!==INSTALLED_INVESTIGATION_PLUGIN ||
+        JSON.stringify(skillSelfcheckResult.skills)!==JSON.stringify(INSTALLED_INVESTIGATION_NAMES) ||
+        skillSelfcheckResult.loadedInstructions!==6 || skillSelfcheckResult.instructionOnly!==true ||
+        skillSelfcheckResult.mcpServers!==0 || skillSelfcheckResult.providerCalls!==0 || skillSelfcheckResult.targetExecuted!==false)
+        throw new Error("Installed investigation selfcheck did not confirm six instruction-only skills");
+      await writeFile(join(evidence,"investigation-skills-selfcheck.json"),JSON.stringify(skillSelfcheckResult,null,2));
+    } finally {
+      if(skillSelfcheck.child.pid && skillSelfcheck.child.exitCode===null) {
+        await killOwnedProcess(skillSelfcheck.child.pid);
+        await withInstalledActionDeadline("owned-investigation-selfcheck-exit",()=>skillSelfcheck.exited,10_000);
+      }
+    }
 		// Use the installed sidecar to bootstrap an isolated Hub on an OS-assigned port.
 		// A default Hub left by the earlier GUI smoke must never satisfy this fixture.
 		const bootstrap = startAcceptanceProcess(
@@ -913,6 +965,21 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			.first()
       .click();
     stages.push("owned-workspace-idle-session-opened");
+    const installedSkillRoot=join(resolve(sidecar,".."),"investigation-skills");
+    const readSkills=()=>rpc<InstalledInvestigationCatalog>(page,"list_user_instruction_configs",{environmentId:"local"});
+    verifyInstalledInvestigationCatalog(await readSkills(),true,installedSkillRoot);
+    const setInvestigationDisabled=async(disabled:boolean)=>{
+      const catalog=await rpc<InstalledInvestigationCatalog>(page,"set_plugin_disabled",{environmentId:"local",path:installedSkillRoot,disabled});
+      verifyInstalledInvestigationCatalog(catalog,!disabled,installedSkillRoot);
+    };
+    await setInvestigationDisabled(true);
+    await setInvestigationDisabled(false);
+    await writeFile(join(evidence,"investigation-skills-evidence.json"),JSON.stringify({
+      plugin:INSTALLED_INVESTIGATION_PLUGIN,skills:INSTALLED_INVESTIGATION_NAMES,selfcheck:skillSelfcheckResult,
+      namespacedCatalogVerified:true,disableAndReenableVerified:true,providerCalls:0,targetExecuted:false,
+      limitation:"Instruction loading only; no live model or unported engine parity claim",
+    },null,2));
+    stages.push("installed-bundled-investigation-skills-instruction-only-namespace-disable-passed");
     const verifyRecordedTaskReport=async()=>{
       const destinations=page.getByRole("navigation",{name:"Task destinations",exact:true});
       await destinations.getByRole("button",{name:"Reports",exact:true}).click();
@@ -1833,8 +1900,15 @@ ConvertTo-Json -InputObject @($rows) -Compress
       savedSourceReference[0].value.selection.selector.kind!=="artifact"||Object.keys(savedSourceReference[0].value.selection.selector).sort().join(",")!=="kind,path")
       throw new Error("Installed remembered source reference retained extra data or wrong selector");
     await page.screenshot({ path: join(evidence, "full-capabilities.png") });
+    await setInvestigationDisabled(true);
     await acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000);
     page = await launch();
+    verifyInstalledInvestigationCatalog(await readSkills(),false,installedSkillRoot);
+    await setInvestigationDisabled(false);
+    await writeFile(join(evidence,"investigation-skills-restart.json"),JSON.stringify({
+      plugin:INSTALLED_INVESTIGATION_PLUGIN,disabledPersisted:true,reenabled:true,providerCalls:0,targetExecuted:false,
+    },null,2));
+    stages.push("installed-bundled-investigation-skills-disable-persisted-restart-passed");
     const restartedSourceReference = await acceptanceAction("owned-source-reference-after-restart", () =>
       page.evaluate((key) => localStorage.getItem(key), savedSourceReference[0].key), 30000);
     verifyInstalledSourceReferenceStorage(savedSourceReference[0].value, restartedSourceReference);

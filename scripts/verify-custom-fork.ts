@@ -4,6 +4,14 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{path:"apps/examples/desktop-app/sidecar/investigation-skills.ts",markers:["verifyInvestigationSkillPack", "resolveDisabledAgentPluginNames", "loaded.mcpServers.length", "targetExecuted: false", "installedPresent"]},
+	{path:"apps/examples/desktop-app/sidecar/chat-session.ts",markers:["localInvestigationSkills", "agentPluginPaths: inspectInvestigationSkillPack(true).paths", 'binding.kind === "local"']},
+	{path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["bundledInvestigationSkills: bundled.pack", 'agentPluginPaths: inspectInvestigationSkillPack(ctx.activeEnvironmentId === "local").paths']},
+	{path:"apps/examples/desktop-app/sidecar/index.ts",markers:["--cline-investigation-skills-selfcheck", "selfcheckInvestigationSkills"]},
+	{path:"apps/examples/desktop-app/sidecar/investigation-skills.test.ts",markers:["before creating a profile, Hub or listener", "hard-linked instruction bytes", "does not use a clean development fallback"]},
+	{path:"apps/examples/desktop-app/src-tauri/tauri.conf.json",markers:["investigation-skills/**/*"]},
+	{path:"apps/examples/desktop-app/src-tauri/tauri.analysis-runtime.conf.json",markers:["investigation-skills/**/*"]},
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-bundled-investigation-skills-instruction-only-namespace-disable-passed", "installed-bundled-investigation-skills-disable-persisted-restart-passed", "verifyInstalledInvestigationCatalog"]},
 	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
 		markers: [

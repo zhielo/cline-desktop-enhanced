@@ -1,3 +1,4 @@
+import { inspectInvestigationSkillPack, loadInvestigationSkills } from "./investigation-skills";
 import { resolveAnalysisTimeoutMs } from "../shared/analysis-budgets";
 import { handleDeviceSmoke } from "./device-smoke";
 import { handleManagedRuntime, managedInspectorSessions } from "./managed-runtime";
@@ -1903,6 +1904,7 @@ async function listHubSettings(
 	const reply = await hubClient.command("settings.list", {
 		workspaceRoot: ctx.localWorkspaceRoot,
 		cwd: ctx.localWorkspaceRoot,
+		agentPluginPaths: inspectInvestigationSkillPack(ctx.activeEnvironmentId === "local").paths,
 	});
 	if (!reply.ok) {
 		throw new Error(
@@ -1926,6 +1928,7 @@ async function toggleHubSetting(
 		...input,
 		workspaceRoot: ctx.localWorkspaceRoot,
 		cwd: ctx.localWorkspaceRoot,
+		agentPluginPaths: inspectInvestigationSkillPack(ctx.activeEnvironmentId === "local").paths,
 	});
 	if (!reply.ok) {
 		throw new Error(
@@ -1942,8 +1945,11 @@ async function listUserInstructionConfigs(
 	const workspaceRoot = ctx.localWorkspaceRoot;
 	const hubSettings = settingsSnapshot ?? (await listHubSettings(ctx));
 	const warnings: string[] = [];
+	const bundled = await loadInvestigationSkills(ctx.activeEnvironmentId === "local");
+	if (bundled.pack.status === "unavailable" && bundled.pack.reason !== "not-local")
+		warnings.push(`Bundled investigation skills unavailable: ${bundled.pack.reason}`);
 	const userInstructionService = createUserInstructionConfigService({
-		skills: { workspacePath: workspaceRoot },
+		skills: { workspacePath: workspaceRoot, agentPluginSkills: bundled.skills },
 		rules: { workspacePath: workspaceRoot },
 		workflows: { workspacePath: workspaceRoot },
 	});
@@ -1959,6 +1965,9 @@ async function listUserInstructionConfigs(
 			// ones; skills need to stay visible (disabled) so they can be
 			// re-enabled from the Skills tab.
 			if (disabled && type !== "skill") continue;
+			const pluginOwner = type === "skill" ? hubSettings.skills.find(
+				(skill) => skill.path === record.filePath && skill.agentPlugin === true,
+			) : undefined;
 			items.push({
 				id: record.id,
 				name: item.name ?? record.id,
@@ -1966,6 +1975,7 @@ async function listUserInstructionConfigs(
 				instructions: item.instructions,
 				path: record.filePath,
 				...(type === "skill" ? { enabled: !disabled } : {}),
+				...(pluginOwner ? { agentPlugin: true, pluginName: pluginOwner.pluginName, source: pluginOwner.source } : {}),
 			});
 		}
 		return items;
@@ -2081,6 +2091,7 @@ async function listUserInstructionConfigs(
 		workflows,
 		skills,
 		runtimeCommands,
+		bundledInvestigationSkills: bundled.pack,
 		agents: loadAgents(),
 		plugins: hubSettings.plugins.map((plugin) => ({
 			id: plugin.id,

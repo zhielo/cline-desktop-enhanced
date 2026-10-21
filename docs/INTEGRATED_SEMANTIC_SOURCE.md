@@ -30,6 +30,25 @@ A saved trace requires an upstream-compatible seed and direction; select the out
 
 Directions are backward-provenance, forward-influence, callers and ownership. Trace findings remain static inference. No target execution, producer attestation or semantic-equivalence certification is implied.
 
+## Bundled investigation skills
+
+The app ships six instruction-only guides as the portable Agent Plugin **cline-investigation**. They appear in Customize → Skills and the local slash-command catalog:
+
+| Command | Scope |
+| --- | --- |
+| `/investigate-artifact` | Confirm exact artifact identity, authorization, scope and supported analysis route. |
+| `/analyze-electron` | Inspect admitted JS/TS/application and Electron-boundary evidence; separate static inference from observation. |
+| `/compare-applications` | Compare distinct saved application receipts, selected exports and partial source/bundle references without rerunning a target. |
+| `/investigate-native` | Use supported configured native engines and bounded selectors; preserve unresolved calls, engine/license limitations and partial coverage. |
+| `/investigate-android` | Coordinate supported static Android/DEX/resource/native evidence; treat device execution as a separate approval boundary. |
+| `/review-candidate` | Review preview-bound candidates, exact source/output hashes and separate validation/export steps; never overwrite originals automatically. |
+
+The normal skills tool loads the guides on demand. Their qualified IDs are `cline-investigation:<command-name>`. Bare slash tokens retain the existing deterministic collision rules; a conflicting user skill can own a token. The qualified ID remains available to the skills tool. Selecting a guide does not enable Analysis, approve a tool, acquire a license, install an engine or run a target.
+
+Use Customize → Plugins → Agent Plugins to disable or re-enable **cline-investigation** as one package. Its shipped skill files are not individually editable/toggleable/uninstallable through the existing controls. The setting persists, and the catalog refreshes; rebuild/restart an already running session to refresh its runtime skills. Hot-reconfiguration of an active model turn is not promised. SSH/cloud sessions do not receive local installation paths.
+
+The app verifies the fixed compiled resource manifest before discovery. Missing/damaged resources are explicitly unavailable; normal chat remains usable. No REA installation, backend, MCP tool or new engine implementation accompanies these guides. Instruction loading and catalog acceptance are not a live-model outcome, full engine migration or REA parity test.
+
 ## Optional application graph
 
 Select **Include application graph and Electron boundaries** or explicitly pass both flags:
