@@ -24,19 +24,11 @@ export async function runAnalysisWorkerEntrypoint() {
 	return worker.runAnalysisWorkerEntrypoint();
 }
 
-import { z } from "zod";
 import { FirstPartyAnalysisStore } from "./store";
-export const EvidenceQuerySchema = z
-	.object({
-		receiptId: z.string().uuid(),
-		view: z
-			.enum(["artifacts", "findings", "graph", "comparison", "verification"])
-			.default("findings"),
-		offset: z.number().int().min(0).max(10000).default(0),
-		limit: z.number().int().min(1).max(50).default(20),
-		filter: z.string().max(200).default(""),
-	})
-	.strict();
+import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
+import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
+import { javaScriptSemanticGraphSchema } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticGraph";
+export { EvidenceQuerySchema } from "./evidence-query";
 export function queryFirstPartyEvidence(
 	sessionId: string,
 	input: unknown,
@@ -45,6 +37,42 @@ export function queryFirstPartyEvidence(
 	const q = EvidenceQuerySchema.parse(input),
 		receipt = store.get(sessionId, q.receiptId);
 	const result = receipt.result;
+	if (q.view.startsWith("semantic-")) {
+		const summary = result?.semanticGraph;
+		if (!summary || q.view === "semantic-summary")
+			return {
+				id: receipt.id,
+				available: !!summary,
+				status: receipt.status,
+				summary,
+			};
+		const graph = store.semanticGraph(sessionId, receipt.id);
+		if (!graph) throw new Error("Semantic evidence unavailable");
+		if (q.view === "semantic-trace") {
+			const trace = queryJavaScriptSemanticGraph(
+				javaScriptSemanticGraphSchema.parse(graph),
+				q.trace,
+			);
+			return {
+				id: receipt.id,
+				available: true,
+				graphHash: summary.graphHash,
+				queryId: trace.query_id,
+				status: trace.status,
+				direction: trace.direction,
+				summary: trace.summary,
+				coverage: trace.coverage,
+				limitations: trace.limitations,
+				...semanticEvidencePage(trace as unknown as Record<string, unknown>, q),
+			};
+		}
+		return {
+			id: receipt.id,
+			available: true,
+			graphHash: summary.graphHash,
+			...semanticEvidencePage(graph, q),
+		};
+	}
 	if (q.view === "verification")
 		return {
 			id: receipt.id,
@@ -106,3 +134,5 @@ export {
 } from "./scenario";
 
 export { correlateSavedEvidence } from "./correlation";
+
+export { semanticSourceNotices } from "./semantic-engine/notices";

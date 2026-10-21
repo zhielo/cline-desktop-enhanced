@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/analysis/semantic-engine/engine.ts",markers:["cline-semantic/1", "file-local-semantics", "Semantic source hash mismatch"]},
+ {path:"sdk/packages/core/src/analysis/evidence-query.ts",markers:["semantic-trace", "displayOmitted", "Semantic trace request exceeds byte budget"]},
+ {path:"scripts/verify-semantic-port.mjs",markers:["Source digest mismatch", "Missing attribution"]},
+ {path:".github/workflows/build-custom-windows-installer.yml",markers:["semantic-source-validation", "needs: [ghidra-owned-fixtures, android-toolchain-preflight, semantic-source-validation]"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/advanced-candidates.ts",markers:["matching preview_sha256", "No-op byte patch", "bounded-structure-only", "reconstructed-constant-Int32-body"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/candidate-files.ts",markers:["fs.link(temp, output)","Source changed before publication", "cleanupWarning", "no overwrite permitted"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/candidate-batch.ts",markers:["Batch outputs may not replace inputs/manifest", "batch_preview_sha256", "NOT an all-or-nothing transaction", "manifestHash"]},

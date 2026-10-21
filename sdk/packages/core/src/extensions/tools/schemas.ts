@@ -1,3 +1,4 @@
+import { EvidenceQuerySchema } from "../../analysis/evidence-query";
 import { RuntimeObservationPlanSchema } from "./runtime-observation-schema";
 import { AndroidProjectPatchSchema } from "./android-project-schema";
 import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
@@ -323,21 +324,10 @@ export const ReverseEngineeringInputSchema = z.object({
 		.optional(),
 	engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
 	javascript_options: z
-		.object({ compareTarget: z.string().min(1).max(4096).optional() })
+		.object({ compareTarget: z.string().min(1).max(4096).optional(), semanticGraph: z.boolean().optional() })
 		.strict()
 		.optional(),
-	evidence_query: z
-		.object({
-			receiptId: z.string().uuid(),
-			view: z
-				.enum(["artifacts", "findings", "graph", "comparison", "verification"])
-				.optional(),
-			offset: z.number().int().min(0).max(10000).optional(),
-			limit: z.number().int().min(1).max(50).optional(),
-			filter: z.string().max(200).optional(),
-		})
-		.strict()
-		.optional(),
+	evidence_query: EvidenceQuerySchema.optional(),
 	runtime_observation_plan: RuntimeObservationPlanSchema.optional(),
 	candidate_validation: CandidateValidationSchema.optional(),
 	candidate_review: CandidateReviewSchema.optional(),

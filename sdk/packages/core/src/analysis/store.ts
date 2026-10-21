@@ -2,6 +2,7 @@ import { mkdirSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { loadSqliteDb, type SqliteDb } from "@cline/shared/db";
 import { resolveClineDataDir } from "@cline/shared/storage";
+import { digestCanonicalValue } from "./semantic-engine/upstream/src/domain/canonicalDigest";
 import {
 	AnalysisModeSchema,
 	type AnalysisMode,
@@ -27,7 +28,8 @@ export class FirstPartyAnalysisStore {
 				CREATE TABLE IF NOT EXISTS analysis_sessions(id TEXT PRIMARY KEY, workspace TEXT NOT NULL, mode TEXT NOT NULL);
 				CREATE TABLE IF NOT EXISTS analysis_receipts(id TEXT PRIMARY KEY, session_id TEXT NOT NULL, status TEXT NOT NULL, body TEXT NOT NULL);
 				CREATE INDEX IF NOT EXISTS analysis_receipt_session ON analysis_receipts(session_id);
- CREATE TABLE IF NOT EXISTS analysis_recovery(receipt_id TEXT PRIMARY KEY, body_hash TEXT NOT NULL, at TEXT NOT NULL, audit_hash TEXT NOT NULL);`);
+ CREATE TABLE IF NOT EXISTS analysis_recovery(receipt_id TEXT PRIMARY KEY, body_hash TEXT NOT NULL, at TEXT NOT NULL, audit_hash TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS analysis_semantic_graphs(receipt_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, body TEXT NOT NULL);`);
 		}
 		return this.db;
 	}
@@ -118,21 +120,75 @@ export class FirstPartyAnalysisStore {
 			throw e;
 		}
 	}
-	save(receipt: AnalysisReceipt) {
+	save(receipt: AnalysisReceipt, semanticGraph?: unknown) {
 		if (receipt.result && receipt.resultHash !== digest(receipt.result))
 			throw new Error("Evidence result hash mismatch");
-		const updated = this.database()
+		const db = this.database();
+		db.exec("BEGIN IMMEDIATE");
+		try {
+			if (receipt.result?.semanticGraph) {
+				if (
+					semanticGraph === undefined ||
+					digestCanonicalValue(semanticGraph) !==
+						receipt.result.semanticGraph.graphHash
+				)
+					throw new Error("Semantic evidence integrity mismatch");
+				const body = JSON.stringify(semanticGraph);
+				if (Buffer.byteLength(body) > 128 * 1024 * 1024)
+					throw new Error("Semantic graph exceeds storage budget");
+				const used = db
+					.prepare(
+						"SELECT COALESCE(SUM(length(CAST(body AS BLOB))),0) AS n FROM analysis_semantic_graphs",
+					)
+					.get();
+				if (Number(used?.n) + Buffer.byteLength(body) > 512 * 1024 * 1024)
+					throw new Error(
+						"Semantic ledger capacity reached; no automatic evidence deletion",
+					);
+				db.prepare(
+					"INSERT INTO analysis_semantic_graphs(receipt_id,session_id,body) VALUES(?,?,?)",
+				).run(receipt.id, receipt.sessionId, body);
+			} else if (semanticGraph !== undefined)
+				throw new Error("Unbound semantic evidence");
+			const updated = db
+				.prepare(
+					"UPDATE analysis_receipts SET status=?,body=? WHERE id=? AND session_id=? AND status='running' AND NOT EXISTS (SELECT 1 FROM analysis_recovery WHERE receipt_id=analysis_receipts.id)",
+				)
+				.run(
+					receipt.status,
+					JSON.stringify(receipt),
+					receipt.id,
+					receipt.sessionId,
+				);
+			if (updated.changes !== 1)
+				throw new Error("Final evidence receipts are immutable");
+			db.exec("COMMIT");
+		} catch (error) {
+			db.exec("ROLLBACK");
+			throw error;
+		}
+	}
+	/** Read scoped, receipt-bound graph data. Integrity is not producer authentication. */
+	semanticGraph(
+		sessionId: string,
+		id: string,
+	): Record<string, unknown> | undefined {
+		const receipt = this.get(sessionId, id);
+		if (!receipt.result?.semanticGraph) return undefined;
+		const row = this.database()
 			.prepare(
-				"UPDATE analysis_receipts SET status=?,body=? WHERE id=? AND session_id=? AND status='running' AND NOT EXISTS (SELECT 1 FROM analysis_recovery WHERE receipt_id=analysis_receipts.id)",
+				"SELECT body FROM analysis_semantic_graphs WHERE receipt_id=? AND session_id=?",
 			)
-			.run(
-				receipt.status,
-				JSON.stringify(receipt),
-				receipt.id,
-				receipt.sessionId,
-			);
-		if (updated.changes !== 1)
-			throw new Error("Final evidence receipts are immutable");
+			.get(id, sessionId);
+		if (!row || Buffer.byteLength(String(row.body)) > 128 * 1024 * 1024)
+			throw new Error("Semantic evidence missing or oversized");
+		const graph = JSON.parse(String(row.body)) as Record<string, unknown>;
+		if (
+			digestCanonicalValue(graph) !== receipt.result.semanticGraph.graphHash ||
+			graph.graph_id !== receipt.result.semanticGraph.graphId
+		)
+			throw new Error("Stored semantic evidence integrity mismatch");
+		return graph;
 	}
 	recovery(id: string) {
 		const row = this.database()

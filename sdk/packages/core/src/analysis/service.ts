@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { mkdtemp, readFile, rm, lstat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join } from "node:path";
 import {
 	ANALYSIS_PROFILE,
 	AnalysisInputSchema,
@@ -65,6 +67,10 @@ export async function runFirstPartyAnalysis(
 	)
 		throw new Error("Invalid parser host");
 	if (signal?.aborted) throw new Error("Analysis cancelled before admission");
+	if (input.semanticGraph && input.compareTarget)
+		throw new Error(
+			"Semantic graph comparison is not implemented; analyze each target separately",
+		);
 	const receipt: AnalysisReceipt = {
 		id: randomUUID(),
 		sessionId,
@@ -80,6 +86,17 @@ export async function runFirstPartyAnalysis(
 		status: "running",
 	};
 	store.start(receipt);
+	let scratch: string | undefined;
+	try {
+		if (input.semanticGraph)
+			scratch = await mkdtemp(join(tmpdir(), "cline-semantic-"));
+	} catch {
+		receipt.status = "failed";
+		receipt.error = "Could not create private semantic transfer directory";
+		store.save(receipt);
+		return receipt;
+	}
+	const semanticOutput = scratch ? join(scratch, "graph.json") : undefined;
 	const abort = new AbortController();
 	controllers.set(receipt.id, { sessionId, abort });
 	return await new Promise<AnalysisReceipt>((resolve) => {
@@ -90,7 +107,7 @@ export async function runFirstPartyAnalysis(
 		let final = false,
 			timedOut = false;
 		let deadline: ReturnType<typeof setTimeout> | undefined;
-		const finish = (
+		const finish = async (
 			confirmed: boolean,
 			code: number | null,
 			sig: string | null,
@@ -119,9 +136,12 @@ export async function runFirstPartyAnalysis(
 				receipt.error = failure ?? "Parser exited unsuccessfully";
 			} else
 				try {
-					receipt.result = ResultSchema.parse(
+					const parsedResult = ResultSchema.parse(
 						JSON.parse(output.toString("utf8")),
 					);
+					if (!!input.semanticGraph !== !!parsedResult.semanticGraph)
+						throw new Error("Requested semantic evidence was not returned");
+					receipt.result = parsedResult;
 					receipt.resultHash = digest(receipt.result);
 					receipt.status = receipt.result.status;
 				} catch {
@@ -129,12 +149,54 @@ export async function runFirstPartyAnalysis(
 					receipt.error = "Invalid or oversized parser evidence";
 				}
 			try {
-				store.save(receipt);
+				let graph: unknown;
+				if (receipt.result?.semanticGraph) {
+					if (!semanticOutput) throw new Error("Unexpected semantic graph");
+					const {
+						SEMANTIC_MAX_BYTES,
+						javaScriptSemanticGraphSchema,
+						semanticSummary,
+					} = await import("./semantic-engine/engine");
+					const info = await lstat(semanticOutput);
+					if (
+						!info.isFile() ||
+						info.isSymbolicLink() ||
+						info.size > SEMANTIC_MAX_BYTES
+					)
+						throw new Error("Invalid semantic transfer");
+					const encoded = await readFile(semanticOutput);
+					if (
+						encoded.length !== info.size ||
+						encoded.length > SEMANTIC_MAX_BYTES
+					)
+						throw new Error("Semantic transfer size changed");
+					graph = javaScriptSemanticGraphSchema.parse(
+						JSON.parse(encoded.toString("utf8")),
+					);
+					if (
+						digest(
+							semanticSummary(graph as Parameters<typeof semanticSummary>[0]),
+						) !== digest(receipt.result.semanticGraph)
+					)
+						throw new Error("Semantic summary integrity mismatch");
+				}
+				store.save(receipt, graph);
 			} catch {
 				receipt.status = "failed";
 				receipt.error =
 					"Evidence persistence failed; do not replay analysis automatically";
+				delete receipt.result;
+				delete receipt.resultHash;
+				try {
+					store.save(receipt);
+				} catch {
+					/* Reservation is retained if persistence is unavailable. */
+				}
 			}
+			if (scratch && confirmed)
+				await rm(scratch, { recursive: true, force: true }).catch(
+					() => undefined,
+				);
 			resolve(receipt);
 		};
 		const stop = () => {
@@ -215,7 +277,11 @@ export async function runFirstPartyAnalysis(
 						store.save(receipt);
 					}
 					child!.stdin!.end(
-						JSON.stringify({ workspace: receipt.workspace, input }),
+						JSON.stringify({
+							workspace: receipt.workspace,
+							input,
+							semanticOutput,
+						}),
 					);
 				} catch {
 					failure = "Worker ownership persistence failed";
@@ -224,10 +290,13 @@ export async function runFirstPartyAnalysis(
 			})();
 			signal?.addEventListener("abort", stop, { once: true });
 			abort.signal.addEventListener("abort", stop, { once: true });
-			deadline = setTimeout(() => {
-				timedOut = true;
-				stop();
-			}, LIMITS.timeoutMs);
+			deadline = setTimeout(
+				() => {
+					timedOut = true;
+					stop();
+				},
+				input.semanticGraph ? 300_000 : LIMITS.timeoutMs,
+			);
 			if (signal?.aborted) stop();
 		} catch {
 			failure = "Parser process admission failed";

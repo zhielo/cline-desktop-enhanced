@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { lstat, open, realpath, opendir } from "node:fs/promises";
+import { lstat, open, realpath, opendir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
 	AnalysisInputSchema,
@@ -233,6 +233,7 @@ export async function readSources(
 export async function analyzeTarget(
 	workspace: string,
 	value: unknown,
+	semanticOutput?: string,
 ): Promise<AnalysisResult> {
 	const input = AnalysisInputSchema.parse(value),
 		root = await realpath(workspace);
@@ -240,6 +241,24 @@ export async function analyzeTarget(
 	const current = await readSources(root, input.target, budget);
 	const result = analyzeSources(current.sources, current.limitations);
 	result.counters.entries = budget.entries;
+	if (input.semanticGraph) {
+		if (!semanticOutput || !path.isAbsolute(semanticOutput))
+			throw new Error("Owned semantic output required");
+		if (input.compareTarget)
+			throw new Error(
+				"Semantic graph comparison is not implemented; analyze each target separately",
+			);
+		const { analyzeSemanticSources, semanticSummary, SEMANTIC_MAX_BYTES } =
+			await import("./semantic-engine/engine");
+		const graph = await analyzeSemanticSources(current.sources);
+		const output = JSON.stringify(graph);
+		if (Buffer.byteLength(output) > SEMANTIC_MAX_BYTES)
+			throw new Error("Semantic graph transfer budget exceeded");
+		await writeFile(semanticOutput, output, { flag: "wx", mode: 0o600 });
+		result.semanticGraph = semanticSummary(graph);
+		if (current.limitations.length || graph.coverage.status !== "complete")
+			result.status = "partial";
+	}
 	if (input.compareTarget) {
 		const previous = await readSources(root, input.compareTarget, budget);
 		const baseCurrent = await confinedTarget(root, input.target),
@@ -317,7 +336,17 @@ export async function runAnalysisWorkerEntrypoint() {
 	const request = JSON.parse(text);
 	if (!request || typeof request.workspace !== "string")
 		throw new Error("Worker workspace required");
-	const result = await analyzeTarget(request.workspace, request.input);
+	if (
+		request.semanticOutput !== undefined &&
+		(typeof request.semanticOutput !== "string" ||
+			!path.isAbsolute(request.semanticOutput))
+	)
+		throw new Error("Invalid owned semantic output");
+	const result = await analyzeTarget(
+		request.workspace,
+		request.input,
+		request.semanticOutput,
+	);
 	const output = JSON.stringify(result);
 	if (Buffer.byteLength(output) > LIMITS.outputBytes)
 		throw new Error("Evidence output budget exceeded");

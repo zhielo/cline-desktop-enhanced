@@ -2,12 +2,18 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 export const ANALYSIS_PROFILE = "cline-js-static/7";
-export const AnalysisModeSchema = z.enum(["off", "static", "runtime", "hybrid"]);
+export const AnalysisModeSchema = z.enum([
+	"off",
+	"static",
+	"runtime",
+	"hybrid",
+]);
 export type AnalysisMode = z.infer<typeof AnalysisModeSchema>;
 export const AnalysisInputSchema = z
 	.object({
 		target: z.string().min(1).max(4096),
 		compareTarget: z.string().min(1).max(4096).optional(),
+		semanticGraph: z.boolean().optional(),
 	})
 	.strict();
 export type AnalysisInput = z.infer<typeof AnalysisInputSchema>;
@@ -150,6 +156,22 @@ export const ResultSchema = z
 					.max(LIMITS.facts)
 					.optional(),
 				limitations: z.array(z.string()),
+			})
+			.strict()
+			.optional(),
+		semanticGraph: z
+			.object({
+				profile: z.literal("cline-semantic/1"),
+				upstreamRevision: z.string().regex(/^[a-f0-9]{40}$/),
+				graphId: z.string().max(100),
+				graphHash: z.string().regex(/^[a-f0-9]{64}$/),
+				nodes: z.number().int().nonnegative(),
+				relations: z.number().int().nonnegative(),
+				unknowns: z.number().int().nonnegative(),
+				fingerprints: z.number().int().nonnegative(),
+				coverage: z.unknown(),
+				scope: z.literal("file-local-semantics"),
+				limitations: z.array(z.string().max(1000)).max(20),
 			})
 			.strict()
 			.optional(),
