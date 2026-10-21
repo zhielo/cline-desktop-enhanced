@@ -225,6 +225,12 @@ if (
 )
 	throw Error("Tool registry/effect audit mismatch");
 const ports = {
+ inspect_electron_fuses: {
+  route:"reverse_engineer.javascript_analysis",
+  options:{electronFuses:true},
+  tests:["sdk/packages/core/src/analysis/electron-fuses.test.ts","sdk/packages/core/src/analysis/semantic-engine/electron-fuses-parity.test.ts"],
+  limitation:"Exact pinned streaming parser for one session-confined regular PE/ELF/Mach-O executable. No automatic macOS app-bundle resolution, fuse modification, target execution or Inspector readiness certification. Static inspection remains partial."
+ },
 	analyze_javascript_application: {
 		route: "reverse_engineer.javascript_analysis",
 		options: { semanticGraph: true, applicationGraph: true },

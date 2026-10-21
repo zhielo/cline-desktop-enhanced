@@ -171,8 +171,52 @@
       "sha256": "9fe43203b1b8ebda8d6dbee2affe35769ad9fdcb40d5a62900ba42f946ed6c68"
     },
     {
+      "path": "src/artifacts/ArtifactFileOperation.ts",
+      "sha256": "41e72f5096cb34d799f198b140a5c7d7b343ffc0e38b83deb59c4407b6dd35b7"
+    },
+    {
+      "path": "src/artifacts/ArtifactPaths.ts",
+      "sha256": "196c12fedcdf628a99ad2e59272fe40f777d6336690aab98378baac8e35d07b3"
+    },
+    {
       "path": "src/artifacts/ArtifactReader.ts",
       "sha256": "a2499f6b521adfc6931b06e7feb58b0a6709ec585ee00cf1a01e2b81f02c52d3"
+    },
+    {
+      "path": "src/artifacts/ArtifactResourceScope.ts",
+      "sha256": "aa39497a724fa4e3b77e039560ccabc59b072da1cc67c83fc2da3afe616fcdbb"
+    },
+    {
+      "path": "src/artifacts/SafeOutputTree.ts",
+      "sha256": "29cccae965329aa89a691e729638041d0c05ce4ce4afd61d0015b10684482d3c"
+    },
+    {
+      "path": "src/artifacts/SafeOutputTreeCleanup.ts",
+      "sha256": "0d4e9a2524f7136a75baa729e005d4a92cfd70281c37105bc5b8b3cbd63d7e49"
+    },
+    {
+      "path": "src/artifacts/SafeOutputTreeCreationFailure.ts",
+      "sha256": "c2015608f69b6aed8795626ae0122089f43935f804b35e77dd23b677b26ffd6e"
+    },
+    {
+      "path": "src/artifacts/SafeOutputTreeIdentity.ts",
+      "sha256": "f5208428a535a3a9d34e0f9ff055d6e80758057758a88047ee5002ca6b6b1890"
+    },
+    {
+      "path": "src/artifacts/SafeOutputTreeReadback.ts",
+      "sha256": "06997f0f6581222590ee4555f7d63f18283feafd0b9df47bef8b56cc5e218d75"
+    },
+    {
+      "path": "src/artifacts/StreamBytes.ts",
+      "sha256": "af717ba28133a48c0bb95c415aab7432c221a3e1fbf73277d981d49059cae32a"
+    },
+    {
+      "path": "src/artifacts/apple/MachoLoadCommandReader.ts",
+      "sha256": "9b798d58f9423f117388ca816b4267960c58c5630a51dbaffc0fd740eb2b333a"
+    },
+    {
+      "path": "src/artifacts/readArtifactFileChunks.ts",
+      "sha256": "0f19793347bebdd8004d2fc4ce3c5908c2ad6c416f7e0f828b36c524b45ae1d0"
     },
     {
       "path": "src/domain/adb/adbDeviceAnalysis.ts",
@@ -215,6 +259,34 @@
     {
       "path": "src/domain/apple/bundleResourceRoot.ts",
       "sha256": "bca4a4dde0c9ccf6b03e340eef5afabfb14d050a6dcdb18359c4cb3730945b35"
+    },
+    {
+      "path": "src/domain/apple/dyldEnvironment.ts",
+      "sha256": "fd06a1ec02cb88e79e1d693abb303d92338f4ac67b03d6d8a6f259affa27bbe9"
+    },
+    {
+      "path": "src/domain/apple/dyldPaths.ts",
+      "sha256": "f4b563410aa9c8f9bd58d26a4326c4224356eb074d7952e9aba96d501b4cc98d"
+    },
+    {
+      "path": "src/domain/apple/dylibResolution.ts",
+      "sha256": "511ed827de437c81450974ef571893f40d4fb6f0c826e40a7f2de983572cb445"
+    },
+    {
+      "path": "src/domain/apple/dylibResolutionFindings.ts",
+      "sha256": "c7af9dd98b52d343d278682b529ebbac4f75bcbf2b6e5d91992f2a7714279382"
+    },
+    {
+      "path": "src/domain/apple/jvmClassFile.ts",
+      "sha256": "c3a45dcb4a970d3e569986648d7d7764e12ad4a6f7c05761bc9c982c37744d71"
+    },
+    {
+      "path": "src/domain/apple/machoContainer.ts",
+      "sha256": "4d8122c293f69017eae2cd65295302456c115ba9630a287f609f571aa965d41d"
+    },
+    {
+      "path": "src/domain/apple/machoCpuIdentity.ts",
+      "sha256": "8fcce29606d9ad83acdc83ba481db4820daeaf1f9a74f2089e8d3b87e7fa756a"
     },
     {
       "path": "src/domain/artifactFormatMetadata.ts",
@@ -335,6 +407,18 @@
     {
       "path": "src/domain/dosCom.ts",
       "sha256": "8e2b0bc95dc3e759045b230ea443d69d3022a1f5b69bf8b6bee2fa8d772c75a4"
+    },
+    {
+      "path": "src/domain/electron/electronFuses.test.ts",
+      "sha256": "1da4b2c1fe681be0e4064e960f169781b13c77578c1e5b354d26c644068213df"
+    },
+    {
+      "path": "src/domain/electron/electronFuses.ts",
+      "sha256": "882793db3cf919e1a64e0cdbe6ad94cb074ddd7cee4ffa12d10d4373b417203e"
+    },
+    {
+      "path": "src/domain/elfFixedHeader.ts",
+      "sha256": "61640306804f0788d9b622a51b0154c22c2ebab9f1e77823fc5a788bf83440f2"
     },
     {
       "path": "src/domain/emptyArraySchema.ts",
@@ -1033,6 +1117,10 @@
       "sha256": "2296b3c74b305974d33817fa3e226cb1fdaaf78cca6e224debac71344ef342df"
     },
     {
+      "path": "src/domain/peMachine.ts",
+      "sha256": "d6845eea162412978f422f8f7bc05a440da64034ccd0427031957f26e9bbe26b"
+    },
+    {
       "path": "src/domain/pngHeader.ts",
       "sha256": "ef54b81e8aa224b573f61e30689aaa53751377cb1551700e807a817c3ae955ae"
     },
@@ -1171,6 +1259,70 @@
     {
       "path": "src/domain/zodCollectionSteps.ts",
       "sha256": "9cb0c18a0f8b8c18e9096c1f88f49c33849f146db512f60b3cd93fbb6b2ebf8f"
+    },
+    {
+      "path": "src/electron/ElectronFusePath.ts",
+      "sha256": "9278a4226ec75155268ce81e6643461311d28e4c758aadc503d69f42f2d02629"
+    },
+    {
+      "path": "src/electron/ElectronFuseReader.ts",
+      "sha256": "7b4f3e5d990d85a6fc2583b9788cea9f03e323cea0b7a76ed80b916f63cc5bea"
+    },
+    {
+      "path": "src/filesystem/OwnedDirectoryHandle.ts",
+      "sha256": "6c468afd1ed1f705fd1eca30133a5acf2eeecea6cfdf37684ba4d30e080d2038"
+    },
+    {
+      "path": "src/filesystem/OwnedFileHandle.ts",
+      "sha256": "323c9a8cb354ee02f819a3c543afaa3aa7b136b203404b91b171ed958c95104a"
+    },
+    {
+      "path": "src/filesystem/OwnedRegularFile.ts",
+      "sha256": "71326d5b3f16b97876cf98946e800d80111c73e9bf0374435b8600abf2ec191a"
+    },
+    {
+      "path": "src/filesystem/OwnedStagedOutput.ts",
+      "sha256": "a0d380e9597bd3197b32aefd4d390fe16b88a37f16ec75283772876a6853dec0"
+    },
+    {
+      "path": "src/filesystem/RegularFile.ts",
+      "sha256": "4f8640415953c6fd12f2ae4cfdd8ef0f7558ea9cda34a3dbe38f016c1e1c96b5"
+    },
+    {
+      "path": "src/filesystem/callerPath.ts",
+      "sha256": "293cd6c0193026393f25b8533038a74a690327ca02dce99d348bd06719e46e60"
+    },
+    {
+      "path": "src/filesystem/readFileHandleChunks.ts",
+      "sha256": "aa370258766ac032c52f22238e10d8f0d8e14fe21713a2c52479ad60ab090152"
+    },
+    {
+      "path": "src/generatedPackageMetadata.ts",
+      "sha256": "12deebfc932fb0e78746ad06136f5d9b445615a2d4a5e9752e42a2069d245622"
+    },
+    {
+      "path": "src/process/PrivateRuntimeRoot.ts",
+      "sha256": "34cb5256578df89a2af21ffea3d96bf8477ae6c5ab75dbbee0c287c714f449fd"
+    },
+    {
+      "path": "src/process/PrivateRuntimeRootUnavailableError.ts",
+      "sha256": "b2b627f073e78974acd55089a3306654d333aae89afeb0c1c77355c27b3433c7"
+    },
+    {
+      "path": "src/process/WindowsAuthority.ts",
+      "sha256": "8917080d6962a70ea5e18203bece5a597ddc217c6cf0e2ba82509d698389749d"
+    },
+    {
+      "path": "src/windows/WindowsNativeLoader.ts",
+      "sha256": "22205c5cb868c7016d6273219deb8a6c5969fe60a01452e432a880a51ca8b8ae"
+    },
+    {
+      "path": "src/windows/WindowsPrivateRuntime.ts",
+      "sha256": "ab6f56c78229b28aca26ec90ce97f2c36a3d0587ef5fd94b3e65c7035a03d48f"
+    },
+    {
+      "path": "tests/fixtures/electron/fuseImage.ts",
+      "sha256": "01fc0862cee20a93346306a70b44277ab88908dc1b50df1ec06b6271698a60e9"
     },
     {
       "path": "tests/fixtures/javascriptAliasSelectionBudget.ts",
