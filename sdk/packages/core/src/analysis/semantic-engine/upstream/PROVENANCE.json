@@ -1294,7 +1294,9 @@
     },
     {
       "path": "src/filesystem/readFileHandleChunks.ts",
-      "sha256": "aa370258766ac032c52f22238e10d8f0d8e14fe21713a2c52479ad60ab090152"
+      "sha256": "aa370258766ac032c52f22238e10d8f0d8e14fe21713a2c52479ad60ab090152",
+      "localSha256": "c48d5596d2a68e2333f3184b1602e431105d7724c8104d8b1bf9371352608557",
+      "adaptation": "Type-only intersection declares the existing BigInt positional-read overload missing from older VS Code Node type declarations. The original method receiver, exact BigInt offset and emitted JavaScript are unchanged; supported Node 24 and Bun 1.3 runtimes are tested. No number conversion, read bound, cancellation or cleanup change."
     },
     {
       "path": "src/generatedPackageMetadata.ts",
@@ -1319,6 +1321,10 @@
     {
       "path": "src/windows/WindowsPrivateRuntime.ts",
       "sha256": "ab6f56c78229b28aca26ec90ce97f2c36a3d0587ef5fd94b3e65c7035a03d48f"
+    },
+    {
+      "path": "tests/boundary/filesystem/fileHandleChunks.test.ts",
+      "sha256": "f03ed5d464f4fa898d99ac7d2926d8ba4e478bf039236f75f7a2d1ea89accac9"
     },
     {
       "path": "tests/fixtures/electron/fuseImage.ts",

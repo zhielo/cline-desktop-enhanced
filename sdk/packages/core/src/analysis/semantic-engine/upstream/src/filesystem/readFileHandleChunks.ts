@@ -68,7 +68,14 @@ export const readFileHandleChunks = (
         readPending = true;
         let bytesRead: number;
         try {
-          ({ bytesRead } = await handle.read(chunk, 0, chunk.length, position));
+          // Node 24 and Bun 1.3 support BigInt positional reads. The VS Code
+          // compatibility build uses older Node declarations without that overload.
+          // This type-only intersection retains the receiver and exact offset;
+          // it emits the original method call without number coercion.
+          ({ bytesRead } = await (handle.read as typeof handle.read & (
+            (buffer: Buffer, offset: number, length: number, position: bigint) =>
+              Promise<{ bytesRead: number }>
+          ))(chunk, 0, chunk.length, position));
         } finally {
           readPending = false;
         }

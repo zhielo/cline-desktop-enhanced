@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Electron reader cross-runtime compatibility and acceptance formatting
+
+- The VS Code source compatibility check uses older Node declarations that omit the BigInt positional-read overload supported by Node 24 and Bun 1.3. A call-local type-only intersection preserves the exact original method receiver and BigInt offset without number coercion. Emitted JavaScript is byte-identical to the original reader. Original cancellation/coverage fixtures and new real-descriptor/cursor/large-offset regressions remain blocking; provenance records the adaptation explicitly.
+- The installed acceptance driver is formatted with the existing extension Biome configuration. Its emitted runtime AST is unchanged (ignoring parentheses/formatting), assertions and deadlines are not relaxed, and the finite policy pins its new bytes. The exact filterable-view-before-filter preservation marker is updated to the formatted source, not removed. The complete extension quality/package checks must pass before publication.
+
 ## Direct Electron fuse source port
 
 - `javascript_analysis` accepts explicit `javascript_options.electronFuses: true` for one confined regular PE/ELF/Mach-O executable, including universal Mach-O slices. It uses the pinned original streaming reader, format/architecture decoders, wire-state names, implication rules and descriptor cleanup—not a REA install, backend, MCP server or executable plugin. Existing source analysis remains the default. Fuse mode cannot combine graphs or comparison.

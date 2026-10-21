@@ -98,7 +98,7 @@ The script never installs REA and is not part of the production runtime. The two
 
 ## Source provenance
 
-`semantic-engine/upstream/PROVENANCE.json` records original file hashes, pinned revision, test selection and local compatibility adaptations. Upstream MIT attribution is included. Adaptations remove unused imports or prefix unused parameter names to satisfy host compiler rules; a URL base is passed as its identical href for downstream string-only URL.parse declarations, and a guarded loop uses a type-only non-null assertion for older downstream TypeScript versions. The analysis algorithms and function arity are preserved.
+`semantic-engine/upstream/PROVENANCE.json` records original file hashes, pinned revision, test selection and local compatibility adaptations. Upstream MIT attribution is included. Adaptations remove unused imports or prefix unused parameter names to satisfy host compiler rules; a URL base is passed as its identical href for downstream string-only URL.parse declarations, and a guarded loop uses a type-only non-null assertion for older downstream TypeScript versions. The descriptor streaming helper additionally declares its existing BigInt positional-read overload through a type-only intersection for older VS Code Node declarations; receiver, exact offset and emitted JavaScript are unchanged. Original cancellation/coverage and real-runtime descriptor regressions cover this adaptation. The analysis algorithms and function arity are preserved.
 
 Run `node scripts/verify-semantic-port.mjs` to detect undocumented drift. Do not run global source-rewriting formatters over the attributed snapshot without updating documented adaptations and rerunning differential tests.
 

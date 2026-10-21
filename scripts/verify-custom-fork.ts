@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/analysis/file-handle-chunks-compat.test.ts",markers:["without moving its cursor", "beyond Number.MAX_SAFE_INTEGER without coercion", "expect(this).toBe(owner)"]},
  {path:"sdk/packages/core/src/analysis/electron-fuses.ts",markers:["readElectronFuseImage", "resources.close()", 'status: "partial"', "electronFuseReportSchema.parse"]},
  {path:"sdk/packages/core/src/analysis/service.ts",markers:["!!input.electronFuses !== !!parsedResult.electronFuses", "Fuse receipt projection mismatch"]},
  {path:"sdk/packages/core/src/analysis/electron-fuses.test.ts",markers:["chunk-boundary sentinels", "fails closed when the owned child", "unknown wire versions"]},
@@ -21,7 +22,7 @@ const requiredMarkers: Array<{
 	{
 		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
 		markers: [
-			'await sourceWorkspace.getByRole("button",{name:"application-nodes",exact:true}).click();\n    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("ipc-channel");',
+			'await sourceWorkspace.getByRole("button", { name: "application-nodes", exact: true }).click()\n\t\tawait sourceWorkspace.getByLabel("Filter analysis evidence", { exact: true }).fill("ipc-channel")',
 		],
 	},
 	{
