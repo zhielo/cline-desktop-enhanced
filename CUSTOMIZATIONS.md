@@ -2,6 +2,12 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Native Node CI supervision with exact pinned Bun children
+
+- The consolidated CI supervisor runs under native Node 22+, independent of the Bun children that execute the unchanged gates. This addresses a repeatedly observed Windows stall at installer configuration in which Bun-hosted supervisor heartbeats also stopped; it is a targeted mitigation, not proof of an established Bun root cause or a passing Windows result.
+- Before any gate, bounded isolated probes verify the exact supported Bun version, canonical regular-file executable and a second invocation of that exact path. Every default Bun job uses that executable; explicitly Node/Python jobs retain their own runtime. Wrong/malformed/changed identities fail closed. Probe failures omit child error output.
+- No gate is removed, skipped or retried; 20-minute per-gate and 35-minute outer workflow deadlines, owned child-tree termination, failure receipts and exact commit/run/attempt reuse remain unchanged. Package orchestration still uses the existing workflow commands; only the supervisor runtime changes. Its finite release recipe hash is updated. New Windows validation is mandatory before claiming the mitigation works.
+
 ## Runtime-neutral installed receipt profile identity
 
 - The unchanged `cline-js-static/7` constant lives in the dependency-free analysis `profile.ts` module. Analysis contracts import and re-export that same constant; parser schemas and receipt validation remain unchanged. Native Node strip-types acceptance imports/reads the profile-only module rather than transitively loading Bun-resolved source parsers. No Node loader, extension-resolution workaround or parser validation bypass is added.

@@ -158,6 +158,6 @@ export const RELEASE_GATE_POLICY = {
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"bcb9f8d7c5b30a1a16f1eb8787f8ae8df90084cfde9aadaf22e33e70dd6e7df2",
 		"scripts/validate-advanced-build.mjs":
-			"17d4cf434e7ca82f075ffb3227bde1e770d93bb6b1845c1a369bf446ff9adc84",
+			"5fe0020327e10e9f0101e8f9dd0b6f34c4d8554749e7555c18c8c8aed3192bca",
 	},
 } as const;

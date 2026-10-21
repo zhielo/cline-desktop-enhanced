@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertReusableCoreValidation, coreValidationReceiptPath, validationScope, engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, formatValidationFailureNotice, formatValidationSummary, recordValidationProgress, parseParallel, runJobs, runValidation } from "./validate-advanced-build.mjs";
+import { assertReusableCoreValidation, coreValidationReceiptPath, validationScope, engineCorpusArgs, formatValidationHeartbeat, formatValidationNotice, formatValidationFailureNotice, formatValidationSummary, recordValidationProgress, parseParallel, runJobs, runValidation, probeValidationBun, validationExecutable } from "./validate-advanced-build.mjs";
 const jobs = [1, 2, 3, 4, 5].map(n => ({ name: String(n) }));
 test("core reuse requires every gate and the exact commit, job and run attempt", () => {
   const source = "a".repeat(40);
@@ -198,4 +198,44 @@ test("shipped investigation skills are a blocking core and installed gate before
  for(const stage of ["installed-bundled-investigation-skills-instruction-only-namespace-disable-passed","installed-bundled-investigation-skills-disable-persisted-restart-passed"])
   assert.ok(acceptance.includes(stage));
  assert.ok(acceptance.includes('verifyInstalledInvestigationCatalog(await readSkills(), false, installedSkillRoot)'));
+});
+
+
+test("native Node supervises the same exact pinned Bun executable with isolated bounded probes", () => {
+ const root=mkdtempSync(path.join(tmpdir(),"cline-supervisor-"));
+ try {
+  const identity={runtime:"bun",version:"1.3.14",executable:process.execPath};
+  const calls=[];
+  const bun=probeValidationBun(root,"1.3.14",(exe,args,options)=>{
+   calls.push(exe);assert.equal(options.cwd,root);assert.equal(options.shell,false);
+   assert.equal(options.timeout,30_000);assert.equal(options.maxBuffer,8192);
+   for(const flag of ["--no-env-file","--no-autoload-bunfig","--no-autoload-tsconfig","--no-autoload-package-json"])
+    assert.ok(args.includes(flag));
+   return JSON.stringify(identity);
+  });
+  assert.equal(calls[0],"bun");assert.equal(calls[1],bun.executable);
+  assert.equal(bun.version,"1.3.14");
+  assert.equal(validationExecutable({},bun.executable),bun.executable);
+  assert.equal(validationExecutable({executable:"node"},bun.executable),"node");
+  assert.equal(validationExecutable({executable:"python"},bun.executable),"python");
+  const pkg=JSON.parse(readFileSync(new URL("../package.json",import.meta.url),"utf8"));
+  assert.equal(pkg.scripts["validate:advanced"],"node scripts/validate-advanced-build.mjs");
+  const source=readFileSync(new URL("./validate-advanced-build.mjs",import.meta.url),"utf8");
+  assert.ok(source.includes("spawn(validationExecutable(step, bun.executable), step.args"));
+  assert.ok(source.includes("timeoutMs: 20 * 60 * 1000"));
+  assert.ok(source.includes('supervisorRuntime: "node"'));
+ } finally {rmSync(root,{recursive:true,force:true});}
+});
+test("supervisor rejects wrong, malformed, changed and non-file Bun identities without leaking child errors", () => {
+ const base={runtime:"bun",version:"1.3.14",executable:process.execPath};
+ for(const value of [null,{}, {...base,runtime:"node"},{...base,version:"1.3.13"},
+   {...base,executable:"relative-bun"},{...base,executable:tmpdir()},{...base,extra:true},
+   {...base,executable:process.execPath+"\n"}])
+  assert.throws(()=>probeValidationBun(tmpdir(),"1.3.14",()=>JSON.stringify(value)));
+ assert.throws(()=>probeValidationBun(tmpdir(),"1.3.14",()=>"not-json"),/malformed/);
+ let calls=0;
+ assert.throws(()=>probeValidationBun(tmpdir(),"1.3.14",()=>JSON.stringify(++calls===1?base:{...base,executable:path.resolve("package.json")})),/identity changed during exact-path probe/);
+ assert.throws(()=>probeValidationBun(tmpdir(),"1.3.14",()=>{throw Error("PRIVATE_CHILD_OUTPUT");}),error=>{
+  assert.ok(!error.message.includes("PRIVATE_CHILD_OUTPUT"));return /fixed deadline/.test(error.message);
+ });
 });

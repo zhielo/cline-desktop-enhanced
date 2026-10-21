@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"scripts/validate-advanced-build.mjs",markers:["probeValidationBun", "spawn(validationExecutable(step, bun.executable), step.args", 'supervisorRuntime: "node"', "timeoutMs: 20 * 60 * 1000"]},
+ {path:"scripts/validate-advanced-build.test.mjs",markers:["isolated bounded probes", "without leaking child errors"]},
  {path:"sdk/packages/core/src/analysis/profile.ts",markers:['export const ANALYSIS_PROFILE = "cline-js-static/7";']},
  {path:"sdk/packages/core/src/analysis/contracts-profile.test.ts",markers:["the same runtime-neutral receipt profile", "malformed fuse evidence"]},
  {path:"scripts/validate-advanced-build.test.mjs",markers:["selfcheck>=0 && bootstrap>=0 && selfcheck<bootstrap", "verifyInstalledInvestigationCatalog(await readSkills(), false, installedSkillRoot)"]},

@@ -1,8 +1,40 @@
 import { spawn, execFileSync } from "node:child_process";
-import { appendFileSync, createWriteStream } from "node:fs";
+import { appendFileSync, createWriteStream, realpathSync, statSync } from "node:fs";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { supportedBunVersion } from "./read-bun-version.mjs";
+
+/** Probe with no project autoload, then bind every Bun job to the same canonical executable. */
+export function probeValidationBun(root, expectedVersion, execute = execFileSync) {
+  const args = ["--no-env-file", "--no-autoload-bunfig", "--no-autoload-tsconfig", "--no-autoload-package-json", "--eval",
+    'console.log(JSON.stringify({runtime:"bun",version:Bun.version,executable:process.execPath}))'];
+  const options = { cwd: root, encoding: "utf8", timeout: 30_000, maxBuffer: 8192, windowsHide: true, shell: false };
+  const parse = raw => {
+    let value;
+    try { value = JSON.parse(raw); } catch { throw new Error("Validation Bun identity probe is malformed"); }
+    if (!value || Object.keys(value).sort().join(",") !== "executable,runtime,version" || value.runtime !== "bun" ||
+        value.version !== expectedVersion || typeof value.executable !== "string" || value.executable.length > 4096 ||
+        /[\x00-\x1f\x7f]/.test(value.executable) || !path.isAbsolute(value.executable))
+      throw new Error("Validation requires the exact supported Bun executable identity");
+    const executable = realpathSync(value.executable);
+    if (!statSync(executable).isFile()) throw new Error("Validation Bun executable must be a regular file");
+    return executable;
+  };
+  const probe = executable => {
+    try { return execute(executable, args, options); }
+    catch { throw new Error("Pinned Bun identity probe failed or exceeded its fixed deadline"); }
+  };
+  const executable = parse(probe("bun"));
+  if (parse(probe(executable)) !== executable)
+    throw new Error("Validation Bun executable identity changed during exact-path probe");
+  return { executable, version: expectedVersion };
+}
+
+/** Node owns timers and pipes; command jobs keep their explicit runtime when supplied. */
+export function validationExecutable(step, bunExecutable) {
+  return step.executable ?? bunExecutable;
+}
 
 export function parseParallel(value = "2") {
   const n = Number(value);
@@ -102,11 +134,14 @@ export async function runValidation(prerequisites, checks, parallel, run) {
 }
 
 async function main() {
+  if (process.versions.bun || !process.versions.node || Number(process.versions.node.split(".")[0]) < 22)
+    throw new Error("Validation supervisor requires native Node 22+; use the validate:advanced package command");
   const flags = process.argv.slice(2).filter(x => x !== "--");
   if (flags.some(x => !["--engines", "--reuse-core"].includes(x)) ||
       (flags.includes("--reuse-core") && !flags.includes("--engines")))
     throw new Error("Only --engines and its receipt-verified --reuse-core option are supported");
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const bun = probeValidationBun(root, supportedBunVersion(JSON.parse(await readFile(path.join(root, "package.json"), "utf8"))));
   const output = path.join(root, ".cline-validation", `${Date.now()}-${process.pid}`);
   await mkdir(output, { recursive: true });
   const parallel = parseParallel(process.env.CLINE_VALIDATION_PARALLEL ?? "2");
@@ -299,7 +334,7 @@ async function main() {
     recordValidationProgress(progressFile, { event: "check-start", name: step.name, log: logName });
     return await new Promise(resolve => {
       let settled = false, timedOut = false, timer;
-      const child = spawn(step.executable ?? process.execPath, step.args, {
+      const child = spawn(validationExecutable(step, bun.executable), step.args, {
         cwd: step.cwd, env: process.env, shell: false, detached: process.platform !== "win32", windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -326,6 +361,7 @@ async function main() {
   }
   await writeFile(path.join(output, "summary.json"), JSON.stringify({
     schemaVersion: 1, started, finished: new Date().toISOString(), sourceCommit, parallel, executionScope,
+    supervisorRuntime: "node", supervisorVersion: process.versions.node, childBunVersion: bun.version,
     coreValidationReceipt,
     engineValidation: flags.includes("--engines") ? "requested-see-corpus-results" : "not-requested",
     engineProfile: flags.includes("--engines") ? (process.platform === "win32" ? "windows-portable" : "full") : "not-requested",
