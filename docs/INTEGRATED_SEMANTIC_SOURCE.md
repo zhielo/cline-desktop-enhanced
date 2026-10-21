@@ -2,9 +2,9 @@
 
 ## Status and scope
 
-This is a partial source-level migration from `morluto/rea` at commit `d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f`, not the completed whole-application REA migration. It directly integrates file-local semantic analysis, graph construction, fingerprints and saved semantic queries. No `rea-agents` dependency, REA CLI, MCP server, REA installation, or separate REA runtime is used in production.
+This is a partial source-level migration from `morluto/rea` at commit `d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f`, not the completed whole-application REA migration. It directly integrates file-local semantic analysis, application graph projection over admitted source files, graph construction, fingerprints and saved semantic/application queries. No `rea-agents` dependency, REA CLI, MCP server, REA installation, or separate REA runtime is used in production.
 
-Existing Cline native, managed, runtime and device capabilities remain unchanged. Cross-module application graph linking, bundle recovery, native high-p-code value tracing, complete managed workflows, runtime reconciliation, reconstruction obligations and remaining specialist-provider migrations are not implemented by this patch. No full REA parity or superiority claim is made.
+Existing Cline native, managed, runtime and device capabilities remain unchanged. Complete application acquisition/source selection, bundle source recovery, native high-p-code value tracing, complete managed workflows, runtime reconciliation, reconstruction obligations and remaining specialist-provider migrations are not implemented by this patch. No full REA parity or superiority claim is made.
 
 ## Use
 
@@ -30,6 +30,41 @@ A saved trace requires an upstream-compatible seed and direction; select the out
 
 Directions are backward-provenance, forward-influence, callers and ownership. Trace findings remain static inference. No target execution, producer attestation or semantic-equivalence certification is implied.
 
+## Optional application graph
+
+Select **Include application graph and Electron boundaries** or explicitly pass both flags:
+
+```json
+{"operation":"javascript_analysis","target":"app","javascript_options":{"semanticGraph":true,"applicationGraph":true}}
+```
+
+The worker uses the original module/bundle/Electron graph algorithms over admitted bytes. JSON and HTML admission is extended only for this option. Native `.node` files contribute static metadata, not native decompilation. Application identities commit a sorted virtual path/hash/size manifest; they do not certify complete original container acquisition. Semantic nodes remain file-local but bind to application nodes (`cline-semantic/2`). Graph coverage is partial even for small fixtures; configured truncation and omitted counts are retained.
+
+Read `application-summary`, `application-nodes`, or `application-edges`. The desktop also offers explicit **Saved application feature tracing and comparisons** controls, including while Analysis is Off:
+
+```json
+{"operation":"analysis_evidence","evidence_query":{"receiptId":"<owning receipt UUID>","view":"application-trace","applicationTrace":{"seed":{"kind":"channel","value":"owned:add"},"direction":"both"},"applicationSection":"edges","limit":20}}
+```
+
+- `application-comparison`: a distinct `compareReceiptId`; same-content distinct receipts are valid, but incomplete graphs cannot prove globally unchanged behavior or absence.
+- `application-exports`: distinct `compareReceiptId` and exact `exportSelectors.left/right` containing `modulePath` and `exportName`.
+- `application-source-bundle`: `compareReceiptId`; the left source manifest is only a partial historical reference, without complete repository/import/VCS evidence.
+- `applicationSection` selects retained arrays for bounded display. A section absent from that workflow fails explicitly. No provider, target, reconstruction or automatic approval is launched by these queries.
+
+Both graphs and receipt finalize in one transaction after parent-side schema/hash/binding checks. The private combined transfer stays below 128 MiB; retained graph storage shares the 512 MiB ledger limit. No automatic eviction is added.
+
+## Complete contract inventory, not a parity claim
+
+`docs/rea-migration/capabilities.json` records all 212 public contracts from the pinned upstream registry. The companion dependency index covers static literal imports, including types, not provider script/runtime dependencies. Each contract retains its effect audit, description, source location, lexical upstream test mentions and explicit source-migration status. Six contracts have partial source-port routes; the others are deliberately not certified by this audit, even where Cline has an independent overlapping tool.
+
+Regenerate/check using Bun with `CLINE_SEMANTIC_REFERENCE_ROOT` set to the exact pinned development checkout:
+
+```bash
+bun scripts/rea-capability-inventory.mjs --check
+```
+
+The script never installs REA and is not part of the production runtime. The two-platform source validation workflow checks the committed inventory.
+
 ## Integrity and budgets
 
 - Existing source inventory budgets remain: 128 files, 1 MiB per source, 8 MiB aggregate source bytes, bounded ASAR inventory. Therefore broad artifact/source-selection parity is not established.
@@ -40,7 +75,7 @@ Directions are backward-provenance, forward-influence, callers and ownership. Tr
 - New canonical graph hashing is separate from legacy receipt hashing. Historical evidence is not rehashed.
 - Semantic analysis has a five-minute deadline. Worker isolation is not an OS sandbox or a fixed-RSS guarantee; no new kernel memory enforcement is claimed.
 - Page output is bounded by record count and byte budget. Oversized individual records retain a display-omitted marker. Saved queries currently load/hash-validate the bounded whole graph before returning a page; they are not streaming queries.
-- Combined semantic graph/version comparison is rejected. Analyze targets independently; no application-version equivalence claim is provided.
+- `compareTarget` together with semantic analysis is rejected. Analyze separately, then use saved application comparisons; no semantic or behavioral equivalence claim is provided.
 
 ## Source provenance
 
@@ -58,6 +93,6 @@ Run `node scripts/verify-semantic-port.mjs` to detect undocumented drift. Do not
 
 The parity test requires `CLINE_SEMANTIC_REFERENCE_ROOT` pointing to a separate checkout of the exact pinned reference. Its dependencies must resolve to identical analysis versions. The reference is development-only; do not install or launch REA in production. Without this variable, the parity test is explicitly skipped, not passed. The finite release policy requires both semantic parity checks and pins both the installer and semantic validation recipes. The reusable source-validation workflow always supplies the pinned reference and runs on Linux and Windows before the installer job.
 
-The owned corpus covers local calls/closures, properties, promises, events, timers, child-process syntax, configuration/requests, Electron syntax, shadowing, dynamic keys, malformed input and nonexecution. Exact graph digests are compared; original source hashes are also checked. This establishes equality only for those file-local fixtures, not all JavaScript programs or all REA features.
+The owned corpus covers local calls/closures, properties, promises, events, timers, child-process syntax, configuration/requests, Electron syntax, shadowing, dynamic keys, malformed input and nonexecution. Exact graph digests are compared; original source hashes are also checked. The additional application parity corpus compares original application and semantic graph digests for the same admitted inventory plus saved feature/version/export algorithm outputs. Applicable upstream graph/source-map/module/version/uncertainty tests run unchanged. This establishes equality only for those fixtures and projection inputs, not full upstream acquisition, all JavaScript programs or all REA features.
 
 Installed Windows acceptance, licensed-engine compatibility, whole-application parity and superiority remain separate release obligations. This patch must remain draft until its required CI and release obligations are reviewed.

@@ -8,7 +8,7 @@ import {OWNED_MANAGED_BASE64,OWNED_MANAGED_SHA256,OWNED_EH_BASE64,OWNED_EH_SHA25
 import { createHash,randomUUID } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { appendFile, mkdir, mkdtemp, open, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, open, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
@@ -460,6 +460,14 @@ export async function main() {
   await writeFile(join(analysisCurrent,"owned-eh.dll"),exceptionFixture);
   await writeFile(join(analysisCurrent,"preload.js"),'const {contextBridge:cb,ipcRenderer:ir}=require("electron");const addon=require("./owned.node");const api={read:(x)=>ir.invoke("owned:fixture",x),hash:(x)=>addon.hash(x)};cb.exposeInMainWorld("ownedApi",api);');
   await writeFile(join(analysisCurrent,"renderer.js"),'import {ipcRenderer} from "electron";ipcRenderer.invoke("owned:fixture");window.ownedApi.read(42);window.ownedApi.hash(42);');
+
+  const applicationSentinel=join(workspace,"APPLICATION_MUST_NOT_EXECUTE");
+  const applicationRoot=join(workspace,"owned-application-graph");await mkdir(applicationRoot);
+  await writeFile(join(applicationRoot,"package.json"),'{"name":"owned-installed-app","main":"main.cjs"}');
+  await writeFile(join(applicationRoot,"main.cjs"),`const {BrowserWindow,ipcMain}=require('electron');require('node:fs').writeFileSync(${JSON.stringify(applicationSentinel)},'BAD');const win=new BrowserWindow({webPreferences:{preload:__dirname+'/preload.cjs'}});win.loadFile('index.html');ipcMain.handle('owned:application',(_event,value)=>({count:value+1}));throw new Error('MUST_NOT_EXECUTE');`);
+  await writeFile(join(applicationRoot,"preload.cjs"),"const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('owned',{read:(value)=>ipcRenderer.invoke('owned:application',value)});");
+  await writeFile(join(applicationRoot,"index.html"),'<script src="renderer.js"></script>');
+  await writeFile(join(applicationRoot,"renderer.js"),"window.owned.read(41);");
 
   let port = 0;
   const discoveryPath = join(root, "hub.json");
@@ -1023,6 +1031,41 @@ ConvertTo-Json -InputObject @($rows) -Compress
     stages.push("installed-first-party-mode-parser-evidence-passed");
     // Receipt-bound read stays available Off; no analysis, approval or target execution is started.
     const sourceWorkspace=page.getByLabel("First-party Analysis Workspace",{exact:true});
+    // Explicit UI opt-in; retained queries remain available after returning to Off.
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("static");
+    await sourceWorkspace.getByLabel("JavaScript analysis target",{exact:true}).fill("owned-application-graph");
+    await sourceWorkspace.getByLabel("JavaScript comparison target",{exact:true}).fill("");
+    await sourceWorkspace.getByLabel("Include application graph and Electron boundaries",{exact:true}).check();
+    if(!await sourceWorkspace.getByLabel("Include file-local semantic graph",{exact:true}).isChecked())throw new Error("Application graph did not explicitly bind semantic opt-in");
+    const applicationRun=sourceWorkspace.getByRole("button",{name:"Inspect static sources",exact:true});
+    await applicationRun.waitFor();
+    await page.waitForFunction(()=>!document.querySelector<HTMLButtonElement>('[aria-label="First-party Analysis Workspace"] button.bg-primary')?.disabled,undefined,{timeout:30000});
+    await applicationRun.click();
+    await page.waitForFunction(()=>{const s=document.querySelector<HTMLSelectElement>('[aria-label="Saved analysis receipt"]');return !!s?.selectedOptions[0]?.textContent?.includes("owned-application-graph")&&!document.querySelector<HTMLButtonElement>('[aria-label="First-party Analysis Workspace"] button.bg-primary')?.disabled;},undefined,{timeout:330000});
+    const applicationReceiptId=await sourceWorkspace.getByLabel("Saved analysis receipt",{exact:true}).inputValue();
+    const appSummary=await rpc<{available:boolean;summary:{profile:string;coverage:{status:string}}}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:applicationReceiptId,view:"application-summary"}});
+    if(!appSummary.available||appSummary.summary.profile!=="cline-application/1"||appSummary.summary.coverage.status!=="partial")throw new Error("Installed application graph summary missing or overstated");
+    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("ipc-channel");
+    await sourceWorkspace.getByRole("button",{name:"application-nodes",exact:true}).click();
+    await sourceWorkspace.getByText('"ipc-channel"',{exact:false}).first().waitFor({timeout:30000});
+    await page.getByLabel("Session Analysis mode",{exact:true}).selectOption("off");
+    const appWorkflows=sourceWorkspace.getByLabel("Saved application workflows",{exact:true});
+    await appWorkflows.locator("summary").click();
+    await appWorkflows.getByLabel("Application feature seed",{exact:true}).fill("owned:application");
+    await appWorkflows.getByRole("button",{name:"Run saved application query",exact:true}).click();
+    const appTrace=appWorkflows.getByRole("region",{name:"Saved application workflow result",exact:true});
+    await appTrace.waitFor({timeout:30000});
+    const displayedAppTrace=JSON.parse(await appTrace.innerText());
+    if(displayedAppTrace.summary?.matched_seeds<1||displayedAppTrace.providerCalls!==0)throw new Error("Installed application trace UI did not show saved evidence");
+    const savedAppTrace=await rpc<{providerCalls:number;verifiedBehavior:boolean;summary:{matched_seeds:number}}>(page,"first_party_analysis_evidence",{...analysisArgs,query:{receiptId:applicationReceiptId,view:"application-trace",applicationTrace:{seed:{kind:"channel",value:"owned:application"},direction:"both"},limit:2}});
+    if(savedAppTrace.providerCalls!==0||savedAppTrace.verifiedBehavior!==false||savedAppTrace.summary.matched_seeds<1)throw new Error("Installed saved application trace contract failed");
+    if(await stat(applicationSentinel).then(()=>true,()=>false))throw new Error("Installed application graph executed target code");
+    await writeFile(join(evidence,"application-graph-evidence.json"),JSON.stringify({receiptId:applicationReceiptId,summary:appSummary,trace:savedAppTrace},null,2));
+    stages.push("installed-application-graph-electron-saved-trace-no-execution-passed");
+    await sourceWorkspace.getByLabel("Include application graph and Electron boundaries",{exact:true}).uncheck();
+    await sourceWorkspace.getByLabel("Include file-local semantic graph",{exact:true}).uncheck();
+    await sourceWorkspace.getByLabel("Saved analysis receipt",{exact:true}).selectOption(parsed.id);
+    await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("");
     await sourceWorkspace.getByRole("button",{name:"artifacts",exact:true}).click();
     await sourceWorkspace.getByLabel("Filter analysis evidence",{exact:true}).fill("selection-owned.ts");
     const inspectSaved=sourceWorkspace.getByRole("button",{name:"Inspect saved source identity",exact:true});
