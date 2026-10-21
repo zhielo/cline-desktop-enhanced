@@ -3,10 +3,10 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
-	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, expect, it } from "vitest";
@@ -35,10 +35,10 @@ beforeAll(async () => {
 	a = await analyzeApplicationSources(ownedApplication());
 	b = await analyzeApplicationSources(ownedApplication(2));
 });
-beforeEach(() => {
-	// Worker helpers require the canonical workspace spelling, as production
-	// service admission and the owned worker smoke already provide on Windows.
-	root = realpathSync(mkdtempSync(join(tmpdir(), "cline-application-test-")));
+beforeEach(async () => {
+	// Use the exact async canonicalizer used by analyzeTarget and the owned
+	// worker smoke. Sync JS realpath can retain Windows 8.3 TEMP aliases.
+	root = await realpath(mkdtempSync(join(tmpdir(), "cline-application-test-")));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 function receipt(graphs: typeof a, version = 1): AnalysisReceipt {

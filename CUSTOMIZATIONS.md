@@ -5,7 +5,7 @@ This file is the durable customization ledger for this repository. The source on
 ## Migration CI diagnostics and narrowly scoped secret-scan exception
 
 - The pinned public REA revision is exempted only from the Sourcegraph token rule, on its exact `revision` JSON line in the two generated migration inventories. Other fields, revisions, files and actual token patterns remain scanned. One exact historical fingerprint records the same public revision in the first scanner-scope fixture; current fixtures read the revision from inventory instead of embedding it. Nine synthetic scope regressions run before both Windows secret scans; default rules and full-history scanning remain enabled.
-- Application evidence fixtures canonicalize their temporary workspace before calling low-level worker helpers, matching production admission. The worker containment/link checks remain unchanged.
+- Application evidence fixtures use the worker's async canonicalizer on their temporary workspace before calling low-level helpers; synchronous JS realpath can retain Windows 8.3 TEMP aliases. The worker containment/link checks remain unchanged.
 - Semantic CI always publishes bounded JUnit failure/error annotations, retains the complete report artifact, and fails diagnostic parsing on missing/malformed/unsafe reports. Unicode diagnostics explicitly use UTF-8, including on Windows console code pages. Python is standard-library CI tooling only, not an app prerequisite. The original Vitest exit status still blocks release; tests are not retried or skipped to mask failures.
 
 ## Integrated application graph and saved application workflows (partial REA migration)
