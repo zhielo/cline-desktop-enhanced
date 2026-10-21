@@ -1477,6 +1477,7 @@ const requiredMarkers: Array<{
 			"bun install --frozen-lockfile",
 			"bun run types",
 			"run: bun run lint",
+			"scripts/prepare-ci-python*.mjs",
 			"node scripts/prepare-ci-python.mjs",
 			"node --test scripts/prepare-ci-python.test.mjs",
 		],

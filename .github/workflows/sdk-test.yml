@@ -8,6 +8,7 @@ on:
             - "sdk/**"
             - "package.json"
             - "scripts/read-bun-version.mjs"
+            - "scripts/prepare-ci-python*.mjs"
             - "apps/examples/desktop-app/**"
             - ".github/workflows/sdk-test.yml"
     workflow_dispatch:
@@ -16,6 +17,7 @@ on:
             - "sdk/**"
             - "package.json"
             - "scripts/read-bun-version.mjs"
+            - "scripts/prepare-ci-python*.mjs"
             - "apps/examples/desktop-app/**"
             - ".github/workflows/sdk-test.yml"
     workflow_call:
