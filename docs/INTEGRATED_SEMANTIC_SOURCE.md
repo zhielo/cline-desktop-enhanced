@@ -44,7 +44,7 @@ Directions are backward-provenance, forward-influence, callers and ownership. Tr
 
 ## Source provenance
 
-`semantic-engine/upstream/PROVENANCE.json` records original file hashes, pinned revision, test selection and local compatibility adaptations. Upstream MIT attribution is included. Adaptations remove unused imports or prefix unused parameter names to satisfy host compiler rules; the analysis algorithms and function arity are preserved.
+`semantic-engine/upstream/PROVENANCE.json` records original file hashes, pinned revision, test selection and local compatibility adaptations. Upstream MIT attribution is included. Adaptations remove unused imports or prefix unused parameter names to satisfy host compiler rules; a URL base is passed as its identical href for downstream string-only URL.parse declarations, and a guarded loop uses a type-only non-null assertion for older downstream TypeScript versions. The analysis algorithms and function arity are preserved.
 
 Run `node scripts/verify-semantic-port.mjs` to detect undocumented drift. Do not run global source-rewriting formatters over the attributed snapshot without updating documented adaptations and rerunning differential tests.
 

@@ -7,7 +7,8 @@ Validated on Linux against pinned REA source revision `d0067ba34a39ea47dd7e11bb2
 | Check | Result |
 | --- | --- |
 | SDK build (all packages) | Passed |
-| Core development and smoke TypeScript checks | Passed |
+| Repository-wide TypeScript checks (`bun run types`) | Passed, including CLI/VS Code consumers and core smoke configurations |
+| Repository CI lint gate | Passed |
 | Desktop sidecar bundle | Passed |
 | Custom-fork preservation | 308 source contracts passed |
 | Source provenance | 138 source/test files verified |

@@ -158,7 +158,9 @@
     },
     {
       "path": "src/domain/javascript/javascriptBundledRequireOrigin.ts",
-      "sha256": "e5bacf475192a17c58b6b6b23ecefee0f0dd46d76c1e163b98fc5bd2f1237aa1"
+      "sha256": "e5bacf475192a17c58b6b6b23ecefee0f0dd46d76c1e163b98fc5bd2f1237aa1",
+      "localSha256": "32d32a6af6702c9f3ccfda874b231dac88ef060ac69a35d0adcc7909e0b6325f",
+      "adaptation": "Add a type-only non-null assertion in the for-loop increment already guarded by ancestor !== undefined, for the downstream TypeScript version; emitted behavior is unchanged."
     },
     {
       "path": "src/domain/javascript/javascriptCommonJsExportReceivers.ts",
@@ -428,7 +430,9 @@
     },
     {
       "path": "src/domain/javascript/javascriptSourceMapPaths.ts",
-      "sha256": "52dea977dad8fa3837ae960ed5d874b0d5fd857f4780dcd9634f21bd178e26ab"
+      "sha256": "52dea977dad8fa3837ae960ed5d874b0d5fd857f4780dcd9634f21bd178e26ab",
+      "localSha256": "d0f29e57b9200993646056c4d02dd08b1d0f7d793c2474efab5e7b7d144fc7b1",
+      "adaptation": "Pass the identical URL base as base.href to support downstream string-only URL.parse type declarations; URL resolution behavior is unchanged."
     },
     {
       "path": "src/domain/javascript/javascriptSourceParser.ts",

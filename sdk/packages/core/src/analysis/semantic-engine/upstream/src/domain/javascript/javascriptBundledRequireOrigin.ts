@@ -123,7 +123,7 @@ export const semanticBundledRequireOrigin = (
   for (
     let ancestor = state.parentsByNode.get(current);
     ancestor !== undefined;
-    ancestor = state.parentsByNode.get(ancestor)
+    ancestor = state.parentsByNode.get(ancestor!)
   ) {
     if (!t.isCallExpression(ancestor)) continue;
     const proof = bootstrapExternals(ancestor, state);
@@ -269,7 +269,7 @@ const bootstrapProofForLoaderCall = (
   for (
     let ancestor = state.parentsByNode.get(call);
     ancestor !== undefined;
-    ancestor = state.parentsByNode.get(ancestor)
+    ancestor = state.parentsByNode.get(ancestor!)
   ) {
     if (!t.isCallExpression(ancestor)) continue;
     const proof = bootstrapExternals(ancestor, state);

@@ -96,7 +96,7 @@ const resolveJavaScriptSourceMapPath = (
   const directory = posix.join(anchor, posix.dirname(mapPath));
   const base = pathToFileURL(`${directory}/`, { windows: false });
   const absolute = windowsPath ? windowsFileUrl(source) : URL.parse(source);
-  const resolved = windowsPath ? absolute : URL.parse(source, base);
+  const resolved = windowsPath ? absolute : URL.parse(source, base.href);
   if (resolved === null)
     return {
       kind: "unresolved",
