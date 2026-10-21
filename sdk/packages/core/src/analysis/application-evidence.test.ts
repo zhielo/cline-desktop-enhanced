@@ -3,6 +3,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -35,7 +36,9 @@ beforeAll(async () => {
 	b = await analyzeApplicationSources(ownedApplication(2));
 });
 beforeEach(() => {
-	root = mkdtempSync(join(tmpdir(), "cline-application-test-"));
+	// Worker helpers require the canonical workspace spelling, as production
+	// service admission and the owned worker smoke already provide on Windows.
+	root = realpathSync(mkdtempSync(join(tmpdir(), "cline-application-test-")));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 function receipt(graphs: typeof a, version = 1): AnalysisReceipt {
