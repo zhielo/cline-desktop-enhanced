@@ -1,3 +1,7 @@
+import {
+	inspectInvestigationSkillPack,
+	loadInvestigationSkills,
+} from "./investigation-skills";
 import { projectOutputInstructions } from "./project-output";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -212,8 +216,11 @@ async function expandRuntimeSlashCommand(
 	if (!name || BUILTIN_SLASH_COMMAND_NAMES.has(name)) {
 		return prompt;
 	}
+	const bundled = await loadInvestigationSkills(
+		ctx.activeEnvironmentId === "local",
+	);
 	const service = createUserInstructionConfigService({
-		skills: { workspacePath },
+		skills: { workspacePath, agentPluginSkills: bundled.skills },
 		rules: { workspacePath },
 		workflows: { workspacePath },
 	});
@@ -663,6 +670,7 @@ function buildCoreSessionConfig(
 	config: JsonRecord,
 	telemetryUser?: SidecarContext["telemetryUser"],
 	mistakeRecovery?: ReturnType<typeof createDesktopMistakeRecovery>,
+	localInvestigationSkills = false,
 ): JsonRecord {
 	const rawWorkspaceRoot = config.workspaceRoot ?? config.workspace_root;
 	const workspaceRoot =
@@ -745,6 +753,9 @@ function buildCoreSessionConfig(
 		sessions: config.sessions,
 		initialMessages: config.initialMessages,
 		extensionContext: createDesktopExtensionContext(telemetryUser),
+		...(localInvestigationSkills
+			? { agentPluginPaths: inspectInvestigationSkillPack(true).paths }
+			: {}),
 		...mistakeRecovery,
 	};
 }
@@ -1119,6 +1130,7 @@ async function handleStart(
 			config,
 			ctx.telemetryUser,
 			createDesktopMistakeRecovery(ctx, () => startedSessionId),
+			binding.kind === "local",
 		),
 		systemPrompt,
 		...(initialMessages ? { initialMessages } : {}),
@@ -1308,6 +1320,7 @@ async function startRebuiltSession(
 				},
 				ctx.telemetryUser,
 				createDesktopMistakeRecovery(ctx, () => sessionId),
+				getSessionRuntimeBinding(ctx, sessionId).kind === "local",
 			) as unknown as ClineCoreStartConfig,
 		),
 		source: SessionSource.DESKTOP,
@@ -2139,6 +2152,7 @@ async function handleForkUnlocked(
 				},
 				ctx.telemetryUser,
 				createDesktopMistakeRecovery(ctx, () => newSessionId),
+				binding.kind === "local",
 			) as unknown as ClineCoreStartConfig,
 		),
 		source: SessionSource.DESKTOP,
@@ -2338,6 +2352,7 @@ async function handleRestoreCheckpoint(
 						},
 						ctx.telemetryUser,
 						createDesktopMistakeRecovery(ctx, () => restoredSessionId),
+						binding.kind === "local",
 					) as unknown as ClineCoreStartConfig,
 				),
 				source: SessionSource.DESKTOP,

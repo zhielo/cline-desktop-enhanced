@@ -13,3 +13,17 @@ paths = [
   '''^sdk/packages/core/src/hub/server/index\.test\.ts$''',
   '''^sdk/packages/core/src/services/storage/provider-settings-legacy-migration\.test\.ts$''',
 ]
+
+[[rules]]
+id = "sourcegraph-access-token"
+
+[[rules.allowlists]]
+description = "Pinned public REA Git revision in generated capability inventories (not a token)"
+condition = "AND"
+paths = [
+  '''^docs/rea-migration/(?:capabilities|contract-dependencies)\.json$''',
+]
+regexTarget = "line"
+regexes = [
+  '''(?m)^  "revision": "d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f",\r?$''',
+]

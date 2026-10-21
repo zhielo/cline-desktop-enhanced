@@ -1,17 +1,18 @@
-import { RuntimeObservationPlanSchema } from "./runtime-observation-schema";
+import { EvidenceQuerySchema } from "../../analysis/evidence-query";
 import { AndroidProjectPatchSchema } from "./android-project-schema";
-import { EvidenceArchiveOptionsSchema } from "./investigation-workflows-schema";
-import { DependencyEvidenceOptionsSchema } from "./investigation-workflows-schema";
 import {
 	ArtifactDiscoveryOptionsSchema,
-	VersionComparisonSchema,
-	CrossLanguageOptionsSchema,
-	CandidateValidationSchema,
 	CandidateReviewSchema,
+	CandidateValidationSchema,
+	CrossLanguageOptionsSchema,
+	DependencyEvidenceOptionsSchema,
+	EvidenceArchiveOptionsSchema,
 	HypothesisSchema,
 	INVESTIGATION_COMMANDS,
+	VersionComparisonSchema,
 	WorkflowQuerySchema,
 } from "./investigation-workflows-schema";
+import { RuntimeObservationPlanSchema } from "./runtime-observation-schema";
 /**
  * Zod Schemas for Default Tool Inputs
  *
@@ -26,8 +27,8 @@ import {
 	EvidenceTraceSchema,
 	JvmMethodSchema,
 	ManagedMethodSchema,
-	SourceSinkSchema,
 	SourceFlowSchema,
+	SourceSinkSchema,
 } from "./advanced-candidates-schema";
 import {
 	ANALYSIS_ALIAS_NAMES,
@@ -137,455 +138,470 @@ export const ReadFilesInputUnionSchema = z.union([
 /**
  * Schema for supervised reverse-engineering operations.
  */
-export const ReverseEngineeringInputSchema = z.object({
-	advanced_action: z
-		.enum([
-			"toolchain",
-			"suite",
-			"triage",
-			"apk_inventory",
-			"dex_index",
-			"native_inventory",
-			"native_disassemble",
-			"native_crosscheck",
-			"simplify_expression",
-			"compare_expressions",
-			"transform_blob",
-			"triton_expression",
-			"unicorn_emulate",
-			"angr_lift",
-			"match_native_functions",
-			"trace_native_region",
-			"trace_input_influence",
-			"trace_android_dataflow",
-			"lift_native_ir",
-			"deobfuscation_pass",
-			"jeb_analysis",
-			"virtual_dispatch",
-			"graph_build",
-			"graph_query",
-			"notebook_validate",
-			"notebook_run",
-			"cfg_analyze",
-			"trace_slice",
-			"trace_taint",
-			"decrypt_blob",
-			"artifact_discovery",
-			"android_relationships",
-			"android_entrypoints",
-			"android_resources",
-			"android_method",
-			"investigation_query",
-			"android_method_code",
-			"native_function",
-			"analysis_readiness",
-			"investigation_graph",
-		])
-		.optional(),
-	advanced_options: z
-		.object({
-			entrypoints: z
-				.object({
-					max_depth: z.number().int().min(0).max(16).optional(),
-					max_components: z.number().int().min(1).max(128).optional(),
-					max_dex_files: z.number().int().min(1).max(32).optional(),
-				})
-				.strict()
-				.optional(),
-			jni_trace: CrossLanguageOptionsSchema.options[0]
-				.omit({ kind: true, method: true })
-				.optional(),
-			discovery: z
-				.object({
-					max_depth: z.number().int().min(0).max(4).optional(),
-					max_artifacts: z.number().int().min(1).max(500).optional(),
-					inspect_native: z.boolean().optional(),
-					identify_formats: z.boolean().optional(),
-				})
-				.strict()
-				.optional(),
-			android_calls: z
-				.object({
-					max_depth: z.number().int().min(0).max(4).optional(),
-					max_nodes: z.number().int().min(1).max(64).optional(),
-					max_edges: z.number().int().min(1).max(200).optional(),
-					direction: z.enum(["callers", "callees", "both"]).optional(),
-				})
-				.strict()
-				.optional(),
-			native_calls: z
-				.object({
-					max_depth: z.number().int().min(0).max(4).optional(),
-					max_functions: z.number().int().min(1).max(32).optional(),
-					max_edges: z.number().int().min(1).max(256).optional(),
-					max_total_bytes: z.number().int().min(1).max(65536).optional(),
-				})
-				.strict()
-				.optional(),
-			function: z
-				.object({
-					symbol: z.string().min(1).max(4096).optional(),
-					address: z
-						.string()
-						.regex(/^0x[0-9a-fA-F]{1,16}$/)
-						.optional(),
-					max_bytes: z.number().int().min(1).max(65536).optional(),
-				})
-				.strict()
-				.refine(
-					(v) => Boolean(v.symbol) !== Boolean(v.address),
-					"Choose exactly one symbol or entry address",
-				)
-				.optional(),
-			method: z
-				.object({
-					class_descriptor: z
-						.string()
-						.min(3)
-						.max(4096)
-						.regex(/^L.+;$/),
-					name: z.string().min(1).max(4096),
-					descriptor: z
-						.string()
-						.min(3)
-						.max(4096)
-						.regex(/^\(.*\).+$/),
-				})
-				.strict()
-				.optional(),
-			investigation_query: z
-				.object({
-					kind: z
-						.enum([
-							"artifact",
-							"method",
-							"loader-reference",
-							"jni-name-candidate",
-							"native-symbol",
-							"jni-export-match-candidate",
-						])
-						.optional(),
-					text: z.string().max(512).optional(),
-					id: z
-						.string()
-						.regex(/^[a-f0-9]{32}$/)
-						.optional(),
-					offset: z.number().int().min(0).max(10000).optional(),
-					limit: z.number().int().min(1).max(200).optional(),
-				})
-				.strict()
-				.optional(),
-			decrypt: z
-				.object({
-					algorithm: z.enum(["aes-256-gcm", "chacha20-poly1305"]),
-					nonce_hex: z.string().regex(/^[a-fA-F0-9]{24}$/),
-					aad_hex: z
-						.string()
-						.regex(/^(?:[a-fA-F0-9]{2})*$/)
-						.max(8192)
-						.optional(),
-					analysis: z.enum(["triage", "structured"]).optional(),
-				})
-				.strict()
-				.optional(),
-			architecture: z
-				.enum(["arm64", "arm", "thumb", "x86", "x86_64"])
-				.optional(),
-			offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
-			address: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
-			bytes: z.number().int().min(1).max(65536).optional(),
-			steps: z
-				.array(z.enum(["base64", "hex", "zlib", "gzip"]))
-				.min(1)
-				.max(8)
-				.optional(),
-			graph_query: z
-				.object({
-					kind: z
-						.enum([
-							"artifact",
-							"dex-class",
-							"dex-method",
-							"native-symbol",
-							"archive-member",
-							"unresolved-call",
-						])
-						.optional(),
-					text: z.string().max(512).optional(),
-					startId: z.string().max(80).optional(),
-					depth: z.number().int().min(0).max(8).optional(),
-					limit: z.number().int().min(1).max(1000).optional(),
-				})
-				.strict()
-				.optional(),
-		})
-		.strict()
-		.optional(),
-	engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
-	javascript_options: z
-		.object({ compareTarget: z.string().min(1).max(4096).optional() })
-		.strict()
-		.optional(),
-	evidence_query: z
-		.object({
-			receiptId: z.string().uuid(),
-			view: z
-				.enum(["artifacts", "findings", "graph", "comparison", "verification"])
-				.optional(),
-			offset: z.number().int().min(0).max(10000).optional(),
-			limit: z.number().int().min(1).max(50).optional(),
-			filter: z.string().max(200).optional(),
-		})
-		.strict()
-		.optional(),
-	runtime_observation_plan: RuntimeObservationPlanSchema.optional(),
-	candidate_validation: CandidateValidationSchema.optional(),
-	candidate_review: CandidateReviewSchema.optional(),
-	workflow_query: WorkflowQuerySchema.optional(),
-	artifact_discovery: ArtifactDiscoveryOptionsSchema.optional(),
-	version_comparison: VersionComparisonSchema.optional(),
-	cross_language: CrossLanguageOptionsSchema.optional(),
-	dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
-	evidence_archive: EvidenceArchiveOptionsSchema.optional(),
-	android_project_patch: AndroidProjectPatchSchema.optional(),
-	hypothesis: HypothesisSchema.optional(),
-	candidate: CandidateSchema.optional(),
-	evidence_trace: EvidenceTraceSchema.optional(),
-	source_flow: SourceFlowSchema.optional(),
-	source_sink: SourceSinkSchema.optional(),
-	managed_method: ManagedMethodSchema.optional(),
-	jvm_method: JvmMethodSchema.optional(),
-	batch_preview_sha256: z
-		.string()
-		.regex(/^[a-f0-9]{64}$/)
-		.optional(),
-	smali_patch: SmaliPatchSchema.optional(),
-	investigation_plan: InvestigationPlanSchema.optional(),
-	operation: z.enum([
-		...ANALYSIS_ALIAS_NAMES,
-		...CANDIDATE_COMMANDS,
-		...INVESTIGATION_COMMANDS,
-		"trace_source_sink",
-		"audit_candidate_batch",
-		"trace_cross_language",
-		"trace_data_flow",
-		"decompile_dotnet_method",
-		"read_jvm_method",
-		"preview_candidate_batch",
-		"apply_candidate_batch",
-		"baksmali_dir",
-		"analysis_command_catalog",
-		"plan_investigation",
-		"plan_batch",
-		"preview_smali_patch",
-		"patch_smali_method",
-		"patch_smali",
-		"javascript_analysis",
-		"analysis_evidence",
-		"discover",
-		"advanced_analysis",
-		"inspect",
-		"forensic_report",
-		"apk_security_report",
-		"compare_apks",
-		"verify_apk_signature",
-		"validate_android_container",
-		"align_apk",
-		"sign_apk",
-		"scan_strings",
-		"extract",
-		"analyze",
-		"decompile",
-		"project_edit",
-		"disassemble_smali",
-		"read_smali_method",
-		"search_smali",
-		"assemble_smali",
-		"rebuild_apk",
-		"script",
-		"open_gui",
-	]),
-	target: z
-		.string()
-		.min(1)
-		.optional()
-		.describe(
-			"Absolute path to the input artifact or decoded Smali/APK directory; omit for discover",
-		),
-	compare_target: z
-		.string()
-		.min(1)
-		.optional()
-		.describe(
-			"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
-		),
-	confirm_test_signing: z
-		.boolean()
-		.optional()
-		.describe(
-			"Separate acknowledgement: sign a new APK using only a host-configured authorized test key; never supply passwords",
-		),
-	project_edit: NativeProjectEditSchema.optional(),
-	managed_worker: z
-		.boolean()
-		.optional()
-		.describe(
-			"Opt-in bounded persistent IDA/Ghidra process for exact selected-function decompilation only",
-		),
-	confirm_managed_worker: z
-		.boolean()
-		.optional()
-		.describe(
-			"Explicit acknowledgement of licensed-engine process lifetime and private project writes",
-		),
-	function_selector: z
-		.object({
-			symbol: z.string().min(1).max(4096).optional(),
-			address: z
-				.string()
-				.regex(/^0x[0-9a-fA-F]{1,16}$/)
-				.optional(),
-		})
-		.strict()
-		.refine(
-			(v) => Boolean(v.symbol) !== Boolean(v.address),
-			"Choose exactly one exact function name or entry address",
-		)
-		.optional(),
-	script_path: z.string().min(1).optional(),
-	script_args: z.array(z.string()).optional(),
-	timeout_ms: z.number().int().positive().max(4_500_000).optional()
-        .describe("Overall deadline; IDA defaults to 75 minutes including a separate 60-minute auto-analysis phase. Explicit shorter limits cap that phase."),
-	ida_phase_timeout_ms: z.number().int().min(1000).max(3_600_000).optional(),
-	output_directory: z.string().min(1).optional(),
-	output_file: z
-		.string()
-		.min(1)
-		.optional()
-		.describe("Absolute output file for assemble_smali or rebuild_apk"),
-	report_output_file: z
-		.string()
-		.min(1)
-		.optional()
-		.describe(
-			"Optional absolute destination for a JSON or HTML forensic report",
-		),
-	report_format: z.enum(["json", "html"]).default("json"),
-	discovery_depth: z
-		.enum(["fast", "deep"])
-		.default("fast")
-		.describe(
-			"Discovery only: fast returns cached executable inventory; deep also verifies versions, plugins, decompilers, and supplemental tools",
-		),
-	acknowledge_external_output: z
-		.boolean()
-		.optional()
-		.describe(
-			"Required when an output path is outside the managed reverse-engineering cache or operating-system temporary directory",
-		),
-	smali_api_level: z.number().int().min(1).max(100).optional(),
-	smali_class: z
-		.string()
-		.min(1)
-		.optional()
-		.describe(
-			"Smali class name or relative path, for example com.example.MainActivity or com/example/MainActivity.smali",
-		),
-	smali_method: z
-		.string()
-		.min(1)
-		.optional()
-		.describe(
-			"Method name or signature to return in full, for example onCreate or onCreate(Landroid/os/Bundle;)V",
-		),
-	smali_query: z
-		.string()
-		.min(1)
-		.max(4_096)
-		.optional()
-		.describe(
-			"Literal text or regular expression to find across decoded Smali",
-		),
-	smali_queries: z
-		.array(z.string().min(1).max(4096))
-		.min(1)
-		.max(32)
-		.optional()
-		.describe(
-			"Search up to 32 literal indicators in one file pass; cannot combine with smali_query or regex mode",
-		),
-	smali_exclude_dirs: z
-		.array(
-			z
-				.string()
-				.min(1)
-				.max(128)
-				.regex(/^[^\\/]+$/),
-		)
-		.max(32)
-		.optional()
-		.describe(
-			"Additional directory basenames to exclude; .git and node_modules are always excluded",
-		),
-	smali_max_bytes: z
-		.number()
-		.int()
-		.min(1)
-		.max(2 * 1024 * 1024 * 1024)
-		.optional()
-		.describe(
-			"Total scanned-byte budget; defaults to 512 MiB. Reaching it returns explicit partial coverage",
-		),
-	smali_regex: z.boolean().optional(),
-	context_lines: z.number().int().min(0).max(20).optional(),
-	max_results: z.number().int().min(1).max(5_000).optional(),
-	min_string_length: z.number().int().min(4).max(1_024).optional(),
-	string_pattern: z
-		.string()
-		.min(1)
-		.max(4_096)
-		.optional()
-		.describe("Optional case-insensitive literal filter for scan_strings"),
-	string_pattern_regex: z
-		.boolean()
-		.optional()
-		.describe(
-			"Treat string_pattern as a bounded regular expression instead of literal text",
-		),
-	reuse_analysis: z
-		.boolean()
-		.optional()
-		.describe(
-			"Reuse an artifact-hash keyed analysis workspace instead of starting from scratch",
-		),
-	max_cpu: z
-		.number()
-		.int()
-		.min(1)
-		.max(64)
-		.optional()
-		.describe("Maximum CPU cores for engines that support an explicit limit"),
-	jadx_mode: z
-		.enum(["auto", "restructure", "simple", "fallback"])
-		.optional()
-		.describe("JADX decompilation mode"),
-	jadx_threads: z.number().int().min(1).max(64).optional(),
-	jadx_single_class: z
-		.string()
-		.min(1)
-		.optional()
-		.describe("Decompile only this fully qualified JADX class"),
-	jadx_output_format: z.enum(["java", "json"]).optional(),
-	jadx_deobfuscate: z.boolean().optional(),
-	jadx_call_graph: z.enum(["dot", "json"]).optional(),
-	jadx_export_gradle: z.boolean().optional(),
-	jadx_no_resources: z.boolean().optional(),
-	jadx_no_sources: z.boolean().optional(),
-	jadx_mappings_path: z.string().min(1).optional(),
-}).refine(input => !input.timeout_ms || input.timeout_ms <= 3_600_000 || input.engine === "ida", {
-  message: "Overall deadlines above one hour require the explicit IDA engine",
-  path: ["timeout_ms"],
-});
+export const ReverseEngineeringInputSchema = z
+	.object({
+		advanced_action: z
+			.enum([
+				"toolchain",
+				"suite",
+				"triage",
+				"apk_inventory",
+				"dex_index",
+				"native_inventory",
+				"native_disassemble",
+				"native_crosscheck",
+				"simplify_expression",
+				"compare_expressions",
+				"transform_blob",
+				"triton_expression",
+				"unicorn_emulate",
+				"angr_lift",
+				"match_native_functions",
+				"trace_native_region",
+				"trace_input_influence",
+				"trace_android_dataflow",
+				"lift_native_ir",
+				"deobfuscation_pass",
+				"jeb_analysis",
+				"virtual_dispatch",
+				"graph_build",
+				"graph_query",
+				"notebook_validate",
+				"notebook_run",
+				"cfg_analyze",
+				"trace_slice",
+				"trace_taint",
+				"decrypt_blob",
+				"artifact_discovery",
+				"android_relationships",
+				"android_entrypoints",
+				"android_resources",
+				"android_method",
+				"investigation_query",
+				"android_method_code",
+				"native_function",
+				"analysis_readiness",
+				"investigation_graph",
+			])
+			.optional(),
+		advanced_options: z
+			.object({
+				entrypoints: z
+					.object({
+						max_depth: z.number().int().min(0).max(16).optional(),
+						max_components: z.number().int().min(1).max(128).optional(),
+						max_dex_files: z.number().int().min(1).max(32).optional(),
+					})
+					.strict()
+					.optional(),
+				jni_trace: CrossLanguageOptionsSchema.options[0]
+					.omit({ kind: true, method: true })
+					.optional(),
+				discovery: z
+					.object({
+						max_depth: z.number().int().min(0).max(4).optional(),
+						max_artifacts: z.number().int().min(1).max(500).optional(),
+						inspect_native: z.boolean().optional(),
+						identify_formats: z.boolean().optional(),
+					})
+					.strict()
+					.optional(),
+				android_calls: z
+					.object({
+						max_depth: z.number().int().min(0).max(4).optional(),
+						max_nodes: z.number().int().min(1).max(64).optional(),
+						max_edges: z.number().int().min(1).max(200).optional(),
+						direction: z.enum(["callers", "callees", "both"]).optional(),
+					})
+					.strict()
+					.optional(),
+				native_calls: z
+					.object({
+						max_depth: z.number().int().min(0).max(4).optional(),
+						max_functions: z.number().int().min(1).max(32).optional(),
+						max_edges: z.number().int().min(1).max(256).optional(),
+						max_total_bytes: z.number().int().min(1).max(65536).optional(),
+					})
+					.strict()
+					.optional(),
+				function: z
+					.object({
+						symbol: z.string().min(1).max(4096).optional(),
+						address: z
+							.string()
+							.regex(/^0x[0-9a-fA-F]{1,16}$/)
+							.optional(),
+						max_bytes: z.number().int().min(1).max(65536).optional(),
+					})
+					.strict()
+					.refine(
+						(v) => Boolean(v.symbol) !== Boolean(v.address),
+						"Choose exactly one symbol or entry address",
+					)
+					.optional(),
+				method: z
+					.object({
+						class_descriptor: z
+							.string()
+							.min(3)
+							.max(4096)
+							.regex(/^L.+;$/),
+						name: z.string().min(1).max(4096),
+						descriptor: z
+							.string()
+							.min(3)
+							.max(4096)
+							.regex(/^\(.*\).+$/),
+					})
+					.strict()
+					.optional(),
+				investigation_query: z
+					.object({
+						kind: z
+							.enum([
+								"artifact",
+								"method",
+								"loader-reference",
+								"jni-name-candidate",
+								"native-symbol",
+								"jni-export-match-candidate",
+							])
+							.optional(),
+						text: z.string().max(512).optional(),
+						id: z
+							.string()
+							.regex(/^[a-f0-9]{32}$/)
+							.optional(),
+						offset: z.number().int().min(0).max(10000).optional(),
+						limit: z.number().int().min(1).max(200).optional(),
+					})
+					.strict()
+					.optional(),
+				decrypt: z
+					.object({
+						algorithm: z.enum(["aes-256-gcm", "chacha20-poly1305"]),
+						nonce_hex: z.string().regex(/^[a-fA-F0-9]{24}$/),
+						aad_hex: z
+							.string()
+							.regex(/^(?:[a-fA-F0-9]{2})*$/)
+							.max(8192)
+							.optional(),
+						analysis: z.enum(["triage", "structured"]).optional(),
+					})
+					.strict()
+					.optional(),
+				architecture: z
+					.enum(["arm64", "arm", "thumb", "x86", "x86_64"])
+					.optional(),
+				offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+				address: z
+					.number()
+					.int()
+					.min(0)
+					.max(Number.MAX_SAFE_INTEGER)
+					.optional(),
+				bytes: z.number().int().min(1).max(65536).optional(),
+				steps: z
+					.array(z.enum(["base64", "hex", "zlib", "gzip"]))
+					.min(1)
+					.max(8)
+					.optional(),
+				graph_query: z
+					.object({
+						kind: z
+							.enum([
+								"artifact",
+								"dex-class",
+								"dex-method",
+								"native-symbol",
+								"archive-member",
+								"unresolved-call",
+							])
+							.optional(),
+						text: z.string().max(512).optional(),
+						startId: z.string().max(80).optional(),
+						depth: z.number().int().min(0).max(8).optional(),
+						limit: z.number().int().min(1).max(1000).optional(),
+					})
+					.strict()
+					.optional(),
+			})
+			.strict()
+			.optional(),
+		engine: z.enum(["auto", "ghidra", "ida", "jadx"]).default("auto"),
+		javascript_options: z
+			.object({
+				compareTarget: z.string().min(1).max(4096).optional(),
+				semanticGraph: z.boolean().optional(),
+				applicationGraph: z.boolean().optional(),
+				electronFuses: z.boolean().optional(),
+			})
+			.strict()
+			.optional(),
+		evidence_query: EvidenceQuerySchema.optional(),
+		runtime_observation_plan: RuntimeObservationPlanSchema.optional(),
+		candidate_validation: CandidateValidationSchema.optional(),
+		candidate_review: CandidateReviewSchema.optional(),
+		workflow_query: WorkflowQuerySchema.optional(),
+		artifact_discovery: ArtifactDiscoveryOptionsSchema.optional(),
+		version_comparison: VersionComparisonSchema.optional(),
+		cross_language: CrossLanguageOptionsSchema.optional(),
+		dependency_evidence: DependencyEvidenceOptionsSchema.optional(),
+		evidence_archive: EvidenceArchiveOptionsSchema.optional(),
+		android_project_patch: AndroidProjectPatchSchema.optional(),
+		hypothesis: HypothesisSchema.optional(),
+		candidate: CandidateSchema.optional(),
+		evidence_trace: EvidenceTraceSchema.optional(),
+		source_flow: SourceFlowSchema.optional(),
+		source_sink: SourceSinkSchema.optional(),
+		managed_method: ManagedMethodSchema.optional(),
+		jvm_method: JvmMethodSchema.optional(),
+		batch_preview_sha256: z
+			.string()
+			.regex(/^[a-f0-9]{64}$/)
+			.optional(),
+		smali_patch: SmaliPatchSchema.optional(),
+		investigation_plan: InvestigationPlanSchema.optional(),
+		operation: z.enum([
+			...ANALYSIS_ALIAS_NAMES,
+			...CANDIDATE_COMMANDS,
+			...INVESTIGATION_COMMANDS,
+			"trace_source_sink",
+			"audit_candidate_batch",
+			"trace_cross_language",
+			"trace_data_flow",
+			"decompile_dotnet_method",
+			"read_jvm_method",
+			"preview_candidate_batch",
+			"apply_candidate_batch",
+			"baksmali_dir",
+			"analysis_command_catalog",
+			"plan_investigation",
+			"plan_batch",
+			"preview_smali_patch",
+			"patch_smali_method",
+			"patch_smali",
+			"javascript_analysis",
+			"analysis_evidence",
+			"discover",
+			"advanced_analysis",
+			"inspect",
+			"forensic_report",
+			"apk_security_report",
+			"compare_apks",
+			"verify_apk_signature",
+			"validate_android_container",
+			"align_apk",
+			"sign_apk",
+			"scan_strings",
+			"extract",
+			"analyze",
+			"decompile",
+			"project_edit",
+			"disassemble_smali",
+			"read_smali_method",
+			"search_smali",
+			"assemble_smali",
+			"rebuild_apk",
+			"script",
+			"open_gui",
+		]),
+		target: z
+			.string()
+			.min(1)
+			.optional()
+			.describe(
+				"Absolute path to the input artifact or decoded Smali/APK directory; omit for discover",
+			),
+		compare_target: z
+			.string()
+			.min(1)
+			.optional()
+			.describe(
+				"Absolute path to the second APK for compare_apks (target is the original; compare_target is the modified APK)",
+			),
+		confirm_test_signing: z
+			.boolean()
+			.optional()
+			.describe(
+				"Separate acknowledgement: sign a new APK using only a host-configured authorized test key; never supply passwords",
+			),
+		project_edit: NativeProjectEditSchema.optional(),
+		managed_worker: z
+			.boolean()
+			.optional()
+			.describe(
+				"Opt-in bounded persistent IDA/Ghidra process for exact selected-function decompilation only",
+			),
+		confirm_managed_worker: z
+			.boolean()
+			.optional()
+			.describe(
+				"Explicit acknowledgement of licensed-engine process lifetime and private project writes",
+			),
+		function_selector: z
+			.object({
+				symbol: z.string().min(1).max(4096).optional(),
+				address: z
+					.string()
+					.regex(/^0x[0-9a-fA-F]{1,16}$/)
+					.optional(),
+			})
+			.strict()
+			.refine(
+				(v) => Boolean(v.symbol) !== Boolean(v.address),
+				"Choose exactly one exact function name or entry address",
+			)
+			.optional(),
+		script_path: z.string().min(1).optional(),
+		script_args: z.array(z.string()).optional(),
+		timeout_ms: z
+			.number()
+			.int()
+			.positive()
+			.max(4_500_000)
+			.optional()
+			.describe(
+				"Overall deadline; IDA defaults to 75 minutes including a separate 60-minute auto-analysis phase. Explicit shorter limits cap that phase.",
+			),
+		ida_phase_timeout_ms: z.number().int().min(1000).max(3_600_000).optional(),
+		output_directory: z.string().min(1).optional(),
+		output_file: z
+			.string()
+			.min(1)
+			.optional()
+			.describe("Absolute output file for assemble_smali or rebuild_apk"),
+		report_output_file: z
+			.string()
+			.min(1)
+			.optional()
+			.describe(
+				"Optional absolute destination for a JSON or HTML forensic report",
+			),
+		report_format: z.enum(["json", "html"]).default("json"),
+		discovery_depth: z
+			.enum(["fast", "deep"])
+			.default("fast")
+			.describe(
+				"Discovery only: fast returns cached executable inventory; deep also verifies versions, plugins, decompilers, and supplemental tools",
+			),
+		acknowledge_external_output: z
+			.boolean()
+			.optional()
+			.describe(
+				"Required when an output path is outside the managed reverse-engineering cache or operating-system temporary directory",
+			),
+		smali_api_level: z.number().int().min(1).max(100).optional(),
+		smali_class: z
+			.string()
+			.min(1)
+			.optional()
+			.describe(
+				"Smali class name or relative path, for example com.example.MainActivity or com/example/MainActivity.smali",
+			),
+		smali_method: z
+			.string()
+			.min(1)
+			.optional()
+			.describe(
+				"Method name or signature to return in full, for example onCreate or onCreate(Landroid/os/Bundle;)V",
+			),
+		smali_query: z
+			.string()
+			.min(1)
+			.max(4_096)
+			.optional()
+			.describe(
+				"Literal text or regular expression to find across decoded Smali",
+			),
+		smali_queries: z
+			.array(z.string().min(1).max(4096))
+			.min(1)
+			.max(32)
+			.optional()
+			.describe(
+				"Search up to 32 literal indicators in one file pass; cannot combine with smali_query or regex mode",
+			),
+		smali_exclude_dirs: z
+			.array(
+				z
+					.string()
+					.min(1)
+					.max(128)
+					.regex(/^[^\\/]+$/),
+			)
+			.max(32)
+			.optional()
+			.describe(
+				"Additional directory basenames to exclude; .git and node_modules are always excluded",
+			),
+		smali_max_bytes: z
+			.number()
+			.int()
+			.min(1)
+			.max(2 * 1024 * 1024 * 1024)
+			.optional()
+			.describe(
+				"Total scanned-byte budget; defaults to 512 MiB. Reaching it returns explicit partial coverage",
+			),
+		smali_regex: z.boolean().optional(),
+		context_lines: z.number().int().min(0).max(20).optional(),
+		max_results: z.number().int().min(1).max(5_000).optional(),
+		min_string_length: z.number().int().min(4).max(1_024).optional(),
+		string_pattern: z
+			.string()
+			.min(1)
+			.max(4_096)
+			.optional()
+			.describe("Optional case-insensitive literal filter for scan_strings"),
+		string_pattern_regex: z
+			.boolean()
+			.optional()
+			.describe(
+				"Treat string_pattern as a bounded regular expression instead of literal text",
+			),
+		reuse_analysis: z
+			.boolean()
+			.optional()
+			.describe(
+				"Reuse an artifact-hash keyed analysis workspace instead of starting from scratch",
+			),
+		max_cpu: z
+			.number()
+			.int()
+			.min(1)
+			.max(64)
+			.optional()
+			.describe("Maximum CPU cores for engines that support an explicit limit"),
+		jadx_mode: z
+			.enum(["auto", "restructure", "simple", "fallback"])
+			.optional()
+			.describe("JADX decompilation mode"),
+		jadx_threads: z.number().int().min(1).max(64).optional(),
+		jadx_single_class: z
+			.string()
+			.min(1)
+			.optional()
+			.describe("Decompile only this fully qualified JADX class"),
+		jadx_output_format: z.enum(["java", "json"]).optional(),
+		jadx_deobfuscate: z.boolean().optional(),
+		jadx_call_graph: z.enum(["dot", "json"]).optional(),
+		jadx_export_gradle: z.boolean().optional(),
+		jadx_no_resources: z.boolean().optional(),
+		jadx_no_sources: z.boolean().optional(),
+		jadx_mappings_path: z.string().min(1).optional(),
+	})
+	.refine(
+		(input) =>
+			!input.timeout_ms ||
+			input.timeout_ms <= 3_600_000 ||
+			input.engine === "ida",
+		{
+			message:
+				"Overall deadlines above one hour require the explicit IDA engine",
+			path: ["timeout_ms"],
+		},
+	);
 
 /** Only debugger locations that cannot introduce an additional GDB/LLDB command. */
 const SAFE_DEBUGGER_LOCATION_PATTERN =

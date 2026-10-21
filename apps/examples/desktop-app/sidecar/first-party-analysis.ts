@@ -1,41 +1,39 @@
-import { selectSourceEvidence } from "./source-evidence-selection";
+import { realpathSync } from "node:fs";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+	AnalysisModeSchema,
+	cancelFirstPartyAnalysis,
+	dossierDisagreements,
+	FirstPartyAnalysisStore,
+	InspectorRequestSchema,
+	nativeDossiers,
+	observeJavaScriptInspector,
+	probeProcessStartTokenAsync,
+	queryFirstPartyEvidence,
+	recoverFirstPartyReservation,
+	runFirstPartyAnalysis,
+	runtimeAnalysisEnabled,
+	UnifiedEvidenceStore,
+	unifiedEvidenceView,
+} from "@cline/core";
+import { desktopAnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
 import {
 	bindHybridObservation,
 	recheckHybridObservation,
 } from "./hybrid-analysis";
-import { runtimeAnalysisEnabled } from "@cline/core";
-import {
-	bindNativeModuleObservation,
-	NativeModuleRequestSchema,
-	observeNativeModule,
-} from "./native-module-observation";
-import { realpathSync } from "node:fs";
-import { mkdtemp, writeFile, rm, realpath } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import {
-	AnalysisModeSchema,
-	FirstPartyAnalysisStore,
-	runFirstPartyAnalysis,
-	queryFirstPartyEvidence,
-	cancelFirstPartyAnalysis,
-	recoverFirstPartyReservation,
-	InspectorRequestSchema,
-	observeJavaScriptInspector,
-	probeProcessStartTokenAsync,
-	UnifiedEvidenceStore,
-	unifiedEvidenceView,
-	nativeDossiers,
-	dossierDisagreements,
-} from "@cline/core";
-
-import { desktopAnalysisTaskOrchestrator } from "./analysis-task-orchestrator";
-
 import {
 	bindJavaScriptExecution,
 	JavaScriptExecutionSchema,
 	runIsolatedJavaScript,
 } from "./javascript-isolation";
+import {
+	bindNativeModuleObservation,
+	NativeModuleRequestSchema,
+	observeNativeModule,
+} from "./native-module-observation";
+import { selectSourceEvidence } from "./source-evidence-selection";
 
 let store: FirstPartyAnalysisStore | undefined;
 let taskEvidence: UnifiedEvidenceStore | undefined;
@@ -76,7 +74,9 @@ export function firstPartyReadiness() {
 		parser: "TypeScript 5.9.3",
 		staticFixture: fixtureReceipt ?? { status: "not-tested" },
 		targetSupported:
-			"Determined per request; bounded JS/TS/package/source-map/ASAR and managed PE metadata/IL bytes",
+			"Determined per request; bounded JS/TS/package/source-map/ASAR and managed PE metadata/IL bytes; explicit streaming Electron fuse inspection for one regular PE/ELF/Mach-O executable",
+		semanticGraph:
+			"Optional integrated file-local semantic graph and saved provenance/influence/caller/ownership queries; no REA runtime. Installed parity not established by inventory. Native/application workflows remain separate.",
 		localSemantics:
 			"Closed-inventory relative ES bindings/reexports, const scalar object reads and simple pure-return substitutions; no complete program semantics",
 		sourceMaps:

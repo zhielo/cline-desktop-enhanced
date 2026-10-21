@@ -1,0 +1,60 @@
+{
+  "schema": "cline-investigation-skills/1",
+  "pluginName": "cline-investigation",
+  "version": "1.0.0",
+  "skills": [
+    "investigate-artifact",
+    "analyze-electron",
+    "compare-applications",
+    "investigate-native",
+    "investigate-android",
+    "review-candidate"
+  ],
+  "files": [
+    {
+      "path": "LICENSE.txt",
+      "bytes": 11344,
+      "sha256": "f704446a5f1271608805598b557e4288cf8580477ea038c9c3d8b361f693f6b8"
+    },
+    {
+      "path": "NOTICE.txt",
+      "bytes": 446,
+      "sha256": "613ba0912b05f87c367192464c3f33e62ad6488c8f827b08c6d8de12be5aa162"
+    },
+    {
+      "path": "plugin.json",
+      "bytes": 403,
+      "sha256": "8c3be3f9f04f3170fc55929a02c817c1d3f80d9ec36961b22b041e47e617ac08"
+    },
+    {
+      "path": "skills/analyze-electron/SKILL.md",
+      "bytes": 3150,
+      "sha256": "5024768c40f82ad611308e5f427b35cd94739e0bdf1f7574f44e74c76bc3ae9a"
+    },
+    {
+      "path": "skills/compare-applications/SKILL.md",
+      "bytes": 2686,
+      "sha256": "35592abb31c6e52202f23334f070316a93d79d5c2237f48097b813c098fc0f44"
+    },
+    {
+      "path": "skills/investigate-android/SKILL.md",
+      "bytes": 2994,
+      "sha256": "55d9d8dc411c048c52eaa51c0f38868f137330b703e2f8f5e87db445a1481046"
+    },
+    {
+      "path": "skills/investigate-artifact/SKILL.md",
+      "bytes": 3191,
+      "sha256": "220f682290df15917be22515fce5ebe83ba89f77121960e629c20fd79eed05a9"
+    },
+    {
+      "path": "skills/investigate-native/SKILL.md",
+      "bytes": 3199,
+      "sha256": "16484094fd2e5039ded4f674bcce037b445abf27b35229b98f4121b5c1afb268"
+    },
+    {
+      "path": "skills/review-candidate/SKILL.md",
+      "bytes": 2989,
+      "sha256": "e64a3b03558141243f84862e482016e2113951e2ade9f3f87db74eb6408581af"
+    }
+  ]
+}

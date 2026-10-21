@@ -1,0 +1,6 @@
+Cline Investigation Skills, version 1
+Original Cline-specific workflow instructions under Apache-2.0.
+These are instruction-only adaptations of investigation patterns, not REA tool implementations.
+Upstream capability research: morluto/rea d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f (MIT).
+No REA package, MCP server, CLI or separate backend is installed or launched.
+Existing upstream source attribution remains in the integrated semantic engine.

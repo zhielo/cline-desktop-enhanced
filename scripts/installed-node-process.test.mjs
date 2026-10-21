@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ANALYSIS_PROFILE } from "../sdk/packages/core/src/analysis/contracts.ts";
+import { ANALYSIS_PROFILE } from "../sdk/packages/core/src/analysis/profile.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -22,6 +22,7 @@ import {
 	verifyInstalledAnalysisProfile,
  openInstalledSavedSession,
  verifyInstalledSourceReferenceStorage,
+ verifyInstalledInvestigationCatalog,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
 
 test("owned native tree is stopped before CDP can tear down its WebView children", async () => {
@@ -303,7 +304,7 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('sequence > INSTALLED_ACTION_LIMIT'));
  assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v12'));
  assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
- assert.match(driver, /acceptanceAction\(`native-\$\{name\}`/);
+ assert.match(driver, /acceptanceAction\(\s*`native-\$\{name\}`/);
  assert.ok(driver.includes('installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed'));
  assert.ok(driver.includes('Installed completed batch was replayed'));
  assert.ok(driver.includes('installed-candidate-validation-review-hash-scope-preservation-passed'));
@@ -316,7 +317,9 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('Installed candidate handle crossed session boundary'));
  assert.ok(driver.includes('installed-ai-batch-read-only-profile-denied'));
  assert.ok(driver.includes('Installed batch widened the Read Only session'));
- assert.ok(driver.indexOf('const triageScope=') < driver.indexOf('const batchRequest='));
+ const triage=driver.indexOf('const triageScope =');
+ const batch=driver.indexOf('const batchRequest =');
+ assert.ok(triage>=0 && batch>=0 && triage<batch);
  assert.ok(driver.includes('installed-owned-app-cleanup-confirmed'));
  assert.ok(driver.indexOf('installed-owned-app-cleanup-confirmed')<driver.indexOf('status: "passed"'));
 });
@@ -400,7 +403,7 @@ test("saved-session navigation exits Settings before looking for a hidden sessio
  await assert.rejects(openInstalledSavedSession({getByRole(){lookups++;return {async click(){throw failure;}};}},/owned/),error=>error===failure);
  assert.equal(lookups,1,"a failed navigation must not fall back to an RPC or force click");
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
- assert.equal(driver.split("await openInstalledSavedSession(page, /Installer owned session/);").length-1,2);
+ assert.equal(driver.split("await openInstalledSavedSession(page, /Installer owned session/)").length-1,2);
 });
 
 
@@ -410,8 +413,10 @@ test("restart source reference check never injects or accepts lost or changed de
  for(const raw of [null,undefined,"", "{", "x".repeat(32769), JSON.stringify({...saved,version:2}), JSON.stringify({...saved,preview:"MUST_NOT_RESTORE"}), JSON.stringify({version:1,selection:{...saved.selection,receiptId:"other"}})])
   assert.throws(()=>verifyInstalledSourceReferenceStorage(saved,raw),/Installed source reference/);
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
- assert.ok(driver.indexOf('"owned-source-reference-after-restart"') < driver.indexOf('const restoredSource='));
- assert.ok(driver.includes('join(evidence,"failure.png")'));
+ const persisted=driver.indexOf('"owned-source-reference-after-restart"');
+ const restored=driver.indexOf('const restoredSource =');
+ assert.ok(persisted>=0 && restored>=0 && persisted<restored);
+ assert.ok(driver.includes('join(evidence, "failure.png")'));
  assert.ok(driver.includes('projectApplied.plan.candidateOutcome'));
 });
 
@@ -442,7 +447,7 @@ test("normal restart never converts nonzero, missing or timed-out native exit in
  const restart=driver.slice(driver.indexOf("async function quitForRestart"),driver.indexOf("\n\ttry {",driver.indexOf("async function quitForRestart")));
  assert.ok(restart.includes('.invoke("quit_app")'));
  assert.ok(!restart.includes("killOwnedProcess")&&!restart.includes("localStorage"));
- assert.ok(driver.includes('acceptanceAction("owned-normal-native-quit-for-restart",()=>quitForRestart(page),95_000)'));
+ assert.ok(driver.includes('acceptanceAction("owned-normal-native-quit-for-restart", () => quitForRestart(page), 95_000)'));
  assert.ok(driver.includes("await stopOwnedApplication("),"forced failure cleanup remains separate");
 });
 
@@ -517,4 +522,26 @@ test('installed handshake error sends no command and never automatically reconne
   const request=fixtureRpc('approve_analysis_task');f.instances[0].onerror();await assert.rejects(request,/not replayed/);
   assert.equal(f.instances.length,1);assert.equal(f.instances[0].messages.length,0);
  }finally{f.restore();}
+});
+
+
+test("installed skill catalog requires fixed namespaced instructions and plugin-only controls", () => {
+ const names=["investigate-artifact","analyze-electron","compare-applications","investigate-native","investigate-android","review-candidate"];
+ const root="/owned/installed/investigation-skills";
+ const skills=names.map(name=>({id:`cline-investigation:${name}`,description:"Owned guide",instructions:"Retain the receipt",enabled:true,agentPlugin:true,pluginName:"cline-investigation"}));
+ const catalog={bundledInvestigationSkills:{status:"available",root,paths:[root],skills:names},skills,
+  runtimeCommands:skills.map(s=>({...s,name:s.id.split(":")[1],kind:"skill"})),
+  plugins:[{name:"cline-investigation",path:root,enabled:true,agentPlugin:true,toggleable:true}]};
+ assert.equal(verifyInstalledInvestigationCatalog(catalog,true,root),root);
+ for(const mutate of [c=>c.skills.pop(),c=>c.skills.push(c.skills[0]),c=>c.skills[0].agentPlugin=false,
+  c=>c.skills[0].instructions="",c=>c.skills[0].pluginName="other",c=>c.runtimeCommands.pop(),
+  c=>c.runtimeCommands[0].kind="workflow",c=>c.plugins[0].enabled=false,c=>c.plugins[0].path="/other",
+  c=>c.bundledInvestigationSkills.status="unavailable",c=>c.bundledInvestigationSkills.paths.push("/other")]) {
+  const changed=structuredClone(catalog);mutate(changed);
+  assert.throws(()=>verifyInstalledInvestigationCatalog(changed,true,root));
+ }
+ const off=structuredClone(catalog);off.plugins[0].enabled=false;off.skills=[];off.runtimeCommands=[];
+ assert.equal(verifyInstalledInvestigationCatalog(off,false,root),root);
+ off.skills=[skills[0]];assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
+ off.skills=[];off.runtimeCommands=catalog.runtimeCommands;assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
 });

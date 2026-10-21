@@ -1,15 +1,44 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { electronFuseReportSchema } from "./semantic-engine/upstream/src/domain/electron/electronFuses";
+import { AcquisitionSchema } from "./acquisition";
 
-export const ANALYSIS_PROFILE = "cline-js-static/7";
-export const AnalysisModeSchema = z.enum(["off", "static", "runtime", "hybrid"]);
+import { ANALYSIS_PROFILE } from "./profile";
+export { ANALYSIS_PROFILE } from "./profile";
+export const AnalysisModeSchema = z.enum([
+	"off",
+	"static",
+	"runtime",
+	"hybrid",
+]);
 export type AnalysisMode = z.infer<typeof AnalysisModeSchema>;
 export const AnalysisInputSchema = z
 	.object({
 		target: z.string().min(1).max(4096),
 		compareTarget: z.string().min(1).max(4096).optional(),
+		semanticGraph: z.boolean().optional(),
+		applicationGraph: z.boolean().optional(),
+		electronFuses: z.boolean().optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((v, ctx) => {
+		if (
+			v.electronFuses &&
+			(v.semanticGraph || v.applicationGraph || v.compareTarget !== undefined)
+		)
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"Electron fuse inspection requires one executable and cannot combine graphs or comparison",
+				path: ["electronFuses"],
+			});
+		if (v.applicationGraph && !v.semanticGraph)
+			ctx.addIssue({
+				code: "custom",
+				message: "applicationGraph requires semanticGraph: true",
+				path: ["applicationGraph"],
+			});
+	});
 export type AnalysisInput = z.infer<typeof AnalysisInputSchema>;
 export const LIMITS = {
 	files: 128,
@@ -153,8 +182,72 @@ export const ResultSchema = z
 			})
 			.strict()
 			.optional(),
+		electronFuses: electronFuseReportSchema.optional(),
+		acquisition: AcquisitionSchema.optional(),
+		applicationGraph: z
+			.object({
+				profile: z.literal("cline-application/1"),
+				upstreamRevision: z.string().regex(/^[a-f0-9]{40}$/),
+				graphId: z.string().max(100),
+				graphHash: z.string().regex(/^[a-f0-9]{64}$/),
+				semanticGraphHash: z.string().regex(/^[a-f0-9]{64}$/),
+				rootManifestHash: z.string().regex(/^[a-f0-9]{64}$/),
+				sources: z
+					.array(
+						z
+							.object({
+								path: z.string().min(1).max(4096),
+								sha256: z.string().regex(/^[a-f0-9]{64}$/),
+								bytes: z.number().int().nonnegative().max(LIMITS.sourceBytes),
+							})
+							.strict(),
+					)
+					.max(LIMITS.files),
+				nodes: z.number().int().nonnegative(),
+				edges: z.number().int().nonnegative(),
+				coverage: z.unknown(),
+				scope: z.literal("admitted-application-sources"),
+				limitations: z.array(z.string().max(1000)).max(20),
+			})
+			.strict()
+			.optional(),
+		semanticGraph: z
+			.object({
+				profile: z.enum(["cline-semantic/1", "cline-semantic/2"]),
+				upstreamRevision: z.string().regex(/^[a-f0-9]{40}$/),
+				graphId: z.string().max(100),
+				graphHash: z.string().regex(/^[a-f0-9]{64}$/),
+				nodes: z.number().int().nonnegative(),
+				relations: z.number().int().nonnegative(),
+				unknowns: z.number().int().nonnegative(),
+				fingerprints: z.number().int().nonnegative(),
+				coverage: z.unknown(),
+				scope: z.enum([
+					"file-local-semantics",
+					"application-bound-file-semantics",
+				]),
+				limitations: z.array(z.string().max(1000)).max(20),
+			})
+			.strict()
+			.optional(),
 	})
-	.strict();
+	.strict()
+	.superRefine((result, ctx) => {
+		if (!result.acquisition) return;
+		const artifacts = new Map(result.artifacts.map((a) => [a.path, a]));
+		if (
+			artifacts.size !== result.artifacts.length ||
+			result.acquisition.sources.length !== artifacts.size ||
+			result.acquisition.sources.some((s) => {
+				const a = artifacts.get(s.path);
+				return !a || a.sha256 !== s.sha256 || a.bytes !== s.bytes;
+			})
+		)
+			ctx.addIssue({
+				code: "custom",
+				message: "Acquisition/artifact projection mismatch",
+			});
+	});
 export type AnalysisResult = z.infer<typeof ResultSchema>;
 export type AnalysisReceipt = {
 	id: string;

@@ -1,18 +1,28 @@
+import { assertAdmittedApplicationManifest } from "./application-bindings";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import {
+	dirname,
+	isAbsolute,
+	join,
+	relative,
+	resolve as resolvePath,
+	sep,
+} from "node:path";
+import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 import {
 	ANALYSIS_PROFILE,
 	AnalysisInputSchema,
+	type AnalysisReceipt,
+	digest,
 	LIMITS,
 	ResultSchema,
-	digest,
-	type AnalysisReceipt,
 } from "./contracts";
-import { FirstPartyAnalysisStore } from "./store";
 import { analysisHostIdentity, ownershipBinding } from "./recovery";
-import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
+import { FirstPartyAnalysisStore } from "./store";
 
 type WorkerHost = { executable: string; args: string[] };
 export function configureFirstPartyAnalysisHost(host: WorkerHost) {
@@ -65,6 +75,10 @@ export async function runFirstPartyAnalysis(
 	)
 		throw new Error("Invalid parser host");
 	if (signal?.aborted) throw new Error("Analysis cancelled before admission");
+	if (input.semanticGraph && input.compareTarget)
+		throw new Error(
+			"Semantic graph comparison is not implemented; analyze each target separately",
+		);
 	const receipt: AnalysisReceipt = {
 		id: randomUUID(),
 		sessionId,
@@ -80,6 +94,17 @@ export async function runFirstPartyAnalysis(
 		status: "running",
 	};
 	store.start(receipt);
+	let scratch: string | undefined;
+	try {
+		if (input.semanticGraph)
+			scratch = await mkdtemp(join(tmpdir(), "cline-semantic-"));
+	} catch {
+		receipt.status = "failed";
+		receipt.error = "Could not create private semantic transfer directory";
+		store.save(receipt);
+		return receipt;
+	}
+	const semanticOutput = scratch ? join(scratch, "graph.json") : undefined;
 	const abort = new AbortController();
 	controllers.set(receipt.id, { sessionId, abort });
 	return await new Promise<AnalysisReceipt>((resolve) => {
@@ -90,7 +115,7 @@ export async function runFirstPartyAnalysis(
 		let final = false,
 			timedOut = false;
 		let deadline: ReturnType<typeof setTimeout> | undefined;
-		const finish = (
+		const finish = async (
 			confirmed: boolean,
 			code: number | null,
 			sig: string | null,
@@ -119,9 +144,41 @@ export async function runFirstPartyAnalysis(
 				receipt.error = failure ?? "Parser exited unsuccessfully";
 			} else
 				try {
-					receipt.result = ResultSchema.parse(
+					const parsedResult = ResultSchema.parse(
 						JSON.parse(output.toString("utf8")),
 					);
+					if (
+						!!input.semanticGraph !== !!parsedResult.semanticGraph ||
+						!!input.applicationGraph !== !!parsedResult.applicationGraph ||
+						!!input.electronFuses !== !!parsedResult.electronFuses
+					)
+						throw new Error("Requested semantic evidence was not returned");
+					if (parsedResult.acquisition) {
+						const selected = realpathSync(
+							resolvePath(receipt.workspace, input.target),
+						);
+						const label =
+							relative(receipt.workspace, selected).split(sep).join("/") || ".";
+						if (parsedResult.acquisition.selectedPath !== label)
+							throw new Error("Acquisition selected target mismatch");
+					}
+					if (parsedResult.electronFuses) {
+						const a = parsedResult.artifacts[0],
+							f = parsedResult.electronFuses.artifact;
+						if (
+							parsedResult.status !== "partial" ||
+							parsedResult.artifacts.length !== 1 ||
+							!a ||
+							a.role !== "electron-fuse-container" ||
+							a.sha256 !== f.sha256 ||
+							a.bytes !== f.bytes ||
+							parsedResult.counters.bytes !== f.bytes ||
+							parsedResult.facts.length ||
+							parsedResult.edges.length
+						)
+							throw new Error("Fuse receipt projection mismatch");
+					}
+					receipt.result = parsedResult;
 					receipt.resultHash = digest(receipt.result);
 					receipt.status = receipt.result.status;
 				} catch {
@@ -129,12 +186,82 @@ export async function runFirstPartyAnalysis(
 					receipt.error = "Invalid or oversized parser evidence";
 				}
 			try {
-				store.save(receipt);
+				let graph: unknown;
+				let application: unknown;
+				if (receipt.result?.semanticGraph) {
+					if (!semanticOutput) throw new Error("Unexpected semantic graph");
+					const {
+						SEMANTIC_MAX_BYTES,
+						javaScriptSemanticGraphSchema,
+						semanticSummary,
+					} = await import("./semantic-engine/engine");
+					const info = await lstat(semanticOutput);
+					if (
+						!info.isFile() ||
+						info.isSymbolicLink() ||
+						info.size > SEMANTIC_MAX_BYTES
+					)
+						throw new Error("Invalid semantic transfer");
+					const encoded = await readFile(semanticOutput);
+					if (
+						encoded.length !== info.size ||
+						encoded.length > SEMANTIC_MAX_BYTES
+					)
+						throw new Error("Semantic transfer size changed");
+					const transferred = JSON.parse(encoded.toString("utf8"));
+					graph = javaScriptSemanticGraphSchema.parse(
+						receipt.result.applicationGraph
+							? transferred.semantic
+							: transferred,
+					);
+					if (receipt.result.applicationGraph) {
+						assertAdmittedApplicationManifest(
+							receipt.result.applicationGraph.sources,
+							receipt.result.artifacts,
+						);
+						const { parseJavaScriptApplicationGraph, applicationSummary } =
+							await import("./semantic-engine/application");
+						application = parseJavaScriptApplicationGraph(
+							transferred.application,
+						);
+						if (
+							digest(
+								applicationSummary(
+									application as Parameters<typeof applicationSummary>[0],
+									graph as Parameters<typeof applicationSummary>[1],
+									receipt.result.applicationGraph.sources,
+								),
+							) !== digest(receipt.result.applicationGraph)
+						)
+							throw new Error("Application summary integrity mismatch");
+					}
+					if (
+						digest(
+							semanticSummary(
+								graph as Parameters<typeof semanticSummary>[0],
+								!!receipt.result.applicationGraph,
+							),
+						) !== digest(receipt.result.semanticGraph)
+					)
+						throw new Error("Semantic summary integrity mismatch");
+				}
+				store.save(receipt, graph, application);
 			} catch {
 				receipt.status = "failed";
 				receipt.error =
 					"Evidence persistence failed; do not replay analysis automatically";
+				delete receipt.result;
+				delete receipt.resultHash;
+				try {
+					store.save(receipt);
+				} catch {
+					/* Reservation is retained if persistence is unavailable. */
+				}
 			}
+			if (scratch && confirmed)
+				await rm(scratch, { recursive: true, force: true }).catch(
+					() => undefined,
+				);
 			resolve(receipt);
 		};
 		const stop = () => {
@@ -215,7 +342,11 @@ export async function runFirstPartyAnalysis(
 						store.save(receipt);
 					}
 					child!.stdin!.end(
-						JSON.stringify({ workspace: receipt.workspace, input }),
+						JSON.stringify({
+							workspace: receipt.workspace,
+							input,
+							semanticOutput,
+						}),
 					);
 				} catch {
 					failure = "Worker ownership persistence failed";
@@ -224,10 +355,13 @@ export async function runFirstPartyAnalysis(
 			})();
 			signal?.addEventListener("abort", stop, { once: true });
 			abort.signal.addEventListener("abort", stop, { once: true });
-			deadline = setTimeout(() => {
-				timedOut = true;
-				stop();
-			}, LIMITS.timeoutMs);
+			deadline = setTimeout(
+				() => {
+					timedOut = true;
+					stop();
+				},
+				input.semanticGraph ? 300_000 : LIMITS.timeoutMs,
+			);
 			if (signal?.aborted) stop();
 		} catch {
 			failure = "Parser process admission failed";

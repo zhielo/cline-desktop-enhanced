@@ -12,10 +12,20 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 63);
+	assert.equal(r.installedStages, 68);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
+	[
+		"missing installed acquisition proof",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(s: string) =>
+					s !==
+					"installed-source-acquisition-hash-bound-saved-off-no-execution-passed",
+			);
+		},
+	],
 	[
 		"moved head",
 		(e) => {
@@ -244,4 +254,29 @@ test("conditional desktop packaging checks must both pass when triggered", () =>
 	});
 	unknown.checks.total_count++;
 	assert.throws(() => verifyReleaseGateEvidence(133, head, unknown));
+});
+
+for (const platform of ["ubuntu-latest", "windows-latest"]) {
+	test(`semantic parity ${platform} is mandatory and cannot be skipped`, () => {
+		const name = `semantic-source-validation / Semantic source parity (${platform})`;
+		for (const conclusion of ["failure", "skipped", "cancelled", "timed_out"]) {
+			const e = fixture();
+			const check = e.checks.check_runs.find((c) => c.name === name);
+			assert.ok(check, "semantic parity must remain a required policy check");
+			check.conclusion = conclusion;
+			assert.throws(() => verifyReleaseGateEvidence(133, head, e));
+		}
+		const missing = fixture();
+		missing.checks.check_runs = missing.checks.check_runs.filter(
+			(c) => c.name !== name,
+		);
+		missing.checks.total_count = missing.checks.check_runs.length;
+		assert.throws(() => verifyReleaseGateEvidence(133, head, missing));
+	});
+}
+test("semantic workflow recipe remains hash-pinned", () => {
+	const e = fixture();
+	e.policyFileBytes[".github/workflows/semantic-source-validation.yml"] =
+		Buffer.from("changed");
+	assert.throws(() => verifyReleaseGateEvidence(133, head, e));
 });

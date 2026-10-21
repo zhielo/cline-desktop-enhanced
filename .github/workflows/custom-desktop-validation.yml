@@ -70,6 +70,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify secret scanner exception scope
+        run: node scripts/test-secret-scan-fixtures.mjs
+
       - name: Scan repository for committed secrets
         shell: bash
         run: gitleaks git --redact --no-banner --config .gitleaks.toml

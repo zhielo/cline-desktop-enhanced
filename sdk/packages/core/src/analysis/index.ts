@@ -1,42 +1,37 @@
-export {
-	assertInspectorOwner,
-	sameInspectorSourcePath,
-	InspectorRequestSchema,
-	observeJavaScriptInspector,
-} from "./inspector";
-export {
-	UnifiedEvidenceStore,
-	unifiedEvidenceView,
-	nativeDossiers,
-	dossierDisagreements,
-} from "./unified-evidence";
-export { recoverFirstPartyReservation } from "./recovery";
 export * from "./contracts";
 export * from "./hybrid";
-export { FirstPartyAnalysisStore } from "./store";
 export {
+	assertInspectorOwner,
+	InspectorRequestSchema,
+	observeJavaScriptInspector,
+	sameInspectorSourcePath,
+} from "./inspector";
+export { recoverFirstPartyReservation } from "./recovery";
+export {
+	cancelFirstPartyAnalysis,
 	configureFirstPartyAnalysisHost,
 	runFirstPartyAnalysis,
-	cancelFirstPartyAnalysis,
 } from "./service";
+export { FirstPartyAnalysisStore } from "./store";
+export {
+	dossierDisagreements,
+	nativeDossiers,
+	UnifiedEvidenceStore,
+	unifiedEvidenceView,
+} from "./unified-evidence";
 export async function runAnalysisWorkerEntrypoint() {
 	const worker = await import("./worker");
 	return worker.runAnalysisWorkerEntrypoint();
 }
 
-import { z } from "zod";
+import { queryApplicationEvidence } from "./application-query";
+import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
+import { javaScriptSemanticGraphSchema } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticGraph";
+import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
 import { FirstPartyAnalysisStore } from "./store";
-export const EvidenceQuerySchema = z
-	.object({
-		receiptId: z.string().uuid(),
-		view: z
-			.enum(["artifacts", "findings", "graph", "comparison", "verification"])
-			.default("findings"),
-		offset: z.number().int().min(0).max(10000).default(0),
-		limit: z.number().int().min(1).max(50).default(20),
-		filter: z.string().max(200).default(""),
-	})
-	.strict();
+import { ResultSchema } from "./contracts";
+
+export { EvidenceQuerySchema } from "./evidence-query";
 export function queryFirstPartyEvidence(
 	sessionId: string,
 	input: unknown,
@@ -45,6 +40,96 @@ export function queryFirstPartyEvidence(
 	const q = EvidenceQuerySchema.parse(input),
 		receipt = store.get(sessionId, q.receiptId);
 	const result = receipt.result;
+	if (q.view === "source-acquisition" || q.view === "source-containers") {
+		const report = result?.acquisition
+			? ResultSchema.parse(result).acquisition
+			: undefined;
+		if (!report)
+			return { id: receipt.id, available: false, status: receipt.status };
+		return {
+			id: receipt.id,
+			available: true,
+			resultHash: receipt.resultHash,
+			manifestSha256: report.manifestSha256,
+			selectedPath: report.selectedPath,
+			selection: report.selection,
+			coverage: report.coverage,
+			containerCount: report.containers.length,
+			limitations: report.limitations,
+			providerCalls: 0,
+			targetExecuted: false,
+			verifiedBehavior: false,
+			...semanticEvidencePage(report, q),
+		};
+	}
+	if (q.view === "electron-fuses") {
+		const report = result?.electronFuses;
+		if (!report)
+			return { id: receipt.id, available: false, status: receipt.status };
+		return {
+			id: receipt.id,
+			available: true,
+			resultHash: receipt.resultHash,
+			artifact: report.artifact,
+			section: q.fuseSection ?? "slices",
+			limitations: report.limitations.slice(0, 20).map((s) => s.slice(0, 1000)),
+			omittedLimitations: Math.max(0, report.limitations.length - 20),
+			providerCalls: 0,
+			targetExecuted: false,
+			verifiedBehavior: false,
+			...semanticEvidencePage(
+				{
+					...report,
+					sentinels: report.slices.flatMap((slice) =>
+						slice.sentinels.map((sentinel) => ({
+							slice_index: slice.index,
+							architecture: slice.architecture,
+							...sentinel,
+						})),
+					),
+				},
+				q,
+			),
+		};
+	}
+	if (q.view.startsWith("application-"))
+		return queryApplicationEvidence(sessionId, q, store);
+	if (q.view.startsWith("semantic-")) {
+		const summary = result?.semanticGraph;
+		if (!summary || q.view === "semantic-summary")
+			return {
+				id: receipt.id,
+				available: !!summary,
+				status: receipt.status,
+				summary,
+			};
+		const graph = store.semanticGraph(sessionId, receipt.id);
+		if (!graph) throw new Error("Semantic evidence unavailable");
+		if (q.view === "semantic-trace") {
+			const trace = queryJavaScriptSemanticGraph(
+				javaScriptSemanticGraphSchema.parse(graph),
+				q.trace,
+			);
+			return {
+				id: receipt.id,
+				available: true,
+				graphHash: summary.graphHash,
+				queryId: trace.query_id,
+				status: trace.status,
+				direction: trace.direction,
+				summary: trace.summary,
+				coverage: trace.coverage,
+				limitations: trace.limitations,
+				...semanticEvidencePage(trace as unknown as Record<string, unknown>, q),
+			};
+		}
+		return {
+			id: receipt.id,
+			available: true,
+			graphHash: summary.graphHash,
+			...semanticEvidencePage(graph, q),
+		};
+	}
 	if (q.view === "verification")
 		return {
 			id: receipt.id,
@@ -100,9 +185,10 @@ export function queryFirstPartyEvidence(
 	};
 }
 
+export { correlateSavedEvidence } from "./correlation";
 export {
-	ScenarioExpectationSchema,
 	reconcileProcessScenario,
+	ScenarioExpectationSchema,
 } from "./scenario";
 
-export { correlateSavedEvidence } from "./correlation";
+export { semanticSourceNotices } from "./semantic-engine/notices";

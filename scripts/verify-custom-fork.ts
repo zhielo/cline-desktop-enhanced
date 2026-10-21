@@ -4,28 +4,314 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"sdk/packages/core/src/extensions/tools/executors/advanced-candidates.ts",markers:["matching preview_sha256", "No-op byte patch", "bounded-structure-only", "reconstructed-constant-Int32-body"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/candidate-files.ts",markers:["fs.link(temp, output)","Source changed before publication", "cleanupWarning", "no overwrite permitted"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/candidate-batch.ts",markers:["Batch outputs may not replace inputs/manifest", "batch_preview_sha256", "NOT an all-or-nothing transaction", "manifestHash"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/evidence-trace.ts",markers:["declared-data-flow-edges-only", "observedExecution: false", "untrusted-imported-report", "Trace seed/coverage exceeds output byte budget"]},
- {path:"apps/examples/desktop-app/sidecar/model-investigation.ts",markers:["capture_network_metadata", "independentRecordingConsent: true", "analysis_workflow_hybrid_prepare"]},
- {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-preview-approved-binary-ast-batch-originals-preserved", "installed-multiedit-audit-source-sink-originals-preserved", "installed-integrated-source-hypothesis-notebook-coverage-passed"]},
- {path:"sdk/packages/core/src/extensions/tools/analysis-commands.ts",markers:["ANALYSIS_COMMAND_ALIASES","isAnalysisWriteOperation","planInvestigation","notebook_run"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/smali-patch.ts",markers:["preview_sha256","fs.link(temporary, output)","expected_sha256","MAX_SOURCE_BYTES"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/advanced-command-workspace.tsx",markers:["Advanced AI commands","Prepare advanced command for review","Not available in this command pack"]},
- {path:"apps/examples/desktop-app/webview/lib/session-reasoning.ts", markers:["cline.reasoning.v1:","writeSessionReasoning","readDraftReasoning","normalizeProviderId"]},
- {path:"apps/examples/desktop-app/webview/hooks/use-chat-session.ts", markers:["hydrationPendingRef","updateReasoning","boundConfig.analysisMode","readSessionReasoning"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx", markers:["onDraftModeChange","Runtime mode does not grant execution permission"]},
- {path:"apps/vscode/scripts/desktop-installed-acceptance.ts", markers:["installed-fresh-draft-analysis-visible-before-first-task"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["probeValidationBun", "spawn(validationExecutable(step, bun.executable), step.args", 'supervisorRuntime: "node"', "timeoutMs: 20 * 60 * 1000"]},
+ {path:"scripts/validate-advanced-build.test.mjs",markers:["isolated bounded probes", "without leaking child errors"]},
+ {path:"sdk/packages/core/src/analysis/profile.ts",markers:['export const ANALYSIS_PROFILE = "cline-js-static/7";']},
+ {path:"sdk/packages/core/src/analysis/contracts-profile.test.ts",markers:["the same runtime-neutral receipt profile", "malformed fuse evidence"]},
+ {path:"scripts/validate-advanced-build.test.mjs",markers:["selfcheck>=0 && bootstrap>=0 && selfcheck<bootstrap", "verifyInstalledInvestigationCatalog(await readSkills(), false, installedSkillRoot)"]},
+ {path:"sdk/packages/core/src/analysis/file-handle-chunks-compat.test.ts",markers:["without moving its cursor", "beyond Number.MAX_SAFE_INTEGER without coercion", "expect(this).toBe(owner)"]},
+ {path:"sdk/packages/core/src/analysis/acquisition.ts",markers:["AcquisitionSchema", "Acquisition manifest digest mismatch", "Acquisition member/container binding mismatch", 'coverage: z.literal("partial")']},
+ {path:"sdk/packages/core/src/analysis/worker.ts",markers:["buildAcquisitionReport", "archiveBytesRead", "Admission is atomic per parsed archive", "named.dev !== after.dev"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-source-acquisition-hash-bound-saved-off-no-execution-passed", "Installed acquisition byte identity mismatch"]},
+ {path:"sdk/packages/core/src/analysis/electron-fuses.ts",markers:["readElectronFuseImage", "resources.close()", 'status: "partial"', "electronFuseReportSchema.parse"]},
+ {path:"sdk/packages/core/src/analysis/service.ts",markers:["!!input.electronFuses !== !!parsedResult.electronFuses", "Fuse receipt projection mismatch"]},
+ {path:"sdk/packages/core/src/analysis/electron-fuses.test.ts",markers:["chunk-boundary sentinels", "fails closed when the owned child", "unknown wire versions"]},
+ {path:"sdk/packages/core/src/analysis/semantic-engine/electron-fuses-parity.test.ts",markers:["CLINE_SEMANTIC_REFERENCE_ROOT", "universalFuseImage", "original.readElectronFuseImage"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-electron-fuses-explicit-read-only-hash-bound-saved-off-passed", "Installed fuse inspection modified the original"]},
 
- {path:"scripts/pinned-android-download.mjs",markers:["Pinned digest mismatch","attempt <= 4","404, 408, 429"]},
- {path:"sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",markers:["verifyAndroidToolchain","JAVA_TOOL_OPTIONS","Untracked Android pack resource","ClineAndroidLauncher","PROCESSOR_ARCHITEW6432","Explicit reads avoid Bun/Windows","handle.close()","runBundledAndroidNative","constants.COPYFILE_EXCL"]},
- {path:"scripts/package-android-toolchain.mjs",markers:["downloadPinnedAndroidAsset","tools.lock.json","ClineAndroidLauncher.java"]},
- {path:"apps/examples/desktop-app/webview/components/views/chat/android-toolchain-workspace.tsx",markers:["Prepare exact Android step for review","confirm_test_signing","No automatic install"]},
- {path:".github/workflows/build-custom-windows-installer.yml",markers:["test-android-toolchain.ts","package-android-toolchain.mjs"]},
- {path: "apps/examples/desktop-app/sidecar/binary-triage-worker.ts", markers: ["r2pipe.open([target]", "one literal path"]},
- {path: "scripts/test-embedded-binary-triage.ps1", markers: ["76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0", "python313._pth", "test-binary-triage-pack.ts", "cline triage pack with spaces"]},
- {path: "apps/examples/desktop-app/webview/components/views/settings/binary-triage-readiness.tsx", markers: ["ownedTriageDiagnostic", "no operation is automatically retried"]},
+	{path:"apps/examples/desktop-app/sidecar/investigation-skills.ts",markers:["verifyInvestigationSkillPack", "resolveDisabledAgentPluginNames", "loaded.mcpServers.length", "targetExecuted: false", "installedPresent"]},
+	{path:"apps/examples/desktop-app/sidecar/chat-session.ts",markers:["localInvestigationSkills", "agentPluginPaths: inspectInvestigationSkillPack(true).paths", 'binding.kind === "local"']},
+	{path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["bundledInvestigationSkills: bundled.pack", 'agentPluginPaths: inspectInvestigationSkillPack(ctx.activeEnvironmentId === "local").paths']},
+	{path:"apps/examples/desktop-app/sidecar/index.ts",markers:["--cline-investigation-skills-selfcheck", "selfcheckInvestigationSkills"]},
+	{path:"apps/examples/desktop-app/sidecar/investigation-skills.test.ts",markers:["before creating a profile, Hub or listener", "hard-linked instruction bytes", "does not use a clean development fallback"]},
+	{path:"apps/examples/desktop-app/src-tauri/tauri.conf.json",markers:["investigation-skills/**/*"]},
+	{path:"apps/examples/desktop-app/src-tauri/tauri.analysis-runtime.conf.json",markers:["investigation-skills/**/*"]},
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-bundled-investigation-skills-instruction-only-namespace-disable-passed", "installed-bundled-investigation-skills-disable-persisted-restart-passed", "verifyInstalledInvestigationCatalog"]},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			'await sourceWorkspace.getByRole("button", { name: "application-nodes", exact: true }).click()\n\t\tawait sourceWorkspace.getByLabel("Filter analysis evidence", { exact: true }).fill("ipc-channel")',
+		],
+	},
+	{
+		path: "scripts/prepare-ci-python.mjs",
+		markers: [
+			"cline-ci-python/v1",
+			"CI_PYTHON_PHASE=entry",
+			"timeout: 60_000",
+			"fixtureDeadlineChanged: false",
+			"CLINE_RE_PYTHON=${identity.executable}",
+		],
+	},
+	{
+		path: "scripts/test-secret-scan-fixtures.mjs",
+		markers: [
+			"token beside revision",
+			"same hash outside revision",
+			"different revision",
+			"exception must not cover another file",
+		],
+	},
+	{
+		path: "scripts/summarize-semantic-tests.py",
+		markers: [
+			"Semantic regression failure",
+			"JUnit report contains no test cases",
+			"<!DOCTYPE",
+			"problems[:15]",
+		],
+	},
+	{
+		path: ".gitleaks.toml",
+		markers: [
+			'id = "sourcegraph-access-token"',
+			"[[rules.allowlists]]",
+			'condition = "AND"',
+			'regexTarget = "line"',
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/application-bindings.ts",
+		markers: [
+			"assertAdmittedApplicationManifest",
+			"source inventory count",
+			"duplicate inventory",
+			"admitted source identities",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/semantic-engine/application.ts",
+		markers: [
+			"cline-application/1",
+			"Admitted source set only",
+			"Application source hash or byte count mismatch",
+			"...full.coverage",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/application-query.ts",
+		markers: [
+			"compareJavaScriptApplicationVersions",
+			"compareJavaScriptExportShapes",
+			"compareSourceToBundle",
+			"providerCalls: 0",
+			"verifiedBehavior: false",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/application-evidence-workflows.tsx",
+		markers: [
+			"Saved application workflows",
+			"Run saved application query",
+			"Next saved application page",
+		],
+	},
+	{
+		path: "docs/rea-migration/capabilities.json",
+		markers: [
+			"cline-rea-capability-inventory/1",
+			"partial-source-port",
+			"not-source-ported-or-audited",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/semantic-engine/engine.ts",
+		markers: [
+			"cline-semantic/1",
+			"file-local-semantics",
+			"Semantic source hash mismatch",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/analysis/evidence-query.ts",
+		markers: [
+			"semantic-trace",
+			"displayOmitted",
+			"Semantic trace request exceeds byte budget",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/release-gate-policy.ts",
+		markers: [
+			"semantic-source-validation / Semantic source parity (ubuntu-latest)",
+			"semantic-source-validation / Semantic source parity (windows-latest)",
+			".github/workflows/semantic-source-validation.yml",
+		],
+	},
+	{
+		path: "scripts/verify-semantic-port.mjs",
+		markers: ["Source digest mismatch", "Missing attribution"],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: [
+			"semantic-source-validation",
+			"needs: [ghidra-owned-fixtures, android-toolchain-preflight, semantic-source-validation]",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/advanced-candidates.ts",
+		markers: [
+			"matching preview_sha256",
+			"No-op byte patch",
+			"bounded-structure-only",
+			"reconstructed-constant-Int32-body",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/candidate-files.ts",
+		markers: [
+			"fs.link(temp, output)",
+			"Source changed before publication",
+			"cleanupWarning",
+			"no overwrite permitted",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/candidate-batch.ts",
+		markers: [
+			"Batch outputs may not replace inputs/manifest",
+			"batch_preview_sha256",
+			"NOT an all-or-nothing transaction",
+			"manifestHash",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/evidence-trace.ts",
+		markers: [
+			"declared-data-flow-edges-only",
+			"observedExecution: false",
+			"untrusted-imported-report",
+			"Trace seed/coverage exceeds output byte budget",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/model-investigation.ts",
+		markers: [
+			"capture_network_metadata",
+			"independentRecordingConsent: true",
+			"analysis_workflow_hybrid_prepare",
+		],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: [
+			"installed-preview-approved-binary-ast-batch-originals-preserved",
+			"installed-multiedit-audit-source-sink-originals-preserved",
+			"installed-integrated-source-hypothesis-notebook-coverage-passed",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/analysis-commands.ts",
+		markers: [
+			"ANALYSIS_COMMAND_ALIASES",
+			"isAnalysisWriteOperation",
+			"planInvestigation",
+			"notebook_run",
+		],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/smali-patch.ts",
+		markers: [
+			"preview_sha256",
+			"fs.link(temporary, output)",
+			"expected_sha256",
+			"MAX_SOURCE_BYTES",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/advanced-command-workspace.tsx",
+		markers: [
+			"Advanced AI commands",
+			"Prepare advanced command for review",
+			"Not available in this command pack",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/lib/session-reasoning.ts",
+		markers: [
+			"cline.reasoning.v1:",
+			"writeSessionReasoning",
+			"readDraftReasoning",
+			"normalizeProviderId",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/hooks/use-chat-session.ts",
+		markers: [
+			"hydrationPendingRef",
+			"updateReasoning",
+			"boundConfig.analysisMode",
+			"readSessionReasoning",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/analysis-mode-control.tsx",
+		markers: [
+			"onDraftModeChange",
+			"Runtime mode does not grant execution permission",
+		],
+	},
+	{
+		path: "apps/vscode/scripts/desktop-installed-acceptance.ts",
+		markers: ["installed-fresh-draft-analysis-visible-before-first-task"],
+	},
+
+	{
+		path: "scripts/pinned-android-download.mjs",
+		markers: ["Pinned digest mismatch", "attempt <= 4", "404, 408, 429"],
+	},
+	{
+		path: "sdk/packages/core/src/extensions/tools/executors/android-toolchain.ts",
+		markers: [
+			"verifyAndroidToolchain",
+			"JAVA_TOOL_OPTIONS",
+			"Untracked Android pack resource",
+			"ClineAndroidLauncher",
+			"PROCESSOR_ARCHITEW6432",
+			"Explicit reads avoid Bun/Windows",
+			"handle.close()",
+			"runBundledAndroidNative",
+			"constants.COPYFILE_EXCL",
+		],
+	},
+	{
+		path: "scripts/package-android-toolchain.mjs",
+		markers: [
+			"downloadPinnedAndroidAsset",
+			"tools.lock.json",
+			"ClineAndroidLauncher.java",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/chat/android-toolchain-workspace.tsx",
+		markers: [
+			"Prepare exact Android step for review",
+			"confirm_test_signing",
+			"No automatic install",
+		],
+	},
+	{
+		path: ".github/workflows/build-custom-windows-installer.yml",
+		markers: ["test-android-toolchain.ts", "package-android-toolchain.mjs"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/binary-triage-worker.ts",
+		markers: ["r2pipe.open([target]", "one literal path"],
+	},
+	{
+		path: "scripts/test-embedded-binary-triage.ps1",
+		markers: [
+			"76f238f606250c87c6beac75dccd35ee99070a13490555936abb6cb64ecce3d0",
+			"python313._pth",
+			"test-binary-triage-pack.ts",
+			"cline triage pack with spaces",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/webview/components/views/settings/binary-triage-readiness.tsx",
+		markers: ["ownedTriageDiagnostic", "no operation is automatically retried"],
+	},
 	{
 		path: "scripts/install-pinned-gitleaks.ps1",
 		markers: ["SHA256", "version self-check failed", "$attempt -le 3"],
@@ -78,7 +364,9 @@ const requiredMarkers: Array<{
 	{
 		path: "sdk/packages/core/src/analysis/contracts.ts",
 		markers: [
-			"cline-js-static/7",
+			'import { ANALYSIS_PROFILE } from "./profile";',
+			'export { ANALYSIS_PROFILE } from "./profile";',
+			"profile: z.literal(ANALYSIS_PROFILE)",
 			"shipped-artifact",
 			"termination-unconfirmed",
 		],
@@ -1220,6 +1508,9 @@ const requiredMarkers: Array<{
 			"bun install --frozen-lockfile",
 			"bun run types",
 			"run: bun run lint",
+			"scripts/prepare-ci-python*.mjs",
+			"node scripts/prepare-ci-python.mjs",
+			"node --test scripts/prepare-ci-python.test.mjs",
 		],
 	},
 	{

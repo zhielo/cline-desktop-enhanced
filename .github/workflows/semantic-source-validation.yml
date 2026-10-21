@@ -1,0 +1,64 @@
+name: Integrated semantic source validation
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  semantic-source:
+    name: Semantic source parity (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Read supported Bun version
+        id: toolchain
+        shell: bash
+        run: echo "version=$(node scripts/read-bun-version.mjs)" >> "$GITHUB_OUTPUT"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ steps.toolchain.outputs.version }}
+      - name: Test semantic diagnostic parser
+        run: python -B scripts/test-semantic-diagnostics.py
+      - name: Install locked application dependencies
+        run: bun install --frozen-lockfile
+      - name: Verify port provenance
+        run: node scripts/verify-semantic-port.mjs
+      - name: Build SDK
+        run: bun run build:sdk
+      - name: Checkout pinned upstream source for development-only comparisons
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: morluto/rea
+          ref: d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f
+          path: .semantic-reference
+          persist-credentials: false
+      - name: Bind reference source to identical analysis dependencies
+        shell: bash
+        run: |
+          node -e 'require("node:fs").symlinkSync(require("node:path").resolve("sdk/packages/core/node_modules"), ".semantic-reference/node_modules", process.platform === "win32" ? "junction" : "dir")'
+      - name: Verify complete pinned public capability inventory
+        env:
+          CLINE_SEMANTIC_REFERENCE_ROOT: ${{ github.workspace }}/.semantic-reference
+        run: bun scripts/rea-capability-inventory.mjs --check
+      - name: Analysis regression and exact source projection parity
+        working-directory: sdk/packages/core
+        env:
+          CLINE_SEMANTIC_REFERENCE_ROOT: ${{ github.workspace }}/.semantic-reference
+        run: bun x vitest run src/analysis --config vitest.config.ts --maxWorkers=1 --reporter=default --reporter=junit --outputFile.junit=semantic-results.xml
+      - name: Publish bounded semantic failure diagnostics
+        if: ${{ always() }}
+        run: python -B scripts/summarize-semantic-tests.py sdk/packages/core/semantic-results.xml
+      - name: Owned worker and evidence smoke
+        run: bun scripts/test-semantic-worker.ts
+      - name: Upload analysis test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: semantic-source-${{ matrix.os }}-${{ github.run_id }}
+          path: sdk/packages/core/semantic-results.xml
+          if-no-files-found: warn

@@ -174,7 +174,7 @@ test("extension Bun cache saving is bounded without weakening E2E gates", () => 
  expect(source).toContain("timeout-minutes: 20");
 });
 
-test("installed Hybrid exercises static prerequisites and separately approved isolated execution",()=>{const source=load("apps/vscode/scripts/desktop-installed-acceptance.ts");expect(source).toContain("installed-hybrid-mode-persistence-static-preflight-passed");expect(source).toContain("installed-hybrid-owned-isolated-execution-and-export-passed");expect(source).toContain("first_party_analysis_execute_prepare");expect(source).toContain('"approve_analysis_task"');expect(source).toContain("confirmExecution:true");expect(source).toContain('relation!=="exact-artifact-hash"');expect(source).toContain("verifiedBeforeResume!==true");expect(source).toContain("missingBasisDenied");});
+test("installed Hybrid exercises static prerequisites and separately approved isolated execution",()=>{const source=load("apps/vscode/scripts/desktop-installed-acceptance.ts");expect(source).toContain("installed-hybrid-mode-persistence-static-preflight-passed");expect(source).toContain("installed-hybrid-owned-isolated-execution-and-export-passed");expect(source).toContain("first_party_analysis_execute_prepare");expect(source).toContain('"approve_analysis_task"');expect(source).toContain("confirmExecution: true");expect(source).toContain('relation !== "exact-artifact-hash"');expect(source).toContain("verifiedBeforeResume !== true");expect(source).toContain("missingBasisDenied");});
 
 test("both Windows gates use checksum-verified upstream Gitleaks", () => {
   const source = load("scripts/install-pinned-gitleaks.ps1");
@@ -194,7 +194,7 @@ test("installed Analysis waits use the active accessible identity, not obsolete 
  const source = load("apps/vscode/scripts/desktop-installed-acceptance.ts");
  expect(source).not.toContain("#session-analysis-mode");
  expect(source.match(/querySelector<HTMLSelectElement>\('select\[aria-label="Session Analysis mode"\]'\)/g)).toHaveLength(3);
- for (const mode of ["static", "hybrid", "off"]) expect(source).toContain(`select?.value==="${mode}"&&!select.disabled`);
+ for (const mode of ["static", "hybrid", "off"]) expect(source).toContain(`select?.value === "${mode}" && !select.disabled`);
  expect(source).toContain('getByLabel("Draft Analysis mode", { exact: true })');
 });
 
@@ -202,21 +202,21 @@ test("installed advanced commands verify catalog and separately approved immutab
  const driver = readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts", import.meta.url), "utf8");
  expect(driver.includes("installed-fresh-advanced-command-catalog-visible-without-execution")).toBe(true);
  expect(driver.includes("installed-advanced-smali-preview-approved-candidate-original-preserved")).toBe(true);
- expect(driver.includes('operation:"patch_smali_method"')).toBe(true);
- expect(driver.includes("preview_sha256:ownedPreview.result.previewSha256")).toBe(true);
+ expect(driver.includes('operation: "patch_smali_method"')).toBe(true);
+ expect(driver.includes("preview_sha256: ownedPreview.result.previewSha256")).toBe(true);
 });
 
 test("installed advanced batch requires reviewed preview, separate approval and preserved originals", () => {
  const driver = readFileSync("apps/vscode/scripts/desktop-installed-acceptance.ts", "utf8");
  expect(driver.includes("installed-preview-approved-binary-ast-batch-originals-preserved")).toBe(true);
  expect(driver.includes("installed-multiedit-audit-source-sink-originals-preserved")).toBe(true);
- expect(driver.includes('operation:"preview_candidate_batch"')).toBe(true);
- expect(driver.includes('operation:"apply_candidate_batch"')).toBe(true);
+ expect(driver.includes('operation: "preview_candidate_batch"')).toBe(true);
+ expect(driver.includes('operation: "apply_candidate_batch"')).toBe(true);
  expect(driver.includes('batchApply.result.results')).toBe(true);
 });
 
 test("installed integrated workflows retain exact evidence and honest recommendation coverage",()=>{
  const driver=readFileSync("apps/vscode/scripts/desktop-installed-acceptance.ts","utf8");
- for(const marker of ["installed-integrated-source-hypothesis-notebook-coverage-passed",'operation:"explain_behavior"','operation:"verify_hypothesis"','operation:"preview_batch"',"not-certified-by-catalog","ownedWorkflowText"])expect(driver.includes(marker)).toBe(true);
+ for(const marker of ["installed-integrated-source-hypothesis-notebook-coverage-passed",'operation: "explain_behavior"','operation: "verify_hypothesis"','operation: "preview_batch"',"not-certified-by-catalog","ownedWorkflowText"])expect(driver.includes(marker)).toBe(true);
  const validation=readFileSync("scripts/validate-advanced-build.mjs","utf8");expect(validation.includes("executors/investigation-workflows.test.ts")).toBe(true);
 });

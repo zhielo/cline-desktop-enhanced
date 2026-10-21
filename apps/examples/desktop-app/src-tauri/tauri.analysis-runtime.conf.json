@@ -10,7 +10,8 @@
       "resources/analysis-runtime-angr/**/*",
       "resources/android-platform-tools/**/*",
       "resources/binary-triage/**/*",
-      "resources/android-toolchain/**/*"
+      "resources/android-toolchain/**/*",
+      "investigation-skills/**/*"
     ]
   }
 }

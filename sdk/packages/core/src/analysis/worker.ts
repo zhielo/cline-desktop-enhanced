@@ -1,18 +1,20 @@
 import { constants } from "node:fs";
-import { lstat, open, realpath, opendir } from "node:fs/promises";
+import { lstat, open, opendir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
 	AnalysisInputSchema,
-	LIMITS,
-	byteDigest,
-	ResultSchema,
 	type AnalysisResult,
+	byteDigest,
+	LIMITS,
+	ResultSchema,
 } from "./contracts";
 import { analyzeSources, type SourceArtifact } from "./parser";
+import { buildAcquisitionReport, type AcquisitionBody } from "./acquisition";
 
-const sourceName = (p: string) =>
+const sourceName = (p: string, extended = false) =>
 	/\.(?:[cm]?[jt]s|[jt]sx)$/i.test(p) ||
 	p.endsWith(".map") ||
+	(extended && /\.(?:json|html?|node)$/i.test(p)) ||
 	/\.(?:dll|exe)$/i.test(p) ||
 	path.basename(p) === "package.json";
 export function within(root: string, target: string) {
@@ -38,10 +40,21 @@ export async function confinedTarget(root: string, target: string) {
 export async function readSources(
 	root: string,
 	target: string,
-	budget = { entries: 0, bytes: 0, files: 0 },
+	budget: {
+		entries: number;
+		bytes: number;
+		files: number;
+		archiveBytes?: number;
+		archiveContainers?: number;
+	} = { entries: 0, bytes: 0, files: 0 },
+	extended = false,
 ) {
 	const sources: SourceArtifact[] = [],
 		limitations: string[] = [];
+	const containers: AcquisitionBody["containers"] = [];
+	const acquired: AcquisitionBody["sources"] = [];
+	const labelFor = (p: string) =>
+		path.relative(root, p).split(path.sep).join("/") || ".";
 	const note = (s: string) => {
 		if (limitations.length < 80) limitations.push(s.slice(0, 1000));
 	};
@@ -64,10 +77,21 @@ export async function readSources(
 				count += r.bytesRead;
 			}
 			const after = await f.stat();
+			const named = await lstat(actual);
 			if (
 				count !== before.size ||
 				after.size !== before.size ||
 				after.mtimeMs !== before.mtimeMs ||
+				after.ctimeMs !== before.ctimeMs ||
+				after.dev !== before.dev ||
+				after.ino !== before.ino ||
+				!named.isFile() ||
+				named.isSymbolicLink() ||
+				named.dev !== after.dev ||
+				named.ino !== after.ino ||
+				named.size !== after.size ||
+				named.mtimeMs !== after.mtimeMs ||
+				named.ctimeMs !== after.ctimeMs ||
 				(await realpath(actual)) !== actual
 			)
 				throw new Error("Artifact changed during read");
@@ -76,7 +100,14 @@ export async function readSources(
 			await f.close();
 		}
 	};
-	const add = (name: string, data: Buffer) => {
+	const add = (
+		name: string,
+		data: Buffer,
+		origin: AcquisitionBody["sources"][number]["origin"] = {
+			kind: "file",
+			path: name,
+		},
+	) => {
 		if (
 			budget.files >= LIMITS.files ||
 			data.length > LIMITS.sourceBytes ||
@@ -87,16 +118,45 @@ export async function readSources(
 		}
 		budget.files++;
 		budget.bytes += data.length;
+		acquired.push({
+			path: name,
+			sha256: byteDigest(data),
+			bytes: data.length,
+			origin,
+		});
 		sources.push({
 			path: name,
 			bytes: data.length,
 			sha256: byteDigest(data),
-			source: /\.(?:dll|exe)$/i.test(name) ? "" : data.toString("utf8"),
-			...(/\.(?:dll|exe)$/i.test(name) ? { binary: data } : {}),
+			source: /\.(?:dll|exe|node)$/i.test(name) ? "" : data.toString("utf8"),
+			...(!Buffer.from(data.toString("utf8")).equals(data)
+				? { rawBytes: data }
+				: {}),
+			...(/\.(?:dll|exe|node)$/i.test(name) ? { binary: data } : {}),
 		});
 	};
 	const asar = async (p: string) => {
-		const bytes = await read(p, LIMITS.archiveBytes);
+		const archiveBytesRead = budget.archiveBytes ?? 0;
+		if (
+			(budget.archiveContainers ?? 0) >= LIMITS.files ||
+			archiveBytesRead >= 64 * 1024 * 1024
+		)
+			throw new Error("ASAR container acquisition budget reached");
+		const bytes = await read(
+			p,
+			Math.min(LIMITS.archiveBytes, 64 * 1024 * 1024 - archiveBytesRead),
+		);
+		budget.archiveBytes = archiveBytesRead + bytes.length;
+		budget.archiveContainers = (budget.archiveContainers ?? 0) + 1;
+		const containerPath = labelFor(p),
+			containerSha256 = byteDigest(bytes);
+		containers.push({
+			path: containerPath,
+			sha256: containerSha256,
+			bytes: bytes.length,
+			kind: "asar-candidate",
+		});
+		const pending: Array<{ path: string; data: Buffer; offset: number }> = [];
 		if (bytes.length < 16 || bytes.readUInt32LE(0) !== 4)
 			throw new Error("Invalid ASAR pickle header");
 		const headerSize = bytes.readUInt32LE(4),
@@ -105,12 +165,16 @@ export async function readSources(
 		if (
 			headerSize > LIMITS.sourceBytes ||
 			headerSize < 8 ||
+			headerSize % 4 !== 0 ||
+			bytes.readUInt32LE(8) !== headerSize - 4 ||
 			jsonSize > headerSize - 8 ||
 			dataStart > bytes.length
 		)
 			throw new Error("Invalid or oversized ASAR header");
 		const header = JSON.parse(
-			bytes.subarray(16, 16 + jsonSize).toString("utf8"),
+			new TextDecoder("utf-8", { fatal: true }).decode(
+				bytes.subarray(16, 16 + jsonSize),
+			),
 		);
 		const walk = (entries: unknown, prefix: string, depth: number) => {
 			if (depth > LIMITS.depth) {
@@ -126,7 +190,7 @@ export async function readSources(
 				}
 				if (
 					!name ||
-					/[/\\\0]/.test(name) ||
+					/[/\\\0\r\n]/.test(name) ||
 					name === "." ||
 					name === ".." ||
 					!raw ||
@@ -143,7 +207,7 @@ export async function readSources(
 					walk(e.files, label, depth + 1);
 					continue;
 				}
-				if (!sourceName(name)) continue;
+				if (!sourceName(name, extended)) continue;
 				const offset =
 					typeof e.offset === "string" && /^\d+$/.test(e.offset)
 						? Number(e.offset)
@@ -158,10 +222,11 @@ export async function readSources(
 					dataStart + offset + size > bytes.length
 				)
 					throw new Error("Invalid ASAR source range");
-				add(
-					label,
-					bytes.subarray(dataStart + offset, dataStart + offset + size),
-				);
+				pending.push({
+					path: label,
+					data: bytes.subarray(dataStart + offset, dataStart + offset + size),
+					offset: dataStart + offset,
+				});
 			}
 		};
 		walk(
@@ -169,6 +234,15 @@ export async function readSources(
 			path.relative(root, p).split(path.sep).join("/") + "!",
 			0,
 		);
+		// Admission is atomic per parsed archive: a later malformed member must
+		// not leave earlier members looking like a successful acquisition.
+		for (const member of pending)
+			add(member.path, member.data, {
+				kind: "asar-member",
+				containerPath,
+				containerSha256,
+				offset: member.offset,
+			});
 		note(
 			"ASAR source hashes identify payload bytes; archive integrity metadata is not authenticated.",
 		);
@@ -183,6 +257,11 @@ export async function readSources(
 			return;
 		}
 		budget.entries++;
+		const label = labelFor(p);
+		if (/[\0\r\n\\]/.test(label) || /^[a-z]:/i.test(label)) {
+			note("Skipped unsupported acquisition path label.");
+			return;
+		}
 		const info = await lstat(p);
 		if (info.isSymbolicLink()) {
 			note("Skipped filesystem link.");
@@ -213,8 +292,9 @@ export async function readSources(
 		} else if (info.isFile()) {
 			const name = path.relative(root, p).split(path.sep).join("/");
 			try {
-				if (p.endsWith(".asar")) await asar(p);
-				else if (sourceName(p)) add(name, await read(p, LIMITS.sourceBytes));
+				if (/\.asar$/i.test(p)) await asar(p);
+				else if (sourceName(p, extended))
+					add(name, await read(p, LIMITS.sourceBytes));
 			} catch (e) {
 				note(
 					`Unreadable/unsupported ${name}: ${e instanceof Error ? e.message : "read failure"}`,
@@ -222,24 +302,101 @@ export async function readSources(
 			}
 		} else note("Skipped non-regular filesystem entry.");
 	};
-	await visit(await confinedTarget(root, target), 0);
+	const selected = await confinedTarget(root, target);
+	await visit(selected, 0);
 	if (!sources.length)
 		note(
 			"No supported JavaScript/TypeScript/package metadata sources were inspected.",
 		);
 	sources.sort((a, b) => a.path.localeCompare(b.path));
-	return { sources, limitations };
+	const acquisition = buildAcquisitionReport({
+		version: 1,
+		selectedPath: labelFor(selected),
+		selection: "explicit-workspace-target",
+		coverage: "partial",
+		containers,
+		sources: acquired,
+		limitations: [
+			"Commits only bytes admitted by the bounded reader. Unsupported, excluded, linked, unpacked and unvisited files are not claimed absent.",
+			"Directory reads are separate file snapshots, not an atomic filesystem snapshot or complete application acquisition.",
+			"ASAR hashes bind observed container bytes and selected member ranges, not publisher authenticity, archive integrity metadata, execution or source equivalence.",
+			...limitations,
+		],
+	});
+	return { sources, limitations, acquisition };
 }
 export async function analyzeTarget(
 	workspace: string,
 	value: unknown,
+	semanticOutput?: string,
 ): Promise<AnalysisResult> {
 	const input = AnalysisInputSchema.parse(value),
 		root = await realpath(workspace);
+	if (input.electronFuses) {
+		const { inspectOwnedElectronFuses } = await import("./electron-fuses");
+		return inspectOwnedElectronFuses(root, input.target);
+	}
 	const budget = { entries: 0, bytes: 0, files: 0 };
-	const current = await readSources(root, input.target, budget);
+	const current = await readSources(
+		root,
+		input.target,
+		budget,
+		!!input.applicationGraph,
+	);
 	const result = analyzeSources(current.sources, current.limitations);
+	result.acquisition = current.acquisition;
 	result.counters.entries = budget.entries;
+	if (input.semanticGraph) {
+		if (!semanticOutput || !path.isAbsolute(semanticOutput))
+			throw new Error("Owned semantic output required");
+		if (input.compareTarget)
+			throw new Error(
+				"Semantic graph comparison is not implemented; analyze each target separately",
+			);
+		const { analyzeSemanticSources, semanticSummary, SEMANTIC_MAX_BYTES } =
+			await import("./semantic-engine/engine");
+		let application: unknown;
+		let graph: Awaited<ReturnType<typeof analyzeSemanticSources>>;
+		if (input.applicationGraph) {
+			const { analyzeApplicationSources, applicationSummary } = await import(
+				"./semantic-engine/application"
+			);
+			const target = await confinedTarget(root, input.target);
+			const prefix = path.relative(root, target).split(path.sep).join("/");
+			const normalized = current.sources.map((s) => ({
+				...s,
+				path:
+					s.path === prefix
+						? path.posix.basename(prefix)
+						: prefix && s.path.startsWith(prefix + "/")
+							? s.path.slice(prefix.length + 1)
+							: prefix && s.path.startsWith(prefix + "!/")
+								? s.path.slice(prefix.length + 2)
+								: s.path,
+			}));
+			const graphs = await analyzeApplicationSources(normalized);
+			graph = graphs.semantic;
+			application = graphs.application;
+			result.applicationGraph = applicationSummary(
+				graphs.application,
+				graph,
+				graphs.manifest,
+			);
+		} else graph = await analyzeSemanticSources(current.sources);
+		const output = JSON.stringify(
+			application ? { semantic: graph, application } : graph,
+		);
+		if (Buffer.byteLength(output) > SEMANTIC_MAX_BYTES)
+			throw new Error("Semantic graph transfer budget exceeded");
+		await writeFile(semanticOutput, output, { flag: "wx", mode: 0o600 });
+		result.semanticGraph = semanticSummary(graph, !!input.applicationGraph);
+		if (
+			input.applicationGraph ||
+			current.limitations.length ||
+			graph.coverage.status !== "complete"
+		)
+			result.status = "partial";
+	}
 	if (input.compareTarget) {
 		const previous = await readSources(root, input.compareTarget, budget);
 		const baseCurrent = await confinedTarget(root, input.target),
@@ -317,7 +474,17 @@ export async function runAnalysisWorkerEntrypoint() {
 	const request = JSON.parse(text);
 	if (!request || typeof request.workspace !== "string")
 		throw new Error("Worker workspace required");
-	const result = await analyzeTarget(request.workspace, request.input);
+	if (
+		request.semanticOutput !== undefined &&
+		(typeof request.semanticOutput !== "string" ||
+			!path.isAbsolute(request.semanticOutput))
+	)
+		throw new Error("Invalid owned semantic output");
+	const result = await analyzeTarget(
+		request.workspace,
+		request.input,
+		request.semanticOutput,
+	);
 	const output = JSON.stringify(result);
 	if (Buffer.byteLength(output) > LIMITS.outputBytes)
 		throw new Error("Evidence output budget exceeded");
