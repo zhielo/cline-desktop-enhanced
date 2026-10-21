@@ -192,8 +192,10 @@ test("shipped investigation skills are a blocking core and installed gate before
  const sidecar=readFileSync(new URL("../apps/examples/desktop-app/sidecar/index.ts",import.meta.url),"utf8");
  assert.ok(sidecar.indexOf('process.argv.includes("--cline-investigation-skills-selfcheck")')<sidecar.indexOf("configureFirstPartyAnalysisHost({"));
  const acceptance=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
- assert.ok(acceptance.indexOf('startAcceptanceProcess(sidecar, ["--cline-investigation-skills-selfcheck"]')<acceptance.indexOf('"--remote-hub-ensure"'));
+ const selfcheck=acceptance.indexOf('startAcceptanceProcess(sidecar, ["--cline-investigation-skills-selfcheck"]');
+ const bootstrap=acceptance.indexOf('"--remote-hub-ensure"');
+ assert.ok(selfcheck>=0 && bootstrap>=0 && selfcheck<bootstrap);
  for(const stage of ["installed-bundled-investigation-skills-instruction-only-namespace-disable-passed","installed-bundled-investigation-skills-disable-persisted-restart-passed"])
   assert.ok(acceptance.includes(stage));
- assert.ok(acceptance.includes('verifyInstalledInvestigationCatalog(await readSkills(),false,installedSkillRoot)'));
+ assert.ok(acceptance.includes('verifyInstalledInvestigationCatalog(await readSkills(), false, installedSkillRoot)'));
 });

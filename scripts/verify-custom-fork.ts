@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"scripts/validate-advanced-build.test.mjs",markers:["selfcheck>=0 && bootstrap>=0 && selfcheck<bootstrap", "verifyInstalledInvestigationCatalog(await readSkills(), false, installedSkillRoot)"]},
  {path:"sdk/packages/core/src/analysis/file-handle-chunks-compat.test.ts",markers:["without moving its cursor", "beyond Number.MAX_SAFE_INTEGER without coercion", "expect(this).toBe(owner)"]},
  {path:"sdk/packages/core/src/analysis/electron-fuses.ts",markers:["readElectronFuseImage", "resources.close()", 'status: "partial"', "electronFuseReportSchema.parse"]},
  {path:"sdk/packages/core/src/analysis/service.ts",markers:["!!input.electronFuses !== !!parsedResult.electronFuses", "Fuse receipt projection mismatch"]},
