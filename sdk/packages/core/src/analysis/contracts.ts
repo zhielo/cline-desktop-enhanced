@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { electronFuseReportSchema } from "./semantic-engine/upstream/src/domain/electron/electronFuses";
 
-export const ANALYSIS_PROFILE = "cline-js-static/7";
+import { ANALYSIS_PROFILE } from "./profile";
+export { ANALYSIS_PROFILE } from "./profile";
 export const AnalysisModeSchema = z.enum([
 	"off",
 	"static",

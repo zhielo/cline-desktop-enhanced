@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/src/analysis/profile.ts",markers:['export const ANALYSIS_PROFILE = "cline-js-static/7";']},
+ {path:"sdk/packages/core/src/analysis/contracts-profile.test.ts",markers:["the same runtime-neutral receipt profile", "malformed fuse evidence"]},
  {path:"scripts/validate-advanced-build.test.mjs",markers:["selfcheck>=0 && bootstrap>=0 && selfcheck<bootstrap", "verifyInstalledInvestigationCatalog(await readSkills(), false, installedSkillRoot)"]},
  {path:"sdk/packages/core/src/analysis/file-handle-chunks-compat.test.ts",markers:["without moving its cursor", "beyond Number.MAX_SAFE_INTEGER without coercion", "expect(this).toBe(owner)"]},
  {path:"sdk/packages/core/src/analysis/electron-fuses.ts",markers:["readElectronFuseImage", "resources.close()", 'status: "partial"', "electronFuseReportSchema.parse"]},
@@ -357,7 +359,9 @@ const requiredMarkers: Array<{
 	{
 		path: "sdk/packages/core/src/analysis/contracts.ts",
 		markers: [
-			"cline-js-static/7",
+			'import { ANALYSIS_PROFILE } from "./profile";',
+			'export { ANALYSIS_PROFILE } from "./profile";',
+			"profile: z.literal(ANALYSIS_PROFILE)",
 			"shipped-artifact",
 			"termination-unconfirmed",
 		],

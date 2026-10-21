@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Runtime-neutral installed receipt profile identity
+
+- The unchanged `cline-js-static/7` constant lives in the dependency-free analysis `profile.ts` module. Analysis contracts import and re-export that same constant; parser schemas and receipt validation remain unchanged. Native Node strip-types acceptance imports/reads the profile-only module rather than transitively loading Bun-resolved source parsers. No Node loader, extension-resolution workaround or parser validation bypass is added.
+- Native harness acceptance still verifies the trusted checkout's exact profile declaration and rejects stale, empty or unknown profiles. A schema regression binds the production contract export and literal validation to the same profile and checks that malformed fuse evidence is still rejected. Native harness source-string assertions use the formatted call text; counts, quit deadlines, capture instrumentation and restart checks are retained. Source-reference ordering additionally requires both markers to exist. The acceptance hash is repinned; no runtime profile version, existing assertion, cleanup check or deadline is relaxed.
+
 ## Electron reader cross-runtime compatibility and acceptance formatting
 
 - The VS Code source compatibility check uses older Node declarations that omit the BigInt positional-read overload supported by Node 24 and Bun 1.3. A call-local type-only intersection preserves the exact original method receiver and BigInt offset without number coercion. Emitted JavaScript is byte-identical to the original reader. Original cancellation/coverage fixtures and new real-descriptor/cursor/large-offset regressions remain blocking; provenance records the adaptation explicitly.

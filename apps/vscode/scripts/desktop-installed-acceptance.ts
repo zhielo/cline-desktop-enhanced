@@ -238,7 +238,7 @@ export function verifyInstalledAnalysisProfile(profile: string) {
 	// This Node strip-types driver is also checked by a project which disallows
 	// .ts imports. Read only the trusted checkout's exact constant declaration;
 	// never load target code or accept a caller-selected expected profile.
-	const contract = readFileSync(new URL("../../../sdk/packages/core/src/analysis/contracts.ts", import.meta.url), "utf8")
+	const contract = readFileSync(new URL("../../../sdk/packages/core/src/analysis/profile.ts", import.meta.url), "utf8")
 	const current = /^export const ANALYSIS_PROFILE = "(cline-js-static\/[1-9][0-9]*)";$/m.exec(contract)
 	if (!current) throw new Error("Shipped analysis profile declaration unavailable")
 	if (profile !== current[1]) throw new Error("Installed analysis profile is stale")
