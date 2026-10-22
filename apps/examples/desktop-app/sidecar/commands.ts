@@ -1,3 +1,4 @@
+import { testSpecialistProfile } from "./setup-center";
 import { inspectInvestigationSkillPack, loadInvestigationSkills } from "./investigation-skills";
 import { resolveAnalysisTimeoutMs } from "../shared/analysis-budgets";
 import { handleDeviceSmoke } from "./device-smoke";
@@ -4617,6 +4618,15 @@ export async function handleCommand(
 				);
 			return await tracked(installFullCapabilityPack);
 		}
+		if (command === "setup_center_test_specialist") {
+			const engine = args.engine;
+			if (engine !== "angr" && engine !== "joern")
+				throw new Error("Unsupported specialist engine");
+			return await tracked(async (phase) => {
+				phase(`Testing fixed ${engine} owned fixture; not user targets`);
+				return await testSpecialistProfile(engine);
+			});
+		}
 		if (command === "setup_center_test_full")
 			return await tracked(testFullCapabilityPack);
 		if (command === "setup_center_rollback_core")
@@ -6209,7 +6219,7 @@ export async function handleCommand(
 								result,
 								input.operation === "android_capture"
 									? "isolated-android-worker"
-									: "isolated-qbdi-worker",
+									: input.operation === "emulate_windows" ? "isolated-speakeasy-worker" : "isolated-qbdi-worker",
 								input.operation === "android_capture"
 									? ((result as { outputPaths?: string[] }).outputPaths ?? [])
 									: [],

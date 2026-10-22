@@ -5,7 +5,12 @@ import type { AndroidCandidateLifecycle } from "../../../../shared/android-candi
 import { CandidateOutcomeCard } from "./candidate-outcome";
 import type { CandidateOutcome } from "../../../../shared/candidate-outcome";
 import { SharedSourceEvidencePanel } from "./source-evidence-selection";
-import { AnalysisProjectSelectionProvider, analysisProjectScope, SharedArtifactSelection, useAnalysisProjectTarget } from "./analysis-project-selection";
+import {
+	AnalysisProjectSelectionProvider,
+	analysisProjectScope,
+	SharedArtifactSelection,
+	useAnalysisProjectTarget,
+} from "./analysis-project-selection";
 import { AdvancedCommandWorkspace } from "./advanced-command-workspace";
 import { AndroidToolchainWorkspace } from "./android-toolchain-workspace";
 import { AnalysisResultView } from "./analysis-result-view";
@@ -37,13 +42,13 @@ import { InvestigationWorkspace } from "./investigation-workspace";
 
 import { ExecutionWorkspace } from "./execution-workspace";
 
-import {FirstPartyAnalysisWorkspace} from "./first-party-analysis-workspace";
+import { FirstPartyAnalysisWorkspace } from "./first-party-analysis-workspace";
 
 type WorkbenchMode =
- | "advanced-commands"
- | "android"
- | "guide"
- | "first-party"
+	| "advanced-commands"
+	| "android"
+	| "guide"
+	| "first-party"
 	| "execution"
 	| "incidents"
 	| "investigation"
@@ -123,8 +128,8 @@ const modes: Array<{
 	label: string;
 }> = [
 	{ id: "guide", icon: FileSearch, label: "Start here" },
- { id: "advanced-commands", icon: ListChecks, label: "AI commands" },
- {id:"android",icon:Binary,label:"Android tools"},
+	{ id: "advanced-commands", icon: ListChecks, label: "AI commands" },
+	{ id: "android", icon: Binary, label: "Android tools" },
 	{ id: "execution", icon: Terminal, label: "Execution lab" },
 	{ id: "incidents", icon: Bug, label: "APK incidents" },
 	{ id: "investigation", icon: ListChecks, label: "Investigation" },
@@ -136,37 +141,61 @@ const modes: Array<{
 	{ id: "debug", icon: Bug, label: "Debug" },
 	{ id: "terminal", icon: Terminal, label: "Terminal" },
 	{ id: "approvals", icon: ShieldCheck, label: "Approvals" },
-	{ id:"first-party",icon:FileSearch,label:"App analysis" },
+	{ id: "first-party", icon: FileSearch, label: "App analysis" },
 	{ id: "evidence", icon: FileCheck2, label: "Evidence" },
 	{ id: "diagnostics", icon: Wrench, label: "Diagnostics" },
 ];
 
 const navigationGroups = [
- {label:"Overview",ids:["guide","tasks","approvals"]},
- {label:"Tools",ids:["advanced-commands","android","analyze","first-party"]},
- {label:"Evidence",ids:["investigation","incidents","notebook","graph","evidence"]},
- {label:"Runtime · opt-in",ids:["execution","runtime","debug","terminal"]},
- {label:"Diagnostics",ids:["diagnostics"]},
+	{ label: "Overview", ids: ["guide", "tasks", "approvals"] },
+	{
+		label: "Tools",
+		ids: ["advanced-commands", "android", "analyze", "first-party"],
+	},
+	{
+		label: "Evidence",
+		ids: ["investigation", "incidents", "notebook", "graph", "evidence"],
+	},
+	{
+		label: "Runtime · opt-in",
+		ids: ["execution", "runtime", "debug", "terminal"],
+	},
+	{ label: "Diagnostics", ids: ["diagnostics"] },
 ];
 function pretty(value: unknown): string {
 	if (typeof value === "string") return value;
 	return JSON.stringify(value, null, 2);
 }
 
-type AnalysisWorkbenchProps = { sessionId?: string; cwd?: string; environmentId: string };
+type AnalysisWorkbenchProps = {
+	sessionId?: string;
+	cwd?: string;
+	environmentId: string;
+};
 export function AnalysisWorkbench(props: AnalysisWorkbenchProps) {
- const scope = analysisProjectScope(props.environmentId, props.cwd, props.sessionId);
- return <AnalysisProjectSelectionProvider key={scope} scope={scope}><AnalysisWorkbenchContent {...props} /></AnalysisProjectSelectionProvider>;
+	const scope = analysisProjectScope(
+		props.environmentId,
+		props.cwd,
+		props.sessionId,
+	);
+	return (
+		<AnalysisProjectSelectionProvider key={scope} scope={scope}>
+			<AnalysisWorkbenchContent {...props} />
+		</AnalysisProjectSelectionProvider>
+	);
 }
 function AnalysisWorkbenchContent({
- sessionId,	cwd,
+	sessionId,
+	cwd,
 	environmentId,
 }: {
- sessionId?:string;
+	sessionId?: string;
 	cwd?: string;
 	environmentId: string;
 }) {
-	const [mode, setMode] = useState<WorkbenchMode>(sessionId ? "guide" : "analyze");
+	const [mode, setMode] = useState<WorkbenchMode>(
+		sessionId ? "guide" : "analyze",
+	);
 	const [discovery, setDiscovery] = useState<Discovery | null>(null);
 	const [diagnostics, setDiagnostics] = useState<unknown>(null);
 	const [tasks, setTasks] = useState<TaskPlan[]>([]);
@@ -216,7 +245,7 @@ function AnalysisWorkbenchContent({
 	const common = useMemo(
 		() => ({
 			environmentId,
-   ...(sessionId ? { sessionId } : {}),
+			...(sessionId ? { sessionId } : {}),
 			...(cwd?.trim() ? { cwd } : {}),
 			...(investigationId ? { investigationId } : {}),
 		}),
@@ -298,18 +327,31 @@ function AnalysisWorkbenchContent({
 		setResult(null);
 		setPendingPlan(null);
 		try {
-			const plan = await desktopClient.invoke<TaskPlan>("prepare_candidate_verification", {
-				...common, planId, allowExternalTarget,
-			});
+			const plan = await desktopClient.invoke<TaskPlan>(
+				"prepare_candidate_verification",
+				{
+					...common,
+					planId,
+					allowExternalTarget,
+				},
+			);
 			setPendingPlan(plan);
 			setUploadConfirmed(false);
 			setRuntimeConfirmed(false);
 			await refreshLedger();
 			setMode("approvals");
 		} catch (error) {
-			toast({ variant: "destructive", title: "Could not prepare candidate verification",
-				description: error instanceof Error ? error.message : "Candidate identity could not be checked." });
-		} finally { setBusy(false); }
+			toast({
+				variant: "destructive",
+				title: "Could not prepare candidate verification",
+				description:
+					error instanceof Error
+						? error.message
+						: "Candidate identity could not be checked.",
+			});
+		} finally {
+			setBusy(false);
+		}
 	};
 
 	const approveAndRun = async () => {
@@ -524,24 +566,39 @@ function AnalysisWorkbenchContent({
 	);
 
 	return (
-		<section aria-label="Analysis workbench" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+		<section
+			aria-label="Analysis workbench"
+			className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+		>
 			<div className="flex max-h-[25%] shrink-0 flex-wrap items-center gap-1 overflow-auto border-b border-border px-3 py-2">
-				{navigationGroups.map(group=><fieldset key={group.label} className="flex flex-wrap gap-1 rounded border border-border/60 px-1 pb-1"><legend className="px-1 text-[10px] text-muted-foreground">{group.label}</legend>{modes.filter(item=>group.ids.includes(item.id)).map((item) => (
-					<button
-						className={cn(
-							"flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm",
-							mode === item.id
-								? "bg-secondary text-foreground"
-								: "text-muted-foreground hover:text-foreground",
-						)}
-						key={item.id}
-						onClick={() => setMode(item.id)}
-						type="button"
+				{navigationGroups.map((group) => (
+					<fieldset
+						key={group.label}
+						className="flex flex-wrap gap-1 rounded border border-border/60 px-1 pb-1"
 					>
-						<item.icon className="h-3.5 w-3.5" />
-						{item.label}
-					</button>
-				))}</fieldset>)}
+						<legend className="px-1 text-[10px] text-muted-foreground">
+							{group.label}
+						</legend>
+						{modes
+							.filter((item) => group.ids.includes(item.id))
+							.map((item) => (
+								<button
+									className={cn(
+										"flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm",
+										mode === item.id
+											? "bg-secondary text-foreground"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									key={item.id}
+									onClick={() => setMode(item.id)}
+									type="button"
+								>
+									<item.icon className="h-3.5 w-3.5" />
+									{item.label}
+								</button>
+							))}
+					</fieldset>
+				))}
 				<button
 					aria-label="Refresh diagnostics"
 					className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
@@ -554,10 +611,19 @@ function AnalysisWorkbenchContent({
 					/>
 				</button>
 			</div>
-			<details aria-label="Analysis selection details" className="max-h-[40%] min-h-0 shrink-0 overflow-auto" open>
-                <summary className="cursor-pointer px-3 py-1 text-xs">Target, source evidence and readiness scope</summary>
+			<details
+				aria-label="Analysis selection details"
+				className="max-h-[40%] min-h-0 shrink-0 overflow-auto"
+				open
+			>
+				<summary className="cursor-pointer px-3 py-1 text-xs">
+					Target, source evidence and readiness scope
+				</summary>
 				<SharedArtifactSelection />
-				<SharedSourceEvidencePanel sessionId={sessionId} environmentId={environmentId} />
+				<SharedSourceEvidencePanel
+					sessionId={sessionId}
+					environmentId={environmentId}
+				/>
 			</details>
 			<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[380px_minmax(0,1fr)]">
 				<div className="overflow-auto border-b border-border p-4 lg:border-b-0 lg:border-r">
@@ -569,10 +635,34 @@ function AnalysisWorkbenchContent({
 							onPrepare={(request) => prepare("static", request)}
 						/>
 					)}
-					{mode === "guide" && <GuidedInvestigation key={environmentId} sessionId={sessionId} environmentId={environmentId} onNavigate={setMode} />}
-					{mode === "advanced-commands" && <AdvancedCommandWorkspace environmentId={environmentId} onPrepare={request => prepare("static", request)} />}
-     {mode === "android" && <AndroidToolchainWorkspace key={environmentId} environmentId={environmentId} onPrepare={request=>prepare("static",request)}/>}
-					{mode === "first-party" && <FirstPartyAnalysisWorkspace key={sessionId} sessionId={sessionId} environmentId={environmentId}/>}
+					{mode === "guide" && (
+						<GuidedInvestigation
+							key={environmentId}
+							sessionId={sessionId}
+							environmentId={environmentId}
+							onNavigate={setMode}
+						/>
+					)}
+					{mode === "advanced-commands" && (
+						<AdvancedCommandWorkspace
+							environmentId={environmentId}
+							onPrepare={(request) => prepare("static", request)}
+						/>
+					)}
+					{mode === "android" && (
+						<AndroidToolchainWorkspace
+							key={environmentId}
+							environmentId={environmentId}
+							onPrepare={(request) => prepare("static", request)}
+						/>
+					)}
+					{mode === "first-party" && (
+						<FirstPartyAnalysisWorkspace
+							key={sessionId}
+							sessionId={sessionId}
+							environmentId={environmentId}
+						/>
+					)}
 					{mode === "execution" && (
 						<ExecutionWorkspace cwd={cwd ?? ""} environmentId={environmentId} />
 					)}
@@ -606,6 +696,9 @@ function AnalysisWorkbenchContent({
 								>
 									<option value="trace_native_region">
 										Existing QBDI native trace
+									</option>
+									<option value="emulate_windows">
+										Speakeasy Windows PE emulation (isolated worker)
 									</option>
 									<option value="android_capture">
 										Authorized Android loader / JNI capture
@@ -687,26 +780,37 @@ function AnalysisWorkbenchContent({
 									onChange={(e) => setTarget(e.target.value)}
 								/>
 							</label>
-							<label htmlFor="runtime-symbol" className="block text-sm">
-								Exported function symbol
-								<Input
-									id="runtime-symbol"
-									aria-label="Runtime symbol"
-									value={runtimeSymbol}
-									onChange={(e) => setRuntimeSymbol(e.target.value)}
-								/>
-							</label>
-							<label className="block text-sm">
-								Architecture
-								<select
-									className="min-h-11 w-full rounded-md border border-input bg-background px-3"
-									value={architecture}
-									onChange={(e) => setArchitecture(e.target.value)}
-								>
-									<option value="x86_64">x86-64</option>
-									<option value="arm64">ARM64</option>
-								</select>
-							</label>
+							{runtimeOperation === "trace_native_region" && (
+								<>
+									<label htmlFor="runtime-symbol" className="block text-sm">
+										Exported function symbol
+										<Input
+											id="runtime-symbol"
+											aria-label="Runtime symbol"
+											value={runtimeSymbol}
+											onChange={(e) => setRuntimeSymbol(e.target.value)}
+										/>
+									</label>
+									<label className="block text-sm">
+										Architecture
+										<select
+											className="min-h-11 w-full rounded-md border border-input bg-background px-3"
+											value={architecture}
+											onChange={(e) => setArchitecture(e.target.value)}
+										>
+											<option value="x86_64">x86-64</option>
+											<option value="arm64">ARM64</option>
+										</select>
+									</label>
+								</>
+							)}
+							{runtimeOperation === "emulate_windows" && (
+								<p className="text-sm text-muted-foreground">
+									Speakeasy models a user-mode Windows PE entry point in a
+									separately provisioned isolated Linux worker. Modeled APIs are
+									not observed native Windows behavior.
+								</p>
+							)}
 							<p className="text-sm text-muted-foreground">
 								Worker endpoint, key fingerprint and artifact identity are bound
 								to approval. Upload and authorized execution require separate
@@ -724,12 +828,14 @@ function AnalysisWorkbenchContent({
 													capture_native: captureNative,
 													output_directory: ".cline/android-captures",
 												}
-											: {
-													operation: "trace_native_region",
-													symbol: runtimeSymbol,
-													architecture,
-													instruction_limit: 10000,
-												}),
+											: runtimeOperation === "emulate_windows"
+												? { operation: "emulate_windows" }
+												: {
+														operation: "trace_native_region",
+														symbol: runtimeSymbol,
+														architecture,
+														instruction_limit: 10000,
+													}),
 										target: target.trim(),
 										timeout_ms: 60000,
 									}),
@@ -856,6 +962,12 @@ function AnalysisWorkbenchContent({
 										</option>
 										<option value="investigation_query">
 											Query saved investigation index
+										</option>
+										<option value="joern_query">
+											Joern fixed source/data-flow query
+										</option>
+										<option value="angr_symbolic">
+											Bounded AMD64 symbolic path analysis
 										</option>
 										<option value="suite">Structural suite</option>
 										<option value="toolchain">Optional engine inventory</option>
@@ -1192,21 +1304,56 @@ function AnalysisWorkbenchContent({
 												<br />
 												Candidate SHA256: {task.candidateSource.outputSha256}
 												<br />
-												Retained provenance only, not approval or authenticated producer evidence.
+												Retained provenance only, not approval or authenticated
+												producer evidence.
 											</p>
 										)}
-                                        {task.target && <button
-                                            type="button"
-                                            className="rounded border px-2 py-1 text-xs"
-                                            aria-label={`Select target from evidence ${task.id}`}
-                                            onClick={()=>{if (!task.target) return;setTarget(task.target);setResult(task);setMode("analyze");}}
-                                        >Select task target in Analyze (identity not rechecked)</button>}
-                                        <CandidateOutcomeCard outcome={task.candidateOutcome} status={task.status} />
-                                        <AndroidCandidateLifecycleCard summary={task.candidateLifecycle} />
-                                        {task.status === "completed" && task.candidateOutcome?.operation === "build_android_candidate" && task.candidateOutcome.evidence === "bounded-checks-passed" && task.candidateOutcome.outputSha256 && <div className="space-y-1">
-                                            <button type="button" className="rounded border px-2 py-1 text-xs" disabled={busy} onClick={() => void prepareCandidateVerification(task.id)}>Prepare separate APK verification</button>
-                                            <p className="text-xs text-muted-foreground">Rechecks current file identity, then prepares Inspect approval only. Unsigned APK signature checks may fail. No signing, install or execution.</p>
-                                        </div>}
+										{task.target && (
+											<button
+												type="button"
+												className="rounded border px-2 py-1 text-xs"
+												aria-label={`Select target from evidence ${task.id}`}
+												onClick={() => {
+													if (!task.target) return;
+													setTarget(task.target);
+													setResult(task);
+													setMode("analyze");
+												}}
+											>
+												Select task target in Analyze (identity not rechecked)
+											</button>
+										)}
+										<CandidateOutcomeCard
+											outcome={task.candidateOutcome}
+											status={task.status}
+										/>
+										<AndroidCandidateLifecycleCard
+											summary={task.candidateLifecycle}
+										/>
+										{task.status === "completed" &&
+											task.candidateOutcome?.operation ===
+												"build_android_candidate" &&
+											task.candidateOutcome.evidence ===
+												"bounded-checks-passed" &&
+											task.candidateOutcome.outputSha256 && (
+												<div className="space-y-1">
+													<button
+														type="button"
+														className="rounded border px-2 py-1 text-xs"
+														disabled={busy}
+														onClick={() =>
+															void prepareCandidateVerification(task.id)
+														}
+													>
+														Prepare separate APK verification
+													</button>
+													<p className="text-xs text-muted-foreground">
+														Rechecks current file identity, then prepares
+														Inspect approval only. Unsigned APK signature checks
+														may fail. No signing, install or execution.
+													</p>
+												</div>
+											)}
 										{task.evidence?.outputPaths.map((path) => (
 											<button
 												className="block max-w-full truncate text-left text-primary hover:underline"
@@ -1235,8 +1382,18 @@ function AnalysisWorkbenchContent({
 						<Activity className="h-3.5 w-3.5" />
 						Supervised output
 					</div>
-                    {result && typeof result === "object" && "plan" in result && result.plan && typeof result.plan === "object" && "candidateOutcome" in result.plan ? <CandidateOutcomeCard outcome={(result.plan as TaskPlan).candidateOutcome} status={(result.plan as TaskPlan).status} /> : null}
-                    <AnalysisResultView value={result} busy={busy}/>
+					{result &&
+					typeof result === "object" &&
+					"plan" in result &&
+					result.plan &&
+					typeof result.plan === "object" &&
+					"candidateOutcome" in result.plan ? (
+						<CandidateOutcomeCard
+							outcome={(result.plan as TaskPlan).candidateOutcome}
+							status={(result.plan as TaskPlan).status}
+						/>
+					) : null}
+					<AnalysisResultView value={result} busy={busy} />
 				</div>
 			</div>
 		</section>

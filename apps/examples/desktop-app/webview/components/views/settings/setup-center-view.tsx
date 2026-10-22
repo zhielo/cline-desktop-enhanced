@@ -26,6 +26,12 @@ type SetupJob = {
 	error?: string;
 };
 type Status = {
+	specialistProfiles?: {
+		id: string;
+		status: string;
+		checkedAt?: string;
+		scope: string;
+	}[];
 	ghidra?: { status: string; javaVersion?: string; reason: string };
 	firstPartyAnalysis?: {
 		installed: boolean;
@@ -174,6 +180,7 @@ export function SetupCenter() {
 		const tracked = [
 			"setup_center_install_full",
 			"setup_center_test_full",
+			"setup_center_test_specialist",
 			"setup_center_rollback_core",
 			"setup_center_test_ida",
 			"setup_center_test_ghidra",
@@ -291,6 +298,47 @@ export function SetupCenter() {
 			/>
 			<div className="space-y-6 p-6">
 				<BackendConnectionStatus />
+				<section
+					className="space-y-3 rounded-md border p-4"
+					aria-label="Optional specialist engines"
+				>
+					<h3 className="font-semibold">Optional specialist engines</h3>
+					<p className="text-sm text-muted-foreground">
+						Independent from the full pack. Joern uses a pinned Linux runtime;
+						angr symbolic uses the separate interpreter. A passed owned fixture
+						is not target-wide readiness.
+					</p>
+					{(["angr", "joern"] as const).map((engine) => {
+						const profile = status?.specialistProfiles?.find(
+							(p) => p.id === engine,
+						);
+						return (
+							<div key={engine}>
+								<p>
+									{engine}: {profile?.status ?? "not-tested"}
+									{profile?.checkedAt ? ` — ${profile.checkedAt}` : ""}
+								</p>
+								<Button
+									disabled={busy}
+									onClick={() =>
+										void action(
+											"setup_center_test_specialist",
+											`Run the fixed ${engine} owned fixture? No selected target is analyzed.`,
+											{ engine },
+										)
+									}
+								>
+									Test {engine} specialist fixture
+								</Button>
+							</div>
+						);
+					})}
+					<p className="text-sm text-muted-foreground">
+						Speakeasy: prepare an emulate_windows task in Runtime Analysis;
+						signed worker and upload/execution approval required. Qiling:
+						evaluation deferred, no execution route.
+					</p>
+				</section>
 				<BinaryTriageReadiness />
 				<p className="text-xs">
 					Installed does not mean verified. Ready requires an owned-fixture

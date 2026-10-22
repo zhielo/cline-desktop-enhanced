@@ -2,6 +2,13 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Optional specialist reverse-engineering profiles
+
+- Added fixed Joern single-file queries and bounded raw-AMD64 angr models, separate owned-fixture Setup Center receipts, input/request/runtime identity and fail-closed OS memory enforcement. Existing eleven-engine readiness is unchanged. Joern uses the reviewed Linux distribution; Windows Joern remains blocked.
+- Speakeasy uses a separately provisioned authenticated, signed isolated worker and the existing approved runtime workbench, not a model static tool or desktop-native target launch. Qiling evaluation is explicitly deferred pending rootfs licensing, provenance and isolation review.
+- Frida's read-only process/protocol probe moved into `capture_support.instrumentation_preflight` and runs before target installation. Preservation markers follow that implementation and retain process enumeration/system-parameter checks. Sandbox redirect rejection remains enforced; its marker follows formatting only.
+- New owned real-engine CI supplements, rather than replaces, existing Windows build/release gates. Local fixtures do not certify installed Windows, live Android or operator VM/network deployment. See `docs/RE_SPECIALIST_ENGINES.md` for exact scopes and prerequisites.
+
 ## Native Node CI supervision with exact pinned Bun children
 
 - The consolidated CI supervisor runs under native Node 22+, independent of the Bun children that execute the unchanged gates. This addresses a repeatedly observed Windows stall at installer configuration in which Bun-hosted supervisor heartbeats also stopped; it is a targeted mitigation, not proof of an established Bun root cause or a passing Windows result.

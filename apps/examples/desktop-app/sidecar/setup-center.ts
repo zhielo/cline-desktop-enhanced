@@ -15,6 +15,7 @@ import { isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 import {
 	ADVANCED_ANALYSIS_WORKER,
+	RE_SPECIALIST_WORKER,
 	SETUP_ENGINE_ROUTES,
 	setupCapabilityCatalog,
 	createReverseEngineeringExecutor,
@@ -850,6 +851,7 @@ export async function getSetupCenterStatus() {
 	return {
 		preferences,
 		aiCapabilities: setupCapabilityCatalog(),
+		specialistProfiles: await specialistProfileHistory(),
 		setupJob: getSetupJob(),
 		runtime,
 		packs,
@@ -911,4 +913,93 @@ export async function getSetupCenterStatus() {
 			"Pack activation and rollback preserve old runtime files and project data; existing shared Hub processes require a separate backend restart.",
 		],
 	};
+}
+
+function specialistProfileIdentity(engine: "angr" | "joern") {
+	return createHash("sha256")
+		.update(
+			JSON.stringify({
+				base: receiptIdentity(),
+				engine,
+				worker: RE_SPECIALIST_WORKER,
+				python:
+					engine === "angr"
+						? (process.env.CLINE_ANGR_PYTHON ??
+							process.env.CLINE_RE_PYTHON ??
+							"PATH-default")
+						: (process.env.CLINE_RE_PYTHON ?? "PATH-default"),
+				joernHome:
+					engine === "joern" ? (process.env.CLINE_JOERN_HOME ?? null) : null,
+				joernManifest:
+					engine === "joern"
+						? (process.env.CLINE_JOERN_MANIFEST_SHA256 ?? null)
+						: null,
+			}),
+		)
+		.digest("hex");
+}
+
+/** Optional profiles never contribute to the existing eleven-engine full receipt. */
+export async function testSpecialistProfile(engine: "angr" | "joern") {
+	if (!["angr", "joern"].includes(engine))
+		throw new Error("Unsupported specialist engine");
+	const identity = specialistProfileIdentity(engine);
+	const result = await runAdvancedAnalysis({
+		action: "specialist_readiness",
+		options: { specialist_readiness: { engine } },
+		timeoutMs: 240000,
+		limit: 20,
+	});
+	await requireSetupWorkerTermination(result, identity);
+	const passed =
+		identity === specialistProfileIdentity(engine) &&
+		result.status === "completed" &&
+		result.evidence.ownedFixturePassed === true;
+	const receipt = {
+		engine,
+		identity,
+		joernManifest: process.env.CLINE_JOERN_MANIFEST_SHA256 ?? null,
+		checkedAt: new Date().toISOString(),
+		status: passed
+			? "passed"
+			: result.status === "completed"
+				? "failed"
+				: result.status,
+		result,
+	};
+	await saveOwnedJson(`specialist-${engine}.json`, receipt);
+	return receipt;
+}
+async function specialistProfileHistory() {
+	return await Promise.all(
+		(["angr", "joern"] as const).map(async (engine) => {
+			let receipt:
+				| {
+						identity?: string;
+						joernManifest?: string | null;
+						status?: string;
+						checkedAt?: string;
+				  }
+				| undefined;
+			try {
+				receipt = (await readOwnedJson(
+					`specialist-${engine}.json`,
+				)) as typeof receipt;
+			} catch {
+				/* No receipt, no readiness claim. */
+			}
+			const current =
+				receipt?.identity === specialistProfileIdentity(engine) &&
+				(engine !== "joern" ||
+					receipt?.joernManifest ===
+						(process.env.CLINE_JOERN_MANIFEST_SHA256 ?? null));
+			return {
+				id: engine,
+				status: receipt ? (current ? receipt.status : "stale") : "not-tested",
+				checkedAt: receipt?.checkedAt,
+				scope:
+					"Last owned-fixture result only; runtime integrity and target support rechecked at execution",
+			};
+		}),
+	);
 }

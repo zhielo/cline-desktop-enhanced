@@ -22,6 +22,7 @@ vi.mock("@cline/core", async () => {
 		SETUP_ENGINE_ROUTES: actual.SETUP_ENGINE_ROUTES,
 		setupCapabilityCatalog: actual.setupCapabilityCatalog,
 		ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
+		RE_SPECIALIST_WORKER: actual.RE_SPECIALIST_WORKER,
 		prepareProcessEnvironment: () => ({ secretValues: [] }),
 		redactSensitiveText: (value: string) => value,
 		getAnalysisRuntimeIdentity: mocks.identity,
@@ -35,6 +36,7 @@ vi.mock("./trusted-update", () => ({
 
 import {
 	FULL_ENGINE_IDS,
+	testSpecialistProfile,
 	testGhidraIntegration,
 	currentGhidraAcceptance,
 	testLicensedIda,
@@ -395,4 +397,43 @@ it("persists failed Ghidra/Java acceptance without claiming Ready", async () => 
 	expect(status.ghidra.status).toBe("Test failed");
 	expect(status.ghidra.reason).toContain("No compatible JDK");
 	mocks.executor.mockReset();
+});
+
+it("keeps optional profile tests separate and invalidates changed interpreter configuration", async () => {
+	const root = await mkdtemp(join(tmpdir(), "owned-specialist-"));
+	roots.push(root);
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	mocks.run.mockResolvedValue({
+		status: "completed",
+		evidence: { ownedFixturePassed: true },
+	});
+	const receipt = await testSpecialistProfile("angr");
+	expect(receipt.status).toBe("passed");
+	expect(mocks.run).toHaveBeenCalledWith(
+		expect.objectContaining({
+			action: "specialist_readiness",
+			options: { specialist_readiness: { engine: "angr" } },
+		}),
+	);
+	expect(
+		(await getSetupCenterStatus()).specialistProfiles.find(
+			(x) => x.id === "angr",
+		)?.status,
+	).toBe("passed");
+	vi.stubEnv("CLINE_ANGR_PYTHON", join(root, "changed-python"));
+	expect(
+		(await getSetupCenterStatus()).specialistProfiles.find(
+			(x) => x.id === "angr",
+		)?.status,
+	).toBe("stale");
+});
+it("never treats an inventory-only optional result as a passed fixture", async () => {
+	const root = await mkdtemp(join(tmpdir(), "owned-specialist-failed-"));
+	roots.push(root);
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	mocks.run.mockResolvedValue({
+		status: "completed",
+		evidence: { available: true },
+	});
+	expect((await testSpecialistProfile("joern")).status).toBe("failed");
 });
