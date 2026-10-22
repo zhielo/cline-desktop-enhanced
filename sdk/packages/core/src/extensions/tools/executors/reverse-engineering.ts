@@ -1,3 +1,4 @@
+import { setupCapabilityCatalog } from "../setup-capability-catalog";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -2259,23 +2260,6 @@ function installationRoot(command: string | undefined, engine: Engine) {
 	return commandDirectory;
 }
 
-async function detectHexRays(
-	command: string | undefined,
-): Promise<boolean | undefined> {
-	const root = installationRoot(command, "ida");
-	if (!root) return undefined;
-	for (const directory of [root, path.join(root, "plugins")]) {
-		const entries = await fs.readdir(directory).catch(() => []);
-		if (
-			entries.some((entry) =>
-				/(?:hexrays|hexx64|hexarm|hexarm64|hexmips|hexppc)/i.test(entry),
-			)
-		)
-			return true;
-	}
-	return false;
-}
-
 function analysisOptionsHash(
 	engine: Engine,
 	input: Record<string, unknown>,
@@ -2322,13 +2306,11 @@ async function installationCapabilities(
 	const idalibActivationScript = idaHome
 		? path.join(idaHome, "idalib", "python", "py-activate-idalib.py")
 		: undefined;
-	const [ghidraIdentity, idaIdentity, jadxIdentity, hexRays] =
-		await Promise.all([
-			toolIdentity("ghidra", ghidraCommand),
-			toolIdentity("ida", idaCommand),
-			toolIdentity("jadx", available.jadx),
-			detectHexRays(idaCommand),
-		]);
+	const [ghidraIdentity, idaIdentity, jadxIdentity] = await Promise.all([
+		toolIdentity("ghidra", ghidraCommand),
+		toolIdentity("ida", idaCommand),
+		toolIdentity("jadx", available.jadx),
+	]);
 	const bundledPyGhidra = ghidraHome
 		? path.join(ghidraHome, "Ghidra", "Features", "PyGhidra", "pypkg", "dist")
 		: undefined;
@@ -2351,7 +2333,12 @@ async function installationCapabilities(
 			gui: await discover("ida", true),
 			version: idaIdentity.version,
 			versionSource: idaIdentity.versionSource,
-			hexRays: { detected: hexRays, requiredForDecompile: true },
+			hexRays: {
+				requiredForDecompile: true,
+				validation: "runtime-on-request",
+				setupGate: false,
+				licenseChecked: false,
+			},
 			executableVerified: Boolean(idaCommand),
 			installDirectory: idaHome,
 			idalibActivationScript:
@@ -3029,6 +3016,15 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			if (input.report_format === "html")
 				throw new Error("Advanced evidence supports JSON only");
 			const action = input.advanced_action;
+			if (
+				["full_readiness", "angr_readiness"].includes(action) &&
+				(input.target !== undefined ||
+					input.compare_target !== undefined ||
+					input.advanced_options !== undefined)
+			)
+				throw new Error(
+					"Owned engine self-tests do not accept target, compare_target or advanced_options",
+				);
 			if (action === "decrypt_blob" && input.output_file)
 				throw new Error(
 					"Plaintext export is not enabled; decryption returns receipts and structural evidence only",
@@ -3178,21 +3174,15 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			const discovered = await discoverCapabilities(
 				input.discovery_depth ?? "fast",
 			);
-			const capabilities = discovered.capabilities as {
-				ida?: { idalibActivationScript?: string };
-				ghidra?: { bundledPyGhidra?: string };
-			};
 			return JSON.stringify(
 				{
 					...discovered,
+					setupCapabilities: setupCapabilityCatalog(),
 					pathRefreshed,
 					recommendations: {
-						ida: capabilities.ida?.idalibActivationScript
-							? `Activate idalib once with: uv run "${capabilities.ida.idalibActivationScript}"`
-							: "Set IDADIR or IDA_HOME if IDA is installed but not detected.",
-						ghidra: capabilities.ghidra?.bundledPyGhidra
-							? `Install bundled PyGhidra with: py -m pip install --no-index -f "${capabilities.ghidra.bundledPyGhidra}" pyghidra`
-							: "Set GHIDRA_INSTALL_DIR if Ghidra is installed but not detected.",
+						ida: "Use the selected IDA executable directly. IDAPython/Hex-Rays are checked by the actual request; no plugin filename, license-file scan or optional Setup Center receipt blocks an attempt. idalib activation is not required by this adapter.",
+						ghidra:
+							"Use the selected headless Ghidra launcher and a compatible JDK. This adapter does not require installing PyGhidra or a separate REA runtime.",
 					},
 				},
 				null,
@@ -4189,15 +4179,6 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				}),
 			)
 			.digest("hex");
-		if (
-			engine === "ida" &&
-			input.operation === "decompile" &&
-			(await detectHexRays(command)) === false
-		) {
-			throw new Error(
-				"IDA decompile requires an installed Hex-Rays decompiler; no compatible plugin was detected.",
-			);
-		}
 
 		if (input.operation === "project_edit") {
 			if (engine !== "ghidra" && engine !== "ida")

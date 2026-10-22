@@ -1,4 +1,8 @@
 export {
+	SETUP_ENGINE_ROUTES,
+	setupCapabilityCatalog,
+} from "./extensions/tools/setup-capability-catalog";
+export {
 	prepareProcessEnvironment,
 	redactSensitiveText,
 } from "./extensions/tools/executors/process-environment-policy";

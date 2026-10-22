@@ -19,6 +19,7 @@ it("reads status only on open and installs only after explicit notice acceptance
 				label: "qbdi",
 				status: "Setup needed",
 				reason: "Owned execution required",
+				aiRoute: "full_readiness (owned fixture only)",
 			},
 		],
 		packs: [],
@@ -54,6 +55,8 @@ it("reads status only on open and installs only after explicit notice acceptance
 			{ timeoutMs: 15000 },
 		);
 		expect(element.textContent).toContain("qbdi: Setup needed");
+		expect(element.textContent).toContain("AI route: reverse_engineer");
+		expect(element.textContent).toContain("Listed does not mean ready");
 	} finally {
 		confirm.mockRestore();
 		await act(async () => root.unmount());
@@ -106,7 +109,6 @@ it("saves the selected IDA folder and requests only the explicitly approved ARM6
 			{
 				environmentId: "local",
 				confirmed: true,
-				authorizedLicense: true,
 				architecture: "arm64",
 				idaHome: status.preferences.idaHome,
 				background: true,
@@ -114,6 +116,8 @@ it("saves the selected IDA folder and requests only the explicitly approved ARM6
 			{ timeoutMs: 15000 },
 		);
 		expect(confirm.mock.calls.at(-1)?.[0]).toContain("fixed owned arm64");
+		expect(confirm.mock.calls.at(-1)?.[0]).not.toContain("I own an authorized");
+		expect(element.textContent).toContain("IDA and Hex-Rays integration");
 		expect(element.textContent).toContain("owned-build");
 		expect(element.textContent).toContain(
 			"optional; direct IDA analysis remains available",

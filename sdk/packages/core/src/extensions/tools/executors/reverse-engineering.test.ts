@@ -62,6 +62,8 @@ describe("reverse-engineering discovery", () => {
 			await execute({ engine: "auto", operation: "discover" }, {} as never),
 		);
 		expect(result.capabilities.platform).toBe(process.platform);
+		expect(result.setupCapabilities.engineRoutes).toHaveLength(11);
+		expect(result.setupCapabilities.status).toBe("registered-routes-not-health-proof");
 		expect(result.capabilities).toHaveProperty("ghidra");
 		expect(result.capabilities).toHaveProperty("ida");
 		expect(result.capabilities).toHaveProperty("androidStudio.plugins");
@@ -1084,10 +1086,7 @@ it("uses a fixed analyze lifecycle, isolates fresh attempts and reuses IDA datab
 		process.platform === "win32" ? "idat.exe" : "idat",
 	);
 	await fs.writeFile(command, "owned executable identity");
-	await fs.writeFile(
-		path.join(home, "hexarm64.dll"),
-		"owned fixture plugin marker",
-	);
+	// No plugin marker: actual invocation, not directory names, determines success.
 	await fs.chmod(command, 0o700);
 	vi.stubEnv("CLINE_IDA_SELECTED_HOME", home);
 	vi.stubEnv("CLINE_DATA_DIR", path.join(dir, "data"));
@@ -1216,4 +1215,51 @@ it("uses a fixed analyze lifecycle, isolates fresh attempts and reuses IDA datab
 	expect(
 		await fs.readFile(path.join(first.outputDirectory, "analysis.i64"), "utf8"),
 	).toBe("owned packed database");
+});
+
+it.each([
+	"full_readiness",
+	"angr_readiness",
+] as const)("exposes %s to the AI without a target and preserves partial/blocked results", async (action) => {
+	const advanced = await import("./advanced-analysis");
+	const spy = vi.spyOn(advanced, "runAdvancedAnalysis").mockResolvedValue({
+		protocol: "cline-advanced-analysis/v1",
+		status: "partial",
+		engine: "owned-fixture",
+		engineVersion: null,
+		evidence: {
+			checks: [
+				{
+					engine: "qbdi",
+					status: "blocked",
+					executionVerified: false,
+					reason: "Missing engine",
+				},
+			],
+		},
+		limitations: ["Owned fixture only"],
+	});
+	const output = JSON.parse(
+		await createReverseEngineeringExecutor()(
+			{ operation: "advanced_analysis", advanced_action: action },
+			{} as never,
+		),
+	);
+	expect(spy).toHaveBeenCalledTimes(1);
+	expect(spy.mock.calls[0][0]).toMatchObject({ action });
+	expect(output.result.status).toBe("partial");
+	expect(output.result.evidence.checks[0].status).toBe("blocked");
+	for (const extra of [
+		{ target: "/untrusted-target" },
+		{ compare_target: "/untrusted-target" },
+		{ advanced_options: {} },
+	]) {
+		await expect(
+			createReverseEngineeringExecutor()(
+				{ operation: "advanced_analysis", advanced_action: action, ...extra },
+				{} as never,
+			),
+		).rejects.toThrow("Owned engine self-tests");
+	}
+	expect(spy).toHaveBeenCalledTimes(1);
 });

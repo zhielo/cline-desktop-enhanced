@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
 		integrity: "verified",
 	})),
 }));
-vi.mock("@cline/core", () => ({
+vi.mock("@cline/core", async () => ({
+	...(await import(
+		"../../../../sdk/packages/core/src/extensions/tools/setup-capability-catalog"
+	)),
 	ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
 	prepareProcessEnvironment: () => ({ secretValues: [] }),
 	redactSensitiveText: (value: string) => value,
@@ -136,6 +139,14 @@ it("coalesces actual full and separate angr tests and invalidates changed runtim
 	expect(a).toEqual(b);
 	expect(mocks.run).toHaveBeenCalledTimes(2);
 	expect((await getSetupCenterStatus()).fullStatus).toBe("Ready");
+	expect(
+		(await getSetupCenterStatus()).aiCapabilities.engineRoutes.map((r) => r.id),
+	).toEqual([...FULL_ENGINE_IDS]);
+	expect(
+		(await getSetupCenterStatus()).features.every(
+			(f) => typeof f.aiRoute === "string",
+		),
+	).toBe(true);
 	vi.stubEnv("CLINE_ANGR_RUNTIME_ID", "changed-owned-runtime");
 	expect((await getSetupCenterStatus()).fullStatus).toBe("Setup needed");
 	expect(
@@ -153,6 +164,51 @@ it("missing angr never produces full Ready", async () => {
 	});
 	await testFullCapabilityPack();
 	expect((await getSetupCenterStatus()).fullStatus).toBe("Setup needed");
+});
+
+it("keeps blocked and failed engine receipts visible without hiding ready siblings", async () => {
+	const root = await mkdtemp(join(tmpdir(), "owned-setup-partial-"));
+	roots.push(root);
+	vi.stubEnv("CLINE_DATA_DIR", root);
+	mocks.run.mockImplementation(async ({ action }) =>
+		action === "full_readiness"
+			? {
+					status: "partial",
+					evidence: {
+						checks: FULL_ENGINE_IDS.filter((id) => id !== "angr").map(
+							(engine) => ({
+								engine,
+								status:
+									engine === "qbdi"
+										? "blocked"
+										: engine === "lief"
+											? "failed"
+											: "completed",
+								executionVerified: engine !== "qbdi" && engine !== "lief",
+								reason:
+									engine === "qbdi"
+										? "Owned fixture backend unavailable"
+										: "Owned fixture result",
+							}),
+						),
+					},
+				}
+			: {
+					status: "completed",
+					engineVersion: "9.2.185",
+					evidence: { hostExecution: false },
+				},
+	);
+	await testFullCapabilityPack();
+	const status = await getSetupCenterStatus();
+	expect(status.fullStatus).toBe("Setup needed");
+	expect(status.features.find((f) => f.id === "qbdi")).toMatchObject({
+		state: "blocked",
+		status: "Blocked",
+		reason: "Owned fixture backend unavailable",
+	});
+	expect(status.features.find((f) => f.id === "lief")?.state).toBe("failed");
+	expect(status.features.find((f) => f.id === "capstone")?.state).toBe("ready");
 });
 
 it("ARM64 acceptance uses a fixed owned fixture and invalidates replacement of the same IDA executable", async () => {
