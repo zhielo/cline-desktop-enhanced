@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { deflateSync } from "node:zlib";
 import {
 	existsSync,
 	mkdirSync,
@@ -160,6 +162,35 @@ function createConfig(
 	};
 }
 
+/** A real, owned empty Git repository without setup subprocesses or user identity dependencies. */
+function seedOwnedGitWorkspace(workspaceRoot: string, remoteUrl: string): void {
+	const gitDirectory = join(workspaceRoot, ".git");
+	mkdirSync(join(gitDirectory, "refs", "heads"), { recursive: true });
+	const object = (type: "tree" | "commit", body: string) => {
+		const content = Buffer.from(body, "utf8");
+		const bytes = Buffer.concat([
+			Buffer.from(`${type} ${content.length}\0`),
+			content,
+		]);
+		const hash = createHash("sha1").update(bytes).digest("hex");
+		const directory = join(gitDirectory, "objects", hash.slice(0, 2));
+		mkdirSync(directory, { recursive: true });
+		writeFileSync(join(directory, hash.slice(2)), deflateSync(bytes));
+		return hash;
+	};
+	const tree = object("tree", "");
+	const commit = object(
+		"commit",
+		`tree ${tree}\nauthor Owned Fixture <test@example.com> 1767225600 +0000\ncommitter Owned Fixture <test@example.com> 1767225600 +0000\n\nOwned empty fixture\n`,
+	);
+	writeFileSync(join(gitDirectory, "HEAD"), "ref: refs/heads/main\n");
+	writeFileSync(join(gitDirectory, "refs", "heads", "main"), `${commit}\n`);
+	writeFileSync(
+		join(gitDirectory, "config"),
+		`[core]\nrepositoryformatversion = 0\nfilemode = false\nbare = false\nlogallrefupdates = false\nhooksPath = .git/hooks\n[remote "origin"]\nurl = ${remoteUrl}\nfetch = +refs/heads/*:refs/remotes/origin/*\n`,
+	);
+}
+
 function normalizeStartInput(
 	input: Omit<StartSessionInput, "config" | "localRuntime"> & {
 		config: CoreSessionConfig;
@@ -303,15 +334,25 @@ describe("LocalRuntimeHost", () => {
 		}
 	});
 
+	it("seeds a valid real Git history without setup subprocesses", async () => {
+		const workspaceRoot = join(isolatedHomeDir, "git-fixture-integrity");
+		seedOwnedGitWorkspace(workspaceRoot, "https://example.com/owned.git");
+		const git = simpleGit({ baseDir: workspaceRoot });
+		expect((await git.raw(["fsck", "--strict"])).trim()).toBe("");
+		expect((await git.raw(["status", "--porcelain"])).trim()).toBe("");
+		expect((await git.branch()).current).toBe("main");
+		expect((await git.revparse(["HEAD"])).trim()).toBe(
+			readFileSync(
+				join(workspaceRoot, ".git", "refs", "heads", "main"),
+				"utf8",
+			).trim(),
+		);
+	});
+
 	it("stores git under metadata and refreshes it after an active turn", async () => {
 		const workspaceRoot = join(isolatedHomeDir, "workspace");
-		mkdirSync(workspaceRoot, { recursive: true });
+		seedOwnedGitWorkspace(workspaceRoot, "https://example.com/original.git");
 		const git = simpleGit({ baseDir: workspaceRoot });
-		await git.init();
-		await git.addConfig("user.email", "test@example.com");
-		await git.addConfig("user.name", "Test");
-		await git.commit("initial", ["--allow-empty"]);
-		await git.addRemote("origin", "https://example.com/original.git");
 
 		const sessionsDir = join(isolatedHomeDir, "sessions");
 		const sessionId = "session-git-metadata";
@@ -326,14 +367,14 @@ describe("LocalRuntimeHost", () => {
 		const agent = {
 			run: vi.fn(async () => {
 				initialManifest = JSON.parse(
-					readFileSync(
-						join(sessionsDir, sessionId, `${sessionId}.json`),
-						"utf8",
-					),
+					readFileSync(join(sessionsDir, sessionId, `${sessionId}.json`), "utf8"),
 				) as SessionManifest;
 				await git.checkoutLocalBranch("feature/session-git");
-				await git.removeRemote("origin");
-				await git.addRemote("origin", "https://example.com/updated.git");
+				await git.remote([
+					"set-url",
+					"origin",
+					"https://example.com/updated.git",
+				]);
 				return createResult();
 			}),
 			continue: vi.fn().mockResolvedValue(createResult()),
@@ -352,43 +393,47 @@ describe("LocalRuntimeHost", () => {
 			createAgent: () => agent as never,
 		});
 
-		const result = await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({
-					sessionId,
-					cwd: workspaceRoot,
-					workspaceRoot,
-					enableAgentTeams: false,
+		try {
+			const result = await manager.startSession(
+				normalizeStartInput({
+					config: createConfig({
+						sessionId,
+						cwd: workspaceRoot,
+						workspaceRoot,
+						enableAgentTeams: false,
+					}),
+					prompt: "change repository state",
+					interactive: true,
+					sessionMetadata: {
+						title: "Keep this title",
+						checkpoint: { latest: { ref: "checkpoint-ref" } },
+					},
 				}),
-				prompt: "change repository state",
-				interactive: true,
-				sessionMetadata: {
-					title: "Keep this title",
-					checkpoint: { latest: { ref: "checkpoint-ref" } },
-				},
-			}),
-		);
+			);
 
-		expect(initialManifest?.metadata).toMatchObject({
-			checkpoint: { latest: { ref: "checkpoint-ref" } },
-			git: {
-				url: "https://example.com/original.git",
-				branch: expect.any(String),
-			},
-		});
-		const manifest = JSON.parse(
-			readFileSync(result.manifestPath, "utf8"),
-		) as SessionManifest;
-		expect(manifest).not.toHaveProperty("git_url");
-		expect(manifest).not.toHaveProperty("git_branch");
-		expect(manifest.metadata).toMatchObject({
-			title: "change repository state",
-			checkpoint: { latest: { ref: "checkpoint-ref" } },
-			git: {
-				url: "https://example.com/updated.git",
-				branch: "feature/session-git",
-			},
-		});
+			expect(initialManifest?.metadata).toMatchObject({
+				checkpoint: { latest: { ref: "checkpoint-ref" } },
+				git: {
+					url: "https://example.com/original.git",
+					branch: "main",
+				},
+			});
+			const manifest = JSON.parse(
+				readFileSync(result.manifestPath, "utf8"),
+			) as SessionManifest;
+			expect(manifest).not.toHaveProperty("git_url");
+			expect(manifest).not.toHaveProperty("git_branch");
+			expect(manifest.metadata).toMatchObject({
+				title: "change repository state",
+				checkpoint: { latest: { ref: "checkpoint-ref" } },
+				git: {
+					url: "https://example.com/updated.git",
+					branch: "feature/session-git",
+				},
+			});
+		} finally {
+			await manager.dispose();
+		}
 	});
 
 	it("forwards rootOnly to the session backend when listing sessions", async () => {
@@ -1648,13 +1693,7 @@ describe("LocalRuntimeHost", () => {
 
 	it("keeps the stored history origin when resuming a session", async () => {
 		const workspaceRoot = join(isolatedHomeDir, "workspace");
-		mkdirSync(workspaceRoot, { recursive: true });
-		const git = simpleGit({ baseDir: workspaceRoot });
-		await git.init();
-		await git.addConfig("user.email", "test@example.com");
-		await git.addConfig("user.name", "Test");
-		await git.commit("initial", ["--allow-empty"]);
-		await git.addRemote("origin", "https://example.com/imported.git");
+		seedOwnedGitWorkspace(workspaceRoot, "https://example.com/imported.git");
 
 		const sessionId = "sess-imported-resume";
 		const importedManifest = (id: string): SessionManifest => ({
@@ -1699,58 +1738,62 @@ describe("LocalRuntimeHost", () => {
 			createAgent: () => agent as never,
 		});
 
-		// A resume start carries the default "user" origin in its metadata;
-		// the git refresh on resume must not persist it over the stored one.
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({ sessionId, cwd: workspaceRoot, workspaceRoot }),
-				interactive: true,
-				initialMessages: [{ role: "user", content: "imported prompt" }],
-				sessionMetadata: { sessionHistoryOrigin: { mode: "user" } },
-			}),
-		);
+		try {
+			// A resume start carries the default "user" origin in its metadata;
+			// the git refresh on resume must not persist it over the stored one.
+			await manager.startSession(
+				normalizeStartInput({
+					config: createConfig({ sessionId, cwd: workspaceRoot, workspaceRoot }),
+					interactive: true,
+					initialMessages: [{ role: "user", content: "imported prompt" }],
+					sessionMetadata: { sessionHistoryOrigin: { mode: "user" } },
+				}),
+			);
 
-		expect(
-			sessionService.createRootSessionWithArtifacts,
-		).not.toHaveBeenCalled();
-		expect(updateSession).toHaveBeenCalledWith(
-			expect.objectContaining({
-				sessionId,
-				metadata: expect.objectContaining({
-					title: "Imported from Claude Code",
-					sessionHistoryOrigin: { mode: "import", trigger: "claude-code" },
-					git: expect.objectContaining({
-						url: "https://example.com/imported.git",
+			expect(
+				sessionService.createRootSessionWithArtifacts,
+			).not.toHaveBeenCalled();
+			expect(updateSession).toHaveBeenCalledWith(
+				expect.objectContaining({
+					sessionId,
+					metadata: expect.objectContaining({
+						title: "Imported from Claude Code",
+						sessionHistoryOrigin: { mode: "import", trigger: "claude-code" },
+						git: expect.objectContaining({
+							url: "https://example.com/imported.git",
+						}),
 					}),
 				}),
-			}),
-		);
+			);
 
-		// An explicit mode on the start input replaces the stored origin as a
-		// whole, so a stale trigger never pairs with the new mode.
-		const overrideSessionId = "sess-imported-resume-override";
-		updateSession.mockClear();
-		await manager.startSession(
-			normalizeStartInput({
-				config: createConfig({
+			// An explicit mode on the start input replaces the stored origin as a
+			// whole, so a stale trigger never pairs with the new mode.
+			const overrideSessionId = "sess-imported-resume-override";
+			updateSession.mockClear();
+			await manager.startSession(
+				normalizeStartInput({
+					config: createConfig({
+						sessionId: overrideSessionId,
+						cwd: workspaceRoot,
+						workspaceRoot,
+					}),
+					mode: "automation",
+					interactive: true,
+					initialMessages: [{ role: "user", content: "imported prompt" }],
+					sessionMetadata: { sessionHistoryOrigin: { mode: "user" } },
+				}),
+			);
+			expect(updateSession).toHaveBeenCalledWith(
+				expect.objectContaining({
 					sessionId: overrideSessionId,
-					cwd: workspaceRoot,
-					workspaceRoot,
+					metadata: expect.objectContaining({
+						sessionHistoryOrigin: { mode: "automation" },
+					}),
 				}),
-				mode: "automation",
-				interactive: true,
-				initialMessages: [{ role: "user", content: "imported prompt" }],
-				sessionMetadata: { sessionHistoryOrigin: { mode: "user" } },
-			}),
-		);
-		expect(updateSession).toHaveBeenCalledWith(
-			expect.objectContaining({
-				sessionId: overrideSessionId,
-				metadata: expect.objectContaining({
-					sessionHistoryOrigin: { mode: "automation" },
-				}),
-			}),
-		);
+			);
+		} finally {
+			await manager.dispose();
+		}
 	});
 
 	it("runs a non-interactive prompt and persists messages/status", async () => {
