@@ -4,6 +4,10 @@ export const RELEASE_GATE_POLICY = {
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
+		"Owned angr fixture (ubuntu-latest)",
+		"Owned angr fixture (windows-latest)",
+		"Owned isolated-worker protocol and PE emulation",
+		"Pinned Joern Linux parse and fixed queries",
 		"qlty",
 		"test",
 		"Test (ubuntu-latest, Node 24.x)",
@@ -152,6 +156,8 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+		".github/workflows/specialist-engine-validation.yml":
+			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":
 			"9bf4c84a47e3e302ba4c35eaa67d9cb650896c2d1caba1e6b49e884aca27b972",
 		".github/workflows/build-custom-windows-installer.yml":
@@ -159,6 +165,6 @@ export const RELEASE_GATE_POLICY = {
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"ffb15386752c53711c417850fad0a5353fa21c084f54800d9e2e471367b20b14",
 		"scripts/validate-advanced-build.mjs":
-			"7ce60defedc2831bb3b2f3966045594cafaa2ae9e6f30f0784fea9177d914d11",
+			"b95428f60c087d6b32e55072e4d9b21b81c0c1f201cf70710ea583e1fe3b3a9d",
 	},
 } as const;

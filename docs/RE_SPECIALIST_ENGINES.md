@@ -34,7 +34,7 @@ The synthetic load base is 0x100000. Entry/find/avoid must refer to the selected
 
 Only the reviewed **Linux** launcher path is enabled. Windows batch launch is blocked; do not interpret catalog visibility in a Windows installer as native Windows Joern readiness. A separate Linux application/runtime deployment is required for this profile; no new remote model route is added.
 
-1. Acquire the official `joernio/joern` v4.0.662 `joern-cli.zip` and review a compatible JDK 25 installation, including its license and redistribution terms. The preparation script verifies the official archive SHA256 before extraction.
+1. Acquire the official `joernio/joern` v4.0.662 `joern-cli-linux-x86_64.zip` and review a compatible JDK 25 installation, including its license and redistribution terms. The preparation script verifies the official archive SHA256 before extraction.
 2. Run `python scripts/prepare-joern-runtime.py ARCHIVE JDK_HOME NEW_DESTINATION`. This copies the reviewed JDK, preserves executable parser bits and prints the runtime's complete content-manifest fingerprint. It does not download or execute either input.
 3. Configure trusted host variables `CLINE_JOERN_HOME` and `CLINE_JOERN_MANIFEST_SHA256` from that output, plus the existing absolute `CLINE_RE_PYTHON` if needed. Do not accept runtime paths or fingerprints from model arguments.
 4. Run **Test Joern** in Setup Center. A call-site query must find the owned fixture call. The runtime's exact inventory and file hashes are checked on every invocation, not just PATH presence.

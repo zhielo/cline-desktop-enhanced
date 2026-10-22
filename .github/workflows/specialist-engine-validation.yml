@@ -64,7 +64,7 @@ jobs:
       - name: Prepare checksum-pinned distribution (no PATH fallback)
         shell: bash
         run: |
-          curl --fail --location --retry 3 https://github.com/joernio/joern/releases/download/v4.0.662/joern-cli.zip -o "$RUNNER_TEMP/joern.zip"
+          curl --fail --location --retry 3 https://github.com/joernio/joern/releases/download/v4.0.662/joern-cli-linux-x86_64.zip -o "$RUNNER_TEMP/joern.zip"
           python scripts/prepare-joern-runtime.py "$RUNNER_TEMP/joern.zip" "$JAVA_HOME" "$RUNNER_TEMP/joern-pinned" > "$RUNNER_TEMP/joern-identity.json"
           python - <<'PY'
           import json,os
