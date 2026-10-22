@@ -15,17 +15,20 @@ const mocks = vi.hoisted(() => ({
 		integrity: "verified",
 	})),
 }));
-vi.mock("@cline/core", async () => ({
-	...(await import(
-		"../../../../sdk/packages/core/src/extensions/tools/setup-capability-catalog"
-	)),
-	ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
-	prepareProcessEnvironment: () => ({ secretValues: [] }),
-	redactSensitiveText: (value: string) => value,
-	getAnalysisRuntimeIdentity: mocks.identity,
-	runAdvancedAnalysis: mocks.run,
-	createReverseEngineeringExecutor: () => mocks.executor,
-}));
+vi.mock("@cline/core", async () => {
+	const actual =
+		await vi.importActual<typeof import("@cline/core")>("@cline/core");
+	return {
+		SETUP_ENGINE_ROUTES: actual.SETUP_ENGINE_ROUTES,
+		setupCapabilityCatalog: actual.setupCapabilityCatalog,
+		ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
+		prepareProcessEnvironment: () => ({ secretValues: [] }),
+		redactSensitiveText: (value: string) => value,
+		getAnalysisRuntimeIdentity: mocks.identity,
+		runAdvancedAnalysis: mocks.run,
+		createReverseEngineeringExecutor: () => mocks.executor,
+	};
+});
 vi.mock("./trusted-update", () => ({
 	privateUpdateReadiness: () => ({ enabled: false }),
 }));
