@@ -1,4 +1,4 @@
-import { startOwnedTriageModel, waitOwnedTriageModel } from "./owned-triage-model"
+import { startOwnedTriageModel, waitOwnedTriageModel } from "./owned-triage-model.ts"
 import { gunzipSync } from "node:zlib"
 /**
  * Windows CI only: attach to the installed app's own WebView2.
