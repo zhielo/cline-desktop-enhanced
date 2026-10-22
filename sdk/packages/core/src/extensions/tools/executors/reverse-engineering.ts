@@ -2544,6 +2544,8 @@ async function validateDexOutput(file: string) {
 
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
+        if (input.advanced_action === "binary_triage" || input.advanced_options?.binary_triage)
+         throw new Error("Binary triage requires the owning Cline Desktop host service; no shell or SDK fallback");
 		const started = Date.now();
 		if (
 			input.advanced_options?.android_calls &&
@@ -3022,6 +3024,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			if (input.report_format === "html")
 				throw new Error("Advanced evidence supports JSON only");
 			const action = input.advanced_action;
+            if (action === "binary_triage") throw new Error("Binary triage requires the owning Cline Desktop host service");
 			const special = {
 				joern_query: "joern",
 				angr_symbolic: "symbolic",
@@ -3173,7 +3176,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 							result,
 						)
 					: undefined;
-			const bundle = advancedEvidenceBundle(input.advanced_action, result);
+			const bundle = advancedEvidenceBundle(action, result);
 			let reportOutputFile: string | undefined;
 			if (input.report_output_file) {
 				if (!path.isAbsolute(input.report_output_file))

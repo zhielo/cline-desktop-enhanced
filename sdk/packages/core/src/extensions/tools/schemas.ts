@@ -1,3 +1,4 @@
+import { BinaryTriageOptionsSchema, BinaryTriageCallSchema } from "./binary-triage-schema";
 import {
 	SymbolicOptionsSchema,
 	JoernOptionsSchema,
@@ -148,6 +149,7 @@ export const ReverseEngineeringInputSchema = z
 		advanced_action: z
 			.enum([
 				"toolchain",
+                "binary_triage",
 				"suite",
 				"triage",
 				"apk_inventory",
@@ -196,7 +198,8 @@ export const ReverseEngineeringInputSchema = z
 			.optional(),
 		advanced_options: z
 			.object({
-				symbolic: SymbolicOptionsSchema.optional(),
+				binary_triage: BinaryTriageOptionsSchema.optional(),
+                symbolic: SymbolicOptionsSchema.optional(),
 				joern: JoernOptionsSchema.optional(),
 				specialist_readiness: SpecialistReadinessSchema.optional(),
 				entrypoints: z
@@ -616,7 +619,14 @@ export const ReverseEngineeringInputSchema = z
 				"Overall deadlines above one hour require the explicit IDA engine",
 			path: ["timeout_ms"],
 		},
-	);
+	).superRefine((input, ctx) => {
+ if (input.advanced_action === "binary_triage") {
+  const result = BinaryTriageCallSchema.safeParse(input);
+  if (!result.success) ctx.addIssue({code:"custom",message:"Binary triage accepts only its strict run/status/read contract"});
+ } else if (input.advanced_options?.binary_triage) {
+  ctx.addIssue({code:"custom",message:"binary_triage options require advanced_analysis binary_triage"});
+ }
+});
 
 /** Only debugger locations that cannot introduce an additional GDB/LLDB command. */
 const SAFE_DEBUGGER_LOCATION_PATTERN =

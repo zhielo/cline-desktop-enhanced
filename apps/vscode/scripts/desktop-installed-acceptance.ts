@@ -1,3 +1,4 @@
+import { startOwnedTriageModel, waitOwnedTriageModel } from "./owned-triage-model"
 import { gunzipSync } from "node:zlib"
 /**
  * Windows CI only: attach to the installed app's own WebView2.
@@ -3743,6 +3744,43 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		if (!replayDenied) throw new Error("Installed analysis replay was not blocked")
 		await writeFile(join(evidence, "binary-triage-owned-report.json"), JSON.stringify(report, null, 2))
 		stages.push("installed-binary-triage-target-report-scope-and-replay-passed")
+
+        // A deterministic loopback provider emits real model tool calls. No production
+        // execution entry point or approval gate is replaced for this acceptance.
+        const triageModel = await startOwnedTriageModel()
+        let modelSessionId: string | undefined
+        try {
+            const modelSession = await rpc<{sessionId:string}>(page,"chat_session_command",{request:{action:"start",config:{
+                sessionId:"installer-owned-ai-triage",environmentId:"local",cwd:workspace,workspaceRoot:workspace,
+                provider:"openai-compatible",model:"gpt-4o",apiKey:"owned-offline-fixture",
+                baseUrl:triageModel.baseUrl,enableTools:true,permissionProfile:"full-access",autoApproveTools:false,
+                initialMessages:[{id:"owned-ai-triage-start",role:"user",content:"Owned offline AI triage acceptance"}],
+            }}})
+            modelSessionId=modelSession.sessionId
+            await rpc(page,"first_party_analysis_mode",{sessionId:modelSessionId,environmentId:"local",mode:"static"})
+            await rpc(page,"chat_session_command",{request:{action:"send",sessionId:modelSessionId,prompt:"Analyze owned-triage.exe using the fixed binary triage operations. Use saved static evidence only."}})
+            const acceptance=await waitOwnedTriageModel(triageModel,
+                ()=>rpc(page,"poll_tool_approvals",{sessionId:modelSessionId}),
+                requestId=>rpc(page,"respond_tool_approval",{sessionId:modelSessionId,requestId,approved:true}))
+            for(const result of acceptance.results) {
+                const saved=await rpc<{receipt:Record<string,unknown>}>(page,"binary_triage_report",{sessionId:modelSessionId,environmentId:"local",id:result.receiptId})
+                if(saved.receipt === undefined) throw new Error("Installed AI result lacks a saved receipt")
+            }
+            let finalObserved=false
+            const finalDeadline=Date.now()+30_000
+            while(Date.now()<finalDeadline) {
+                const transcript=await rpc<unknown[]>(page,"read_session_messages",{sessionId:modelSessionId,maxMessages:100})
+                if(JSON.stringify(transcript).includes("Owned AI triage acceptance complete:")) {finalObserved=true;break}
+                await delay(200)
+            }
+            if(!finalObserved)throw new Error("Installed AI triage final response was not retained in the transcript")
+            await writeFile(join(evidence,"binary-triage-ai-model-acceptance.json"),JSON.stringify(acceptance,null,2))
+            stages.push("installed-ai-binary-triage-seven-operations-approval-and-evidence-passed")
+        } finally {
+            if(modelSessionId) await rpc(page,"chat_session_command",{request:{action:"stop",sessionId:modelSessionId}}).catch(()=>{})
+            await triageModel.close()
+        }
+
 
 		page.once("dialog", async (dialog) => {
 			if (dialog.message().includes("reviewed and accept")) await dialog.accept()

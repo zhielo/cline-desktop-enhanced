@@ -755,6 +755,7 @@ export interface HubCapabilityResolvedPayload {
 }
 
 export type HubToolExecutorName =
+    | "binaryTriage"
 	| "investigation"
 	| "readFile"
 	| "search"
@@ -767,6 +768,7 @@ export type HubToolExecutorName =
 	| "submit";
 
 export const HUB_TOOL_EXECUTOR_NAMES = [
+    "binaryTriage",
 	"investigation",
 	"readFile",
 	"search",

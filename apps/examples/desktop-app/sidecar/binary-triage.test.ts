@@ -158,14 +158,14 @@ describe("fixed binary triage contracts", () => {
 			join(workspace, "owned.exe"),
 			"MZCLINE_OWNED_TRIAGE_FIXTURE_V1",
 		);
-		const worker = vi.fn(async () => ({
+		const worker = vi.fn(async (_python: string, args: Record<string, unknown>) => ({
 			status: "completed" as const,
 			output: {
-				engine: "yara",
-				version: "4.5.4",
+				engine: triageEngine(String(args.operation) as never),
+                version: args.operation === "scan_yara" ? "4.5.4" : args.operation === "inspect_binary" ? "6.2.4" : args.operation === "identify_capabilities" ? "9.4.0" : "v3.1.1-0-g3cd3ee6",
 				format: "pe",
 				category: "rule-match",
-				data: [{ rule: "cline_owned_fixture" }],
+				data: [{ rule: "cline_owned_fixture", marker:"CLINE_OWNED_TRIAGE_FIXTURE_V1" }],
 				coverage: "Owned neutral rules only",
 			},
 		}));
@@ -178,7 +178,10 @@ describe("fixed binary triage contracts", () => {
 				question: "What matches?",
 			};
 		try {
-			const id = "11111111-1111-4111-8111-111111111111";
+			await expect(service.prepare(scope,input)).rejects.toThrow("matching owned-fixture");
+            await service.test();
+            worker.mockClear();
+            const id = "11111111-1111-4111-8111-111111111111";
 			const result = await service.run(scope, input, store, id);
 			expect(result.status).toBe("completed");
 			expect(result.resultHash).toMatch(/^[a-f0-9]{64}$/);

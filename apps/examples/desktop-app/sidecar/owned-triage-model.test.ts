@@ -1,0 +1,127 @@
+import { expect, it } from "vitest";
+import { startOwnedTriageModel } from "../../../vscode/scripts/owned-triage-model";
+it("owned model exercises standard chat completions and refuses fake engine success", async () => {
+	const model = await startOwnedTriageModel();
+	try {
+		const response = await fetch(model.baseUrl + "/chat/completions", {
+			method: "POST",
+			body: JSON.stringify({ model: "owned", messages: [], stream: false }),
+		});
+		const result = (await response.json()) as {
+			choices: Array<{
+				message: {
+					tool_calls: Array<{ function: { name: string; arguments: string } }>;
+				};
+			}>;
+		};
+		const tool = result.choices[0].message.tool_calls[0];
+		expect(tool.function.name).toBe("reverse_engineer");
+		expect(
+			JSON.parse(tool.function.arguments).advanced_options.binary_triage
+				.operation,
+		).toBe("inspect_binary");
+		const stream = await fetch(model.baseUrl + "/chat/completions", {
+			method: "POST",
+			body: JSON.stringify({ model: "owned", messages: [], stream: true }),
+		});
+		expect(await stream.text()).toContain('"finish_reason":"tool_calls"');
+		const failed = await fetch(model.baseUrl + "/chat/completions", {
+			method: "POST",
+			body: JSON.stringify({
+				model: "owned",
+				messages: [
+					{ role: "tool", content: JSON.stringify({ status: "failed" }) },
+				],
+			}),
+		});
+		expect(failed.status).toBe(500);
+		expect(model.error?.message).toContain("failed or incomplete");
+	} finally {
+		await model.close();
+	}
+});
+
+it("real provider adapter parses the owned SSE tool call and serializes saved tool results", async () => {
+	const { createGateway } = await import("@cline/llms");
+	const { createReverseEngineeringTool } = await import("@cline/core");
+	const model = await startOwnedTriageModel();
+	try {
+		const config = {
+			providerId: "openai-compatible",
+			apiKey: "owned",
+			baseUrl: model.baseUrl,
+		};
+		const provider = createGateway({ providerConfigs: [config] });
+		const info = {
+			id: "gpt-4o",
+			providerId: "openai-compatible",
+			name: "gpt-4o",
+		};
+		const tool = createReverseEngineeringTool(async () => "not executed");
+		const messages: any[] = [
+			{
+				id: "user",
+				role: "user",
+				content: [{ type: "text", text: "Owned triage" }],
+				createdAt: new Date(),
+			},
+		];
+		async function turn() {
+			const events: any[] = [];
+			for await (const e of await provider.stream({
+				providerId: config.providerId,
+				modelId: info.id,
+				messages,
+				tools: [tool],
+			} as never))
+				events.push(e);
+			return events;
+		}
+		const first = await turn();
+		const call = first.find((e) => e.type === "tool-call-delta" && e.input);
+		expect(call?.toolName).toBe("reverse_engineer");
+		expect(call?.input.advanced_options.binary_triage.operation).toBe(
+			"inspect_binary",
+		);
+		messages.push({
+			id: "assistant",
+			role: "assistant",
+			createdAt: new Date(),
+			content: [
+				{
+					type: "tool-call",
+					toolCallId: call.toolCallId,
+					toolName: call.toolName,
+					input: call.input,
+				},
+			],
+		});
+		messages.push({
+			id: "tool",
+			role: "tool",
+			createdAt: new Date(),
+			content: [
+				{
+					type: "tool-result",
+					toolCallId: call.toolCallId,
+					toolName: call.toolName,
+					output: JSON.stringify({
+						status: "completed",
+						receiptId: "owned",
+						targetSha256: "a".repeat(64),
+						operation: "inspect_binary",
+						text: "{}",
+					}),
+				},
+			],
+		});
+		const second = await turn();
+		expect(
+			second.find((e) => e.type === "tool-call-delta" && e.input)?.input
+				.advanced_options.binary_triage.operation,
+		).toBe("list_functions");
+		expect(model.error).toBeUndefined();
+	} finally {
+		await model.close();
+	}
+});

@@ -131,6 +131,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed",
 		"installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed",
 		"installed-binary-triage-target-report-scope-and-replay-passed",
+        "installed-ai-binary-triage-seven-operations-approval-and-evidence-passed",
 		"installed-tracked-full-setup-job-passed",
 		"installed-full-eleven-engine-owned-fixtures-passed",
 		"installed-full-pack-exact-range-dual-decoder-passed",
@@ -156,6 +157,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+        "apps/vscode/scripts/owned-triage-model.ts": "7f2868165c7e6461a8aae7f05d91af768ae005b00e978fd325c461592e31b6ac",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":
@@ -163,8 +165,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"ffb15386752c53711c417850fad0a5353fa21c084f54800d9e2e471367b20b14",
+			"73f771b8205cddbec3b3160d4ae5dcc0bae40d870a7d3724038c0125ac6eeb75",
 		"scripts/validate-advanced-build.mjs":
-			"b95428f60c087d6b32e55072e4d9b21b81c0c1f201cf70710ea583e1fe3b3a9d",
+			"17bab43ad28e0598197adce6f9bdc666d81430baa1ba34a6e044837972f6396c",
 	},
 } as const;
