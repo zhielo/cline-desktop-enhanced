@@ -55,6 +55,8 @@ async function withCancellation<T>(
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
 const DEFAULT_CLAIM_LEASE_SECONDS = 90;
+const DEFAULT_RETRY_BACKOFF_SECONDS = 30;
+const DEFAULT_RETRY_MAX_BACKOFF_SECONDS = 3_600;
 const DEFAULT_CRON_EXTENSIONS = ["rules", "skills", "plugins"] as const;
 
 interface HubTurnResult {
@@ -124,6 +126,41 @@ class TimeoutError extends Error {
 		super(message);
 		this.name = "TimeoutError";
 	}
+}
+
+export function nextAutomaticRetry(
+	spec: Pick<CronSpecRecord, "retryPolicy">,
+	run: Pick<
+		CronRunRecord,
+		"retryAttempt" | "runId" | "specId" | "specRevision" | "triggerEventId"
+	>,
+	nowMs: number,
+):
+	| {
+			scheduledFor: string;
+			retryAttempt: number;
+			retryOfRunId: string;
+	  }
+	| undefined {
+	const policy = spec.retryPolicy;
+	if (!policy || policy.maxAttempts <= run.retryAttempt + 1) return undefined;
+	const initialBackoff = Math.max(
+		0,
+		Math.floor(policy.backoffSeconds ?? DEFAULT_RETRY_BACKOFF_SECONDS),
+	);
+	const maxBackoff = Math.max(
+		initialBackoff,
+		Math.floor(policy.maxBackoffSeconds ?? DEFAULT_RETRY_MAX_BACKOFF_SECONDS),
+	);
+	const backoffSeconds = Math.min(
+		maxBackoff,
+		initialBackoff * 2 ** run.retryAttempt,
+	);
+	return {
+		scheduledFor: new Date(nowMs + backoffSeconds * 1000).toISOString(),
+		retryAttempt: run.retryAttempt + 1,
+		retryOfRunId: run.runId,
+	};
 }
 
 async function withTimeout<T>(
@@ -496,11 +533,28 @@ export class CronRunner {
 					? `The run was cancelled while ${phase}:`
 					: `The run failed while ${phase}:`;
 			const status = err instanceof RunCancelledError ? "cancelled" : "failed";
-			const completed = this.store.completeRun(run.runId, {
-				status,
-				sessionId,
-				error: message,
-				claimToken: claim.claimToken,
+			const retry =
+				status === "failed" ? nextAutomaticRetry(spec, run, endMs) : undefined;
+			let retryRun: CronRunRecord | undefined;
+			const completed = this.store.writeTransaction(() => {
+				const didComplete = this.store.completeRun(run.runId, {
+					status,
+					sessionId,
+					error: message,
+					claimToken: claim.claimToken,
+				});
+				if (didComplete && retry) {
+					retryRun = this.store.enqueueRun({
+						specId: run.specId,
+						specRevision: run.specRevision,
+						triggerKind: "retry",
+						scheduledFor: retry.scheduledFor,
+						triggerEventId: run.triggerEventId,
+						retryAttempt: retry.retryAttempt,
+						retryOfRunId: retry.retryOfRunId,
+					});
+				}
+				return didComplete;
 			});
 			if (!completed) {
 				captureScheduleRun(this.options.telemetry, {
@@ -542,6 +596,14 @@ export class CronRunner {
 				spec,
 				run.runId,
 			);
+			if (retryRun) {
+				this.options.logger?.log("cron.runner.retry.scheduled", {
+					runId: run.runId,
+					retryRunId: retryRun.runId,
+					retryAttempt: retryRun.retryAttempt,
+					scheduledFor: retryRun.scheduledFor,
+				});
+			}
 		} finally {
 			if (deadline) clearTimeout(deadline);
 			releaseLeaseHeartbeat?.();

@@ -66,6 +66,8 @@ const CRON_SCHEMA_STATEMENTS: readonly string[] = [
 		report_path TEXT,
 		error TEXT,
 		attempt_count INTEGER NOT NULL DEFAULT 0,
+		retry_attempt INTEGER NOT NULL DEFAULT 0,
+		retry_of_run_id TEXT,
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
@@ -117,6 +119,19 @@ const CRON_SCHEMA_STATEMENTS: readonly string[] = [
 		ON cron_specs(source_path);`,
 ];
 
+function ensureColumn(
+	db: SqliteDb,
+	table: string,
+	column: string,
+	definition: string,
+): void {
+	const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+		name?: string;
+	}>;
+	if (rows.some((row) => row.name === column)) return;
+	db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+}
+
 export function ensureCronSchema(db: SqliteDb): void {
 	db.exec("PRAGMA journal_mode = WAL;");
 	db.exec("PRAGMA busy_timeout = 5000;");
@@ -124,4 +139,8 @@ export function ensureCronSchema(db: SqliteDb): void {
 	for (const stmt of CRON_SCHEMA_STATEMENTS) {
 		db.exec(stmt);
 	}
+	// Existing cron.db files predate retry lineage. Additive migrations keep
+	// durable local schedules and history intact.
+	ensureColumn(db, "cron_runs", "retry_attempt", "INTEGER NOT NULL DEFAULT 0");
+	ensureColumn(db, "cron_runs", "retry_of_run_id", "TEXT");
 }

@@ -920,4 +920,63 @@ describe("CronRunner", () => {
 			scheduleRunNumber: 2,
 		});
 	});
+
+	it("durably retries failed runs with bounded exponential policy", async () => {
+		const { handlers, calls } = fakeHandlers();
+		const sendSession = handlers.sendSession;
+		handlers.sendSession = async (sessionId, request) => {
+			if (calls.send === 0) {
+				calls.send += 1;
+				throw new Error("transient failure");
+			}
+			return sendSession(sessionId, request);
+		};
+		const { record } = store.upsertSpec({
+			externalId: "retryable",
+			sourcePath: "retryable.md",
+			triggerKind: "one_off",
+			sourceHash: "h",
+			parseStatus: "valid",
+			spec: {
+				triggerKind: "one_off",
+				id: "retryable",
+				title: "Retryable",
+				prompt: "Do it",
+				workspaceRoot,
+				enabled: true,
+				retry: { maxAttempts: 2, backoffSeconds: 0 },
+			},
+		});
+		const original = store.enqueueRun({
+			specId: record.specId,
+			specRevision: record.revision,
+			triggerKind: "one_off",
+		});
+		const runner = new CronRunner({
+			store,
+			materializer,
+			runtimeHandlers: handlers,
+			workspaceRoot,
+			specs: { cronSpecsDir: cronDir },
+		});
+
+		await runner.tick();
+		expect(store.getRun(original.runId)?.status).toBe("failed");
+		const queuedRetry = store
+			.listRuns({ specId: record.specId })
+			.find((run) => run.triggerKind === "retry");
+		expect(queuedRetry?.status).toBe("queued");
+		expect(queuedRetry?.retryAttempt).toBe(1);
+		expect(queuedRetry?.retryOfRunId).toBe(original.runId);
+
+		await runner.tick();
+		await runner.dispose();
+		expect(store.getRun(queuedRetry?.runId ?? "")?.status).toBe("done");
+		expect(calls.send).toBe(2);
+		expect(
+			store
+				.listRuns({ specId: record.specId })
+				.filter((run) => run.triggerKind === "retry"),
+		).toHaveLength(1);
+	});
 });

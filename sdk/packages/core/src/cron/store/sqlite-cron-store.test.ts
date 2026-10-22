@@ -78,6 +78,31 @@ describe("SqliteCronStore", () => {
 		expect(result.record.source).toBe("automation");
 	});
 
+	it("persists retry policy without exposing internal metadata", () => {
+		const result = store.upsertSpec({
+			externalId: "cleanup",
+			sourcePath: "cleanup.md",
+			triggerKind: "one_off",
+			sourceHash: "hash1",
+			parseStatus: "valid",
+			spec: {
+				...baseOneOff(),
+				retry: {
+					maxAttempts: 3,
+					backoffSeconds: 10,
+					maxBackoffSeconds: 60,
+				},
+				metadata: { owner: "local" },
+			},
+		});
+		expect(result.record.retryPolicy).toEqual({
+			maxAttempts: 3,
+			backoffSeconds: 10,
+			maxBackoffSeconds: 60,
+		});
+		expect(result.record.metadata).toEqual({ owner: "local" });
+	});
+
 	it("defaults hub schedules to yolo and preserves explicit modes on update", () => {
 		const created = store.createHubSchedule({
 			name: "Routine",
@@ -465,6 +490,24 @@ describe("SqliteCronStore: runs", () => {
 		expect(store.getRun(queued.runId)?.attemptCount).toBe(
 			releaseAttempt ? 0 : 1,
 		);
+	});
+
+	it("persists explicit retry lineage", () => {
+		const spec = seedOneOff();
+		const original = store.enqueueRun({
+			specId: spec.specId,
+			specRevision: spec.revision,
+			triggerKind: "one_off",
+		});
+		const retry = store.enqueueRun({
+			specId: spec.specId,
+			specRevision: spec.revision,
+			triggerKind: "retry",
+			retryAttempt: 1,
+			retryOfRunId: original.runId,
+		});
+		expect(retry.retryAttempt).toBe(1);
+		expect(retry.retryOfRunId).toBe(original.runId);
 	});
 });
 

@@ -2,6 +2,7 @@ export type {
 	AutomationEventEnvelope,
 	CronEventSpec,
 	CronOneOffSpec,
+	CronRetryPolicy,
 	CronScheduleSpec,
 	CronSpec,
 	CronSpecCommonFields,
