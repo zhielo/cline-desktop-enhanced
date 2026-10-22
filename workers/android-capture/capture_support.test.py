@@ -27,4 +27,21 @@ class SupportTest(unittest.TestCase):
   for key,bad in [(('get-state',),b'unauthorized'),(('get-serialno',),b'other-device'),(('shell','getprop','ro.kernel.qemu'),b'1'),(('exec-out','su','-c','id'),b'uid=2000(shell)'),(('shell','getprop','ro.product.cpu.abi'),b'unknown')]:
    values=dict(defaults);values[key]=bad
    with self.assertRaises(ValueError):m.physical_preflight('/owned/adb','owned-device',lambda argv,**_:values[tuple(argv[3:])])
+class InstrumentationTest(unittest.TestCase):
+ def test_protocol_probe_is_readonly_and_never_infers_server_version(self):
+  class Device:
+   def query_system_parameters(self):return {'arch':'arm64','os':{'version':'14'}}
+   def enumerate_processes(self):return []
+  value=m.instrumentation_preflight(Device(),'17.22.2')
+  self.assertEqual(value['connection'],'protocol-negotiated');self.assertEqual(value['serverVersion'],'not-attested');self.assertEqual(value['androidVersion'],'14')
+ def test_incompatible_or_disconnected_server_blocks_before_capture(self):
+  class Device:
+   def query_system_parameters(self):raise RuntimeError('incompatible protocol')
+  with self.assertRaisesRegex(ValueError,'handshake failed'):m.instrumentation_preflight(Device(),'17.22.2')
+ def test_unknown_runtime_or_parameters_fail_closed(self):
+  class Device:
+   def query_system_parameters(self):return None
+   def enumerate_processes(self):return []
+  for version in ['unknown','17.22.2']:
+   with self.assertRaises(ValueError):m.instrumentation_preflight(Device(),version)
 if __name__=='__main__':unittest.main()

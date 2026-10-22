@@ -14,6 +14,8 @@ const Node = z
 			"native-symbol",
 			"archive-member",
 			"unresolved-call",
+            "source-symbol",
+            "symbolic-finding",
 		]),
 		label: z.string().max(4096),
 		artifactSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -31,6 +33,7 @@ const Edge = z
 			"invokes-candidate",
 			"references-candidate",
 			"jni-export-name-candidate",
+            "data-flow-candidate",
 		]),
 		confidence: Confidence,
 	})
@@ -137,6 +140,28 @@ export function buildEvidenceGraph(document: unknown) {
 		for (const item of result.limitations)
 			if (coverage.size < 100) coverage.add(item);
 		const data = result.evidence;
+        if (result.engine === "joern" && result.status === "partial") {
+            for (const row of records(data.rows).slice(0,200)) {
+                const path = records(row.path).slice(0,64);
+                let previous: string | undefined;
+                for (const item of path.length ? path : [row]) {
+                    const code = label(item.code);
+                    if (!code) continue;
+                    const sourceLabel = `${String(item.file ?? row.file ?? "source").slice(0,500)}:${String(item.line ?? row.line ?? "?").slice(0,20)}:${code}`;
+                    const id = node("source-symbol", sourceLabel, "candidate");
+                    edge(root,id,"contains","reported");
+                    if (previous) edge(previous,id,"data-flow-candidate","candidate");
+                    previous=id;
+                }
+            }
+            coverage.add("Joern paths are frontend/model-dependent candidate flows, not observed behavior or proof of absence.");
+        }
+        if (result.engine === "angr" && data.outcome !== undefined) {
+            const id=node("symbolic-finding",`Model outcome: ${String(data.outcome).slice(0,80)}; input candidate: ${String(data.candidate).slice(0,80)}`,"candidate");
+            edge(root,id,"contains","reported");
+            coverage.add("Symbolic findings depend on supplied state assumptions; candidates require independent verification.");
+        }
+
 		if (result.engine === "android-static") {
 			const artifactIds = new Map<string, string>(),
 				methodIds = new Map<string, string>(),

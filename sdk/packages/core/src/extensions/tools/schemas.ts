@@ -1,3 +1,8 @@
+import {
+	SymbolicOptionsSchema,
+	JoernOptionsSchema,
+	SpecialistReadinessSchema,
+} from "./specialist-analysis-schema";
 import { EvidenceQuerySchema } from "../../analysis/evidence-query";
 import { AndroidProjectPatchSchema } from "./android-project-schema";
 import {
@@ -156,6 +161,9 @@ export const ReverseEngineeringInputSchema = z
 				"triton_expression",
 				"unicorn_emulate",
 				"angr_lift",
+				"angr_symbolic",
+				"joern_query",
+				"specialist_readiness",
 				"match_native_functions",
 				"trace_native_region",
 				"trace_input_influence",
@@ -188,6 +196,9 @@ export const ReverseEngineeringInputSchema = z
 			.optional(),
 		advanced_options: z
 			.object({
+				symbolic: SymbolicOptionsSchema.optional(),
+				joern: JoernOptionsSchema.optional(),
+				specialist_readiness: SpecialistReadinessSchema.optional(),
 				entrypoints: z
 					.object({
 						max_depth: z.number().int().min(0).max(16).optional(),
@@ -318,6 +329,8 @@ export const ReverseEngineeringInputSchema = z
 								"native-symbol",
 								"archive-member",
 								"unresolved-call",
+                                "source-symbol",
+                                "symbolic-finding",
 							])
 							.optional(),
 						text: z.string().max(512).optional(),

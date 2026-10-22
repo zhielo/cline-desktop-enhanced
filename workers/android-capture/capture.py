@@ -13,7 +13,8 @@ def run(argv,timeout=30):return support.bounded_command(argv,limit=65536,timeout
 actual=run([analyzer,'manifest','application-id',config['artifact']]).decode().strip()
 if actual!=config['package']:raise SystemExit('APK package does not match approved package')
 device_info=support.physical_preflight(adb,serial)
-device=frida.get_device(serial,timeout=10);device.enumerate_processes() # Fail before installation if Frida is unavailable.
+device=frida.get_device(serial,timeout=10)
+device_info['instrumentation']=support.instrumentation_preflight(device,frida.__version__) # Before package installation or target launch.
 existing=run([adb,'-s',serial,'shell','pm','path',config['package']]).decode().strip()
 if existing:raise SystemExit('Refusing to replace an existing app on a physical device; operator cleanup/review required')
 run([adb,'-s',serial,'install',config['artifact']])

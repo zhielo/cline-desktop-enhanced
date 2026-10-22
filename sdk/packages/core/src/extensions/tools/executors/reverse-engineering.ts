@@ -2966,7 +2966,13 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 					findings: receipt.result?.facts.length,
 					semanticGraph: receipt.result?.semanticGraph,
 					applicationGraph: receipt.result?.applicationGraph,
-					electronFuses: receipt.result?.electronFuses ? {artifact:receipt.result.electronFuses.artifact, slices:receipt.result.electronFuses.slices.length, next:"analysis_evidence electron-fuses; fuseSection slices, sentinels or runtime_implications"} : undefined,
+					electronFuses: receipt.result?.electronFuses
+						? {
+								artifact: receipt.result.electronFuses.artifact,
+								slices: receipt.result.electronFuses.slices.length,
+								next: "analysis_evidence electron-fuses; fuseSection slices, sentinels or runtime_implications",
+							}
+						: undefined,
 					limitations: receipt.result?.limitations,
 					next: "Use analysis_evidence with this receiptId for bounded findings/artifacts/graph/verification views; semantic-* views are available when javascript_options.semanticGraph is true; application-* views including saved feature traces, version/export comparisons and source-to-bundle comparisons require javascript_options.applicationGraph and semanticGraph true. No execution or behavior verification implied.",
 				});
@@ -3016,6 +3022,32 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			if (input.report_format === "html")
 				throw new Error("Advanced evidence supports JSON only");
 			const action = input.advanced_action;
+			const special = {
+				joern_query: "joern",
+				angr_symbolic: "symbolic",
+				specialist_readiness: "specialist_readiness",
+			} as const;
+			if (action in special) {
+				const key = special[action as keyof typeof special];
+				if (
+					!input.advanced_options ||
+					Object.keys(input.advanced_options).length !== 1 ||
+					!(key in input.advanced_options) ||
+					input.compare_target ||
+					(action === "specialist_readiness" && input.target !== undefined)
+				)
+					throw new Error(
+						"Specialist actions require exactly their matching options; readiness accepts no target",
+					);
+			} else if (
+				input.advanced_options?.joern ||
+				input.advanced_options?.symbolic ||
+				input.advanced_options?.specialist_readiness
+			) {
+				throw new Error(
+					"Specialist options require the matching specialist action",
+				);
+			}
 			if (
 				["full_readiness", "angr_readiness"].includes(action) &&
 				(input.target !== undefined ||
