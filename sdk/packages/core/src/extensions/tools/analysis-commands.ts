@@ -1,3 +1,4 @@
+import { setupCapabilityCatalog } from "./setup-capability-catalog";
 import { investigationCommandInterface } from "./investigation";
 import { BatchStaticRequestSchema } from "./batch-analysis-schema";
 import { z } from "zod";
@@ -222,6 +223,7 @@ const HOST_ONLY_COMMANDS = new Set([
 ]);
 export function analysisCommandCatalog() {
 	const catalog = {
+		setupCapabilities: setupCapabilityCatalog(),
 		recommendations: RECOMMENDATION_COVERAGE,
 		releaseStatus: "not-certified-by-catalog",
 		schemaVersion: 1,

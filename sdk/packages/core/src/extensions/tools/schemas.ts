@@ -181,6 +181,8 @@ export const ReverseEngineeringInputSchema = z
 				"android_method_code",
 				"native_function",
 				"analysis_readiness",
+				"full_readiness",
+				"angr_readiness",
 				"investigation_graph",
 			])
 			.optional(),

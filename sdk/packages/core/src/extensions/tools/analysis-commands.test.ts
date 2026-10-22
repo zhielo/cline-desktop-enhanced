@@ -260,3 +260,74 @@ it("publishes distinct authoritative AI and static-review contracts without prob
 				?.implementationScope,
 		).toBe(recommendation.scope);
 });
+
+it("makes every Setup Center engine discoverable without inventing health or standalone tools", () => {
+	const setup = analysisCommandCatalog().setupCapabilities;
+	expect(setup.status).toBe("registered-routes-not-health-proof");
+	expect(setup.providerCalls).toBe(0);
+	expect(setup.targetExecuted).toBe(false);
+	expect(setup.engineRoutes.map((r) => r.id)).toEqual([
+		"lief",
+		"capstone",
+		"z3",
+		"triton",
+		"qbindiff",
+		"androguard",
+		"miasm",
+		"unicorn",
+		"angr",
+		"qbdi",
+		"cryptography",
+	]);
+	for (const row of setup.engineRoutes) {
+		expect(row.tool).toBe("reverse_engineer");
+		if (row.advanced_action)
+			expect(
+				ReverseEngineeringInputSchema.safeParse({
+					operation: row.operation,
+					advanced_action: row.advanced_action,
+				}).success,
+			).toBe(true);
+		expect(
+			ReverseEngineeringInputSchema.safeParse({
+				operation: "advanced_analysis",
+				advanced_action: row.selfTest,
+			}).success,
+		).toBe(true);
+	}
+	expect(setup.engineRoutes.find((r) => r.id === "qbdi")).toMatchObject({
+		advanced_action: null,
+		availability: "owned-self-test-only",
+	});
+	expect(setup.additionalRoutes.map((r) => r.id)).toEqual([
+		"ghidra",
+		"ida",
+		"jadx",
+		"android-build-tools",
+		"android-device",
+		"isolated-worker",
+	]);
+	expect(setup.limitations.join(" ")).toContain(
+		"not separate invented AI tools",
+	);
+});
+
+it("exposes desktop-only specialist tools honestly instead of inventing AI execution routes", () => {
+	const catalog = analysisCommandCatalog().setupCapabilities;
+	expect(catalog.workbenchOnly.map((r) => r.id)).toEqual([
+		"radare2",
+		"yara",
+		"capa",
+		"floss",
+	]);
+	expect(
+		catalog.workbenchOnly.every(
+			(r) => r.availability === "trusted-desktop-workbench-only",
+		),
+	).toBe(true);
+	expect(catalog.firstParty).toMatchObject({
+		tool: "reverse_engineer",
+		operation: "javascript_analysis",
+		savedEvidenceOperation: "analysis_evidence",
+	});
+});

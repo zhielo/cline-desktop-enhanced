@@ -52,6 +52,7 @@ type Status = {
 	features: {
 		id: string;
 		label: string;
+		aiRoute?: string;
 		status: string;
 		reason: string;
 		version?: string;
@@ -247,7 +248,7 @@ export function SetupCenter() {
 			setMessage(
 				reply.idaCandidates.length
 					? `Detected IDA installations: ${reply.idaCandidates.join("; ")}. Choose your installation before testing.`
-					: "No IDA candidate detected. Choose your licensed installation folder.",
+					: "No IDA candidate detected. Choose your installed IDA folder.",
 			);
 			if (reply.idaCandidates[0])
 				setForm((f) => (f ? { ...f, idaHome: reply.idaCandidates[0] } : f));
@@ -500,6 +501,13 @@ export function SetupCenter() {
 						Needs attention only
 					</label>
 				</div>
+				<p>
+					AI discovery: reverse_engineer → analysis_command_catalog lists every
+					registered Setup Center engine and its real operation. Use
+					advanced_analysis → toolchain for inventory; full_readiness and
+					angr_readiness run owned self-tests only. Listed does not mean ready;
+					no separate REA runtime is needed.
+				</p>
 				<ul aria-label="Capability readiness" className="space-y-2">
 					{status?.features
 						.filter(
@@ -515,6 +523,11 @@ export function SetupCenter() {
 									{f.label}: {f.status}
 								</strong>
 								{f.version ? ` (${f.version})` : ""} — {f.reason}
+								{f.aiRoute && (
+									<p className="text-sm">
+										AI route: reverse_engineer → advanced_analysis → {f.aiRoute}
+									</p>
+								)}
 							</li>
 						))}
 				</ul>
@@ -586,7 +599,9 @@ export function SetupCenter() {
 							compatible JDK. This test is separate from the Python pack and
 							does not establish every processor or target's compatibility.
 						</p>
-						<h2 className="text-lg font-semibold">Licensed IDA and Hex-Rays</h2>
+						<h2 className="text-lg font-semibold">
+							IDA and Hex-Rays integration
+						</h2>
 						<p>{status?.licensedStatus}</p>
 						<label className="block">
 							IDA acceptance processor
@@ -648,9 +663,8 @@ export function SetupCenter() {
 								onClick={() =>
 									void action(
 										"setup_center_test_ida",
-										`I own an authorized IDA/Hex-Rays license. Save this IDA folder and run one fixed owned ${idaArchitecture} selected-function decompilation? This does not install a license or execute the ELF.`,
+										`Save this IDA folder and run one fixed owned ${idaArchitecture} selected-function decompilation? IDA reports actual plugin/runtime errors. This does not alter licensing or execute the ELF.`,
 										{
-											authorizedLicense: true,
 											architecture: idaArchitecture,
 											idaHome: form.idaHome,
 										},

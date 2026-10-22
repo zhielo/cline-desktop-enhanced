@@ -15,6 +15,8 @@ import { isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 import {
 	ADVANCED_ANALYSIS_WORKER,
+	SETUP_ENGINE_ROUTES,
+	setupCapabilityCatalog,
 	createReverseEngineeringExecutor,
 	getAnalysisRuntimeIdentity,
 	runAdvancedAnalysis,
@@ -782,6 +784,9 @@ export async function getSetupCenterStatus() {
 		return {
 			id: engine,
 			label: engine,
+			aiRoute:
+				SETUP_ENGINE_ROUTES.find((r) => r.id === engine)?.action ??
+				"full_readiness (owned fixture only)",
 			state:
 				runtime.integrity === "failed"
 					? "failed"
@@ -791,9 +796,11 @@ export async function getSetupCenterStatus() {
 							? "ready"
 							: check?.status === "failed"
 								? "failed"
-								: fullInstalled
-									? "installed_not_tested"
-									: "setup_required",
+								: check?.status === "blocked"
+									? "blocked"
+									: fullInstalled
+										? "installed_not_tested"
+										: "setup_required",
 			status:
 				runtime.integrity === "failed"
 					? "Integrity failed"
@@ -803,9 +810,11 @@ export async function getSetupCenterStatus() {
 							? "Ready"
 							: check?.status === "failed"
 								? "Test failed"
-								: fullInstalled
-									? "Installed, not tested"
-									: "Setup needed",
+								: check?.status === "blocked"
+									? "Blocked"
+									: fullInstalled
+										? "Installed, not tested"
+										: "Setup needed",
 			reason:
 				runtime.integrity === "failed"
 					? "Repair or roll back the runtime before testing"
@@ -840,6 +849,7 @@ export async function getSetupCenterStatus() {
 	);
 	return {
 		preferences,
+		aiCapabilities: setupCapabilityCatalog(),
 		setupJob: getSetupJob(),
 		runtime,
 		packs,

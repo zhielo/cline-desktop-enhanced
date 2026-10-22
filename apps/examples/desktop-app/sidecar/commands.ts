@@ -4642,10 +4642,8 @@ export async function handleCommand(
 				return await testGhidraIntegration();
 			});
 		if (command === "setup_center_test_ida") {
-			if (args.authorizedLicense !== true)
-				throw new Error(
-					"Confirm your authorized IDA/Hex-Rays license before the owned fixture test",
-				);
+			// Trusted local confirmation above authorizes this owned test.
+			// Invoke IDA instead of inferring or self-attesting a vendor license.
 			const architecture = args.architecture ?? "x86_64";
 			if (architecture !== "x86_64" && architecture !== "arm64")
 				throw new Error("Unsupported IDA acceptance architecture");
