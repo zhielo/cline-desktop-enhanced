@@ -1230,3 +1230,5 @@ export {
 export { resolvePermissionProfile, type PermissionProfile } from "./extensions/tools/permission-profile";
 
 export { RE_SPECIALIST_WORKER } from "./extensions/tools/executors/re-specialist-worker";
+
+export { BinaryTriageCallSchema, BinaryTriageOptionsSchema, BINARY_TRIAGE_OPERATIONS, type BinaryTriageCall } from "./extensions/tools/binary-triage-schema";

@@ -163,15 +163,14 @@ export function setupCapabilityCatalog() {
 					"Proposal only; actual runtime work requires separate approval, configured worker and signed capability proof",
 			},
 		],
-		workbenchOnly: ["radare2", "yara", "capa", "floss"].map((id) => ({
-			id,
-			availability: "trusted-desktop-workbench-only",
-			statusCommand: "binary_triage_status",
-			selfTestCommand: "binary_triage_test",
-			executionCommand: "binary_triage_run",
-			limitation:
-				"Visible to the AI as metadata, not callable through reverse_engineer. Requires the trusted desktop workbench, scoped evidence and explicit approval; do not bypass using model RPC or arbitrary shell commands.",
-		})),
+        workbenchOnly: [],
+        binaryTriage: ["radare2", "yara", "capa", "floss"].map(id=>({
+         id, tool:"reverse_engineer", operation:"advanced_analysis", action:"binary_triage",
+         availability:"desktop-host-route-requires-readiness-and-approval",
+         status:{advanced_options:{binary_triage:{action:"status"}}},
+         requirement:"Owning local Full Access session; Static/Hybrid Analysis; matching fixture receipt; independent approval. No shell fallback. Headless SDK unavailable.",
+         limitation:id==="yara" ? "Bundled neutral marker/header rules only; not a malware signature collection" : id==="floss" ? "PE static strings only; no decoding/emulation" : "Bounded static evidence; target compatibility remains separate",
+        })),
 		firstParty: {
 			id: "javascript-electron",
 			tool: "reverse_engineer",

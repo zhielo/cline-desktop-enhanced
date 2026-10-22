@@ -88,6 +88,7 @@ export function BinaryTriageReadiness() {
 				Pinned radare2/r2pipe, YARA, capa and optional-use FLOSS static
 				extraction. Opening this panel never runs tools or downloads packages. A
 				receipt verifies owned fixtures for this backend—not arbitrary targets.
+                AI route: reverse_engineer → advanced_analysis → binary_triage. Execution requires an owning local Full Access session, Static/Hybrid Analysis, a matching fixture test and separate approval. Ready does not mean currently authorized. YARA coverage is limited to bundled neutral marker/header rules. FLOSS: PE static strings only.
 			</p>
 			{capabilities.map((c) => (
 				<div key={c.id} className="rounded border p-2 text-xs">
@@ -95,6 +96,8 @@ export function BinaryTriageReadiness() {
 						{c.id} {c.version} — {labels[c.state] ?? c.state}
 					</strong>
 					<p>{c.reason}</p>
+                    <p>Installed: {["ready","installed-not-tested"].includes(c.state) ? "verified inventory" : "not verified"}. Fixture tested: {c.state === "ready" ? "yes, matching identity" : "not ready"}.</p>
+                    <p>AI route: supported on local Cline Desktop. Permission: checked per request, never granted by this status.</p>
 					{c.testedAt && <p>Last tested: {c.testedAt}</p>}
 				</div>
 			))}

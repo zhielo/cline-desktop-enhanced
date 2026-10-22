@@ -434,3 +434,13 @@ it("forwards investigation name and strict input with owning tool context as sep
 		undefined,
 	);
 });
+
+it("forwards only the dedicated binary triage host capability with owning context", async()=>{
+ const request: ClientContributionRequest = vi.fn(async()=>({result:"bounded-triage-evidence"}));
+ const runtime = createHubClientContributionRuntime({sessionId:"owner",targetClientId:"desktop",contributions:[{kind:"toolExecutor",executor:"binaryTriage",capabilityName:"tool_executor.binaryTriage"}],requestCapability:request});
+ const input={operation:"advanced_analysis",advanced_action:"binary_triage",advanced_options:{binary_triage:{action:"status"}}};
+ const result=await runtime.toolExecutors?.binaryTriage?.(input as never,{sessionId:"owner",agentId:"lead",iteration:1,toolCallId:"call"});
+ expect(result).toBe("bounded-triage-evidence");
+ expect(request).toHaveBeenCalledWith("owner","tool_executor.binaryTriage",expect.objectContaining({args:[input],context:expect.objectContaining({sessionId:"owner",toolCallId:"call"})}),"desktop",undefined);
+ expect(runtime.toolExecutors?.reverseEngineering).toBeUndefined();
+});

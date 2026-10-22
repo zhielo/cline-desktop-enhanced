@@ -240,6 +240,8 @@ export type ComputerUseExecutor = (
  * Collection of all tool executors
  */
 export interface ToolExecutors {
+    /** Narrow desktop-host static triage route; no headless or shell fallback. */
+    binaryTriage?: ReverseEngineeringExecutor;
 	/** Desktop-owned investigation workflow, absent in headless clients. */
 	investigation?: import("./investigation").InvestigationExecutor;
 	/** File reading implementation */

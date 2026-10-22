@@ -2,6 +2,14 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## AI-callable Binary Triage Pack
+
+- `reverse_engineer` → `advanced_analysis` → `binary_triage` runs the existing seven fixed operations through a dedicated `binaryTriage` desktop/Hub capability. Other reverse-engineering executors are unchanged; no headless, generic RPC or shell fallback is added.
+- AI execution binds approval to owning session/workspace, operation/question/address, target hash, pack/rule identity and interpreter hash. It requires local attached Full Access, Static/Hybrid mode, matching selected-engine fixture readiness and independent trusted-surface review. Manual workbench retains idle-session rules.
+- Task abort and scope/profile/mode changes cancel supervised children. Unconfirmed termination remains unresolved and blocks replay. Saved evidence is scoped and paged, non-executing and readable Off.
+- Setup/catalog/tool instructions distinguish supported route, inventory/fixture status and per-request authorization. YARA uses minimal neutral marker/header rules, not a threat signature library; FLOSS remains PE static-only. Joern Windows support is not changed.
+- Windows installed acceptance uses a deterministic loopback provider through actual model dispatch, Hub capability transport, human-review transport and real engines. All seven operations and receipts are required by the release policy. This is not a live commercial-provider or arbitrary-target guarantee.
+
 ## Optional specialist reverse-engineering profiles
 
 - Added fixed Joern single-file queries and bounded raw-AMD64 angr models, separate owned-fixture Setup Center receipts, input/request/runtime identity and fail-closed OS memory enforcement. Existing eleven-engine readiness is unchanged. Joern uses the reviewed Linux distribution; Windows Joern remains blocked.
