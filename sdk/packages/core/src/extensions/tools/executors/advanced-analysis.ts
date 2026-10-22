@@ -1,3 +1,9 @@
+import { RE_SPECIALIST_WORKER } from "./re-specialist-worker";
+import type {
+	SymbolicOptionsSchema,
+	JoernOptionsSchema,
+	SpecialistReadinessSchema,
+} from "../specialist-analysis-schema";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, writeFile, rm, stat, realpath } from "node:fs/promises";
@@ -60,6 +66,9 @@ export const ADVANCED_ACTIONS = [
 	"angr_readiness",
 	"unicorn_emulate",
 	"angr_lift",
+	"angr_symbolic",
+	"joern_query",
+	"specialist_readiness",
 ] as const;
 export type AdvancedAction = (typeof ADVANCED_ACTIONS)[number];
 const LOCAL_ACTIONS = new Set<AdvancedAction>([
@@ -91,6 +100,9 @@ const LOCAL_ACTIONS = new Set<AdvancedAction>([
 	"angr_readiness",
 	"unicorn_emulate",
 	"angr_lift",
+	"angr_symbolic",
+	"joern_query",
+	"specialist_readiness",
 ]);
 export const ADVANCED_BACKENDS = [
 	{ id: "cryptography", integration: "host-gated-authenticated-decryption" },
@@ -131,19 +143,35 @@ export interface AdvancedRequest {
 	limit?: number;
 	timeoutMs?: number;
 	options?: {
+		symbolic?: z.input<typeof SymbolicOptionsSchema>;
+		joern?: z.input<typeof JoernOptionsSchema>;
+		specialist_readiness?: z.infer<typeof SpecialistReadinessSchema>;
 		android_calls?: {
 			max_depth?: number;
 			max_nodes?: number;
 			max_edges?: number;
 			direction?: "callers" | "callees" | "both";
 		};
-        entrypoints?: {max_depth?:number;max_components?:number;max_dex_files?:number};
-        jni_trace?: {native_artifact?:string;max_candidates?:number;native_calls?:{max_depth?:number;max_functions?:number;max_edges?:number;max_total_bytes?:number}};
+		entrypoints?: {
+			max_depth?: number;
+			max_components?: number;
+			max_dex_files?: number;
+		};
+		jni_trace?: {
+			native_artifact?: string;
+			max_candidates?: number;
+			native_calls?: {
+				max_depth?: number;
+				max_functions?: number;
+				max_edges?: number;
+				max_total_bytes?: number;
+			};
+		};
 		discovery?: {
 			max_depth?: number;
 			max_artifacts?: number;
 			inspect_native?: boolean;
-            identify_formats?: boolean;
+			identify_formats?: boolean;
 		};
 		function?: { symbol?: string; address?: string; max_bytes?: number };
 		method?: { class_descriptor: string; name: string; descriptor: string };
@@ -260,11 +288,14 @@ async function runAdvancedAnalysisOwned(
 		request.action === "toolchain" ||
 		request.action === "analysis_readiness" ||
 		request.action === "full_readiness" ||
-		request.action === "angr_readiness"
+		request.action === "angr_readiness" ||
+		request.action === "specialist_readiness"
 			? []
 			: [
 					request.target,
-					...(["match_native_functions", "android_resources"].includes(request.action)
+					...(["match_native_functions", "android_resources"].includes(
+						request.action,
+					)
 						? [request.compareTarget]
 						: []),
 				];
@@ -274,12 +305,23 @@ async function runAdvancedAnalysisOwned(
 		const info = await stat(await realpath(input));
 		if (
 			!info.isFile() ||
-			info.size > (request.action === "decrypt_blob" ? 16 : 128) * 1024 * 1024
+			info.size >
+				(["joern_query", "angr_symbolic"].includes(request.action)
+					? 1
+					: request.action === "decrypt_blob"
+						? 16
+						: 128) *
+					1024 *
+					1024
 		)
 			throw new Error("Input must be file <=128 MiB");
 	}
 	const executable =
-		(request.action === "angr_lift" || request.action === "angr_readiness"
+		(["angr_lift", "angr_symbolic", "angr_readiness"].includes(
+			request.action,
+		) ||
+		(request.action === "specialist_readiness" &&
+			request.options?.specialist_readiness?.engine === "angr")
 			? process.env.CLINE_ANGR_PYTHON?.trim()
 			: undefined) ||
 		process.env.CLINE_RE_PYTHON?.trim() ||
@@ -287,11 +329,45 @@ async function runAdvancedAnalysisOwned(
 	if (
 		(process.env.CLINE_RE_PYTHON ||
 			((request.action === "angr_lift" ||
-				request.action === "angr_readiness") &&
+				request.action === "angr_readiness" ||
+				request.action === "angr_symbolic" ||
+				(request.action === "specialist_readiness" &&
+					request.options?.specialist_readiness?.engine === "angr")) &&
 				process.env.CLINE_ANGR_PYTHON)) &&
 		!isAbsolute(executable)
 	)
 		throw new Error("CLINE_RE_PYTHON must be an absolute interpreter path");
+	const specialist = [
+		"joern_query",
+		"angr_symbolic",
+		"specialist_readiness",
+	].includes(request.action);
+	const requestHash = createHash("sha256")
+		.update(JSON.stringify(request))
+		.digest("hex");
+	let specialistInputHash: string | undefined;
+	if (specialist && request.target) {
+		const file = await (await import("node:fs/promises")).open(
+			request.target,
+			"r",
+		);
+		try {
+			const data = Buffer.alloc(1024 * 1024 + 1);
+			let n = 0;
+			while (n < data.length) {
+				const r = await file.read(data, n, data.length - n, n);
+				if (!r.bytesRead) break;
+				n += r.bytesRead;
+			}
+			if (!n || n > 1024 * 1024)
+				throw new Error("Specialist input grew beyond 1 MiB budget");
+			specialistInputHash = createHash("sha256")
+				.update(data.subarray(0, n))
+				.digest("hex");
+		} finally {
+			await file.close();
+		}
+	}
 	const started = Date.now();
 	const diagnostics: WorkerDiagnostics = {
 		jobId: randomUUID(),
@@ -308,18 +384,22 @@ async function runAdvancedAnalysisOwned(
 	const script = join(directory, "worker.py");
 	await writeFile(
 		script,
-		[
-			"artifact_discovery",
-			"android_relationships",
-	"android_entrypoints",
-	"android_resources",
-			"android_method",
-			"android_method_code",
-			"native_function",
-			"analysis_readiness",
-		].includes(request.action)
-			? ANDROID_INVESTIGATION_WORKER
-			: ADVANCED_ANALYSIS_WORKER,
+		["joern_query", "angr_symbolic", "specialist_readiness"].includes(
+			request.action,
+		)
+			? RE_SPECIALIST_WORKER
+			: [
+						"artifact_discovery",
+						"android_relationships",
+						"android_entrypoints",
+						"android_resources",
+						"android_method",
+						"android_method_code",
+						"native_function",
+						"analysis_readiness",
+					].includes(request.action)
+				? ANDROID_INVESTIGATION_WORKER
+				: ADVANCED_ANALYSIS_WORKER,
 		{ mode: 0o600 },
 	);
 	const policy = prepareProcessEnvironment({
@@ -341,7 +421,9 @@ async function runAdvancedAnalysisOwned(
 							action: request.action,
 							target: request.target,
 							compare_target: request.compareTarget,
-							limit: request.limit ?? 200,
+							limit: specialist
+								? Math.min(request.limit ?? 200, 200)
+								: (request.limit ?? 200),
 							options: request.options,
 						}),
 					],
@@ -424,6 +506,27 @@ async function runAdvancedAnalysisOwned(
 				)
 					category = "missing-dependency";
 				diagnostics.category = category;
+				if (specialist && ["completed", "partial"].includes(result.status)) {
+					if (
+						(specialistInputHash &&
+							result.input?.sha256 !== specialistInputHash) ||
+						!validSpecialistMemoryBoundary(result.evidence.memoryBoundary)
+					) {
+						result = outcome(
+							"failed",
+							"Specialist evidence identity or memory enforcement missing",
+						);
+						category = "invalid-output";
+					} else {
+						result.evidence = {
+							...result.evidence,
+							requestHash,
+							workerSha256: createHash("sha256")
+								.update(RE_SPECIALIST_WORKER)
+								.digest("hex"),
+						};
+					}
+				}
 				// The child cannot supply or override host diagnostic metadata.
 				result.diagnostics = diagnostics;
 				if (
@@ -522,4 +625,16 @@ export function advancedEvidenceBundle(
 			.update(JSON.stringify(body))
 			.digest("hex"),
 	};
+}
+
+function validSpecialistMemoryBoundary(value: unknown): boolean {
+	if (!value || typeof value !== "object") return false;
+	const boundary = value as Record<string, unknown>;
+	return (
+		boundary.hard === true &&
+		((boundary.kind === "rlimit-address-space" &&
+			boundary.bytes === 8 * 1024 ** 3) ||
+			(boundary.kind === "windows-job-commit" &&
+				boundary.bytes === 2 * 1024 ** 3))
+	);
 }

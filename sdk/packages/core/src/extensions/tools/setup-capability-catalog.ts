@@ -73,6 +73,50 @@ export function setupCapabilityCatalog() {
 			availability: action ? "registered" : "owned-self-test-only",
 			selfTest: id === "angr" ? "angr_readiness" : "full_readiness",
 		})),
+		specialistRoutes: [
+			{
+				id: "joern",
+				tool: "reverse_engineer",
+				operation: "advanced_analysis",
+				advanced_action: "joern_query",
+				selfTest: "specialist_readiness",
+				selfTestOptions: { specialist_readiness: { engine: "joern" } },
+				scope:
+					"Single JavaScript/Java source; fixed callers/references/source-sink queries; decompiler output stays approximate",
+				requirement:
+					"Reviewed manifest-pinned Linux Joern runtime with bundled JDK; no arbitrary Scala; Windows launcher not enabled",
+			},
+			{
+				id: "angr-symbolic",
+				tool: "reverse_engineer",
+				operation: "advanced_analysis",
+				advanced_action: "angr_symbolic",
+				selfTest: "specialist_readiness",
+				selfTestOptions: { specialist_readiness: { engine: "angr" } },
+				scope:
+					"Selected raw AMD64 bytes, synthetic base 0x100000, one symbolic argument; no whole-binary solver",
+				requirement:
+					"Separate pinned angr interpreter and enforceable memory limits; candidate is model-specific",
+			},
+			{
+				id: "speakeasy",
+				availability: "trusted-dynamic-workbench",
+				operation: "emulate_windows",
+				prepareCommand: "prepare_analysis_task",
+				runCommand: "run_dynamic_analysis",
+				scope:
+					"Fixed default PE entry in isolated Linux worker; modeled behavior, not native Windows execution",
+				requirement:
+					"Runtime mode, separate upload/execution approval, authenticated HTTPS, pinned Ed25519 key/runtime, disabled worker network",
+			},
+			{
+				id: "qiling",
+				availability: "evaluation-deferred",
+				scope: "No executable route added",
+				requirement:
+					"Rootfs provenance, redistribution review and evidence of value beyond existing Unicorn/Speakeasy required",
+			},
+		],
 		additionalRoutes: [
 			{
 				id: "ghidra",

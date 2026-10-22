@@ -1228,3 +1228,5 @@ export {
 } from "./extensions/tools/batch-analysis-schema";
 
 export { resolvePermissionProfile, type PermissionProfile } from "./extensions/tools/permission-profile";
+
+export { RE_SPECIALIST_WORKER } from "./extensions/tools/executors/re-specialist-worker";

@@ -57,3 +57,16 @@ def physical_preflight(adb,serial,reader=bounded_command):
     abi=probe(['shell','getprop','ro.product.cpu.abi'])
     if abi not in ('arm64-v8a','armeabi-v7a','x86','x86_64'):raise ValueError('Unsupported physical device ABI')
     return {'kind':'physical','deviceSerialSha256':hashlib.sha256(serial.encode()).hexdigest(),'abi':abi,'rootProbe':'uid0-reported','attestation':'not-proven'}
+
+def instrumentation_preflight(device, client_version):
+    """Read-only protocol probe; exact remote server version is not inferred."""
+    if not isinstance(client_version,str) or not re.fullmatch(r'\d+\.\d+\.\d+(?:[-.A-Za-z0-9]*)',client_version):
+        raise ValueError('Unidentified Frida client runtime')
+    try:
+        params=device.query_system_parameters()
+        device.enumerate_processes()
+    except Exception as error:
+        raise ValueError('Frida handshake failed; check server/client compatibility, device authorization and connection') from error
+    if not isinstance(params,dict):raise ValueError('Invalid Frida system parameters')
+    os_info=params.get('os',{})
+    return {'clientVersion':client_version,'connection':'protocol-negotiated','serverVersion':'not-attested','androidVersion':str(os_info.get('version','unknown'))[:80] if isinstance(os_info,dict) else 'unknown','architecture':str(params.get('arch','unknown'))[:80],'coverage':'supported hooks only; no anti-instrumentation bypass, complete loaded-code coverage or hardware attestation'}

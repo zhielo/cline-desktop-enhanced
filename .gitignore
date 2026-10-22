@@ -106,3 +106,7 @@ apps/examples/desktop-app/src-tauri/resources/analysis-runtime-angr/
 apps/examples/desktop-app/src-tauri/resources/android-platform-tools/
 
 apps/examples/desktop-app/src-tauri/resources/android-toolchain/
+
+# Local Python engine-test caches
+__pycache__/
+*.py[cod]

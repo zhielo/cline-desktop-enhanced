@@ -1314,10 +1314,14 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
-		path: "workers/android-capture/capture.py",
+		path: "workers/android-capture/capture_support.py",
+        markers: ["def instrumentation_preflight", "device.enumerate_processes()", "device.query_system_parameters()", "serverVersion"],
+    },
+    {
+        path: "workers/android-capture/capture.py",
 		markers: [
 			"Refusing to replace an existing app",
-			"device.enumerate_processes()",
+			"support.instrumentation_preflight",
 			"support.physical_preflight",
 			"'exec-out','su','-c'",
 		],
@@ -2652,7 +2656,7 @@ requiredMarkers.push(
 			"bindRuntimeAnalysisRequest",
 			"submitAnalysisSandbox",
 			"worker_key_sha256",
-			'redirect:"error"',
+			'redirect: "error"',
 			"Receipt does not bind approved job",
 		],
 	},
