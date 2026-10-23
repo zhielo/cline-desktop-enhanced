@@ -157,7 +157,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
-        "apps/vscode/scripts/owned-triage-model.ts": "419ef05c985ac1592d53c68b93b19b2963957d2a7ea8f36179da2856305c8ed9",
+        "apps/vscode/scripts/owned-triage-model.ts": "f80d51851ccc6b841c0a3da0e4a8d9d49a335675d40c1a6498fde37f99ddde5f",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":
@@ -165,7 +165,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"f4ef6fdd2ce80362c9f19ced04665c1c7094f4895e628678fca97612d3b156ac",
+			"1b557b786b1dee4a896f7ca6f7943908048f4cee0910715b97bb994c8bf75b6d",
 		"scripts/validate-advanced-build.mjs":
 			"17bab43ad28e0598197adce6f9bdc666d81430baa1ba34a6e044837972f6396c",
 	},

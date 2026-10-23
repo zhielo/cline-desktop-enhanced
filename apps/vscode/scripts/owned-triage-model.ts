@@ -14,6 +14,7 @@ export const OWNED_TRIAGE_SEQUENCE = [
 export async function startOwnedTriageModel() {
 	const results: Record<string, unknown>[] = []
 	let error: Error | undefined, selectedAddress: string | undefined
+	let providerRequests = 0
 	const server = createServer(async (req, res) => {
 		try {
 			if (req.method !== "POST" || !req.url?.endsWith("/chat/completions"))
@@ -24,6 +25,7 @@ export async function startOwnedTriageModel() {
 				if (body.length > 8 * 1024 * 1024) throw new Error("Owned model request budget")
 			}
 			const request = JSON.parse(body)
+			providerRequests++
 			const tools = (request.messages as Array<Record<string, unknown>>).filter((m) => m.role === "tool")
 			results.length = 0
 			for (const message of tools) {
@@ -130,6 +132,9 @@ export async function startOwnedTriageModel() {
 	return {
 		baseUrl: `http://127.0.0.1:${address.port}/v1`,
 		results,
+		get providerRequests() {
+			return providerRequests
+		},
 		get error() {
 			return error
 		},
@@ -167,9 +172,11 @@ export async function waitOwnedTriageModel(
 				throw new Error("Installed AI triage operation order mismatch")
 			return { results: model.results, independentApprovals: independent.size }
 		}
-		await delay(200)
+		await delay(500)
 	}
-	throw new Error("Installed AI triage model acceptance timed out")
+	throw new Error(
+		`Installed AI triage timed out: providerRequests=${model.providerRequests}; results=${model.results.length}; reviewed=${reviewed.size}; independent=${independent.size}`,
+	)
 }
 
 /** Queue through the normal idle-session route: immediate sends await the entire

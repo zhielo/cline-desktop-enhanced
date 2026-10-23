@@ -21,6 +21,7 @@ import {
 	waitForInstalledBackendEndpoint,
 	verifyInstalledAnalysisProfile,
  openInstalledSavedSession,
+ visibleOwnedTriageApprovals,
  verifyInstalledSourceReferenceStorage,
  verifyInstalledInvestigationCatalog,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
@@ -544,4 +545,26 @@ test("installed skill catalog requires fixed namespaced instructions and plugin-
  assert.equal(verifyInstalledInvestigationCatalog(off,false,root),root);
  off.skills=[skills[0]];assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
  off.skills=[];off.runtimeCommands=catalog.runtimeCommands;assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
+});
+
+
+test("owned triage reviews use the visible owning approval card, never a second RPC connection", async () => {
+ const id="12345678-1234-1234-1234-123456789abc";
+ const input={independentStaticAnalysisApproval:true,requestHash:"a".repeat(64),targetSha256:"b".repeat(64),operation:"inspect_binary"};
+ let approved=0;
+ const card={
+  textContent:async()=>`reverse_engineer Request ${id} · Iteration 1`,
+  locator:selector=>{assert.equal(selector,"pre");return {innerText:async()=>JSON.stringify(input)};},
+  getByRole:(role,options)=>{assert.equal(role,"button");assert.deepEqual(options,{name:"Approve",exact:true});return {click:async()=>{approved++;}};},
+ };
+ const page={getByRole:(role,options)=>{assert.equal(role,"region");assert.deepEqual(options,{name:"reverse_engineer",exact:true});return {count:async()=>1,nth:index=>{assert.equal(index,0);return card;}};}};
+ const pending=await visibleOwnedTriageApprovals(page);
+ assert.equal(approved,0);
+ assert.equal(pending[0].requestId,id);
+ assert.deepEqual(pending[0].input,input);
+ await pending[0].approve();
+ assert.equal(approved,1);
+ card.textContent=async()=>"reverse_engineer Missing request identity";
+ await assert.rejects(visibleOwnedTriageApprovals(page),/lacks a request identity/);
+ assert.equal(approved,1);
 });

@@ -252,6 +252,22 @@ export async function openInstalledSavedSession(page: Pick<Page, "getByRole">, t
 	await page.getByRole("button", { name: title }).first().click()
 }
 
+/** Read the real owning UI's approval cards. A second authenticated RPC socket
+ * is intentionally not allowed to read or answer another connection's reviews. */
+export async function visibleOwnedTriageApprovals(page: Pick<Page, "getByRole">) {
+ const cards = page.getByRole("region", {name:"reverse_engineer", exact:true})
+ const pending: Array<{requestId:string; toolName:string; input:Record<string,unknown>; approve:()=>Promise<void>}> = []
+ for(let i=0;i<await cards.count();i++) {
+  const card=cards.nth(i)
+  const text=await card.textContent()
+  const requestId=text?.match(/Request ([a-f0-9-]{36})(?:\s|·)/i)?.[1]
+  if(!requestId)throw new Error("Visible triage approval lacks a request identity")
+  const input=JSON.parse(await card.locator("pre").innerText())
+  pending.push({requestId,toolName:"reverse_engineer",input,approve:()=>card.getByRole("button",{name:"Approve",exact:true}).click()})
+ }
+ return pending
+}
+
 /** Read-only restart check. Never reconstruct or inject a lost device reference. */
 export function verifyInstalledSourceReferenceStorage(expected: unknown, raw: unknown) {
 	if (typeof raw !== "string" || raw.length > 32768)
@@ -3757,11 +3773,24 @@ ConvertTo-Json -InputObject @($rows) -Compress
                 initialMessages:[{id:"owned-ai-triage-start",role:"user",content:"Owned offline AI triage acceptance"}],
             }}})
             modelSessionId=modelSession.sessionId
+            await rpc(page,"update_chat_session_title",{sessionId:modelSessionId,environmentId:"local",title:"Installer AI triage"})
+            await page.reload()
+            await openInstalledSavedSession(page,/Installer AI triage/)
             await rpc(page,"first_party_analysis_mode",{sessionId:modelSessionId,environmentId:"local",mode:"static"})
             await enqueueOwnedTriageTurn(request => rpc<{queued?: boolean}>(page,"chat_session_command",{request}), modelSessionId)
+            const visible = new Map<string,()=>Promise<void>>()
             const acceptance=await waitOwnedTriageModel(triageModel,
-                ()=>rpc(page,"poll_tool_approvals",{sessionId:modelSessionId}),
-                requestId=>rpc(page,"respond_tool_approval",{sessionId:modelSessionId,requestId,approved:true}))
+                async ()=>{
+                    const items=await visibleOwnedTriageApprovals(page)
+                    for(const item of items) visible.set(item.requestId,item.approve)
+                    return items
+                },
+                async requestId=>{
+                    const approve=visible.get(requestId)
+                    if(!approve)throw new Error("Owning visible approval disappeared; no RPC fallback")
+                    await acceptanceAction("ui-owned-triage-approve",approve)
+                    visible.delete(requestId)
+                })
             for(const result of acceptance.results) {
                 const saved=await rpc<{receipt:Record<string,unknown>}>(page,"binary_triage_report",{sessionId:modelSessionId,environmentId:"local",id:result.receiptId})
                 if(saved.receipt === undefined) throw new Error("Installed AI result lacks a saved receipt")
@@ -3771,7 +3800,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
             while(Date.now()<finalDeadline) {
                 const transcript=await rpc<unknown[]>(page,"read_session_messages",{sessionId:modelSessionId,maxMessages:100})
                 if(JSON.stringify(transcript).includes("Owned AI triage acceptance complete:")) {finalObserved=true;break}
-                await delay(200)
+                await delay(1000)
             }
             if(!finalObserved)throw new Error("Installed AI triage final response was not retained in the transcript")
             await writeFile(join(evidence,"binary-triage-ai-model-acceptance.json"),JSON.stringify(acceptance,null,2))
@@ -3780,6 +3809,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
             if(modelSessionId) await rpc(page,"chat_session_command",{request:{action:"stop",sessionId:modelSessionId}}).catch(()=>{})
             await triageModel.close()
         }
+        await settings(page, "Setup Center")
 
 
 		page.once("dialog", async (dialog) => {
