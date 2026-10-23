@@ -1,19 +1,20 @@
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { dirname, join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import lock from "../../../../scripts/binary-triage-tools.lock.json";
+import { AnalysisWorkflowStore } from "./analysis-workflow-store";
 import {
 	BinaryTriageService,
 	hashTriageFile,
 	triageEvidencePage,
 } from "./binary-triage";
-import { AnalysisWorkflowStore } from "./analysis-workflow-store";
 import { triageEngine } from "./binary-triage-contracts";
 import {
-	runModelBinaryTriage,
 	type ModelTriagePorts,
+	runModelBinaryTriage,
 } from "./model-binary-triage";
+
 const roots: string[] = [];
 const stores: AnalysisWorkflowStore[] = [];
 afterEach(async () => {
@@ -51,7 +52,12 @@ async function fixture() {
 		join(workspace, "owned.exe"),
 		"MZCLINE_OWNED_TRIAGE_FIXTURE_V1",
 	);
-	vi.stubEnv("CLINE_RE_PYTHON", process.execPath);
+	// This suite injects its worker; hash a small owned interpreter identity.
+	// Hashing the 100+ MiB Node executable on every transaction needlessly
+	// turns seven mocked operations into gigabytes of I/O under CI contention.
+	const python = join(root, "owned-mock-python");
+	await writeFile(python, "owned mock interpreter identity; never executed");
+	vi.stubEnv("CLINE_RE_PYTHON", python);
 	vi.stubEnv("CLINE_DIR", join(root, "private"));
 	const worker = vi.fn(
 		async (
@@ -167,6 +173,17 @@ describe("host-owned model binary triage", () => {
 		};
 		await expect(runModelBinaryTriage(call(), ports)).rejects.toThrow(
 			"identity changed",
+		);
+		expect(worker).not.toHaveBeenCalled();
+	});
+	it("changed interpreter bytes invalidate readiness after review without executing", async () => {
+		const { ports, worker } = await fixture();
+		ports.review = async () => {
+			await writeFile(process.env.CLINE_RE_PYTHON!, "changed mock interpreter");
+			return true;
+		};
+		await expect(runModelBinaryTriage(call(), ports)).rejects.toThrow(
+			"matching owned-fixture test",
 		);
 		expect(worker).not.toHaveBeenCalled();
 	});
