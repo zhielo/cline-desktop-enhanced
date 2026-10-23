@@ -157,7 +157,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
-        "apps/vscode/scripts/owned-triage-model.ts": "c6867faaafa39819c8048c91488869704c377162ff16b4228b92836d22acd884",
+        "apps/vscode/scripts/owned-triage-model.ts": "49b6f1cc1c4477689e31eb47330fae0f9454630532efa46b347ed524d2daa0fd",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":

@@ -65,7 +65,9 @@ export async function startOwnedTriageModel() {
 							error:result.error, receiptId:result.receiptId}).slice(0, 600))
 				results.push(result)
 				if (result.operation === "list_functions") {
-					const match = String(result.text).match(/"offset":\s*(\d+)/)
+					// Pinned radare2 6.2.4 aflj emits addr; older fixtures used offset.
+					// Parse the decimal token with BigInt, never a lossy JS number.
+					const match = String(result.text).match(/"(?:addr|offset)":\s*(\d+)/)
 					if (!match) throw new Error("Owned function listing lacks an address for the next call")
 					selectedAddress = "0x" + BigInt(match[1]).toString(16)
 				}

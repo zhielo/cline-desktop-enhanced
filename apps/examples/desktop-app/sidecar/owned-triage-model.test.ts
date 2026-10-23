@@ -158,3 +158,49 @@ it("queues the installed AI turn without waiting for approvals and rejects missi
 		enqueueOwnedTriageTurn(async () => ({}), "owned-session"),
 	).rejects.toThrow("not acknowledged");
 });
+
+it.each([
+	"addr",
+	"offset",
+])("uses saved radare2 %s for exact selected disassembly without rerunning listing", async (field) => {
+	const model = await startOwnedTriageModel();
+	try {
+		const messages = ["inspect_binary", "list_functions"].map(
+			(operation, i) => ({
+				role: "tool",
+				content: JSON.stringify({
+					status: "completed",
+					receiptId: `owned-${i}`,
+					targetSha256: "a".repeat(64),
+					operation,
+					text:
+						operation === "list_functions"
+							? `{"engine":"radare2","data":[{"${field}":5368713216,"name":"entry0"}]}`
+							: "{}",
+				}),
+			}),
+		);
+		const response = await fetch(`${model.baseUrl}/chat/completions`, {
+			method: "POST",
+			body: JSON.stringify({ model: "owned", messages, stream: false }),
+		});
+		expect(response.status).toBe(200);
+		const result = (await response.json()) as {
+			choices: Array<{
+				message: { tool_calls: Array<{ function: { arguments: string } }> };
+			}>;
+		};
+		const call = JSON.parse(
+			result.choices[0].message.tool_calls[0].function.arguments,
+		);
+		expect(call.advanced_options.binary_triage).toMatchObject({
+			action: "run",
+			operation: "get_function_disassembly",
+			address: "0x140001000",
+		});
+		expect(model.results).toHaveLength(2);
+		expect(model.error).toBeUndefined();
+	} finally {
+		await model.close();
+	}
+});
