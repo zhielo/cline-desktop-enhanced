@@ -1,7 +1,29 @@
 /** Test-owned loopback model, not a product bypass: uses the real provider/tool/approval path. */
 import { createServer } from "node:http"
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
+import { readFile, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
+export const OWNED_TRIAGE_TARGET = "owned-ai-triage.exe"
+/** Stage the installed pack's compiled owned PE, not the legacy MZ-only YARA marker.
+ * Read/hash/structure checks only: this fixture is never launched. */
+export async function stageOwnedTriagePe(packRoot: string, workspace: string) {
+	const manifest = JSON.parse((await readFile(join(packRoot, "manifest.json"), "utf8")).replace(/^\uFEFF/, ""))
+	const expected = manifest.schemaVersion === 1 ? manifest.files?.["owned-fixture.exe"] : undefined
+	const bytes = await readFile(join(packRoot, "owned-fixture.exe"))
+	const hash = createHash("sha256").update(bytes).digest("hex")
+	if (typeof expected !== "string" || !/^[a-f0-9]{64}$/.test(expected) || hash !== expected)
+		throw new Error("Installed owned PE fixture does not match its pack manifest")
+	const pe = bytes.length >= 64 ? bytes.readUInt32LE(0x3c) : -1
+	if (bytes.toString("ascii", 0, 2) !== "MZ" || pe < 64 || pe > bytes.length - 24 ||
+		bytes.readUInt32LE(pe) !== 0x00004550 || !bytes.includes(Buffer.from("CLINE_OWNED_TRIAGE_FIXTURE_V1")))
+		throw new Error("Installed owned fixture lacks valid PE structure and owned marker")
+	const target = join(workspace, OWNED_TRIAGE_TARGET)
+	await writeFile(target, bytes, { flag: "wx" })
+	if (createHash("sha256").update(await readFile(target)).digest("hex") !== hash)
+		throw new Error("Staged owned PE fixture changed")
+	return { target: OWNED_TRIAGE_TARGET, sha256: hash, bytes: bytes.length }
+}
 export const OWNED_TRIAGE_SEQUENCE = [
 	"inspect_binary",
 	"list_functions",
@@ -38,7 +60,9 @@ export async function startOwnedTriageModel() {
 					typeof result.receiptId !== "string" ||
 					!/^[a-f0-9]{64}$/.test(String(result.targetSha256))
 				)
-					throw new Error("Owned model received a failed or incomplete triage result: " + text.slice(0, 300))
+					throw new Error("Owned model received a failed or incomplete triage result: " +
+						JSON.stringify({status:result.status, operation:result.operation, diagnostic:result.diagnostic,
+							error:result.error, receiptId:result.receiptId}).slice(0, 600))
 				results.push(result)
 				if (result.operation === "list_functions") {
 					const match = String(result.text).match(/"offset":\s*(\d+)/)
@@ -57,7 +81,7 @@ export async function startOwnedTriageModel() {
 							arguments: JSON.stringify({
 								operation: "advanced_analysis",
 								advanced_action: "binary_triage",
-								target: "owned-triage.exe",
+								target: OWNED_TRIAGE_TARGET,
 								advanced_options: {
 									binary_triage: {
 										action: "run",
@@ -189,7 +213,7 @@ export async function enqueueOwnedTriageTurn(
 		action: "send",
 		sessionId,
 		delivery: "queue",
-		prompt: "Analyze owned-triage.exe using the fixed binary triage operations. Use saved static evidence only.",
+		prompt: `Analyze ${OWNED_TRIAGE_TARGET} using the fixed binary triage operations. Use saved static evidence only.`,
 	})
 	if (reply.queued !== true) throw new Error("Owned AI triage turn was not acknowledged by the normal queue")
 }

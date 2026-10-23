@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { startOwnedTriageModel } from "../../../vscode/scripts/owned-triage-model";
+
 it("owned model exercises standard chat completions and refuses fake engine success", async () => {
 	const model = await startOwnedTriageModel();
 	try {
@@ -16,6 +17,9 @@ it("owned model exercises standard chat completions and refuses fake engine succ
 		};
 		const tool = result.choices[0].message.tool_calls[0];
 		expect(tool.function.name).toBe("reverse_engineer");
+		expect(JSON.parse(tool.function.arguments).target).toBe(
+			"owned-ai-triage.exe",
+		);
 		expect(
 			JSON.parse(tool.function.arguments).advanced_options.binary_triage
 				.operation,
@@ -30,12 +34,20 @@ it("owned model exercises standard chat completions and refuses fake engine succ
 			body: JSON.stringify({
 				model: "owned",
 				messages: [
-					{ role: "tool", content: JSON.stringify({ status: "failed" }) },
+					{
+						role: "tool",
+						content: JSON.stringify({
+							status: "failed",
+							operation: "inspect_binary",
+							diagnostic: "r2-inspect:ValueError",
+						}),
+					},
 				],
 			}),
 		});
 		expect(failed.status).toBe(500);
 		expect(model.error?.message).toContain("failed or incomplete");
+		expect(model.error?.message).toContain("r2-inspect:ValueError");
 	} finally {
 		await model.close();
 	}

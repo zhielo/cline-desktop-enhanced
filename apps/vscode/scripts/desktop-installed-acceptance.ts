@@ -1,4 +1,4 @@
-import { startOwnedTriageModel, waitOwnedTriageModel, enqueueOwnedTriageTurn } from "./owned-triage-model.ts"
+import { startOwnedTriageModel, waitOwnedTriageModel, enqueueOwnedTriageTurn, stageOwnedTriagePe } from "./owned-triage-model.ts"
 import { gunzipSync } from "node:zlib"
 /**
  * Windows CI only: attach to the installed app's own WebView2.
@@ -17,7 +17,7 @@ import { spawn } from "node:child_process"
 import { appendFile, mkdir, mkdtemp, open, readFile, stat, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
-import { basename, isAbsolute, join, resolve } from "node:path"
+import { basename, dirname, isAbsolute, join, resolve } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 import { type Browser, chromium, type Locator, type Page } from "playwright"
@@ -3763,6 +3763,8 @@ ConvertTo-Json -InputObject @($rows) -Compress
 
         // A deterministic loopback provider emits real model tool calls. No production
         // execution entry point or approval gate is replaced for this acceptance.
+        const modelFixture = await stageOwnedTriagePe(join(dirname(sidecar), "resources", "binary-triage"), workspace)
+        await writeFile(join(evidence, "binary-triage-ai-owned-fixture.json"), JSON.stringify(modelFixture, null, 2))
         const triageModel = await startOwnedTriageModel()
         let modelSessionId: string | undefined
         try {
@@ -3792,6 +3794,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
                     visible.delete(requestId)
                 })
             for(const result of acceptance.results) {
+                if(result.targetSha256 !== modelFixture.sha256) throw new Error("Installed AI result is not bound to the staged owned PE")
                 const saved=await rpc<{receipt:Record<string,unknown>}>(page,"binary_triage_report",{sessionId:modelSessionId,environmentId:"local",id:result.receiptId})
                 if(saved.receipt === undefined) throw new Error("Installed AI result lacks a saved receipt")
             }
