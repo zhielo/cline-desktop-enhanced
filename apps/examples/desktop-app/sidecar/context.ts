@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { dirname } from "node:path";
 import {
 	type AgentToolContext,
+    BinaryTriageCallSchema,
 	type BasicLogger,
 	ClineCore,
 	type CoreSessionEvent,
@@ -1545,6 +1546,20 @@ export function createSidecarRuntimeCapabilities(
 						browser: owner.browserManager.executor,
 						computerUse: owner.computerUseManager.executor,
 						repository: createRepositoryExecutor(() => ctx.localWorkspaceRoot),
+                        binaryTriage: async (input, context) => {
+                         const parsed = BinaryTriageCallSchema.parse(input);
+                         const {executeModelBinaryTriage} = await import("./commands");
+                         return executeModelBinaryTriage(ctx,parsed,context,async details => {
+                          if (!context.sessionId || !context.toolCallId) return false;
+                          const result=await requestSidecarToolApproval(ctx,{
+                           sessionId:context.sessionId,agentId:context.agentId,
+                           conversationId:context.conversationId ?? context.sessionId,
+                           iteration:context.iteration,toolCallId:context.toolCallId,
+                           toolName:"reverse_engineer",input:details,policy:{autoApprove:false},
+                          },{signal:context.signal,timeoutMs:120_000});
+                          return result.approved;
+                         });
+                        },
 						investigation: async (name, input, context) => {
 							const { executeModelInvestigation } = await import("./commands");
 							return executeModelInvestigation(

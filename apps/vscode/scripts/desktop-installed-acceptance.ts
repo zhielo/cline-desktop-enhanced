@@ -1,3 +1,4 @@
+import { startOwnedTriageModel, waitOwnedTriageModel, enqueueOwnedTriageTurn, stageOwnedTriagePe } from "./owned-triage-model.ts"
 import { gunzipSync } from "node:zlib"
 /**
  * Windows CI only: attach to the installed app's own WebView2.
@@ -16,7 +17,7 @@ import { spawn } from "node:child_process"
 import { appendFile, mkdir, mkdtemp, open, readFile, stat, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
-import { basename, isAbsolute, join, resolve } from "node:path"
+import { basename, dirname, isAbsolute, join, resolve } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 import { type Browser, chromium, type Locator, type Page } from "playwright"
@@ -249,6 +250,22 @@ export function verifyInstalledAnalysisProfile(profile: string) {
 export async function openInstalledSavedSession(page: Pick<Page, "getByRole">, title: RegExp) {
 	await page.getByRole("button", { name: "Cline home", exact: true }).click()
 	await page.getByRole("button", { name: title }).first().click()
+}
+
+/** Read the real owning UI's approval cards. A second authenticated RPC socket
+ * is intentionally not allowed to read or answer another connection's reviews. */
+export async function visibleOwnedTriageApprovals(page: Pick<Page, "getByRole">) {
+ const cards = page.getByRole("region", {name:"reverse_engineer", exact:true})
+ const pending: Array<{requestId:string; toolName:string; input:Record<string,unknown>; approve:()=>Promise<void>}> = []
+ for(let i=0;i<await cards.count();i++) {
+  const card=cards.nth(i)
+  const text=await card.textContent()
+  const requestId=text?.match(/Request ([a-f0-9-]{36})(?:\s|·)/i)?.[1]
+  if(!requestId)throw new Error("Visible triage approval lacks a request identity")
+  const input=JSON.parse(await card.locator("pre").innerText())
+  pending.push({requestId,toolName:"reverse_engineer",input,approve:()=>card.getByRole("button",{name:"Approve",exact:true}).click()})
+ }
+ return pending
 }
 
 /** Read-only restart check. Never reconstruct or inject a lost device reference. */
@@ -3743,6 +3760,60 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		if (!replayDenied) throw new Error("Installed analysis replay was not blocked")
 		await writeFile(join(evidence, "binary-triage-owned-report.json"), JSON.stringify(report, null, 2))
 		stages.push("installed-binary-triage-target-report-scope-and-replay-passed")
+
+        // A deterministic loopback provider emits real model tool calls. No production
+        // execution entry point or approval gate is replaced for this acceptance.
+        const modelFixture = await stageOwnedTriagePe(join(dirname(sidecar), "resources", "binary-triage"), workspace)
+        await writeFile(join(evidence, "binary-triage-ai-owned-fixture.json"), JSON.stringify(modelFixture, null, 2))
+        const triageModel = await startOwnedTriageModel()
+        let modelSessionId: string | undefined
+        try {
+            const modelSession = await rpc<{sessionId:string}>(page,"chat_session_command",{request:{action:"start",config:{
+                sessionId:"installer-owned-ai-triage",environmentId:"local",cwd:workspace,workspaceRoot:workspace,
+                provider:"openai-compatible",model:"gpt-4o",apiKey:"owned-offline-fixture",
+                baseUrl:triageModel.baseUrl,enableTools:true,permissionProfile:"full-access",autoApproveTools:false,
+                initialMessages:[{id:"owned-ai-triage-start",role:"user",content:"Owned offline AI triage acceptance"}],
+            }}})
+            modelSessionId=modelSession.sessionId
+            await rpc(page,"update_chat_session_title",{sessionId:modelSessionId,environmentId:"local",title:"Installer AI triage"})
+            await page.reload()
+            await openInstalledSavedSession(page,/Installer AI triage/)
+            await rpc(page,"first_party_analysis_mode",{sessionId:modelSessionId,environmentId:"local",mode:"static"})
+            await enqueueOwnedTriageTurn(request => rpc<{queued?: boolean}>(page,"chat_session_command",{request}), modelSessionId)
+            const visible = new Map<string,()=>Promise<void>>()
+            const acceptance=await waitOwnedTriageModel(triageModel,
+                async ()=>{
+                    const items=await visibleOwnedTriageApprovals(page)
+                    for(const item of items) visible.set(item.requestId,item.approve)
+                    return items
+                },
+                async requestId=>{
+                    const approve=visible.get(requestId)
+                    if(!approve)throw new Error("Owning visible approval disappeared; no RPC fallback")
+                    await acceptanceAction("ui-owned-triage-approve",approve)
+                    visible.delete(requestId)
+                })
+            for(const result of acceptance.results) {
+                if(result.targetSha256 !== modelFixture.sha256) throw new Error("Installed AI result is not bound to the staged owned PE")
+                const saved=await rpc<{receipt:Record<string,unknown>}>(page,"binary_triage_report",{sessionId:modelSessionId,environmentId:"local",id:result.receiptId})
+                if(saved.receipt === undefined) throw new Error("Installed AI result lacks a saved receipt")
+            }
+            let finalObserved=false
+            const finalDeadline=Date.now()+30_000
+            while(Date.now()<finalDeadline) {
+                const transcript=await rpc<unknown[]>(page,"read_session_messages",{sessionId:modelSessionId,maxMessages:100})
+                if(JSON.stringify(transcript).includes("Owned AI triage acceptance complete:")) {finalObserved=true;break}
+                await delay(1000)
+            }
+            if(!finalObserved)throw new Error("Installed AI triage final response was not retained in the transcript")
+            await writeFile(join(evidence,"binary-triage-ai-model-acceptance.json"),JSON.stringify(acceptance,null,2))
+            stages.push("installed-ai-binary-triage-seven-operations-approval-and-evidence-passed")
+        } finally {
+            if(modelSessionId) await rpc(page,"chat_session_command",{request:{action:"stop",sessionId:modelSessionId}}).catch(()=>{})
+            await triageModel.close()
+        }
+        await settings(page, "Setup Center")
+
 
 		page.once("dialog", async (dialog) => {
 			if (dialog.message().includes("reviewed and accept")) await dialog.accept()

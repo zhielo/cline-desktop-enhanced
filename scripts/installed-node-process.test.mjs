@@ -4,6 +4,9 @@ import { ANALYSIS_PROFILE } from "../sdk/packages/core/src/analysis/profile.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { stageOwnedTriagePe, OWNED_TRIAGE_TARGET } from "../apps/vscode/scripts/owned-triage-model.ts";
 import {
 	withInstalledActionDeadline,
  installedBrowserRpc,
@@ -21,6 +24,7 @@ import {
 	waitForInstalledBackendEndpoint,
 	verifyInstalledAnalysisProfile,
  openInstalledSavedSession,
+ visibleOwnedTriageApprovals,
  verifyInstalledSourceReferenceStorage,
  verifyInstalledInvestigationCatalog,
 } from "../apps/vscode/scripts/desktop-installed-acceptance.ts";
@@ -544,4 +548,52 @@ test("installed skill catalog requires fixed namespaced instructions and plugin-
  assert.equal(verifyInstalledInvestigationCatalog(off,false,root),root);
  off.skills=[skills[0]];assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
  off.skills=[];off.runtimeCommands=catalog.runtimeCommands;assert.throws(()=>verifyInstalledInvestigationCatalog(off,false,root));
+});
+
+
+test("owned triage reviews use the visible owning approval card, never a second RPC connection", async () => {
+ const id="12345678-1234-1234-1234-123456789abc";
+ const input={independentStaticAnalysisApproval:true,requestHash:"a".repeat(64),targetSha256:"b".repeat(64),operation:"inspect_binary"};
+ let approved=0;
+ const card={
+  textContent:async()=>`reverse_engineer Request ${id} · Iteration 1`,
+  locator:selector=>{assert.equal(selector,"pre");return {innerText:async()=>JSON.stringify(input)};},
+  getByRole:(role,options)=>{assert.equal(role,"button");assert.deepEqual(options,{name:"Approve",exact:true});return {click:async()=>{approved++;}};},
+ };
+ const page={getByRole:(role,options)=>{assert.equal(role,"region");assert.deepEqual(options,{name:"reverse_engineer",exact:true});return {count:async()=>1,nth:index=>{assert.equal(index,0);return card;}};}};
+ const pending=await visibleOwnedTriageApprovals(page);
+ assert.equal(approved,0);
+ assert.equal(pending[0].requestId,id);
+ assert.deepEqual(pending[0].input,input);
+ await pending[0].approve();
+ assert.equal(approved,1);
+ card.textContent=async()=>"reverse_engineer Missing request identity";
+ await assert.rejects(visibleOwnedTriageApprovals(page),/lacks a request identity/);
+ assert.equal(approved,1);
+});
+
+test("AI triage stages only a manifest-bound structured PE, never the legacy MZ text marker", async () => {
+ const root=await mkdtemp(join(tmpdir(),"owned-triage-stage-"));
+ const pack=join(root,"pack"),workspace=join(root,"workspace");
+ await mkdir(pack);await mkdir(workspace);
+ const fixture=Buffer.alloc(512);
+ fixture.write("MZ");fixture.writeUInt32LE(128,0x3c);fixture.writeUInt32LE(0x00004550,128);
+ fixture.write("CLINE_OWNED_TRIAGE_FIXTURE_V1",256);
+ const hash=bytes=>createHash("sha256").update(bytes).digest("hex");
+ const seed=async(bytes,expected=hash(bytes))=>{
+  await writeFile(join(pack,"owned-fixture.exe"),bytes);
+  await writeFile(join(pack,"manifest.json"),"\uFEFF"+JSON.stringify({schemaVersion:1,files:{"owned-fixture.exe":expected}}));
+ };
+ try {
+  await seed(Buffer.from("MZCLINE_OWNED_TRIAGE_FIXTURE_V1"));
+  await assert.rejects(stageOwnedTriagePe(pack,workspace),/valid PE structure/);
+  await seed(fixture,"a".repeat(64));
+  await assert.rejects(stageOwnedTriagePe(pack,workspace),/pack manifest/);
+  const invalid=Buffer.from(fixture);invalid.writeUInt32LE(0xffffffff,0x3c);
+  await seed(invalid);await assert.rejects(stageOwnedTriagePe(pack,workspace),/valid PE structure/);
+  await seed(fixture);
+  assert.deepEqual(await stageOwnedTriagePe(pack,workspace),{target:OWNED_TRIAGE_TARGET,sha256:hash(fixture),bytes:512});
+  assert.deepEqual(await readFile(join(workspace,OWNED_TRIAGE_TARGET)),fixture);
+  await assert.rejects(stageOwnedTriagePe(pack,workspace),/EEXIST/);
+ } finally {await rm(root,{recursive:true,force:true});}
 });

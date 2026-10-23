@@ -1,3 +1,4 @@
+import { runModelBinaryTriage } from "./model-binary-triage";
 import { testSpecialistProfile } from "./setup-center";
 import { inspectInvestigationSkillPack, loadInvestigationSkills } from "./investigation-skills";
 import { resolveAnalysisTimeoutMs } from "../shared/analysis-budgets";
@@ -2881,6 +2882,38 @@ export async function executeModelInvestigation(
 	});
 }
 const binaryTriage = new BinaryTriageService();
+/** Not an RPC command. Called only by the host's dedicated binaryTriage capability. */
+export async function executeModelBinaryTriage(
+ ctx: SidecarContext, raw: unknown, context: AgentToolContext,
+ review: (details: Record<string, unknown>) => Promise<boolean>,
+): Promise<string> {
+ const id = context.sessionId;
+ if (!id || !context.agentId || !context.toolCallId) throw new Error("Owning model tool context required");
+ const binding = await getCommandSessionBinding(ctx,id,{sessionId:id});
+ if (!binding || binding.kind !== "local") throw new Error("Binary triage requires an owning local model session");
+ const saved = await binding.sessionManager.get(id);
+ const root = String(saved?.workspaceRoot || saved?.cwd || "");
+ if (!root) throw new Error("Owning workspace unavailable");
+ const workspace = realpathSync(root);
+ const originalLive = ctx.liveSessions.get(id);
+ const mode = firstPartyStore().session(id)?.mode ?? "off";
+ const store = (workflowStore ??= new AnalysisWorkflowStore(join(resolveClineDataDir(),"analysis-workspace","workflow.sqlite")));
+ return runModelBinaryTriage(raw,{
+  service:binaryTriage,store,scope:{sessionId:id,workspace},signal:context.signal,review,
+  assertCurrent(execution) {
+   const live = ctx.liveSessions.get(id);
+   const profile=live?.config.permissionProfile ?? live?.config.permission_profile ?? readGlobalSettings().permissionProfile ?? "full-access";
+   if (!live || live !== originalLive || live.transitioningProvider || profile !== "full-access" || realpathSync(root) !== workspace || (typeof live.config.workspaceRoot === "string" && realpathSync(live.config.workspaceRoot) !== workspace))
+    throw new Error("Owning triage session or Full Access permission changed");
+   if (execution) {
+    const active = firstPartyStore().session(id);
+    if (!["static","hybrid"].includes(mode) || !active || active.mode !== mode || active.workspace !== workspace)
+     throw new Error("Static or Hybrid Analysis and unchanged owning workspace required");
+   }
+  },
+ });
+}
+
 
 export async function handleCommand(
 	ctx: SidecarContext,

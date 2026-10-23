@@ -12,10 +12,20 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 68);
+	assert.equal(r.installedStages, 69);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
+	[
+		"missing installed AI binary triage proof",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(s: string) =>
+					s !==
+					"installed-ai-binary-triage-seven-operations-approval-and-evidence-passed",
+			);
+		},
+	],
 	[
 		"missing installed acquisition proof",
 		(e) => {

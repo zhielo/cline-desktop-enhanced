@@ -19,6 +19,9 @@ it("opening does not execute; explicit test failure is visible without replay",a
  try {
   await act(async()=>root.render(<BinaryTriageReadiness/>));
   expect(invoke.mock.calls.every(([n])=>n==="binary_triage_status")).toBe(true);
+  expect(host.textContent).toContain("AI route: supported on local Cline Desktop");
+  expect(host.textContent).toContain("Fixture tested: not ready");
+  expect(host.textContent).toContain("bundled neutral marker/header rules");
   const button=Array.from(host.querySelectorAll("button")).find(b=>b.textContent==="Test triage fixtures")!;
   await act(async()=>button.click());
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("r2-open:FileNotFoundError");

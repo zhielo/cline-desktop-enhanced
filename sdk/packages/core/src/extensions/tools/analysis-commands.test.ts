@@ -312,20 +312,22 @@ it("makes every Setup Center engine discoverable without inventing health or sta
 	);
 });
 
-it("exposes desktop-only specialist tools honestly instead of inventing AI execution routes", () => {
+it("exposes host-gated triage routes without implying installation or authorization", () => {
 	const catalog = analysisCommandCatalog().setupCapabilities;
-	expect(catalog.workbenchOnly.map((r) => r.id)).toEqual([
+	expect(catalog.binaryTriage.map((r) => r.id)).toEqual([
 		"radare2",
 		"yara",
 		"capa",
 		"floss",
 	]);
 	expect(
-		catalog.workbenchOnly.every(
-			(r) => r.availability === "trusted-desktop-workbench-only",
+		catalog.binaryTriage.every(
+			(r) => r.availability === "desktop-host-route-requires-readiness-and-approval",
 		),
 	).toBe(true);
-	expect(catalog.firstParty).toMatchObject({
+	expect(catalog.workbenchOnly).toEqual([]);
+    expect(catalog.binaryTriage.every(r => r.action === "binary_triage")).toBe(true);
+    expect(catalog.firstParty).toMatchObject({
 		tool: "reverse_engineer",
 		operation: "javascript_analysis",
 		savedEvidenceOperation: "analysis_evidence",

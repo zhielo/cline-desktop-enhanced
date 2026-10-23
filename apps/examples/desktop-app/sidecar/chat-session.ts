@@ -729,7 +729,7 @@ function buildCoreSessionConfig(
 		systemPrompt: [
 			suppliedSystemPrompt,
 			bridgeContract,
-			"First-party desktop analysis: reverse_engineer javascript_analysis is enabled only by the owning session Analysis mode. It parses confined JS/TS/Electron/ASAR without target execution. Use analysis_evidence receiptId views for bounded retained facts. Do not infer executed behavior from static calls, IPC candidates, loaded code, hashes or build success. Off blocks this parser only; runtime selection grants no extra permission. Missing capabilities must be reported, never silently approximated as verified.",
+			"Binary triage: reverse_engineer advanced_analysis binary_triage uses a local host route with fixed operations, matching selected-engine fixture readiness and separate approval. Use action status first. Static/Hybrid mode and Full Access are required to run; never use shell fallback. Saved action read is non-executing and remains available Off. YARA rules are neutral markers/headers only; FLOSS is PE static strings only. First-party desktop analysis: reverse_engineer javascript_analysis is enabled only by the owning session Analysis mode. It parses confined JS/TS/Electron/ASAR without target execution. Use analysis_evidence receiptId views for bounded retained facts. Do not infer executed behavior from static calls, IPC candidates, loaded code, hashes or build success. Off blocks this parser only; runtime selection grants no extra permission. Missing capabilities must be reported, never silently approximated as verified.",
 		]
 			.filter(Boolean)
 			.join("\n\n"),

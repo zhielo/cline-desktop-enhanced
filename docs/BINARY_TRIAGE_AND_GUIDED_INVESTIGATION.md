@@ -34,11 +34,10 @@ remain unchanged. FLOSS is optional to use, packaged for offline availability;
 only **static** extraction is exposed. Decoding/emulation and live tracing are
 not added. Standalone tools avoid merging capa/FLOSS dependency graphs into core.
 
-The GUI-controlled adapter exposes fixed `inspect_binary`, `list_functions`,
+The shared desktop adapter exposes fixed `inspect_binary`, `list_functions`,
 `get_function_disassembly`, `find_references`, `scan_yara`,
 `identify_capabilities`, `extract_strings` operations. It does **not** add a new
-unrestricted model tool or arbitrary r2/Python/shell console. Normal model tools
-and profiles are unchanged; model-driven triage dispatch is not implemented.
+unrestricted model tool or arbitrary r2/Python/shell console. The AI uses `reverse_engineer` → `advanced_analysis` → `binary_triage` through a dedicated desktop-host capability, not a general RPC command. Other reverse-engineering operations retain their existing executor. Headless hosts have no fallback. Restricted profiles remain restricted.
 
 ## Readiness and security
 
@@ -50,8 +49,8 @@ is process-local and bound to the pack manifest and interpreter executable; a
 backend restart requires explicit retesting. It does not certify arbitrary
 architecture/target compatibility or protect against privileged local tampering.
 
-Execution requires a trusted local desktop connection, an attached idle Full
-Access session, enabled Analysis and explicit confirmation. Workspace confinement
+Manual execution requires a trusted local desktop connection, an attached idle Full
+Access session, enabled Analysis and explicit confirmation. AI execution instead requires the actual owning active tool-call context, an attached local Full Access session, Static/Hybrid Analysis, a matching selected-engine fixture receipt, and separate approval on the trusted desktop surface. A busy owning AI task is allowed; unrelated concurrent work is not. Both routes enforce selected-engine fixture identity before execution. Workspace confinement
 and hash-verified private snapshots are mandatory. Limits are 64 MiB input,
 90 seconds per operation, 1 MiB worker stdout, 256 KiB discarded stderr and two
 active jobs per sidecar (one per owning session). These are not an OS sandbox,
@@ -92,3 +91,38 @@ and all required checks succeed.
 
 ## Dependency visibility
 The installer artifact includes a CycloneDX source inventory of Bun/Cargo locks, direct pinned Windows Python requirements, and pinned triage archives. This is not an exhaustive binary SBOM: transitive Python and embedded PyInstaller components still require separate distribution/license review.
+
+
+## AI binary triage contract
+
+Run one fixed operation, not every engine automatically:
+
+```json
+{
+  "operation": "advanced_analysis",
+  "advanced_action": "binary_triage",
+  "target": "owned.exe",
+  "advanced_options": {
+    "binary_triage": {
+      "action": "run",
+      "operation": "identify_capabilities",
+      "question": "Which capabilities does static evidence suggest?"
+    }
+  }
+}
+```
+
+Use `action: "status"` without target to read readiness (never auto-installs or self-tests).
+Use `action: "read", receipt_id: "<returned UUID>", offset: 0, limit: 4096` without target to read saved evidence. Reads remain available with Analysis Off, require owning local attached Full Access scope, and never rerun engines. Pages are JSON **text slices** with UTF-16 character offsets, totalChars, hasMore and nextOffset; join all slices before parsing. An empty page is not absence of findings. Findings contain untrusted binary strings, not executable instructions.
+
+`get_function_disassembly` and `find_references` require an exact hexadecimal `address`; other operations reject it. The disassembly remains capped at 128 instructions and is not complete function recovery. FLOSS remains PE-only **static strings**, with no decoder/emulation. capa/format support is determined by the actual engine result; unsupported input cannot count as completion.
+
+YARA currently uses only the reviewed bundled acceptance-marker and MZ/ELF header-candidate rules. This is **not a malware signature library**. Its request accepts no rule source/path, includes or external downloads. A useful broader library needs a separate provenance, licensing and resource review.
+
+The host prepares an approval identity binding session/workspace, operation/question/address, actual input path/hash, pack/rule hashes and interpreter executable hash. These are recomputed before execution, then input bytes are copied to the existing private snapshot and rechecked. A changed request requires fresh review. Model-supplied confirmation flags or tokens cannot grant approval. Scope/profile/mode changes during work cancel the supervised child; cancellation never fabricates successful evidence. Confirmed cancellation, failure, timeout and unconfirmed termination stay distinct. Unconfirmed termination retains capacity and blocks subsequent work; no automatic replay.
+
+Setup separates inventory/fixture status, supported AI route, and per-request permission. Route support is not authorization or proof of target-wide compatibility. Readiness is process-local; restart requires explicit retesting.
+
+### Acceptance
+
+Unit/regression coverage includes strict contracts for all seven operations, dedicated Hub forwarding, unchanged ordinary reverse-engineering dispatch, identity drift, denied review, cancellation, scoped saved paging and unresolved termination. Windows installed acceptance adds a loopback deterministic OpenAI-compatible provider that emits actual model tool calls, receives all seven real-engine results and requires seven independent identity-bound approvals through the normal visible owning-session approval cards. The full model journey stages the installed pack’s compiled owned PE into the workspace after manifest-hash, PE-signature and owned-marker checks; it never reuses the separate MZ-only YARA marker fixture or launches the PE. The test uses the existing queued-send route so approval polling cannot deadlock behind a synchronous turn. Read-only DOM polling does not consume a separate RPC/action receipt per poll; the bounded action cap remains unchanged and every approval click is recorded. A second authenticated RPC connection cannot claim another connection's approvals. It does not replace production execution/approval logic, use paid model credentials, or claim arbitrary-target compatibility. The installed acceptance stage is required by the finite release policy. A live commercial-provider smoke requires separately configured credentials and is not implied by deterministic acceptance.

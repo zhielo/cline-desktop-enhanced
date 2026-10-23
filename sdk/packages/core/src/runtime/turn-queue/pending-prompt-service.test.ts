@@ -290,3 +290,36 @@ describe("PendingPromptService", () => {
 		).toBe(true);
 	});
 });
+
+it("starts an idle queued turn without awaiting its approval-blocked execution", async () => {
+	const session = {
+		sessionId: "idle-owned",
+		pendingPrompts: [],
+		aborting: false,
+		drainingPendingPrompts: false,
+		status: "idle",
+		agent: { canStartRun: () => true },
+	} as unknown as ActiveSession;
+	let finish!: () => void;
+	const pendingTurn = new Promise<void>((resolve) => {
+		finish = resolve;
+	});
+	const send = vi.fn(() => pendingTurn);
+	const controller = new PendingPromptsController({
+		getSession: () => session,
+		emit: () => {},
+		send,
+	});
+	controller.enqueue(session.sessionId, {
+		prompt: "approved static analysis",
+		delivery: "queue",
+	});
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(send).toHaveBeenCalledTimes(1);
+	expect(session.drainingPendingPrompts).toBe(true);
+	expect(controller.list(session.sessionId)).toEqual([]);
+	finish();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(session.drainingPendingPrompts).toBe(false);
+	expect(send).toHaveBeenCalledTimes(1);
+});

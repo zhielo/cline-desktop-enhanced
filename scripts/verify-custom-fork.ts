@@ -324,6 +324,18 @@ const requiredMarkers: Array<{
 			"bun-lock-sha256",
 		],
 	},
+    {
+        path:"apps/examples/desktop-app/sidecar/model-binary-triage.ts",
+        markers:["BinaryTriageCallSchema.parse", "independentStaticAnalysisApproval", "expected: approval", "triageEvidencePage"],
+    },
+    {
+        path:"sdk/packages/core/src/extensions/tools/binary-triage-schema.ts",
+        markers:["BinaryTriageCallSchema", "get_function_disassembly", "receipt_id"],
+    },
+    {
+        path:"apps/vscode/scripts/owned-triage-model.ts",
+        markers:["OWNED_TRIAGE_SEQUENCE", "independentStaticAnalysisApproval", "independent.size !== 7"],
+    },
 	{
 		path: "apps/examples/desktop-app/sidecar/binary-triage.ts",
 		markers: [
