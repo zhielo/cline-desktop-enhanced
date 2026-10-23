@@ -171,3 +171,18 @@ export async function waitOwnedTriageModel(
 	}
 	throw new Error("Installed AI triage model acceptance timed out")
 }
+
+/** Queue through the normal idle-session route: immediate sends await the entire
+ * agent turn and would deadlock this driver before it polls tool approvals. */
+export async function enqueueOwnedTriageTurn(
+	send: (request: { action: "send"; sessionId: string; delivery: "queue"; prompt: string }) => Promise<{ queued?: boolean }>,
+	sessionId: string,
+) {
+	const reply = await send({
+		action: "send",
+		sessionId,
+		delivery: "queue",
+		prompt: "Analyze owned-triage.exe using the fixed binary triage operations. Use saved static evidence only.",
+	})
+	if (reply.queued !== true) throw new Error("Owned AI triage turn was not acknowledged by the normal queue")
+}

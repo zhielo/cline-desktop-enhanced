@@ -1,4 +1,4 @@
-import { startOwnedTriageModel, waitOwnedTriageModel } from "./owned-triage-model.ts"
+import { startOwnedTriageModel, waitOwnedTriageModel, enqueueOwnedTriageTurn } from "./owned-triage-model.ts"
 import { gunzipSync } from "node:zlib"
 /**
  * Windows CI only: attach to the installed app's own WebView2.
@@ -3758,7 +3758,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
             }}})
             modelSessionId=modelSession.sessionId
             await rpc(page,"first_party_analysis_mode",{sessionId:modelSessionId,environmentId:"local",mode:"static"})
-            await rpc(page,"chat_session_command",{request:{action:"send",sessionId:modelSessionId,prompt:"Analyze owned-triage.exe using the fixed binary triage operations. Use saved static evidence only."}})
+            await enqueueOwnedTriageTurn(request => rpc<{queued?: boolean}>(page,"chat_session_command",{request}), modelSessionId)
             const acceptance=await waitOwnedTriageModel(triageModel,
                 ()=>rpc(page,"poll_tool_approvals",{sessionId:modelSessionId}),
                 requestId=>rpc(page,"respond_tool_approval",{sessionId:modelSessionId,requestId,approved:true}))

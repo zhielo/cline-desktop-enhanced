@@ -125,3 +125,24 @@ it("real provider adapter parses the owned SSE tool call and serializes saved to
 		await model.close();
 	}
 });
+
+it("queues the installed AI turn without waiting for approvals and rejects missing acknowledgement", async () => {
+	const { enqueueOwnedTriageTurn } = await import(
+		"../../../vscode/scripts/owned-triage-model"
+	);
+	const requests: unknown[] = [];
+	await enqueueOwnedTriageTurn(async (request) => {
+		requests.push(request);
+		return { queued: true };
+	}, "owned-session");
+	expect(requests).toEqual([
+		expect.objectContaining({
+			action: "send",
+			sessionId: "owned-session",
+			delivery: "queue",
+		}),
+	]);
+	await expect(
+		enqueueOwnedTriageTurn(async () => ({}), "owned-session"),
+	).rejects.toThrow("not acknowledged");
+});
