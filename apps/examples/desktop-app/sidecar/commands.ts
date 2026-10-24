@@ -6332,7 +6332,10 @@ export async function handleCommand(
 					"decompile",
 					"disassemble_smali",
  "read_smali_method", "search_smali", "assemble_smali", "rebuild_apk", "align_apk", "sign_apk", "validate_android_container",
-				].includes(operation)
+				].includes(operation) &&
+                !(operation === "javascript_analysis" &&
+                    typeof rawInput.javascript_options === "object" && rawInput.javascript_options &&
+                    ("artifactReader" in rawInput.javascript_options || "bundleRecovery" in rawInput.javascript_options))
 			) {
 				throw new Error(
 					"This workbench action is not part of the static-analysis allowlist.",
@@ -6351,6 +6354,15 @@ export async function handleCommand(
    const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"read-only";
    if(!live||(!modelRecovery&&live.busy)||live.transitioningProvider||profile!=="full-access")throw new Error("Candidate construction/signing requires an idle Full Access owning session or its exact host-approved recovery export; restricted profiles are not widened");
   }
+        const sessionOwnedParser = input.operation === "export_bundle_recovery" ||
+            (input.operation === "javascript_analysis" &&
+                (input.javascript_options?.artifactReader || input.javascript_options?.bundleRecovery));
+        const parserOwner = String(args?.sessionId ?? "");
+        if (sessionOwnedParser) {
+            const binding = firstPartyStore().session(parserOwner);
+            if (!binding || binding.workspace !== realpathSync(baseDir))
+                throw new Error("Parser evidence requires its exact owning session workspace");
+        }
   const planId = String(args?.planId ?? "").trim();
 		const executionToken = String(args?.executionToken ?? "").trim();
 		await desktopAnalysisTaskOrchestrator.consume({
@@ -6360,11 +6372,10 @@ export async function handleCommand(
 			kind: command === "open_analysis_gui" ? "gui" : "static",
 			request: input,
 		});
+
 		const executionContext = {
 			...toolContext,
-			...(input.operation === "export_bundle_recovery"
-				? { sessionId: String(args?.sessionId ?? "") }
-				: {}),
+			...(sessionOwnedParser ? { sessionId: parserOwner } : {}),
 			signal: desktopAnalysisTaskOrchestrator.signal(planId),
 		};
 		let result: string;

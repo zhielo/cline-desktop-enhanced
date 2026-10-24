@@ -144,3 +144,20 @@ checks; no "same or higher than REA" certification is claimed.
   profile regression: 46 passed; model routing: 5 passed. SDK build and
   desktop/WebView types passed. Final error-level lint, quick verification and desktop/WebView types passed.
   Exact published-head CI remains required.
+
+## Full host journey follow-up
+
+- Added fixed parser dispatch for metadata/recovery options and validated exact
+  owning-session workspace before consuming the one-use plan. Evidence creation
+  and export now use that same chat session, not the workspace process owner.
+- Actual model-host transaction sequence (scripted decisions, not an LLM):
+  immutable artifact open -> separately reviewed recovery -> supervised parser ->
+  owning saved receipt -> metadata inspection of an owned PyInstaller CArchive ->
+  separate Modify review -> no-overwrite recovery export. All 99 tests in the
+  three host suites passed with this strengthened regression.
+- The three formerly skipped semantic/application/fuse parity tests were run
+  against separately fetched reference d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f
+  and passed. This does not certify full parity with current REA.
+- A concurrent local consolidated run suffered an OS-killed TypeScript process
+  (137); this is a failed gate, not a typecheck pass. Rerun serially on the final
+  published source. No release gate was removed or downgraded.

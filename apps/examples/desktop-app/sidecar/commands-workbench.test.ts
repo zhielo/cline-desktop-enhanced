@@ -343,7 +343,7 @@ it("JSON-shaped model grants cannot authorize recovery export or arbitrary write
 it("publishes a real saved recovery through the approved owning busy model host route", async () => {
 	const { randomUUID } = await import("node:crypto"),
 		{ readFile } = await import("node:fs/promises"),
-		{ byteDigest, digest, runFirstPartyAnalysis } = await import("@cline/core"),
+		{ byteDigest, digest } = await import("@cline/core"),
 		{ execFileSync } = await import("node:child_process"),
 		{ fileURLToPath } = await import("node:url"),
 		{ firstPartyStore } = await import("./first-party-analysis");
@@ -355,37 +355,25 @@ it("publishes a real saved recovery through the approved owning busy model host 
 		),
 		target = join(workspace, "bundle.js");
 	writeFileSync(target, source);
-	const input = {
-			target,
-			bundleRecovery: { expectedSha256: byteDigest(source) },
-		},
-		store = firstPartyStore();
+	const store = firstPartyStore();
 	store.setMode(id, workspace, "static");
 	const executable = execFileSync(
 		"bun",
 		["--eval", "console.log(process.execPath)"],
 		{ encoding: "utf8" },
 	).trim();
-	const receipt = await runFirstPartyAnalysis(
-		id,
-		input,
-		undefined,
-		store,
-		JSON.stringify({
-			executable,
-			args: [
-				fileURLToPath(
-					new URL(
-						"../../../../scripts/semantic-worker-entry.ts",
-						import.meta.url,
-					),
+	const previousHost = process.env.CLINE_FIRST_PARTY_ANALYSIS_HOST;
+	process.env.CLINE_FIRST_PARTY_ANALYSIS_HOST = JSON.stringify({
+		executable,
+		args: [
+			fileURLToPath(
+				new URL(
+					"../../../../scripts/semantic-worker-entry.ts",
+					import.meta.url,
 				),
-			],
-		}),
-	);
-	expect(receipt.status, receipt.error).toBe("partial");
-	const result = receipt.result!,
-		receiptId = receipt.id;
+			),
+		],
+	});
 	const saved = {
 		id,
 		status: "idle",
@@ -414,6 +402,70 @@ it("publishes a real saved recovery through the approved owning busy model host 
 		)) as { id: string };
 		live.busy = true;
 		saved.status = "running";
+		const recoveryRaw = await executeModelInvestigation(
+			context,
+			"recover_bundle_sources",
+			{ artifactId: artifact.id },
+			{
+				sessionId: id,
+				agentId: "owned-agent",
+				toolCallId: "owned-recovery",
+			} as never,
+			async (details) => {
+				expect(details).toMatchObject({ independentAnalysisApproval: true });
+				return true;
+			},
+		);
+		const recovered = JSON.parse(recoveryRaw).result;
+		expect(recovered.status, recovered.error).toBe("partial");
+		const receiptId = recovered.id,
+			result = store.get(id, receiptId).result!;
+		expect(result.bundleRecovery?.modules).toHaveLength(1);
+		const name = Buffer.from("owned.pyc\0"),
+			toc = Buffer.alloc(18 + name.length),
+			cookie = Buffer.alloc(88);
+		toc.writeUInt32BE(toc.length);
+		toc.writeUInt32BE(3, 8);
+		toc.writeUInt32BE(3, 12);
+		toc[17] = 115;
+		name.copy(toc, 18);
+		Buffer.from("MEI\x0c\x0b\x0a\x0b\x0e").copy(cookie);
+		cookie.writeUInt32BE(3 + toc.length + 88, 8);
+		cookie.writeUInt32BE(3, 12);
+		cookie.writeUInt32BE(toc.length, 16);
+		cookie.writeUInt32BE(313, 20);
+		cookie.write("python313.dll", 24);
+		const archive = join(workspace, "owned-pyinstaller.bin");
+		writeFileSync(archive, Buffer.concat([Buffer.from("abc"), toc, cookie]));
+		const archiveArtifact = JSON.parse(
+			await executeModelInvestigation(
+				context,
+				"open_binary",
+				{ target: archive },
+				{
+					sessionId: id,
+					agentId: "owned-agent",
+					toolCallId: "owned-open-metadata",
+				} as never,
+				async () => true,
+			),
+		) as { id: string };
+		const metadataRaw = await executeModelInvestigation(
+			context,
+			"inspect_artifact_metadata",
+			{ artifactId: archiveArtifact.id, reader: "pyinstaller" },
+			{
+				sessionId: id,
+				agentId: "owned-agent",
+				toolCallId: "owned-metadata",
+			} as never,
+			async () => true,
+		);
+		const metadata = JSON.parse(metadataRaw).result;
+		expect(metadata.status, metadata.error).toBe("partial");
+		expect(store.get(id, metadata.id).result?.artifactMetadata?.reader).toBe(
+			"pyinstaller",
+		);
 		let reviews = 0;
 		const raw = await executeModelInvestigation(
 			context,
@@ -447,5 +499,8 @@ it("publishes a real saved recovery through the approved owning busy model host 
 		expect(published.report.sourceSha256).toBe(byteDigest(source));
 	} finally {
 		store.setMode(id, workspace, "off");
+		if (previousHost === undefined)
+			delete process.env.CLINE_FIRST_PARTY_ANALYSIS_HOST;
+		else process.env.CLINE_FIRST_PARTY_ANALYSIS_HOST = previousHost;
 	}
 });
