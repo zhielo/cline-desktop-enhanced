@@ -25,7 +25,10 @@ function sourcePath(value: string, workspace: string): string | undefined {
 			if (url.hostname || url.search || url.hash) return;
 			path = /^\/[a-z]:\//i.test(url.pathname)
 				? decodeURIComponent(url.pathname.slice(1))
-				: fileURLToPath(url);
+				// The evidence's path namespace, not the host running this saved
+				// query, determines URL decoding. Windows callers may review a
+				// retained POSIX workspace without opening any of its paths.
+				: fileURLToPath(url, { windows: false });
 		} catch {
 			return;
 		}
