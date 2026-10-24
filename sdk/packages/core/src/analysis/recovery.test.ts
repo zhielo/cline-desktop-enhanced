@@ -194,3 +194,50 @@ it("actual exited owner and worker instances can release a reservation after res
 		await stop(worker);
 	}
 }, 20000);
+
+it("does not release a proved-dead leader while a bound descendant group may remain", async () => {
+	const r = receipt();
+	const { binding: _binding, ...proof } = r.ownership!;
+	const extended = {
+		...proof,
+		descendants: { kind: "linux-private-process-group" as const, id: r.pid! },
+	};
+	r.ownership = { ...extended, binding: ownershipBinding(r, extended) };
+	r.status = "termination-unconfirmed";
+	store.save(r);
+	for (const groupGone of [
+		() => false,
+		() => {
+			throw new Error("unavailable");
+		},
+	])
+		await expect(
+			recoverFirstPartyReservation("s", r.id, store, { ...gone, groupGone }),
+		).rejects.toThrow();
+	expect(store.summaries("s")[0].reservationReleasedAt).toBeNull();
+	const audit = await recoverFirstPartyReservation("s", r.id, store, {
+		...gone,
+		groupGone: () => true,
+	});
+	expect(audit.bodyHash).toBe(digest(store.get("s", r.id)));
+});
+
+it("binds descendant identity to its private group leader rather than an arbitrary PID", async () => {
+	const r = receipt();
+	const { binding: _binding, ...proof } = r.ownership!;
+	const extended = {
+		...proof,
+		descendants: {
+			kind: "linux-private-process-group" as const,
+			id: r.pid! + 1,
+		},
+	};
+	r.ownership = { ...extended, binding: ownershipBinding(r, extended) };
+	store.save(r);
+	await expect(
+		recoverFirstPartyReservation("s", r.id, store, {
+			...gone,
+			groupGone: () => true,
+		}),
+	).rejects.toThrow("Invalid process-instance");
+});

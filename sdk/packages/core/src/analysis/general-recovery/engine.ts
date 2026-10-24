@@ -1,3 +1,4 @@
+import { privateProcessGroupGone } from "../../runtime/private-process-group";
 /** Fixed OS-bounded native parser adapter; not yet a public execution route. Never runs target code. */
 import { constants, realpathSync } from "node:fs";
 import { lstat, mkdtemp, open, opendir, rm, writeFile } from "node:fs/promises";
@@ -13,6 +14,14 @@ import {
 	WAKARU_REVISION,
 	type GeneralRecoveryReport,
 } from "./contracts";
+export class GeneralRecoveryTerminationUnconfirmedError extends Error {
+	constructor() {
+		super(
+			"Recovery descendant termination was not confirmed; private scratch retained",
+		);
+		this.name = "GeneralRecoveryTerminationUnconfirmedError";
+	}
+}
 const MAX_FILE = 1024 * 1024;
 const MAX_TOTAL = 2 * 1024 * 1024;
 const MAX_ENTRIES = 512;
@@ -251,7 +260,15 @@ export async function runPinnedGeneralRecovery(
 		);
 		clearInterval(monitor);
 		monitor = undefined;
-		if (result.outputDrainTimedOut) cleanupConfirmed = false;
+		if (
+			result.outputDrainTimedOut ||
+			(platform === "linux" &&
+				result.pid &&
+				!privateProcessGroupGone(result.pid))
+		)
+			cleanupConfirmed = false;
+		if (!cleanupConfirmed)
+			throw new GeneralRecoveryTerminationUnconfirmedError();
 		if (budgetError) throw budgetError;
 		if (
 			result.exitCode !== 0 ||
@@ -367,7 +384,7 @@ export async function runPinnedGeneralRecovery(
 			limitations: [
 				"Structural single-input recovery with minimal rewrites only. No claim of original names, full recovery or runtime equivalence; transformed source hashes are separate from original input-range hashes.",
 				"Recovered modules and maps are inert data. No import, target execution, source-map fetch, package installation or automatic publication occurs.",
-				"Fixed 1 MiB input, 128 modules, 2 MiB admitted file output, entry/depth and 45-second process budgets. Polling output monitoring is not a hard disk quota; process separation is not an OS sandbox or a hard memory quota.",
+				"Fixed 1 MiB input, 128 modules, 2 MiB admitted file output, entry/depth and 45-second process budgets. Windows job commit and Linux per-process address/CPU/file limits apply. Output polling is not a hard disk quota or a filesystem/network sandbox.",
 			],
 		});
 	} finally {

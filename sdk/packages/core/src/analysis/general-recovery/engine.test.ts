@@ -1,13 +1,29 @@
-import { afterEach, expect, it } from "vitest";
-import { writeFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import * as groupProbe from "../../runtime/private-process-group";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+	writeFile,
+	mkdir,
+	mkdtemp,
+	readFile,
+	readdir,
+	rm,
+} from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { byteDigest } from "../contracts";
-import { runPinnedGeneralRecovery, safeRecoveryName } from "./engine";
+import {
+	runPinnedGeneralRecovery,
+	safeRecoveryName,
+	GeneralRecoveryTerminationUnconfirmedError,
+} from "./engine";
 import { WAKARU_PINS } from "./contracts";
+const previousTemp = process.env.TMPDIR;
 const original = process.env.CLINE_BUNDLED_ANALYSIS_ROOT;
 const scratch: string[] = [];
 afterEach(async () => {
+	vi.restoreAllMocks();
+	if (previousTemp === undefined) delete process.env.TMPDIR;
+	else process.env.TMPDIR = previousTemp;
 	if (original === undefined) delete process.env.CLINE_BUNDLED_ANALYSIS_ROOT;
 	else process.env.CLINE_BUNDLED_ANALYSIS_ROOT = original;
 	for (const p of scratch.splice(0))
@@ -125,5 +141,37 @@ it.skipIf(!pinnedRoot)(
 				),
 			),
 		).toBe(report.engineSha256);
+	},
+);
+
+it.skipIf(!pinnedRoot || process.platform !== "linux")(
+	"retains private scratch when a native leader exits but descendant absence is unconfirmed",
+	async () => {
+		process.env.CLINE_BUNDLED_ANALYSIS_ROOT = pinnedRoot!;
+		const root = await mkdtemp(
+			path.join(tmpdir(), "cline-recovery-retention-"),
+		);
+		scratch.push(root);
+		process.env.TMPDIR = root;
+		const actualProbe = groupProbe.privateProcessGroupGone;
+		const probe = vi
+			.spyOn(groupProbe, "privateProcessGroupGone")
+			.mockReturnValue(false);
+		const source = Buffer.from(
+			"(function(m){return m[0]({exports:{}})})([function(module){module.exports=42;}]);",
+		);
+		await expect(
+			runPinnedGeneralRecovery(source, byteDigest(source)),
+		).rejects.toBeInstanceOf(GeneralRecoveryTerminationUnconfirmedError);
+		expect(probe).toHaveBeenCalledOnce();
+		// Only our simulated probe failed; the real fixed engine is already gone.
+		// Never clean a possibly live native workspace in production.
+		expect(actualProbe(probe.mock.calls[0][0])).toBe(true);
+		const retained = await readdir(root);
+		expect(retained).toHaveLength(1);
+		expect(retained[0]).toMatch(/^cline-general-recovery-/);
+		expect(await readFile(path.join(root, retained[0], "input.js"))).toEqual(
+			source,
+		);
 	},
 );

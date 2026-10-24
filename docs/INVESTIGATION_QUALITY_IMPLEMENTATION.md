@@ -305,3 +305,22 @@ checks; no "same or higher than REA" certification is claimed.
   and parser-parent/descendant durable ownership still remain incomplete. The
   existing literal recovery is not silently replaced. PR #155 must not merge
   before completing those paths and final exact-head Windows release gates.
+
+## Descendant-aware recovery confirmation
+
+- Added an absence-only Linux private-process-group probe. It never sends a
+  termination signal, adopts a process, kills a replacement PID or interprets
+  permission/probe failure as absence. Kernel-tested cases distinguish an exited
+  leader with a surviving owned descendant from a fully absent private group.
+- Reservation ownership can now bind its original private descendant group into
+  the immutable proof. If present, both original process instances and the group
+  must be proved gone before admission is released. Group/leader mismatches and
+  uncertain probes fail closed; old single-parser proofs retain existing behavior.
+- The internal native recovery adapter checks group absence after Linux process
+  drainage. Unconfirmed drainage or descendants produce a typed failure and retain
+  private scratch, rather than deleting a tree a process could still write. A
+  real pinned-engine fault-injection regression verifies this retention boundary.
+- This is necessary lifecycle groundwork, NOT completion of general recovery's
+  public/native-owner launch, receipt/export or installed packaging path. The
+  existing parser still must not casually nest the native engine. Windows uses
+  the already tested Job Object owner; Linux-only probes never replace that.

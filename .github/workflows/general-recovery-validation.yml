@@ -37,7 +37,7 @@ jobs:
           CLINE_TEST_WAKARU_ROOT: ${{ runner.temp }}/general-runtime
         run: |
           set -o pipefail
-          bunx vitest run src/analysis/general-recovery/engine.test.ts src/runtime/windows-job-launcher.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
+          bunx vitest run src/analysis/general-recovery/engine.test.ts src/runtime/windows-job-launcher.test.ts src/runtime/private-process-group.test.ts src/analysis/recovery.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
       - name: Score and exercise investigation model transport (not a live model)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         shell: bash
