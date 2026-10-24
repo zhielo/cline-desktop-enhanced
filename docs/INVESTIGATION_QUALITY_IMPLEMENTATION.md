@@ -383,3 +383,13 @@ historical validation records, not current blockers.
   the validator's pre-existing control-character sanitizers were not rewritten.
 - Workflow YAML parsed and whitespace checks passed. These local checks do not
   certify final-head Windows installation, arbitrary targets or REA feature parity.
+
+### Reviewed release recipe fingerprint refresh
+
+The first consolidated integration run correctly failed six release-policy
+assertions after the installer recipe and consolidated parser test inventory
+changed. The fingerprint guard was retained. The reviewed installer and validator
+hashes were refreshed; the new general-recovery workflow is now fingerprinted and
+both pinned Windows/Linux recovery checks are mandatory. New regressions require
+both checks to fail closed when skipped. Focused verifier/collector tests passed;
+full consolidated validation must rerun on the resulting published commit.

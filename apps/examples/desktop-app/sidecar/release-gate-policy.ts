@@ -4,6 +4,8 @@ export const RELEASE_GATE_POLICY = {
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
+		"Pinned general recovery (ubuntu-latest)",
+		"Pinned general recovery (windows-latest)",
 		"Owned angr fixture (ubuntu-latest)",
 		"Owned angr fixture (windows-latest)",
 		"Owned isolated-worker protocol and PE emulation",
@@ -157,16 +159,18 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+		".github/workflows/general-recovery-validation.yml":
+			"42b793b4699b512cc776ce8dfe4249c516b0a825f1e4e86f05bffd9ee65bcdac",
         "apps/vscode/scripts/owned-triage-model.ts": "49b6f1cc1c4477689e31eb47330fae0f9454630532efa46b347ed524d2daa0fd",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":
 			"9bf4c84a47e3e302ba4c35eaa67d9cb650896c2d1caba1e6b49e884aca27b972",
 		".github/workflows/build-custom-windows-installer.yml":
-			"145ab2e0156e064adcb32d25a87e9769c78ae19655e270e150a6f61c7d757d81",
+			"4d5ca3ba5bbd1d4bda2391421449ecb027cdaabfcfd68bbe4288c16a91592c36",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"b2c81437eed5f19f79335292b15be60608c0f37a3882567a33ba2128563491ff",
 		"scripts/validate-advanced-build.mjs":
-			"cad3beadd8c9e5605922dd6e4dd50b529b9ed57ed872e37f936ff3fffef9fef2",
+			"c48eb8c926c4ba0691baa967339812977a08563d9c4b9b6543440eb67aafddeb",
 	},
 } as const;
