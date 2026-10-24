@@ -170,7 +170,7 @@ it.skipIf(!pinned)(
 			store.close();
 		}
 	},
-	30000,
+	process.platform === "win32" ? 90000 : 30000,
 );
 it("pre-cancelled owning native requests do not spawn or retain successful evidence", async () => {
 	const { root, store, input } = await fixture();
@@ -246,5 +246,5 @@ it.skipIf(!pinned)(
 			store.close();
 		}
 	},
-	30000,
+	process.platform === "win32" ? 90000 : 30000,
 );

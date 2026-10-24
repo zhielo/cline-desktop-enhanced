@@ -38,5 +38,5 @@ it.skipIf(!process.env.CLINE_TEST_WAKARU_ROOT)(
 			verifiedBehavior: false,
 		});
 	},
-	30000,
+	process.platform === "win32" ? 90000 : 30000,
 );

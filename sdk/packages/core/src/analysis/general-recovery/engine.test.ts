@@ -143,6 +143,8 @@ it.skipIf(!pinnedRoot)(
 			),
 		).toBe(report.engineSha256);
 	},
+	// Outlast the fixed 50s host supervisor on cold Windows CI.
+	process.platform === "win32" ? 90000 : 20000,
 );
 
 it.skipIf(!pinnedRoot || process.platform !== "linux")(
