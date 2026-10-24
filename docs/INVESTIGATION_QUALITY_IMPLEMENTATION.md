@@ -281,3 +281,27 @@ checks; no "same or higher than REA" certification is claimed.
 - Public routing, parser-parent/descendant cancellation ownership, installed
   packaging and saved/export integration are still incomplete. Do not silently
   substitute this internal adapter for the existing literal recovery route.
+
+## Production model transport evaluation foundation
+
+- Exact head `4b9e605e` passed Windows semantic-source parity (run
+  40081976837) and Windows/Linux pinned general recovery (run 40081976695),
+  including the real Windows Job stdin/deadline regressions. Other final release
+  checks and installer acceptance are not implied by these results.
+- Added strict known-answer scoring and a genuinely opt-in production Agent
+  harness for two synthetic source/metadata journeys. Real host reviews, parser
+  execution, owning-session saved reads and exact input hashes are required.
+  Unsupported execution/reconstruction claims and invented evidence fail.
+- Credential-free loopback streaming preflight passes both complete journeys
+  through the real provider transport and host tools (8 requests). It is labeled
+  scripted and `liveModel: false`; this is NOT a live-model evaluation. Normal
+  tests skip real-provider calls. The harness includes the verified bundled skill,
+  uses a temporary data root and never reads production provider configuration.
+- No live model endpoint/credentials were configured for this validation. Actual
+  model quality remains unverified; two cases would still not certify REA parity.
+  Usage and duration are retained, raw provider errors/secrets/transcripts are not.
+  See `INVESTIGATION_MODEL_EVALUATION.md` for repeatable runs and exact limits.
+- General recovery public routing, installed packaging, saved/export integration
+  and parser-parent/descendant durable ownership still remain incomplete. The
+  existing literal recovery is not silently replaced. PR #155 must not merge
+  before completing those paths and final exact-head Windows release gates.

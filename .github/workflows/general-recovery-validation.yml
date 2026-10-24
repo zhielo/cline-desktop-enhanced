@@ -38,6 +38,13 @@ jobs:
         run: |
           set -o pipefail
           bunx vitest run src/analysis/general-recovery/engine.test.ts src/runtime/windows-job-launcher.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
+      - name: Score and exercise investigation model transport (not a live model)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          (cd apps/examples/desktop-app && bunx vitest run sidecar/investigation-eval-score.test.ts sidecar/investigation-model.live.test.ts --config vitest.config.mts)
+          node scripts/test-investigation-model-transport.mjs
       - name: Retain bounded engine validation diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
