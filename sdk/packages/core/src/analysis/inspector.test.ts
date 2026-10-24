@@ -10,6 +10,9 @@ import {
 } from "./inspector";
 import { probeProcessStartTokenAsync } from "../runtime/process-start-token";
 import { byteDigest } from "./contracts";
+import { randomUUID } from "node:crypto";
+import { ANALYSIS_PROFILE, digest } from "./contracts";
+import { correlateSavedEvidence } from "./correlation";
 it(
 	"observes exact owned paused Node source without executing it, and rejects a mismatched PID",
 	async () => {
@@ -152,6 +155,23 @@ it("reconciles a loaded running owned script by exact source bytes", async () =>
 			),
 		).toBe(true);
 		expect(result.verifiedBehavior).toBe(false);
+		const sha256 = byteDigest(Buffer.from(text));
+		const scope = {sessionId:"owned-inspector-fixture",workspace:root};
+		const staticResult = {
+			profile:ANALYSIS_PROFILE,parserVersion:"owned-source-fixture",status:"completed",
+			artifacts:[{path:"loaded.js",sha256,bytes:Buffer.byteLength(text),role:"source"}],
+			facts:[],edges:[],limitations:[],counters:{entries:1,bytes:Buffer.byteLength(text),nodes:0},
+		};
+		const snapshot = {
+			...scope,id:"c".repeat(64),taskId:randomUUID(),domain:"debugger",operation:"js_inspector_observe",
+			tool:"node-inspector-passive",targetSha256:sha256,resultHash:digest(result),
+			requestHash:"a".repeat(64),at:new Date().toISOString(),result,
+		};
+		const correlation=correlateSavedEvidence(scope,{
+			...scope,id:randomUUID(),status:"completed",result:staticResult,resultHash:digest(staticResult),
+		},[{...snapshot,snapshotHash:digest(snapshot)}]);
+		expect(correlation.inspectorSources[0].scripts.some(s=>s.classification==="exact-location-and-byte-match")).toBe(true);
+		expect(correlation.inspectorSources[0].verifiedExecution).toBe(false);
 	} finally {
 		const done = new Promise<void>((resolve) => {
 			if (child.exitCode !== null || child.signalCode !== null) resolve();

@@ -224,3 +224,157 @@ it("retains only hash-matched native RVA observations from mixed static/runtime 
 			.runtimeObservations,
 	).toEqual([]);
 });
+
+it("reconciles retained Inspector bytes without trusting staticMatch or fetching source maps", () => {
+	const f = fixture();
+	const wrap = (scripts: unknown[], extra: Record<string, unknown> = {}) => {
+		const result = {
+			protocol: "cline-js-inspector/2",
+			status: "completed",
+			input: { sha256: hash },
+			scripts,
+			...extra,
+		};
+		const { snapshotHash: _, ...raw } = {
+			...f.snapshot,
+			tool: "node-inspector-passive",
+			result,
+			resultHash: digest(result),
+		};
+		return { ...raw, snapshotHash: digest(raw) };
+	};
+	const report = correlateSavedEvidence(scope, f.receipt, [
+		wrap([
+			{
+				scriptId: "1",
+				url: "file:///owned/owned.js",
+				status: "loaded",
+				sha256: hash,
+				staticMatch: false,
+			},
+			{
+				scriptId: "2",
+				url: "file:///owned/owned.js",
+				status: "loaded",
+				sha256: "d".repeat(64),
+				staticMatch: true,
+			},
+			{ scriptId: "3", url: "file:///owned/owned.js", status: "loaded" },
+			{
+				scriptId: "4",
+				url: "https://example.invalid/secret?token=never-export",
+				status: "loaded",
+				sha256: hash,
+			},
+			{ scriptId: "5", url: "node:untrusted", status: "loaded" },
+			{
+				scriptId: "6",
+				url: "file:///owned/owned.js",
+				status: "loaded",
+				sha256: "bad",
+			},
+		]),
+	]);
+	expect(report.inspectorSources[0]).toMatchObject({
+		providerAdmitted: true,
+		verifiedExecution: false,
+	});
+	expect(
+		report.inspectorSources[0].scripts.map((s) => s.classification),
+	).toEqual([
+		"exact-location-and-byte-match",
+		"source-byte-mismatch",
+		"location-only-unverified",
+		"exact-byte-match-location-unresolved",
+		"unresolved",
+		"invalid-script-record",
+	]);
+	expect(JSON.stringify(report)).not.toContain("never-export");
+	const { evidenceHash, ...body } = report;
+	expect(evidenceHash).toBe(digest(body));
+	for (const extra of [
+		{ protocol: "forged" },
+		{ input: { sha256: "d".repeat(64) } },
+	]) {
+		const denied = correlateSavedEvidence(scope, f.receipt, [wrap([], extra)]);
+		expect(denied.inspectorSources[0]).toMatchObject({
+			providerAdmitted: false,
+			scripts: [],
+		});
+	}
+});
+
+it("keeps duplicate-byte ambiguity and exact-location contradictions instead of choosing another source", () => {
+	const f = fixture();
+	f.receipt.result.artifacts.push({
+		path: "copy.js",
+		sha256: hash,
+		bytes: 12,
+		role: "source",
+	});
+	f.receipt.resultHash = digest(f.receipt.result);
+	const result = {
+		protocol: "cline-js-inspector/2",
+		status: "partial",
+		input: { sha256: hash },
+		scripts: [
+			{
+				scriptId: "1",
+				url: "webpack://unknown",
+				status: "loaded",
+				sha256: hash,
+			},
+			{
+				scriptId: "2",
+				url: "file:///owned/copy.js",
+				status: "loaded",
+				sha256: "d".repeat(64),
+			},
+		],
+	};
+	const { snapshotHash: _, ...raw } = {
+		...f.snapshot,
+		tool: "node-inspector-passive",
+		result,
+		resultHash: digest(result),
+	};
+	const r = correlateSavedEvidence(scope, f.receipt, [
+		{ ...raw, snapshotHash: digest(raw) },
+	]);
+	expect(r.inspectorSources[0].scripts.map((s) => s.classification)).toEqual([
+		"ambiguous-byte-match",
+		"source-byte-mismatch",
+	]);
+});
+
+it("normalizes Windows file URLs on non-Windows hosts and bounds retained Inspector scripts", () => {
+	const f = fixture(),
+		windows = { ...scope, workspace: "C:\\Owned" };
+	const receipt = { ...f.receipt, ...windows };
+	const result = {
+		protocol: "cline-js-inspector/2",
+		status: "partial",
+		input: { sha256: hash },
+		scripts: Array.from({ length: 130 }, (_, i) => ({
+			scriptId: String(i),
+			url: "file:///c:/OWNED/owned.js",
+			status: "loaded",
+			sha256: hash,
+		})),
+	};
+	const { snapshotHash: _, ...raw } = {
+		...f.snapshot,
+		...windows,
+		tool: "node-inspector-passive",
+		result,
+		resultHash: digest(result),
+	};
+	const r = correlateSavedEvidence(windows, receipt, [
+		{ ...raw, snapshotHash: digest(raw) },
+	]);
+	expect(r.inspectorSources[0].scripts).toHaveLength(128);
+	expect(r.inspectorSources[0].scriptsTruncated).toBe(true);
+	expect(r.inspectorSources[0].scripts[0].classification).toBe(
+		"exact-location-and-byte-match",
+	);
+});

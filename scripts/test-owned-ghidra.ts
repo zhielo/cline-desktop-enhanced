@@ -40,6 +40,16 @@ const run = spawnSync(
 		join(root, "direct.c"),
 		"symbol",
 		Buffer.from("owned_direct").toString("base64"),
+		"-postScript",
+		"ClineDecompileSelected.java",
+		join(root, "add.c"),
+		"symbol",
+		Buffer.from("owned_value").toString("base64"),
+		"-postScript",
+		"ClineDecompileSelected.java",
+		join(root, "memory.c"),
+		"symbol",
+		Buffer.from("owned_memory").toString("base64"),
 		"-deleteProject",
 	],
 	{ encoding: "utf8", timeout: 120000, maxBuffer: 2 * 1024 * 1024 },
@@ -55,9 +65,19 @@ const indirect = TargetedNativeEvidenceSchema.parse(
 	),
 	direct = TargetedNativeEvidenceSchema.parse(
 		JSON.parse(readFileSync(join(root, "direct.c.native.json"), "utf8")),
+	),
+	add = TargetedNativeEvidenceSchema.parse(
+		JSON.parse(readFileSync(join(root,"add.c.native.json"),"utf8")),
+	),
+	memory = TargetedNativeEvidenceSchema.parse(
+		JSON.parse(readFileSync(join(root,"memory.c.native.json"),"utf8")),
 	);
 if (
 	!direct.pseudocode.includes("owned_add") ||
+	!direct.callees.some(c=>c.argumentFlows?.some(a=>a.index===0&&a.sources.some(s=>s.kind==="parameter"&&s.parameterIndex===0))) ||
+	!direct.returnFlows?.some(r=>r.flow?.sources.some(s=>s.kind==="call-return"&&direct.callees.some(c=>c.fromAddressHex===s.fromAddressHex))) ||
+	!add.returnFlows?.some(r=>r.flow?.sources.some(s=>s.kind==="parameter"&&s.parameterIndex===0)&&r.flow.sources.some(s=>s.kind==="constant"&&s.valueHex==="0x7")) ||
+	!memory.returnFlows?.some(r=>r.flow?.frontiers.includes("memory-load")) ||
 	!direct.callees.some((c) => c.kind === "direct" && c.targetAddressHex) ||
 	!indirect.callees.some(
 		(c) =>
@@ -78,6 +98,9 @@ const report = {
 	fixtureSourceSha256: sha(readFileSync(source)),
 	fixtureArtifactSha256: sha(readFileSync(target)),
 	directCalls: direct.callees,
+	directReturnFlows: direct.returnFlows,
+	addReturnFlows: add.returnFlows,
+	memoryReturnFlows: memory.returnFlows,
 	indirectCalls: indirect.callees,
 };
 writeFileSync(

@@ -28,6 +28,10 @@ metadata:
 
 Keep Analysis Off unless the user explicitly chooses the required mode. A mode does not approve a command; use existing exact-request review and approval. Prefer static inspection and retained receipt queries. Never launch a target, attach a debugger, capture traffic, rebuild, sign or install as a side effect of routing. If a call times out, inspect its existing receipt/job and cancellation state before considering a new call; do not assume it stopped or blindly replay it.
 
+## Retain unresolved questions
+
+When `manage_investigation_unknowns` is advertised and the owning workspace already has a case, list its current revision before recording or reviewing a question. Link only evidence IDs and exact result hashes already retained in that case. Label supporting and contradicting evidence separately; preserve contradictions instead of changing their role to make an answer look consistent. A stale revision means reread, not overwrite. `open`, `needs-review` and `deferred` are review states, never proof that a claim is true. This metadata route does not run an engine or grant execution permission. If no case exists, ask the user to create/select one in the Investigation workspace; do not invent a case ID.
+
 ## Deliver
 
 Return target identity and SHA256 when supplied by evidence, tool/profile/engine versions, receipt IDs, supported findings with exact locations, inferred relationships, unresolved questions and admission/truncation limits. Distinguish engine installed, owned fixture passed, target analysis completed and behavior observed. Hashes, pseudocode and successful builds are not behavioral certification. Continue useful supported work after an engine-specific blocker; do not claim universal target compatibility.

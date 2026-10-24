@@ -12,8 +12,18 @@ type Case = {
 	state: string;
 	summary: string;
 	questions: string[];
+	unknowns?: Array<{
+		id: string;
+		revision: number;
+		question: string;
+		status: "open" | "needs-review" | "deferred";
+		note: string;
+		supporting: Array<{ id: string; resultHash: string }>;
+		contradicting: Array<{ id: string; resultHash: string }>;
+	}>;
 	evidence: Array<{
 		id: string;
+		resultHash?: string;
 		engine?: string;
 		provenance: string;
 		sourceArtifactSha256?: string;
@@ -48,6 +58,7 @@ export function InvestigationWorkspace({
 		[title, setTitle] = useState("Android investigation"),
 		[summary, setSummary] = useState(""),
 		[questions, setQuestions] = useState(""),
+		[newUnknown, setNewUnknown] = useState(""),
 		[state, setState] = useState("active"),
 		[error, setError] = useState(""),
 		[busy, setBusy] = useState(false);
@@ -158,6 +169,73 @@ export function InvestigationWorkspace({
 						Case {selected.id} · revision {selected.revision}
 						{selected.parentId ? ` · fork of ${selected.parentId}` : ""}
 					</p>
+					<h4 className="font-semibold">
+						Evidence-linked unresolved questions
+					</h4>
+					<p className="text-xs text-muted-foreground">
+						Status is investigation workflow metadata, not a verified
+						conclusion. Supporting and contradicting evidence links are retained
+						across updates. Legacy checkpoint questions below remain unchanged.
+					</p>
+					<label htmlFor={`${prefix}-unknown`}>
+						New unresolved question
+						<Input
+							id={`${prefix}-unknown`}
+							value={newUnknown}
+							maxLength={1000}
+							onChange={(e) => setNewUnknown(e.target.value)}
+						/>
+					</label>
+					<Button
+						disabled={busy || !newUnknown.trim()}
+						onClick={() =>
+							void action(async () => {
+								pick(
+									await desktopClient.invoke<Case>("mutate_investigation", {
+										...context,
+										input: {
+											action: "record_unknown",
+											id: selected.id,
+											revision: selected.revision,
+											question: newUnknown.trim(),
+											confirmWrite: true,
+										},
+									}),
+								);
+								setNewUnknown("");
+								await refresh();
+							})
+						}
+					>
+						Record unresolved question
+					</Button>
+					{(selected.unknowns ?? []).map((unknown) => (
+						<UnknownReview
+							key={`${unknown.id}:${unknown.revision}`}
+							unknown={unknown}
+							evidence={selected.evidence}
+							busy={busy}
+							onSave={(update) =>
+								void action(async () => {
+									pick(
+										await desktopClient.invoke<Case>("mutate_investigation", {
+											...context,
+											input: {
+												action: "update_unknown",
+												id: selected.id,
+												revision: selected.revision,
+												unknownId: unknown.id,
+												unknownRevision: unknown.revision,
+												...update,
+												confirmWrite: true,
+											},
+										}),
+									);
+									await refresh();
+								})
+							}
+						/>
+					))}
 					<label htmlFor={`${prefix}-summary`}>
 						Checkpoint summary
 						<Textarea
@@ -345,6 +423,125 @@ export function InvestigationWorkspace({
 				</>
 			)}
 		</section>
+	);
+}
+
+function UnknownReview({
+	unknown,
+	evidence,
+	busy,
+	onSave,
+}: {
+	unknown: NonNullable<Case["unknowns"]>[number];
+	evidence: Case["evidence"];
+	busy: boolean;
+	onSave: (update: {
+		status: "open" | "needs-review" | "deferred";
+		note: string;
+		supporting: Array<{ id: string; resultHash: string }>;
+		contradicting: Array<{ id: string; resultHash: string }>;
+	}) => void;
+}) {
+	const prefix = useId();
+	const [status, setStatus] = useState(unknown.status);
+	const [note, setNote] = useState(unknown.note);
+	const [reference, setReference] = useState("");
+	const [role, setRole] = useState<"supporting" | "contradicting">(
+		"supporting",
+	);
+	const candidates = evidence.filter(
+		(e) =>
+			typeof e.resultHash === "string" && /^[a-f0-9]{64}$/.test(e.resultHash),
+	);
+	return (
+		<article className="space-y-2 rounded border p-3 text-sm">
+			<p className="font-medium">{unknown.question}</p>
+			<p>
+				{unknown.status} · revision {unknown.revision}
+			</p>
+			<label htmlFor={`${prefix}-status`}>
+				Review status
+				<select
+					id={`${prefix}-status`}
+					value={status}
+					disabled={busy}
+					onChange={(e) => setStatus(e.target.value as typeof status)}
+				>
+					{(["open", "needs-review", "deferred"] as const).map((s) => (
+						<option key={s} value={s}>
+							{s}
+						</option>
+					))}
+				</select>
+			</label>
+			<label htmlFor={`${prefix}-note`}>
+				Review note (not a verified conclusion)
+				<Textarea
+					id={`${prefix}-note`}
+					value={note}
+					maxLength={2000}
+					disabled={busy}
+					onChange={(e) => setNote(e.target.value)}
+				/>
+			</label>
+			<label htmlFor={`${prefix}-reference`}>
+				Add a retained evidence link
+				<select
+					id={`${prefix}-reference`}
+					value={reference}
+					disabled={busy}
+					onChange={(e) => setReference(e.target.value)}
+				>
+					<option value="">No new link</option>
+					{candidates.map((e) => (
+						<option key={e.id} value={e.id}>
+							{e.engine ?? "Evidence"} · {e.id}
+						</option>
+					))}
+				</select>
+			</label>
+			<label htmlFor={`${prefix}-role`}>
+				Link role
+				<select
+					id={`${prefix}-role`}
+					value={role}
+					disabled={busy}
+					onChange={(e) => setRole(e.target.value as typeof role)}
+				>
+					<option value="supporting">Supporting</option>
+					<option value="contradicting">Contradicting</option>
+				</select>
+			</label>
+			<Button
+				disabled={busy || !note.trim()}
+				onClick={() => {
+					const chosen = candidates.find((e) => e.id === reference);
+					const links =
+						chosen && chosen.resultHash
+							? [{ id: chosen.id, resultHash: chosen.resultHash }]
+							: [];
+					onSave({
+						status,
+						note: note.trim(),
+						supporting: role === "supporting" ? links : [],
+						contradicting: role === "contradicting" ? links : [],
+					});
+				}}
+			>
+				Save question review
+			</Button>
+			<pre className="overflow-auto text-xs">
+				{JSON.stringify(
+					{
+						id: unknown.id,
+						supporting: unknown.supporting,
+						contradicting: unknown.contradicting,
+					},
+					null,
+					2,
+				)}
+			</pre>
+		</article>
 	);
 }
 

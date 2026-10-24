@@ -1,3 +1,4 @@
+import { InvestigationSchemas } from "@cline/core";
 import { runModelBinaryTriage } from "./model-binary-triage";
 import { testSpecialistProfile } from "./setup-center";
 import { inspectInvestigationSkillPack, loadInvestigationSkills } from "./investigation-skills";
@@ -3054,6 +3055,28 @@ export async function handleCommand(
 				},
 				store,
 				{
+					unknowns: (value) => {
+						const request = InvestigationSchemas.manage_investigation_unknowns.parse(value);
+						if (request.action === "list") {
+							const current = investigations().get(root, request.caseId);
+							return {
+								caseId: current.id, revision: current.revision,
+								unknowns: current.unknowns ?? [],
+								legacyQuestions: current.questions,
+								verifiedBehavior: false,
+							};
+						}
+						const { caseId, action, ...fields } = request;
+						const current = investigations().mutate(root, {
+							...fields, id: caseId,
+							action: action === "record" ? "record_unknown" : "update_unknown",
+							confirmWrite: true,
+						});
+						return {
+							caseId: current.id, revision: current.revision,
+							unknowns: current.unknowns ?? [], verifiedBehavior: false,
+						};
+					},
 					invoke: (legacy, payload) =>
 						handleCommand(
 							ctx,

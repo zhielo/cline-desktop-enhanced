@@ -42,6 +42,25 @@ it("schemas reject cross-session authority and contradictory selectors", () => {
 		InvestigationSchemas.capture_browser_scenario.parse({ action: "start" }),
 	).toThrow();
 });
+it("unknown metadata cannot claim verification or supply host write authority", () => {
+	const base = {
+		action: "record", caseId: "11111111-1111-4111-8111-111111111111",
+		revision: 0, question: "Which function?",
+	};
+	expect(InvestigationSchemas.manage_investigation_unknowns.parse(base)).toMatchObject({
+		supporting: [], contradicting: [],
+	});
+	expect(() => InvestigationSchemas.manage_investigation_unknowns.parse({
+		...base, confirmWrite: true,
+	})).toThrow();
+	expect(() => InvestigationSchemas.manage_investigation_unknowns.parse({
+		...base, sessionId: "foreign",
+	})).toThrow();
+	expect(() => InvestigationSchemas.manage_investigation_unknowns.parse({
+		action: "update", caseId: base.caseId, revision: 0,
+		unknownId: base.caseId, unknownRevision: 0, status: "verified", note: "claim",
+	})).toThrow();
+});
 
 it("registers the host executor in the real Hub contribution allowlist", () => {
 	expect(isHubToolExecutorName("investigation")).toBe(true);

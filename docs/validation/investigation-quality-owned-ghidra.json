@@ -1,0 +1,105 @@
+{
+  "scope": "actual Ghidra selected owned ELF pseudocode and p-code calls only; no target execution",
+  "status": "passed",
+  "adapterSha256": "e175c39aa6f236527f0c23e142bcf3ca793d0bea474c0d41c30f88a8cd99b605",
+  "fixtureSourceSha256": "3acd09abfa681bc4c25812058ba7aba75e48cdd3a991db07e0eabebb7f09747f",
+  "fixtureArtifactSha256": "4be6470cce3ae76a1799cea1177fca36f91b78c4f28ef64d5f1fbcf47080770e",
+  "directCalls": [
+    {
+      "fromAddressHex": "0x101146",
+      "kind": "direct",
+      "targetAddressHex": "0x101030",
+      "argumentFlows": [
+        {
+          "sources": [
+            {
+              "kind": "parameter",
+              "parameterIndex": 0
+            }
+          ],
+          "frontiers": [],
+          "visited": 1,
+          "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence",
+          "index": 0
+        }
+      ],
+      "argumentsTruncated": false,
+      "resolution": "bounded-high-pcode-constant-candidate"
+    }
+  ],
+  "directReturnFlows": [
+    {
+      "fromAddressHex": "0x10114c",
+      "flow": {
+        "sources": [
+          {
+            "kind": "call-return",
+            "fromAddressHex": "0x101146"
+          }
+        ],
+        "frontiers": [],
+        "visited": 2,
+        "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence"
+      }
+    }
+  ],
+  "addReturnFlows": [
+    {
+      "fromAddressHex": "0x10116b",
+      "flow": {
+        "sources": [
+          {
+            "kind": "parameter",
+            "parameterIndex": 0
+          },
+          {
+            "kind": "constant",
+            "valueHex": "0x7",
+            "bytes": 4
+          }
+        ],
+        "frontiers": [],
+        "visited": 4,
+        "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence"
+      }
+    }
+  ],
+  "memoryReturnFlows": [
+    {
+      "fromAddressHex": "0x10115c",
+      "flow": {
+        "sources": [],
+        "frontiers": [
+          "memory-load"
+        ],
+        "visited": 2,
+        "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence"
+      }
+    }
+  ],
+  "indirectCalls": [
+    {
+      "fromAddressHex": "0x101132",
+      "kind": "indirect",
+      "argumentFlows": [
+        {
+          "sources": [
+            {
+              "kind": "parameter",
+              "parameterIndex": 0
+            }
+          ],
+          "frontiers": [],
+          "visited": 1,
+          "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence",
+          "index": 0
+        }
+      ],
+      "argumentsTruncated": false,
+      "resolution": "unknown-memory-register-or-ambiguous-phi"
+    }
+  ],
+  "engineVersion": "12.1.4",
+  "platform": "linux-x64",
+  "releaseCertification": false
+}

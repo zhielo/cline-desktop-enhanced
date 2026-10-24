@@ -12,6 +12,7 @@ import type {
 const Id = z.string().uuid();
 export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
 export const WORKFLOW_COMMANDS = [
+ "manage_investigation_unknowns",
  ...BATCH_WORKFLOW_COMMANDS,
  "check_release_gate",
  "run_device_smoke_test",
@@ -35,6 +36,7 @@ export const WORKFLOW_COMMANDS = [
 	"analysis_workflow_hybrid_prepare",
 ] as const;
 export interface WorkflowPorts {
+ unknowns?: (input: unknown) => unknown;
 	invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>;
 	staticReceipt: (id: string) => unknown;
 	taskBundle: (id: string) => unknown;
@@ -114,6 +116,10 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
+ if (command === "manage_investigation_unknowns") {
+  if (!options.trusted || !ports.unknowns) throw new Error("Trusted owning investigation host required");
+  return ports.unknowns(InvestigationSchemas.manage_investigation_unknowns.parse(input));
+ }
  if(command === "check_release_gate") {
   if(!options.trusted || !ports.releaseGate) throw new Error("Trusted owning release verification host required");
   const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().min(1).max(512).optional()}).passthrough().parse(input);

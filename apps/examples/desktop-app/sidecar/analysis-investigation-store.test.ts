@@ -47,6 +47,67 @@ function plan(root: string): AnalysisTaskPlan {
 	};
 }
 describe("durable investigation metadata", () => {
+	it("retains revisioned unknowns without rewriting legacy questions or replaying work", () => {
+		const { root, store } = fixture();
+		const original = store.mutate(root, { action: "create", title: "Case", confirmWrite: true });
+		const checkpoint = store.mutate(root, {
+			action: "checkpoint", id: original.id, revision: 0, summary: "",
+			questions: ["Legacy question"], state: "active", confirmWrite: true,
+		});
+		const recorded = store.mutate(root, {
+			action: "record_unknown", id: original.id, revision: checkpoint.revision,
+			question: "Which exact input reaches the function?", confirmWrite: true,
+		});
+		expect(recorded.questions).toEqual(["Legacy question"]);
+		expect(recorded.unknowns?.[0]).toMatchObject({ revision: 0, status: "open", supporting: [], contradicting: [] });
+		const question = recorded.unknowns![0];
+		const updated = store.mutate(root, {
+			action: "update_unknown", id: recorded.id, revision: recorded.revision,
+			unknownId: question.id, unknownRevision: 0,
+			status: "needs-review", note: "Need an authorized observation", confirmWrite: true,
+		});
+		expect(updated.unknowns?.[0].revision).toBe(1);
+		store.close();
+		expect(store.get(root, original.id).unknowns).toEqual(updated.unknowns);
+		expect(() => store.mutate(root, {
+			action: "update_unknown", id: updated.id, revision: updated.revision,
+			unknownId: question.id, unknownRevision: 0,
+			status: "deferred", note: "stale", confirmWrite: true,
+		})).toThrow("Unknown changed");
+		expect(() => store.mutate(root, {
+			action: "update_unknown", id: updated.id, revision: updated.revision,
+			unknownId: question.id, unknownRevision: 1,
+			status: "verified", note: "model says so", confirmWrite: true,
+		})).toThrow();
+	});
+	it("binds unknown links to exact retained evidence and never drops contradictions", () => {
+		const { root, store } = fixture();
+		const original = store.mutate(root, { action: "create", title: "Case", confirmWrite: true });
+		const p = plan(root);
+		store.bind(root, original.id, p);
+		const completed = store.record(root, original.id, p, { engine: "fixture" });
+		const evidence = completed.evidence[0];
+		const link = { id: evidence.id, resultHash: evidence.resultHash };
+		const recorded = store.mutate(root, {
+			action: "record_unknown", id: original.id, revision: completed.revision,
+			question: "Does the claim hold?", contradicting: [link], confirmWrite: true,
+		});
+		const question = recorded.unknowns![0];
+		const update = {
+			action: "update_unknown", id: recorded.id, revision: recorded.revision,
+			unknownId: question.id, unknownRevision: 0,
+			status: "deferred", note: "Need another engine", confirmWrite: true,
+		};
+		expect(() => store.mutate(root, {
+			...update, supporting: [link],
+		})).toThrow("role");
+		expect(() => store.mutate(root, {
+			...update, contradicting: [{ ...link, resultHash: "f".repeat(64) }],
+		})).toThrow("retained");
+		const updated = store.mutate(root, update);
+		expect(updated.unknowns![0].contradicting).toEqual([link]);
+		expect(updated.jobs).toEqual(recorded.jobs);
+	});
 	it("persists checkpoints, refuses stale edits and confines workspace access", () => {
 		const { root, store } = fixture(),
 			c = store.mutate(root, {

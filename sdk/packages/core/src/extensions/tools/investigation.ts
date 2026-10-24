@@ -9,6 +9,13 @@ import {
 } from "@cline/shared";
 import { HybridProposalSchema } from "../../analysis/hybrid";
 const Id = z.string().uuid();
+const CaseEvidenceReference = z.object({
+	id: Id, resultHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+const UnknownEvidenceLinks = {
+	supporting: z.array(CaseEvidenceReference).max(20).default([]),
+	contradicting: z.array(CaseEvidenceReference).max(20).default([]),
+};
 const Selector = z
 	.object({
 		symbol: z.string().min(1).max(4096).optional(),
@@ -55,6 +62,23 @@ const BatchRequest = z
 	.strict();
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
+	manage_investigation_unknowns: z.discriminatedUnion("action", [
+		z.object({ action: z.literal("list"), caseId: Id }).strict(),
+		z.object({
+			action: z.literal("record"), caseId: Id,
+			revision: z.number().int().nonnegative(),
+			question: z.string().trim().min(1).max(1000),
+			...UnknownEvidenceLinks,
+		}).strict(),
+		z.object({
+			action: z.literal("update"), caseId: Id,
+			revision: z.number().int().nonnegative(), unknownId: Id,
+			unknownRevision: z.number().int().nonnegative(),
+			status: z.enum(["open", "needs-review", "deferred"]),
+			note: z.string().trim().min(1).max(2000),
+			...UnknownEvidenceLinks,
+		}).strict(),
+	]),
 	check_release_gate: z.discriminatedUnion("action", [
 		z
 			.object({
@@ -195,6 +219,8 @@ export type InvestigationExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 const descriptions: Record<InvestigationToolName, string> = {
+	manage_investigation_unknowns:
+		"List, record or update a structured unresolved question in an existing owning-workspace investigation case. Metadata only: no engine, runtime, network, target write or approval grant. Writes require exact current case revision and updates also require unknownRevision. References must name existing retained case evidence IDs with exact result hashes. Supporting/contradicting links accumulate; no deletion or silent role changes. open/needs-review/deferred describe workflow, never verified truth or behavioral equivalence. Reload after stale revisions. Legacy free-text questions remain separate and readable.",
 	check_release_gate:
 		"Check the fixed public zhielo/cline-desktop-enhanced release policy for one exact PR head: required successful CI, Windows installer/smoke steps, authenticated core/engine/installed receipts and final app cleanup. Independently human-approved Inspect network reads only, at most 30 requests/90 seconds/18 MiB; no credentials, installer execution, merge or CI rerun. Changed recipes, missing/expired evidence, unknown checks, moved heads or unavailable APIs block, never pass. Read/cancel use owning saved task IDs without network replay, including after Analysis Off. A passing historical receipt does not prove target compatibility, signing, real-device validation or full recommendation completion.",
 	run_device_smoke_test:
@@ -234,7 +260,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 	open_binary:
 		"Create an immutable workspace-confined artifact handle; does not execute or decompile the binary. Analysis mode must be enabled.",
 	analyze_function:
-		"Request one exact Ghidra/IDA function analysis for an open_binary artifact. The desktop requires fresh independent human approval of the hash-bound plan. No approval tokens or consent may be supplied. Installed provider/license required; no target execution.",
+		"Request one exact Ghidra/IDA function analysis for an open_binary artifact. The desktop requires fresh independent human approval of the hash-bound plan. No approval tokens or consent may be supplied. Requires an available selected provider; actual invocation reports its errors. No license-file/plugin-name readiness gate and no target execution.",
 	trace_application_feature:
 		"Reconcile selected owning-session static facts and recorded scenarios. Returns provenance, candidate links and unresolved boundaries, never proves runtime causality from label matches.",
 	capture_browser_scenario:

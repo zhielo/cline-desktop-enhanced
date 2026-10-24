@@ -23,6 +23,17 @@ it("preserves unknown indirect calls rather than filling fake callees", () => {
 		TargetedNativeEvidenceSchema.parse(fixture).callees[0],
 	).not.toHaveProperty("targetAddressHex");
 });
+it("accepts bounded dependency frontiers while preserving historical missing flows",()=>{
+	const flow={sources:[{kind:"parameter",parameterIndex:0}],frontiers:["memory-load"],visited:2,
+		coverage:"bounded-selected-function-def-use-dependencies-not-value-equivalence"};
+	const value={...fixture,callees:[{...fixture.callees[0],argumentFlows:[{...flow,index:0}],argumentsTruncated:false}],
+		returnFlows:[{fromAddressHex:"0x1010",flow}]};
+	expect(TargetedNativeEvidenceSchema.parse(value).returnFlows?.[0].flow?.frontiers).toEqual(["memory-load"]);
+	expect(TargetedNativeEvidenceSchema.parse(fixture)).not.toHaveProperty("returnFlows");
+	for(const changed of [{visited:257},{sources:Array(33).fill({kind:"parameter",parameterIndex:0})},{verified:true}]){
+		expect(()=>TargetedNativeEvidenceSchema.parse({...value,returnFlows:[{fromAddressHex:"0x1010",flow:{...flow,...changed}}]})).toThrow();
+	}
+});
 it("requires bounded addresses and internally consistent target resolution", () => {
 	for (const callees of [
 		[{ ...fixture.callees[0], targetAddressHex: "0x1234" }],

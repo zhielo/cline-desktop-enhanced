@@ -97,6 +97,7 @@ const EXTERNAL_TOOLS = new Set([
  "capture_network_metadata",
 	"get_evidence_bundle",
  "correlate_static_runtime",
+ "manage_investigation_unknowns",
 		"plan_batch",
 		"preview_batch",
 		"run_batch",

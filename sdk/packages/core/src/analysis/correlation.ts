@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { digest, ResultSchema } from "./contracts";
+import { reconcileInspectorSources } from "./inspector-reconciliation";
 import {
 	nativeDossiers,
 	unifiedEvidenceView,
@@ -195,6 +196,7 @@ export function correlateSavedEvidence(
 		})),
 		identity,
 		sampling,
+		inspectorSources: reconcileInspectorSources(receipt.result, selected, scope.workspace),
 		native,
 		nativeDossiersTruncated: matchingNative.length > 50,
 		verifiedBehavior: false,

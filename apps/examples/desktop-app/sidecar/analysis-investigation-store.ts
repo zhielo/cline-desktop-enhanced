@@ -7,7 +7,49 @@ import type { AnalysisTaskPlan } from "./analysis-task-orchestrator";
 const digest = (value: unknown) =>
 	createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const Id = z.string().uuid();
+const EvidenceReference = z
+	.object({
+		id: Id,
+		resultHash: z.string().regex(/^[a-f0-9]{64}$/),
+	})
+	.strict();
+const UnknownFields = {
+	supporting: z.array(EvidenceReference).max(20).default([]),
+	contradicting: z.array(EvidenceReference).max(20).default([]),
+};
+export type InvestigationUnknown = {
+	id: string;
+	revision: number;
+	question: string;
+	status: "open" | "needs-review" | "deferred";
+	note: string;
+	supporting: Array<{ id: string; resultHash: string }>;
+	contradicting: Array<{ id: string; resultHash: string }>;
+};
 export const InvestigationMutation = z.discriminatedUnion("action", [
+	z
+		.object({
+			action: z.literal("record_unknown"),
+			id: Id,
+			revision: z.number().int().nonnegative(),
+			question: z.string().trim().min(1).max(1000),
+			...UnknownFields,
+			confirmWrite: z.literal(true),
+		})
+		.strict(),
+	z
+		.object({
+			action: z.literal("update_unknown"),
+			id: Id,
+			revision: z.number().int().nonnegative(),
+			unknownId: Id,
+			unknownRevision: z.number().int().nonnegative(),
+			status: z.enum(["open", "needs-review", "deferred"]),
+			note: z.string().trim().min(1).max(2000),
+			...UnknownFields,
+			confirmWrite: z.literal(true),
+		})
+		.strict(),
 	z
 		.object({
 			action: z.literal("create"),
@@ -51,6 +93,8 @@ export type Investigation = {
 	state: string;
 	summary: string;
 	questions: string[];
+	/** Absent on historical cases. Never synthesize it before verifying old hashes. */
+	unknowns?: InvestigationUnknown[];
 	evidence: Array<Record<string, unknown>>;
 	transformations: Array<Record<string, unknown>>;
 	jobs: Array<{ id: string; requestHash: string; status: string }>;
@@ -199,6 +243,64 @@ export class InvestigationStore {
 				};
 				this.event(c, "forked-with-inherited-evidence");
 				return this.save(c);
+			}
+			if (m.action === "record_unknown" || m.action === "update_unknown") {
+				const references = [...m.supporting, ...m.contradicting];
+				const seen = new Set<string>();
+				for (const reference of references) {
+					if (
+						seen.has(reference.id) ||
+						!old.evidence.some(
+							(e) => e.id === reference.id && e.resultHash === reference.resultHash,
+						)
+					)
+						throw new Error(
+							"Unknown references require distinct retained case evidence with exact result hashes",
+						);
+					seen.add(reference.id);
+				}
+				const unknowns = (old.unknowns ??= []);
+				if (m.action === "record_unknown") {
+					if (unknowns.length >= 100)
+						throw new Error("Investigation unknown budget reached");
+					unknowns.push({
+						id: randomUUID(),
+						revision: 0,
+						question: m.question,
+						status: "open",
+						note: "",
+						supporting: m.supporting,
+						contradicting: m.contradicting,
+					});
+				} else {
+					const selected = unknowns.find((u) => u.id === m.unknownId);
+					if (!selected || selected.revision !== m.unknownRevision)
+						throw new Error("Unknown changed or unavailable; reload before writing");
+					// Evidence links accumulate: a status update cannot erase a contradiction.
+					const merge = (
+						left: InvestigationUnknown["supporting"],
+						right: InvestigationUnknown["supporting"],
+					) => {
+						const result = [...left];
+						for (const reference of right)
+							if (!result.some((r) => r.id === reference.id)) result.push(reference);
+						if (result.length > 20) throw new Error("Unknown reference budget reached");
+						return result;
+					};
+					if (
+						m.supporting.some((r) => selected.contradicting.some((c) => c.id === r.id)) ||
+						m.contradicting.some((r) => selected.supporting.some((s) => s.id === r.id))
+					)
+						throw new Error("Retained evidence role cannot be silently changed");
+					selected.supporting = merge(selected.supporting, m.supporting);
+					selected.contradicting = merge(selected.contradicting, m.contradicting);
+					selected.status = m.status;
+					selected.note = m.note;
+					selected.revision++;
+				}
+				old.revision++;
+				this.event(old, m.action);
+				return this.save(old);
 			}
 			old.revision++;
 			old.summary = m.summary;

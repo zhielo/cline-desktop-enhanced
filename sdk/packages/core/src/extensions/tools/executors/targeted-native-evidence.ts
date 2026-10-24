@@ -1,6 +1,36 @@
 import { lstat, readFile } from "node:fs/promises";
 import { z } from "zod";
 const Address = z.string().regex(/^0x[a-f0-9]{1,16}$/);
+const ValueFlowFields = {
+	sources: z
+		.array(
+			z.discriminatedUnion("kind", [
+				z
+					.object({
+						kind: z.literal("constant"),
+						valueHex: Address,
+						bytes: z.number().int().min(1).max(8),
+					})
+					.strict(),
+				z
+					.object({
+						kind: z.literal("parameter"),
+						parameterIndex: z.number().int().min(0).max(65535),
+					})
+					.strict(),
+				z
+					.object({ kind: z.literal("call-return"), fromAddressHex: Address })
+					.strict(),
+			]),
+		)
+		.max(32),
+	frontiers: z.array(z.string().min(1).max(120)).max(16),
+	visited: z.number().int().nonnegative().max(256),
+	coverage: z.literal(
+		"bounded-selected-function-def-use-dependencies-not-value-equivalence",
+	),
+};
+export const NativeValueFlowSchema = z.object(ValueFlowFields).strict();
 export const TargetedNativeEvidenceSchema = z
 	.object({
 		schemaVersion: z.literal(1),
@@ -22,6 +52,18 @@ export const TargetedNativeEvidenceSchema = z
 						fromAddressHex: Address,
 						kind: z.enum(["direct", "indirect"]),
 						targetAddressHex: Address.optional(),
+						argumentFlows: z
+							.array(
+								z
+									.object({
+										...ValueFlowFields,
+										index: z.number().int().min(0).max(15),
+									})
+									.strict(),
+							)
+							.max(16)
+							.optional(),
+						argumentsTruncated: z.boolean().optional(),
 						resolution: z.enum([
 							"bounded-high-pcode-constant-candidate",
 							"unknown-memory-register-or-ambiguous-phi",
@@ -37,6 +79,22 @@ export const TargetedNativeEvidenceSchema = z
 			)
 			.max(128),
 		relationsTruncated: z.boolean(),
+		returnFlows: z
+			.array(
+				z
+					.object({
+						fromAddressHex: Address,
+						flow: NativeValueFlowSchema.optional(),
+						voidOrUnavailable: z.literal(true).optional(),
+					})
+					.strict()
+					.refine(
+						(v) => !!v.flow !== !!v.voidOrUnavailable,
+						"Return flow or unavailable marker required",
+					),
+			)
+			.max(64)
+			.optional(),
 		coverage: z.literal(
 			"selected-function-decompiler-and-bounded-high-pcode-not-runtime",
 		),

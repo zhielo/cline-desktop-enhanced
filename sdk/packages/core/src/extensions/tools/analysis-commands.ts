@@ -213,6 +213,7 @@ const HOST_ONLY_COMMANDS = new Set([
 	"cancel_batch",
 	"check_release_gate",
 	"correlate_static_runtime",
+ "manage_investigation_unknowns",
 	"attach_debug_session",
 	"set_scoped_breakpoints",
 	"capture_execution_trace",

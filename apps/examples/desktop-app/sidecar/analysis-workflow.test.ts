@@ -383,3 +383,18 @@ it("project-file review carries exact scope into Inspect approval, never validat
  await expect(handleAnalysisWorkflow("validate_candidate",{...input,kind:"typescript"},scope,options,store,ports)).rejects.toThrow("only accepted");
  }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
+
+it("unknown ledger metadata requires a trusted host and never invokes an engine while Off",async()=>{
+ const unknowns=vi.fn(input=>({input,verifiedBehavior:false})), invoke=vi.fn();
+ const ports={unknowns,invoke,staticReceipt:vi.fn(),taskBundle:vi.fn(),capture:vi.fn()};
+ const scope={sessionId:"owned",workspace:"/owned"};
+ const store={} as AnalysisWorkflowStore;
+ const input={action:"list",caseId:"11111111-1111-4111-8111-111111111111"};
+ await expect(handleAnalysisWorkflow("manage_investigation_unknowns",input,scope,{trusted:false,idle:true,mode:"off"},store,ports)).rejects.toThrow("Trusted");
+ expect(unknowns).not.toHaveBeenCalled();
+ await expect(handleAnalysisWorkflow("manage_investigation_unknowns",{...input,executionToken:"forged"},scope,{trusted:true,idle:true,mode:"off"},store,ports)).rejects.toThrow();
+ expect(unknowns).not.toHaveBeenCalled();
+ expect(await handleAnalysisWorkflow("manage_investigation_unknowns",input,scope,{trusted:true,idle:false,mode:"off"},store,ports)).toMatchObject({verifiedBehavior:false});
+ expect(unknowns).toHaveBeenCalledOnce();
+ expect(invoke).not.toHaveBeenCalled();
+});

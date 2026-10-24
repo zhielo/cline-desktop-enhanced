@@ -36,3 +36,7 @@ Use actual nextOffset values for pagination and preserve the same receipt/query.
 The application root commits a virtual admitted path/hash/size manifest, not the original whole container. Existing file/byte/ASAR budgets apply. JSON, HTML, source maps and native-addon metadata contribute only when admitted. Source-map labels are untrusted and never fetched or executed. `.node` metadata is not native decompilation. File-local semantic nodes bind to application nodes; this is not a complete cross-module taint solver. Dynamic imports, unresolved modules, shadowing and omitted code remain unknown.
 
 Return a concise module/IPC/preload map with receipt-backed examples and exact source locations, a focused saved trace, unresolved frontiers and any next separately authorized analysis. Never import/evaluate target code or launch Electron to make the static result appear complete.
+
+## Saved Inspector source reconciliation
+
+Use the advertised saved static/runtime correlation tool only with an owning static receipt and selected retained runtime tasks. `inspectorSources` compares source hashes and lexical locations without attaching or reading files. Preserve exact-location byte mismatches and duplicate-byte ambiguity. Location-only matches are unverified. Parsed/loaded does not mean executed; a byte match does not authenticate the VM or establish behavior. Missing scripts can reflect a bounded observation window. Do not fetch source maps or rerun capture merely to fill a saved-evidence gap.
