@@ -163,10 +163,10 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/semantic-source-validation.yml":
 			"9bf4c84a47e3e302ba4c35eaa67d9cb650896c2d1caba1e6b49e884aca27b972",
 		".github/workflows/build-custom-windows-installer.yml":
-			"4413bbc5f366d050b9950897858a7a627277ec7324052e295273c37e616d9b03",
+			"145ab2e0156e064adcb32d25a87e9769c78ae19655e270e150a6f61c7d757d81",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"b2c81437eed5f19f79335292b15be60608c0f37a3882567a33ba2128563491ff",
 		"scripts/validate-advanced-build.mjs":
-			"17bab43ad28e0598197adce6f9bdc666d81430baa1ba34a6e044837972f6396c",
+			"cad3beadd8c9e5605922dd6e4dd50b529b9ed57ed872e37f936ff3fffef9fef2",
 	},
 } as const;

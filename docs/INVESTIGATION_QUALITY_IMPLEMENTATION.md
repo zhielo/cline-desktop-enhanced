@@ -161,3 +161,8 @@ checks; no "same or higher than REA" certification is claimed.
 - A concurrent local consolidated run suffered an OS-killed TypeScript process
   (137); this is a failed gate, not a typecheck pass. Rerun serially on the final
   published source. No release gate was removed or downgraded.
+
+- Release recipe fingerprints were updated for the added Ghidra CI step and
+  expanded parser test list. Required check names, core gates and installed
+  acceptance labels were not removed or relaxed. Old recipe hashes correctly
+  blocked the first customization gate; the new recipes must pass full CI.
