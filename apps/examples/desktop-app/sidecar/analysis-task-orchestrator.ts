@@ -191,7 +191,17 @@ function permissionFor(
 				? "Modify"
 				: "Inspect";
 	if (kind === "gui" || kind === "dynamic") return "Execute";
-	if (["launch", "continue", "step", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace"].includes(operation)) return "Execute";
+	if (
+		[
+			"launch",
+			"continue",
+			"step",
+			"attach_debug_session",
+			"set_scoped_breakpoints",
+			"capture_execution_trace",
+		].includes(operation)
+	)
+		return "Execute";
 	return "Debug";
 }
 
@@ -202,25 +212,40 @@ function requirementsFor(
 	request?: AnalysisRequest,
 ): string[] {
 	const requirements = new Set<string>();
- const candidateReview=request?.candidate_review;
- const reviewScope=candidateReview&&typeof candidateReview === "object"&&"scope" in candidateReview?candidateReview.scope:undefined;
- if(operation === "review_candidate_changes" && typeof reviewScope === "string" && ["project-files","project-inventory"].includes(reviewScope)) {
-  requirements.add("all-regular-files-in-disjoint-manifest-child-roots-no-ignore-rules");
-  requirements.add("exact-full-inventory-hashes-and-complete-file-change-allowlist");
-  requirements.add("4096-entries-16MiB-file-64MiB-input-per-pass-two-passes-no-writes");
- }
- if(operation === "check_release_gate") {
-  requirements.add("public-github-exact-head-read-only-evidence");
-  requirements.add("recorded-network-30-requests-90-seconds-18MiB");
-  requirements.add("no-credentials-installer-execution-ci-rerun-or-merge");
- }
+	const candidateReview = request?.candidate_review;
+	const reviewScope =
+		candidateReview &&
+		typeof candidateReview === "object" &&
+		"scope" in candidateReview
+			? candidateReview.scope
+			: undefined;
+	if (
+		operation === "review_candidate_changes" &&
+		typeof reviewScope === "string" &&
+		["project-files", "project-inventory"].includes(reviewScope)
+	) {
+		requirements.add(
+			"all-regular-files-in-disjoint-manifest-child-roots-no-ignore-rules",
+		);
+		requirements.add(
+			"exact-full-inventory-hashes-and-complete-file-change-allowlist",
+		);
+		requirements.add(
+			"4096-entries-16MiB-file-64MiB-input-per-pass-two-passes-no-writes",
+		);
+	}
+	if (operation === "check_release_gate") {
+		requirements.add("public-github-exact-head-read-only-evidence");
+		requirements.add("recorded-network-30-requests-90-seconds-18MiB");
+		requirements.add("no-credentials-installer-execution-ci-rerun-or-merge");
+	}
 	if (
 		kind === "static" &&
 		!["project_edit", "annotate_analysis_project"].includes(operation) &&
 		isAnalysisWriteOperation(operation)
 	) {
 		requirements.add(
-			operation === "export_evidence_bundle"
+			["export_evidence_bundle", "export_bundle_recovery"].includes(operation)
 				? "authorized-redacted-evidence-export"
 				: [
 							"patch_binary",
@@ -273,7 +298,10 @@ function requirementsFor(
 			requirements.add("reviewed-project-modification");
 	}
 	if (kind === "device") {
-  if(operation==="launch_apk"&&request?.owner_session_id){requirements.add("independent-selected-device-launch-and-logs");requirements.add("app-may-remain-running-no-automatic-force-stop");}
+		if (operation === "launch_apk" && request?.owner_session_id) {
+			requirements.add("independent-selected-device-launch-and-logs");
+			requirements.add("app-may-remain-running-no-automatic-force-stop");
+		}
 		requirements.add("authorized-target");
 		requirements.add("sensitive-device-logs");
 		requirements.add("captured-artifact-write");
@@ -316,15 +344,25 @@ function requirementsFor(
 	if (["capture_process_tree", "capture_file_activity"].includes(operation)) {
 		requirements.add("independent-runtime-metadata-approval");
 		requirements.add("private-evidence-write");
-		requirements.add(operation === "capture_process_tree" ? "exact-process-birth-and-descendant-metadata" : "exact-file-notification-metadata-no-process-attribution");
+		requirements.add(
+			operation === "capture_process_tree"
+				? "exact-process-birth-and-descendant-metadata"
+				: "exact-file-notification-metadata-no-process-attribution",
+		);
 	}
-	if (["attach_debug_session","set_scoped_breakpoints","capture_execution_trace"].includes(operation)) {
-  requirements.add("independent-managed-runtime-execute-approval");
-  requirements.add("debugger-activation-cleanup-may-pause-or-resume");
-  requirements.add("exact-loaded-source-and-process-birth");
-  requirements.add("bounded-managed-lifetime-and-private-evidence");
- }
- if (operation === "native_module_observe") {
+	if (
+		[
+			"attach_debug_session",
+			"set_scoped_breakpoints",
+			"capture_execution_trace",
+		].includes(operation)
+	) {
+		requirements.add("independent-managed-runtime-execute-approval");
+		requirements.add("debugger-activation-cleanup-may-pause-or-resume");
+		requirements.add("exact-loaded-source-and-process-birth");
+		requirements.add("bounded-managed-lifetime-and-private-evidence");
+	}
+	if (operation === "native_module_observe") {
 		requirements.add("exact-process-memory-read");
 		requirements.add("sensitive-memory-hash-retention");
 	}
@@ -339,7 +377,14 @@ function requirementsFor(
 	if (
 		kind === "gui" ||
 		kind === "dynamic" ||
-		["launch", "continue", "step", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace"].includes(operation)
+		[
+			"launch",
+			"continue",
+			"step",
+			"attach_debug_session",
+			"set_scoped_breakpoints",
+			"capture_execution_trace",
+		].includes(operation)
 	) {
 		requirements.add("execution-control");
 	}
@@ -472,7 +517,8 @@ export class AnalysisTaskOrchestrator {
 		const request = normalizeRequestPaths(input.request, workspaceRoot);
 		const operation = String(request.operation ?? "").trim();
 		if (!operation) throw new Error("Analysis request operation is required.");
-		if(operation === "check_release_gate" && input.kind !== "static") throw new Error("Release verification requires a read-only Inspect task");
+		if (operation === "check_release_gate" && input.kind !== "static")
+			throw new Error("Release verification requires a read-only Inspect task");
 		if (operation === "js_isolated_execute" && input.kind !== "execution")
 			throw new Error(
 				"Active JavaScript requires independent Execute task kind",
@@ -533,7 +579,8 @@ export class AnalysisTaskOrchestrator {
 				network:
 					operation === "js_isolated_execute"
 						? "disabled"
-						: operation === "check_release_gate" || ["device", "execution"].includes(input.kind)
+						: operation === "check_release_gate" ||
+								["device", "execution"].includes(input.kind)
 							? "recorded"
 							: "disabled",
 			},
@@ -683,12 +730,20 @@ export class AnalysisTaskOrchestrator {
 		return publicPlan(plan);
 	}
 
-
 	/** Retain failed-result metadata without successful completion or replay authority. */
-	failWithEvidence(planId: string, result: unknown, tool: string, error: unknown): AnalysisTaskPlan {
+	failWithEvidence(
+		planId: string,
+		result: unknown,
+		tool: string,
+		error: unknown,
+	): AnalysisTaskPlan {
 		const plan = this.require(planId);
-		if (plan.status === "cancelled" || plan.status === "failed") return publicPlan(plan);
-		if (plan.status !== "running") throw new Error("Only a running analysis task can retain a failed result.");
+		if (plan.status === "cancelled" || plan.status === "failed")
+			return publicPlan(plan);
+		if (plan.status !== "running")
+			throw new Error(
+				"Only a running analysis task can retain a failed result.",
+			);
 		plan.candidateOutcome = summarizeCandidateOutcome(plan, result);
 		plan.evidence = {
 			resultHash: sha256(canonicalJson(result)),
@@ -734,7 +789,9 @@ export class AnalysisTaskOrchestrator {
 	list(workspaceRoot: string): AnalysisTaskPlan[] {
 		this.expireStale();
 		const root = canonicalWorkspaceRoot(workspaceRoot);
-		const retained = [...this.plans.values()].filter((plan) => plan.workspaceRoot === root);
+		const retained = [...this.plans.values()].filter(
+			(plan) => plan.workspaceRoot === root,
+		);
 		return retained
 			.sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 			.slice(0, 100)
@@ -767,17 +824,26 @@ export class AnalysisTaskOrchestrator {
 			typeof outcome.outputSha256 !== "string" ||
 			!/^[a-f0-9]{64}$/.test(outcome.outputSha256)
 		)
-			throw new Error("A completed, bounded unsigned Android build receipt is required.");
+			throw new Error(
+				"A completed, bounded unsigned Android build receipt is required.",
+			);
 		const output = source.request.output_file;
 		if (typeof output !== "string" || !output)
 			throw new Error("The prepared build has no output target.");
 		// Only the host's prepared request supplies the path, not client/receipt output paths.
 		const target = canonicalFuturePath(output);
-		if (!isWithin(source.workspaceRoot, target) && input.allowExternalTarget !== true)
-			throw new Error("Candidate is outside the workspace; explicitly review and allow the external target.");
+		if (
+			!isWithin(source.workspaceRoot, target) &&
+			input.allowExternalTarget !== true
+		)
+			throw new Error(
+				"Candidate is outside the workspace; explicitly review and allow the external target.",
+			);
 		const identity = await targetIdentity(target);
 		if (identity.kind !== "file" || identity.sha256 !== outcome.outputSha256)
-			throw new Error("Candidate file is missing, unreadable, oversized or changed since the build.");
+			throw new Error(
+				"Candidate file is missing, unreadable, oversized or changed since the build.",
+			);
 		const candidateSource = {
 			planId: source.id,
 			requestHash: source.requestHash,
@@ -802,7 +868,9 @@ export class AnalysisTaskOrchestrator {
 		// Recheck the identity captured during prepare; consume will check it again after approval.
 		if (prepared.targetIdentity?.sha256 !== candidateSource.outputSha256) {
 			this.cancel(prepared.id);
-			throw new Error("Candidate changed while preparing verification; no approval was granted.");
+			throw new Error(
+				"Candidate changed while preparing verification; no approval was granted.",
+			);
 		}
 		const stored = this.require(prepared.id);
 		stored.candidateSource = candidateSource;
@@ -816,7 +884,9 @@ export class AnalysisTaskOrchestrator {
 			throw new Error("Analysis task does not belong to this workspace.");
 		}
 		if (!["completed", "failed"].includes(plan.status) || !plan.evidence) {
-			throw new Error("Only a completed or failed task with retained evidence can be exported.");
+			throw new Error(
+				"Only a completed or failed task with retained evidence can be exported.",
+			);
 		}
 		const task = publicPlan(plan);
 		const payload = {

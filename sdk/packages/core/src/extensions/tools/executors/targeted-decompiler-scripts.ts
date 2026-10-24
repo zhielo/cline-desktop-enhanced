@@ -18,6 +18,32 @@ import ghidra.program.model.address.Address;
 import com.google.gson.*;
 public class ClineDecompileSelected extends GhidraScript {
  private int constantVisits=0;
+ private int flowVisits=0;
+ private void flow(Varnode n,int depth,HashSet<Varnode> seen,JsonArray sources,JsonArray frontiers) {
+  if(flowVisits>=256||depth>8||sources.size()>=32||frontiers.size()>=16){if(frontiers.size()<16)frontiers.add("budget");return;}
+  flowVisits++;
+  if(n==null){frontiers.add("missing-varnode");return;}
+  if(seen.contains(n)){frontiers.add("cycle-or-phi");return;}
+  seen.add(n);
+  JsonObject source=new JsonObject();
+  if(n.isConstant()){if(n.getSize()>8){frontiers.add("wide-constant");return;}source.addProperty("kind","constant");source.addProperty("valueHex","0x"+Long.toUnsignedString(n.getOffset(),16));source.addProperty("bytes",n.getSize());sources.add(source);return;}
+  if(n.getHigh() instanceof HighParam){source.addProperty("kind","parameter");source.addProperty("parameterIndex",((HighParam)n.getHigh()).getSlot());sources.add(source);return;}
+  PcodeOp op=n.getDef();if(op==null){frontiers.add("unresolved-input");return;}
+  if(op.getOpcode()==PcodeOp.CALL||op.getOpcode()==PcodeOp.CALLIND){source.addProperty("kind","call-return");source.addProperty("fromAddressHex","0x"+Long.toUnsignedString(op.getSeqnum().getTarget().getOffset(),16));sources.add(source);return;}
+  int code=op.getOpcode();
+  if(code==PcodeOp.COPY||code==PcodeOp.CAST||code==PcodeOp.INT_ADD||code==PcodeOp.INT_SUB||code==PcodeOp.INT_MULT||code==PcodeOp.INT_XOR||code==PcodeOp.INT_AND||code==PcodeOp.INT_OR||code==PcodeOp.INT_ZEXT||code==PcodeOp.INT_SEXT||code==PcodeOp.PIECE||code==PcodeOp.SUBPIECE||code==PcodeOp.PTRADD||code==PcodeOp.PTRSUB||code==PcodeOp.MULTIEQUAL) {
+   if(op.getNumInputs()>16){frontiers.add("input-budget");return;}
+   if(code==PcodeOp.MULTIEQUAL)frontiers.add("phi-alternatives-not-path-sensitive");
+   for(int i=0;i<op.getNumInputs();i++)flow(op.getInput(i),depth+1,new HashSet<Varnode>(seen),sources,frontiers);
+  } else frontiers.add(code==PcodeOp.LOAD?"memory-load":op.getMnemonic());
+ }
+ private JsonObject valueFlow(Varnode n) {
+  JsonObject report=new JsonObject();JsonArray sources=new JsonArray(),frontiers=new JsonArray();flowVisits=0;
+  flow(n,0,new HashSet<Varnode>(),sources,frontiers);
+  report.add("sources",sources);report.add("frontiers",frontiers);report.addProperty("visited",flowVisits);
+  report.addProperty("coverage","bounded-selected-function-def-use-dependencies-not-value-equivalence");
+  return report;
+ }
  private BigInteger constant(Varnode n,int depth,HashSet<Varnode> seen) {
   if(++constantVisits>256||n==null||depth>6||n.getSize()<1||n.getSize()>8||seen.contains(n))return null;
   if(n.isConstant())return new BigInteger(Long.toUnsignedString(n.getOffset()));
@@ -61,9 +87,15 @@ public class ClineDecompileSelected extends GhidraScript {
    evidence.addProperty("name",selected.getName());evidence.addProperty("signature",selected.getSignature().getPrototypeString());
    evidence.addProperty("pseudocode",code);evidence.addProperty("architecture",currentProgram.getLanguageID().getIdAsString());
    JsonObject image=new JsonObject();image.addProperty("preferredBaseHex","0x"+Long.toUnsignedString(currentProgram.getImageBase().getOffset(),16));image.addProperty("addressSpace","ghidra-program-virtual");evidence.add("image",image);
-   JsonArray calls=new JsonArray();int visited=0;boolean truncated=false;
+   JsonArray calls=new JsonArray(),returns=new JsonArray();int visited=0;boolean truncated=false;
    Iterator<PcodeOpAST> operations=result.getHighFunction().getPcodeOps();
    while(operations.hasNext()) {if(++visited>50000||monitor.isCancelled())throw new IllegalStateException("P-code budget/cancellation");PcodeOpAST op=operations.next();
+    if(op.getOpcode()==PcodeOp.RETURN) {
+     if(returns.size()>=64){truncated=true;continue;}
+     JsonObject ret=new JsonObject();ret.addProperty("fromAddressHex","0x"+Long.toUnsignedString(op.getSeqnum().getTarget().getOffset(),16));
+     if(op.getNumInputs()>1)ret.add("flow",valueFlow(op.getInput(1)));else ret.addProperty("voidOrUnavailable",true);
+     returns.add(ret);continue;
+    }
     if(op.getOpcode()!=PcodeOp.CALL&&op.getOpcode()!=PcodeOp.CALLIND)continue;
     if(calls.size()>=128){truncated=true;continue;}
     JsonObject call=new JsonObject();call.addProperty("fromAddressHex","0x"+Long.toUnsignedString(op.getSeqnum().getTarget().getOffset(),16));
@@ -72,9 +104,12 @@ public class ClineDecompileSelected extends GhidraScript {
     BigInteger target=op.getOpcode()==PcodeOp.CALL&&op.getInput(0).isAddress()?new BigInteger(Long.toUnsignedString(op.getInput(0).getOffset())):constant(op.getInput(0),0,new HashSet<Varnode>());
     if(target!=null){call.addProperty("targetAddressHex","0x"+target.toString(16));call.addProperty("resolution","bounded-high-pcode-constant-candidate");}
     else call.addProperty("resolution","unknown-memory-register-or-ambiguous-phi");
+    JsonArray arguments=new JsonArray();
+    for(int i=1;i<op.getNumInputs()&&i<=16;i++){JsonObject argument=valueFlow(op.getInput(i));argument.addProperty("index",i-1);arguments.add(argument);}
+    call.add("argumentFlows",arguments);call.addProperty("argumentsTruncated",op.getNumInputs()>17);
     calls.add(call);
    }
-   evidence.add("callees",calls);evidence.addProperty("relationsTruncated",truncated);evidence.addProperty("coverage","selected-function-decompiler-and-bounded-high-pcode-not-runtime");
+   evidence.add("callees",calls);evidence.add("returnFlows",returns);evidence.addProperty("relationsTruncated",truncated);evidence.addProperty("coverage","selected-function-decompiler-and-bounded-high-pcode-not-runtime");
    try(PrintWriter writer=new PrintWriter(args[0]+".native.json","UTF-8")){writer.println(evidence.toString());}
   } finally {decompiler.dispose();}
  }

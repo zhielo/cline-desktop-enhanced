@@ -1,3 +1,5 @@
+import { ArtifactReaderKindSchema } from "../../analysis/artifact-readers/contracts";
+import { NativeFlowQuerySchema } from "../../analysis/native-value-flow";
 import { BatchStaticRequestSchema } from "./batch-analysis-schema";
 import { z } from "zod";
 import { RuntimeObservationOptionsSchema } from "./runtime-observation-schema";
@@ -9,6 +11,16 @@ import {
 } from "@cline/shared";
 import { HybridProposalSchema } from "../../analysis/hybrid";
 const Id = z.string().uuid();
+const CaseEvidenceReference = z
+	.object({
+		id: Id,
+		resultHash: z.string().regex(/^[a-f0-9]{64}$/),
+	})
+	.strict();
+const UnknownEvidenceLinks = {
+	supporting: z.array(CaseEvidenceReference).max(20).default([]),
+	contradicting: z.array(CaseEvidenceReference).max(20).default([]),
+};
 const Selector = z
 	.object({
 		symbol: z.string().min(1).max(4096).optional(),
@@ -55,6 +67,31 @@ const BatchRequest = z
 	.strict();
 /** Model inputs deliberately have no authority, owner, token, mode or consent fields. */
 export const InvestigationSchemas = {
+	trace_native_value_flow: NativeFlowQuerySchema,
+	manage_investigation_unknowns: z.discriminatedUnion("action", [
+		z.object({ action: z.literal("list"), caseId: Id }).strict(),
+		z
+			.object({
+				action: z.literal("record"),
+				caseId: Id,
+				revision: z.number().int().nonnegative(),
+				question: z.string().trim().min(1).max(1000),
+				...UnknownEvidenceLinks,
+			})
+			.strict(),
+		z
+			.object({
+				action: z.literal("update"),
+				caseId: Id,
+				revision: z.number().int().nonnegative(),
+				unknownId: Id,
+				unknownRevision: z.number().int().nonnegative(),
+				status: z.enum(["open", "needs-review", "deferred"]),
+				note: z.string().trim().min(1).max(2000),
+				...UnknownEvidenceLinks,
+			})
+			.strict(),
+	]),
 	check_release_gate: z.discriminatedUnion("action", [
 		z
 			.object({
@@ -163,6 +200,23 @@ export const InvestigationSchemas = {
 		})
 		.strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
+	recover_bundle_sources: z
+		.object({
+			artifactId: Id,
+			engine: z.enum(["literal", "wakaru"]).optional(),
+		})
+		.strict(),
+	publish_bundle_recovery: z
+		.object({
+			artifactId: Id,
+			receiptId: Id,
+			reportHash: z.string().regex(/^[a-f0-9]{64}$/),
+			outputFile: z.string().min(1).max(4096),
+		})
+		.strict(),
+	inspect_artifact_metadata: z
+		.object({ artifactId: Id, reader: ArtifactReaderKindSchema })
+		.strict(),
 	analyze_function: z
 		.object({
 			artifactId: Id,
@@ -195,6 +249,10 @@ export type InvestigationExecutor = (
 	context: AgentToolContext,
 ) => Promise<string>;
 const descriptions: Record<InvestigationToolName, string> = {
+	trace_native_value_flow:
+		"List or trace retained Ghidra function argument/return dependencies across selected owning-session task snapshots. Read-only; available while Analysis is Off. Exact artifact/engine/version/address identity, bounded depth and explicit unresolved/memory/cycle frontiers. Never executes targets or runs a provider. Call list first for exact root addresses; no inferred PLT/import or IDA value-flow support.",
+	manage_investigation_unknowns:
+		"List, record or update a structured unresolved question in an existing owning-workspace investigation case. Metadata only: no engine, runtime, network, target write or approval grant. Writes require exact current case revision and updates also require unknownRevision. References must name existing retained case evidence IDs with exact result hashes. Supporting/contradicting links accumulate; no deletion or silent role changes. open/needs-review/deferred describe workflow, never verified truth or behavioral equivalence. Reload after stale revisions. Legacy free-text questions remain separate and readable.",
 	check_release_gate:
 		"Check the fixed public zhielo/cline-desktop-enhanced release policy for one exact PR head: required successful CI, Windows installer/smoke steps, authenticated core/engine/installed receipts and final app cleanup. Independently human-approved Inspect network reads only, at most 30 requests/90 seconds/18 MiB; no credentials, installer execution, merge or CI rerun. Changed recipes, missing/expired evidence, unknown checks, moved heads or unavailable APIs block, never pass. Read/cancel use owning saved task IDs without network replay, including after Analysis Off. A passing historical receipt does not prove target compatibility, signing, real-device validation or full recommendation completion.",
 	run_device_smoke_test:
@@ -233,8 +291,14 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Request independent Inspect-approved read-only candidate review. Default recipe mode audits immutable source/output recipes. Explicit project-inventory mode inventories all regular files under two disjoint manifest-child roots and returns a proposed hash-bound allowlist, never approval or a write. Explicit project-files mode requires exact complete inventories and approved before/after hashes; undeclared edits/additions/deletions never pass. No ignore rules, shell, writes, replay or runtime/metadata correctness claim. See docs/PROJECT_FILE_REVIEW.md.",
 	open_binary:
 		"Create an immutable workspace-confined artifact handle; does not execute or decompile the binary. Analysis mode must be enabled.",
+	recover_bundle_sources:
+		"Request independently approved inert recovery for an immutable UTF-8 JS bundle (1 MiB maximum). Default engine literal preserves exact AST factory slices. Explicit engine wakaru uses the pinned packaged native structural recovery engine with minimal rewrites, original range hashes, separate transformed source/map hashes and OS process limits. Missing engines fail explicitly; no download, target execution, full reconstruction or runtime-equivalence claim. Query saved bundle-recovery evidence with reverse_engineer analysis_evidence. No execution or writes outside retained evidence.",
+	publish_bundle_recovery:
+		"Request separate independent Modify approval to publish one exact owning saved bundle-recovery report as a new no-overwrite JSON provenance package. Supply exact receipt/report hash, original artifact handle and new absolute managed outputFile. Full Access required; original source is rechecked. Does not execute fragments, install or overwrite files; model-supplied approval tokens are rejected.",
+	inspect_artifact_metadata:
+		"Request independently approved static metadata reading for one immutable open_binary handle: Go build info, Rust auditable dependencies, PyInstaller CArchive inventory or IL2CPP metadata versions 24/27/29/31/39. Fixed isolated parser child, no target execution or extraction. Results are partial observations; read saved artifact-metadata evidence with reverse_engineer analysis_evidence. Requires Analysis enabled. No approval tokens accepted.",
 	analyze_function:
-		"Request one exact Ghidra/IDA function analysis for an open_binary artifact. The desktop requires fresh independent human approval of the hash-bound plan. No approval tokens or consent may be supplied. Installed provider/license required; no target execution.",
+		"Request one exact Ghidra/IDA function analysis for an open_binary artifact. The desktop requires fresh independent human approval of the hash-bound plan. No approval tokens or consent may be supplied. Requires an available selected provider; actual invocation reports its errors. No license-file/plugin-name readiness gate and no target execution.",
 	trace_application_feature:
 		"Reconcile selected owning-session static facts and recorded scenarios. Returns provenance, candidate links and unresolved boundaries, never proves runtime causality from label matches.",
 	capture_browser_scenario:

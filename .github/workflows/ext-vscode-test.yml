@@ -199,7 +199,9 @@ jobs:
             # Build the extension and tests (without redundant checks)
             - name: Build Tests and Extension
               id: build_step
-              run: bun run ci:build
+              run: |
+                  set -o pipefail
+                  bun run ci:build 2>&1 | tee build-output.log
 
             - name: Vitest Suites (SDK adapter + model catalog)
               id: vitest_tests
@@ -238,20 +240,24 @@ jobs:
               id: unit_tests_non_linux
               if: ${{ !cancelled() && steps.build_step.outcome == 'success' && runner.os != 'Linux' }}
               run: |
-                  bun run test:unit
+                  set -o pipefail
+                  bun run test:unit 2>&1 | tee unit-output.log
 
             - name: Extension Integration Tests - Linux
               id: integration_tests_linux
               if: ${{ !cancelled() && steps.build_step.outcome == 'success' && runner.os == 'Linux' }}
-              run: xvfb-run -a bun run test:coverage
+              run: |
+                  set -o pipefail
+                  xvfb-run -a bun run test:coverage 2>&1 | tee integration-output.log
 
             - name: Extension Integration Tests - Non-Linux
               id: integration_tests_non_linux
               if: ${{ !cancelled() && steps.build_step.outcome == 'success' && runner.os != 'Linux' }}
               run: |
+                  set -o pipefail
                   for attempt in 1 2 3; do
                     echo "Running extension integration tests (attempt ${attempt}/3)"
-                    if bun run test:integration; then
+                    if bun run test:integration 2>&1 | tee "integration-output-${attempt}.log"; then
                       exit 0
                     fi
 
@@ -268,8 +274,17 @@ jobs:
               id: webview_tests
               if: ${{ !cancelled() && steps.build_step.outcome == 'success' }}
               run: |
+                  set -o pipefail
                   cd webview-ui
-                  bun run test:coverage
+                  bun run test:coverage 2>&1 | tee ../webview-output.log
+
+            - name: Retain extension failure diagnostics
+              if: ${{ failure() }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: extension-failure-logs-${{ matrix.os }}
+                  path: apps/vscode/*-output*.log
+                  retention-days: 7
 
             - name: Save Coverage Reports
               uses: actions/upload-artifact@v4
@@ -325,11 +340,23 @@ jobs:
               run: bun run download-ripgrep
 
             - name: Compile Standalone
-              run: bun run compile-standalone
+              run: |
+                  set -o pipefail
+                  bun run compile-standalone 2>&1 | tee standalone-output.log
 
             - name: Running testing platform integration spec tests
               timeout-minutes: 7
-              run: bun run test:tp-orchestrator -- tests/specs/ --count=1 --coverage
+              run: |
+                  set -o pipefail
+                  bun run test:tp-orchestrator -- tests/specs/ --count=1 --coverage 2>&1 | tee platform-output.log
+
+            - name: Retain platform failure diagnostics
+              if: ${{ failure() }}
+              uses: actions/upload-artifact@v4
+              with:
+                  name: platform-failure-logs
+                  path: apps/vscode/*-output*.log
+                  retention-days: 7
 
             - name: Save Coverage Reports
               uses: actions/upload-artifact@v4

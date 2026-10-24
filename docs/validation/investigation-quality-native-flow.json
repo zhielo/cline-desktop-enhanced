@@ -1,0 +1,306 @@
+{
+  "scope": "actual Ghidra owned ELF selected def-use and bounded cross-function dependency candidates; no target execution",
+  "status": "passed",
+  "adapterSha256": "e175c39aa6f236527f0c23e142bcf3ca793d0bea474c0d41c30f88a8cd99b605",
+  "fixtureSourceSha256": "4029f1709491b45237e3eb8cf8cb56ef1cba81f20aa809810967bd955fb1a5c9",
+  "fixtureArtifactSha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+  "directCalls": [
+    {
+      "fromAddressHex": "0x101146",
+      "kind": "direct",
+      "targetAddressHex": "0x101030",
+      "argumentFlows": [
+        {
+          "sources": [
+            {
+              "kind": "parameter",
+              "parameterIndex": 0
+            }
+          ],
+          "frontiers": [],
+          "visited": 1,
+          "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence",
+          "index": 0
+        }
+      ],
+      "argumentsTruncated": false,
+      "resolution": "bounded-high-pcode-constant-candidate"
+    }
+  ],
+  "directReturnFlows": [
+    {
+      "fromAddressHex": "0x10114c",
+      "flow": {
+        "sources": [
+          {
+            "kind": "call-return",
+            "fromAddressHex": "0x101146"
+          }
+        ],
+        "frontiers": [],
+        "visited": 2,
+        "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence"
+      }
+    }
+  ],
+  "addReturnFlows": [
+    {
+      "fromAddressHex": "0x10116b",
+      "flow": {
+        "sources": [
+          {
+            "kind": "parameter",
+            "parameterIndex": 0
+          },
+          {
+            "kind": "constant",
+            "valueHex": "0x7",
+            "bytes": 4
+          }
+        ],
+        "frontiers": [],
+        "visited": 4,
+        "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence"
+      }
+    }
+  ],
+  "memoryReturnFlows": [
+    {
+      "fromAddressHex": "0x10115c",
+      "flow": {
+        "sources": [],
+        "frontiers": [
+          "memory-load"
+        ],
+        "visited": 2,
+        "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence"
+      }
+    }
+  ],
+  "indirectCalls": [
+    {
+      "fromAddressHex": "0x101132",
+      "kind": "indirect",
+      "argumentFlows": [
+        {
+          "sources": [
+            {
+              "kind": "parameter",
+              "parameterIndex": 0
+            }
+          ],
+          "frontiers": [],
+          "visited": 1,
+          "coverage": "bounded-selected-function-def-use-dependencies-not-value-equivalence",
+          "index": 0
+        }
+      ],
+      "argumentsTruncated": false,
+      "resolution": "unknown-memory-register-or-ambiguous-phi"
+    }
+  ],
+  "nativeFlow": {
+    "protocol": "cline-native-value-flow/1",
+    "effect": "saved-evidence-read",
+    "status": "partial",
+    "functions": [
+      {
+        "functionId": "e26d791854b1fbf77edb5a03ca0fa1a02d2e38ffe6e195f52b972732b0ae3575",
+        "taskId": "04c159b8-3940-4931-8296-a7424c9bcd19",
+        "snapshotHash": "3dcb9e6366c1152e53a5eb95d217c26510d4987c49048798d048b103e6474fd4",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x101136",
+        "name": "owned_direct",
+        "argumentFlowsAvailable": true,
+        "returnFlowsAvailable": true
+      },
+      {
+        "functionId": "edc5d4797f250f67f785fdb1d4748dca47cb0afb6681544a3dd020857107d11d",
+        "taskId": "b251efef-7eed-4e5c-8242-6a2006ed04d0",
+        "snapshotHash": "3cde38d830d86b8c9fe7d2a030597ed60fc89091b8ec62132d767dafee673308",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x101118",
+        "name": "owned_indirect",
+        "argumentFlowsAvailable": true,
+        "returnFlowsAvailable": true
+      },
+      {
+        "functionId": "516495757553211e52d75d762add7cbe26d18e17f88d3645063309fe410eca28",
+        "taskId": "1fd108e7-4f41-4e28-9085-3c468bf02075",
+        "snapshotHash": "cda4b633580b9ad1226d3acb63e9cabef9f98099081a586b34f017ff71d0e5b2",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x10115d",
+        "name": "owned_value",
+        "argumentFlowsAvailable": false,
+        "returnFlowsAvailable": true
+      },
+      {
+        "functionId": "19973dfc747f4428d3c8a30a1bd6529e92fd252b077f55af324767814e3aa72c",
+        "taskId": "782a1725-1161-45e2-a046-5e5b356f2913",
+        "snapshotHash": "c03074dce2d9e3a530ef5b646d98b153d8292a8a97f06fdd6b0dab9b793ebefc",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x10114d",
+        "name": "owned_memory",
+        "argumentFlowsAvailable": false,
+        "returnFlowsAvailable": true
+      },
+      {
+        "functionId": "5d0b046eb2c8887ae6b0dc2017406e4606612b5c6240c9c54a09fe7633e19a11",
+        "taskId": "ec5359be-5c52-4e64-85d8-4c8af189cfab",
+        "snapshotHash": "475d3111534288c4f533f6144e2297d866e61adf1bb500acbfe9832d6d4ac35b",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x10116c",
+        "name": "owned_flow_leaf",
+        "argumentFlowsAvailable": false,
+        "returnFlowsAvailable": true
+      },
+      {
+        "functionId": "f62b2b55259e150af91cf412fcc5f7f19b24b22db7154274c99b585ae39c57f6",
+        "taskId": "816b6099-044e-4e85-9b25-c307e825cac5",
+        "snapshotHash": "f882d09c4464f690335bf254c3955bbbc2f7d1ee3402c70aa80e8535f90b15e5",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x10117b",
+        "name": "owned_flow_mid",
+        "argumentFlowsAvailable": true,
+        "returnFlowsAvailable": true
+      },
+      {
+        "functionId": "14887c0e1c3217153c62c1fb5cbb9ec92427a1c4dcbe92c5f6b1e3f184c4f5c4",
+        "taskId": "f59109f5-f70c-4c97-b22b-5dc0c21122db",
+        "snapshotHash": "bf1dc6da7d5c9227e789b24c08f3e06fa682978ee553f89fe67ab1321e109b52",
+        "sha256": "76af6239c5120d82bbc38568528a2d89fcf9270026bbf831b58d61daeb8f0f3c",
+        "engine": "ghidra",
+        "engineVersion": "12.1.4",
+        "address": "0x101198",
+        "name": "owned_flow_root",
+        "argumentFlowsAvailable": true,
+        "returnFlowsAvailable": true
+      }
+    ],
+    "unavailable": [],
+    "steps": [
+      {
+        "id": 0,
+        "kind": "return-site",
+        "functionId": "14887c0e1c3217153c62c1fb5cbb9ec92427a1c4dcbe92c5f6b1e3f184c4f5c4",
+        "taskId": "f59109f5-f70c-4c97-b22b-5dc0c21122db",
+        "snapshotHash": "bf1dc6da7d5c9227e789b24c08f3e06fa682978ee553f89fe67ab1321e109b52",
+        "fromAddressHex": "0x1011ae"
+      },
+      {
+        "id": 1,
+        "parent": 0,
+        "kind": "call-return-dependency",
+        "functionId": "14887c0e1c3217153c62c1fb5cbb9ec92427a1c4dcbe92c5f6b1e3f184c4f5c4",
+        "taskId": "f59109f5-f70c-4c97-b22b-5dc0c21122db",
+        "snapshotHash": "bf1dc6da7d5c9227e789b24c08f3e06fa682978ee553f89fe67ab1321e109b52",
+        "fromAddressHex": "0x1011a8"
+      },
+      {
+        "id": 2,
+        "parent": 1,
+        "kind": "return-site",
+        "functionId": "f62b2b55259e150af91cf412fcc5f7f19b24b22db7154274c99b585ae39c57f6",
+        "taskId": "816b6099-044e-4e85-9b25-c307e825cac5",
+        "snapshotHash": "f882d09c4464f690335bf254c3955bbbc2f7d1ee3402c70aa80e8535f90b15e5",
+        "fromAddressHex": "0x101197"
+      },
+      {
+        "id": 3,
+        "parent": 2,
+        "kind": "call-return-dependency",
+        "functionId": "f62b2b55259e150af91cf412fcc5f7f19b24b22db7154274c99b585ae39c57f6",
+        "taskId": "816b6099-044e-4e85-9b25-c307e825cac5",
+        "snapshotHash": "f882d09c4464f690335bf254c3955bbbc2f7d1ee3402c70aa80e8535f90b15e5",
+        "fromAddressHex": "0x101191"
+      },
+      {
+        "id": 4,
+        "parent": 3,
+        "kind": "return-site",
+        "functionId": "5d0b046eb2c8887ae6b0dc2017406e4606612b5c6240c9c54a09fe7633e19a11",
+        "taskId": "ec5359be-5c52-4e64-85d8-4c8af189cfab",
+        "snapshotHash": "475d3111534288c4f533f6144e2297d866e61adf1bb500acbfe9832d6d4ac35b",
+        "fromAddressHex": "0x10117a"
+      },
+      {
+        "id": 5,
+        "parent": 4,
+        "kind": "parameter-dependency",
+        "functionId": "5d0b046eb2c8887ae6b0dc2017406e4606612b5c6240c9c54a09fe7633e19a11",
+        "taskId": "ec5359be-5c52-4e64-85d8-4c8af189cfab",
+        "snapshotHash": "475d3111534288c4f533f6144e2297d866e61adf1bb500acbfe9832d6d4ac35b",
+        "parameterIndex": 0
+      },
+      {
+        "id": 6,
+        "parent": 5,
+        "kind": "parameter-dependency",
+        "functionId": "f62b2b55259e150af91cf412fcc5f7f19b24b22db7154274c99b585ae39c57f6",
+        "taskId": "816b6099-044e-4e85-9b25-c307e825cac5",
+        "snapshotHash": "f882d09c4464f690335bf254c3955bbbc2f7d1ee3402c70aa80e8535f90b15e5",
+        "parameterIndex": 0
+      },
+      {
+        "id": 7,
+        "parent": 6,
+        "kind": "parameter-dependency",
+        "functionId": "14887c0e1c3217153c62c1fb5cbb9ec92427a1c4dcbe92c5f6b1e3f184c4f5c4",
+        "taskId": "f59109f5-f70c-4c97-b22b-5dc0c21122db",
+        "snapshotHash": "bf1dc6da7d5c9227e789b24c08f3e06fa682978ee553f89fe67ab1321e109b52",
+        "parameterIndex": 0
+      },
+      {
+        "id": 8,
+        "parent": 7,
+        "kind": "frontier",
+        "functionId": "14887c0e1c3217153c62c1fb5cbb9ec92427a1c4dcbe92c5f6b1e3f184c4f5c4",
+        "taskId": "f59109f5-f70c-4c97-b22b-5dc0c21122db",
+        "snapshotHash": "bf1dc6da7d5c9227e789b24c08f3e06fa682978ee553f89fe67ab1321e109b52",
+        "reason": "root-parameter-without-caller-binding"
+      },
+      {
+        "id": 9,
+        "parent": 5,
+        "kind": "constant-dependency",
+        "functionId": "f62b2b55259e150af91cf412fcc5f7f19b24b22db7154274c99b585ae39c57f6",
+        "taskId": "816b6099-044e-4e85-9b25-c307e825cac5",
+        "snapshotHash": "f882d09c4464f690335bf254c3955bbbc2f7d1ee3402c70aa80e8535f90b15e5",
+        "valueHex": "0x3",
+        "bytes": 4
+      },
+      {
+        "id": 10,
+        "parent": 4,
+        "kind": "constant-dependency",
+        "functionId": "5d0b046eb2c8887ae6b0dc2017406e4606612b5c6240c9c54a09fe7633e19a11",
+        "taskId": "ec5359be-5c52-4e64-85d8-4c8af189cfab",
+        "snapshotHash": "475d3111534288c4f533f6144e2297d866e61adf1bb500acbfe9832d6d4ac35b",
+        "valueHex": "0x7",
+        "bytes": 4
+      }
+    ],
+    "truncated": false,
+    "verifiedBehavior": false,
+    "limitations": [
+      "Retained selected-function dependency candidates only; no execution, decompilation, file reads or implicit follow-up analysis.",
+      "No path sensitivity, arithmetic value equivalence, memory alias reasoning or whole-program completeness. Root inputs, PLT/import thunks, indirect targets, mismatched engines/versions and missing callees remain explicit frontiers.",
+      "Exact source hashes bind retained bytes, not provider truth. Arguments/returns reflect Ghidra's inferred calling convention; source text and labels are untrusted data."
+    ],
+    "evidenceHash": "0c4102d4b7ae73b35b6ba94fa3c4f2f5284d2922c2ec32f5397f8592b6d404f3"
+  },
+  "releaseCertification": false,
+  "runtime": "Ghidra 12.1.4 with JDK 21; production decompiler adapter on pinned owned ELF"
+}

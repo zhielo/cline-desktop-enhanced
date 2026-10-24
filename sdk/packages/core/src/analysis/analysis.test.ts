@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import {
 	mkdtemp,
 	mkdir,
@@ -10,7 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { analyzeSources } from "./parser";
-import { analyzeTarget } from "./worker";
+import { analyzeTarget, confinedTarget } from "./worker";
 import {
 	byteDigest,
 	digest,
@@ -309,5 +310,44 @@ it("retains version-one receipt hashes without rewriting evidence during a profi
 		).toMatchObject({ available: false, total: 0 });
 	} finally {
 		reopened.close();
+	}
+});
+
+it("confines canonical paths and refuses traversal, sibling-prefix and linked escapes", async () => {
+	await writeFile(join(root, "owned.js"), "owned");
+	expect(await confinedTarget(root, "owned.js")).toBe(
+		realpathSync.native(join(root, "owned.js")),
+	);
+	const outside = await mkdtemp(join(tmpdir(), "cline-first-party-outside-"));
+	try {
+		await writeFile(join(outside, "outside.js"), "outside");
+		const alias = join(outside, "workspace-alias");
+		await symlink(
+			root,
+			alias,
+			process.platform === "win32" ? "junction" : "dir",
+		);
+		expect(await confinedTarget(alias, join(root, "owned.js"))).toBe(
+			realpathSync.native(join(root, "owned.js")),
+		);
+		await symlink(
+			outside,
+			join(root, "escape"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
+		await expect(confinedTarget(root, "escape/outside.js")).rejects.toThrow(
+			/escapes/,
+		);
+		await expect(
+			confinedTarget(root, join(outside, "outside.js")),
+		).rejects.toThrow(/escapes|workspace/);
+		await expect(confinedTarget(root, "../outside.js")).rejects.toThrow(
+			/workspace/,
+		);
+		await expect(confinedTarget(root, "owned.js\0extra")).rejects.toThrow(
+			/Invalid/,
+		);
+	} finally {
+		await rm(outside, { recursive: true, force: true });
 	}
 });

@@ -378,6 +378,7 @@ export function nativeDossiers(snapshots: TaskEvidenceSnapshot[]) {
 				strings: f.strings ?? "unknown",
 				callers: f.callers ?? "unknown",
 				callees: f.callees ?? "unknown",
+				returnFlows: f.returnFlows ?? "unknown",
 				limitations: [
 					"Engine-qualified exact artifact/address. Preferred ELF base and derived RVA are link-time provider claims, never an observed runtime base. Thumb entry-bit normalization plus separately approved exact Windows process-birth/module/address observations when present; no inferred provider relocation, symbol equivalence, runtime call proof or missing-component inference.",
 				],

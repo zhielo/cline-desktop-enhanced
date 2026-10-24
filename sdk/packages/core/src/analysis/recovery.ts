@@ -1,3 +1,4 @@
+import { privateProcessGroupGone } from "../runtime/private-process-group";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -23,6 +24,13 @@ export const OwnershipSchema = z
 		nonce: z.string().uuid(),
 		owner: Instance,
 		worker: Instance,
+		descendants: z
+			.object({
+				kind: z.literal("linux-private-process-group"),
+				id: z.number().int().positive(),
+			})
+			.strict()
+			.optional(),
 		binding: z.string().regex(/^[a-f0-9]{64}$/),
 	})
 	.strict();
@@ -99,6 +107,7 @@ export async function recoverFirstPartyReservation(
 	deps: {
 		host: () => Promise<string | undefined>;
 		probe: (pid: number) => Promise<ProcessStartTokenProbeResult>;
+		groupGone?: (id: number) => boolean;
 	} = { host: analysisHostIdentity, probe: probeProcessStartTokenAsync },
 ) {
 	const r = store.get(sessionId, id),
@@ -113,6 +122,7 @@ export async function recoverFirstPartyReservation(
 		ownershipBinding(r, unstamped) !== binding ||
 		r.pid !== p.worker.pid ||
 		p.owner.pid === p.worker.pid ||
+		(p.descendants && p.descendants.id !== p.worker.pid) ||
 		!strong(p.owner.token) ||
 		!strong(p.worker.token)
 	)
@@ -130,6 +140,13 @@ export async function recoverFirstPartyReservation(
 	)
 		throw new Error(
 			"Original owner/worker is alive or cannot be proved gone; recovery blocked",
+		);
+	if (
+		p.descendants &&
+		!(deps.groupGone ?? privateProcessGroupGone)(p.descendants.id)
+	)
+		throw new Error(
+			"Original descendant group is alive or absence cannot be proved; recovery blocked",
 		);
 	return store.releaseReservation(r, digest(r));
 }

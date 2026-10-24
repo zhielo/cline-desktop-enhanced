@@ -336,68 +336,276 @@ it("network metadata alias missing Hybrid evidence never reaches consent; stoppi
 		expect.objectContaining({ action: "stop" }),
 	);
 });
-it.each(["run_batch","resume_investigation"] as const)("%s uses independent review and keeps the token private",async(name)=>{
- const p=ports();const input=name==="run_batch"?{operation_id:id,title:"Owned",stages:[{id:"a",request:{operation:"inspect",target:"owned.bin"}}]}:{receiptId:id,revision:3};
- const result=await runModelInvestigation(name,input,p);expect(p.review).toHaveBeenCalledBefore(p.approve as ReturnType<typeof vi.fn>);expect(p.approve).toHaveBeenCalledOnce();expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));expect(result).not.toContain("must-not-leak");
-});
-it.each(["run_batch","resume_investigation"] as const)("%s denial cancels prepared work without execution",async name=>{
- const p=ports();p.review=vi.fn(async()=>false);const input=name==="run_batch"?{operation_id:id,title:"Owned",stages:[{id:"a",request:{operation:"inspect",target:"owned.bin"}}]}:{receiptId:id,revision:1};await expect(runModelInvestigation(name,input,p)).rejects.toThrow("denied");expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();expect(p.cancel).toHaveBeenCalledWith(id);
+it.each([
+	"run_batch",
+	"resume_investigation",
+] as const)("%s uses independent review and keeps the token private", async (name) => {
+	const p = ports();
+	const input =
+		name === "run_batch"
+			? {
+					operation_id: id,
+					title: "Owned",
+					stages: [
+						{ id: "a", request: { operation: "inspect", target: "owned.bin" } },
+					],
+				}
+			: { receiptId: id, revision: 3 };
+	const result = await runModelInvestigation(name, input, p);
+	expect(p.review).toHaveBeenCalledBefore(
+		p.approve as ReturnType<typeof vi.fn>,
+	);
+	expect(p.approve).toHaveBeenCalledOnce();
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		name,
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	expect(result).not.toContain("must-not-leak");
 });
 it.each([
- ["validate_candidate",{artifactId:id,kind:"typescript"}],
- ["review_candidate_changes",{artifactId:id}],
-] as const)("%s requires independent approval and private tokens",async(name,input)=>{
- const p=ports();await runModelInvestigation(name,input,p);
- expect(p.review).toHaveBeenCalledWith(expect.objectContaining({operation:name,independentAnalysisApproval:true}));
- expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
- const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation(name,input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();expect(denied.cancel).toHaveBeenCalledWith(id);
+	"run_batch",
+	"resume_investigation",
+] as const)("%s denial cancels prepared work without execution", async (name) => {
+	const p = ports();
+	p.review = vi.fn(async () => false);
+	const input =
+		name === "run_batch"
+			? {
+					operation_id: id,
+					title: "Owned",
+					stages: [
+						{ id: "a", request: { operation: "inspect", target: "owned.bin" } },
+					],
+				}
+			: { receiptId: id, revision: 1 };
+	await expect(runModelInvestigation(name, input, p)).rejects.toThrow("denied");
+	expect(p.approve).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledOnce();
+	expect(p.cancel).toHaveBeenCalledWith(id);
 });
-it("runtime planning requires independent review but never requests or self-grants runtime consent",async()=>{
- const p=ports(),input={artifactId:id,observation:{backend:"node-inspector",pid:123,processToken:"owned",endpoint:"ws://127.0.0.1:9229/00000000-0000-0000-0000-000000000000"}};
- await runModelInvestigation("plan_runtime_observation",input,p);
- expect(p.review).toHaveBeenCalledTimes(1);expect(p.approve).toHaveBeenCalledTimes(1);
- expect(p.invoke).toHaveBeenCalledWith("plan_runtime_observation",expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
- p.review=vi.fn(async()=>false);p.approve=vi.fn();
- await expect(runModelInvestigation("plan_runtime_observation",input,p)).rejects.toThrow("denied");expect(p.approve).not.toHaveBeenCalled();
+it.each([
+	["validate_candidate", { artifactId: id, kind: "typescript" }],
+	["review_candidate_changes", { artifactId: id }],
+] as const)("%s requires independent approval and private tokens", async (name, input) => {
+	const p = ports();
+	await runModelInvestigation(name, input, p);
+	expect(p.review).toHaveBeenCalledWith(
+		expect.objectContaining({
+			operation: name,
+			independentAnalysisApproval: true,
+		}),
+	);
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		name,
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	const denied = ports();
+	denied.review = vi.fn(async () => false);
+	await expect(runModelInvestigation(name, input, denied)).rejects.toThrow(
+		"denied",
+	);
+	expect(denied.approve).not.toHaveBeenCalled();
+	expect(denied.cancel).toHaveBeenCalledWith(id);
+});
+it("runtime planning requires independent review but never requests or self-grants runtime consent", async () => {
+	const p = ports(),
+		input = {
+			artifactId: id,
+			observation: {
+				backend: "node-inspector",
+				pid: 123,
+				processToken: "owned",
+				endpoint: "ws://127.0.0.1:9229/00000000-0000-0000-0000-000000000000",
+			},
+		};
+	await runModelInvestigation("plan_runtime_observation", input, p);
+	expect(p.review).toHaveBeenCalledTimes(1);
+	expect(p.approve).toHaveBeenCalledTimes(1);
+	expect(p.invoke).toHaveBeenCalledWith(
+		"plan_runtime_observation",
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	p.review = vi.fn(async () => false);
+	p.approve = vi.fn();
+	await expect(
+		runModelInvestigation("plan_runtime_observation", input, p),
+	).rejects.toThrow("denied");
+	expect(p.approve).not.toHaveBeenCalled();
 });
 
 it.each([
- ["capture_process_tree",{artifactId:id,pid:123}],
- ["capture_file_activity",{artifactId:id,durationMs:200,maxEvents:2}],
-] as const)("%s requires independent runtime metadata approval with private tokens",async(name,input)=>{
- const p=ports();await runModelInvestigation(name,input,p);
- expect(p.review).toHaveBeenCalledWith(expect.objectContaining({operation:name,independentAnalysisApproval:true}));
- expect(p.invoke).toHaveBeenLastCalledWith(name,expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
- const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation(name,input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();expect(denied.cancel).toHaveBeenCalledWith(id);
+	["capture_process_tree", { artifactId: id, pid: 123 }],
+	["capture_file_activity", { artifactId: id, durationMs: 200, maxEvents: 2 }],
+] as const)("%s requires independent runtime metadata approval with private tokens", async (name, input) => {
+	const p = ports();
+	await runModelInvestigation(name, input, p);
+	expect(p.review).toHaveBeenCalledWith(
+		expect.objectContaining({
+			operation: name,
+			independentAnalysisApproval: true,
+		}),
+	);
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		name,
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	const denied = ports();
+	denied.review = vi.fn(async () => false);
+	await expect(runModelInvestigation(name, input, denied)).rejects.toThrow(
+		"denied",
+	);
+	expect(denied.approve).not.toHaveBeenCalled();
+	expect(denied.cancel).toHaveBeenCalledWith(id);
 });
 it.each([
- ["attach_debug_session",{artifactId:id,pid:123,endpoint:"ws://127.0.0.1:9229/11111111-1111-4111-8111-111111111111"}],
- ["set_scoped_breakpoints",{runtimeSessionId:id,locations:[{line:2}]}],
- ["capture_execution_trace",{runtimeSessionId:id,durationMs:200}],
-] as const)("%s requires fresh human approval and does not expose tokens",async(name,input)=>{
- const p=ports();p.review=vi.fn(async()=>false);
- await expect(runModelInvestigation(name,input,p)).rejects.toThrow("denied");
- expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledTimes(1);
- const ok=ports(),result=await runModelInvestigation(name,input,ok);
- expect(ok.review).toHaveBeenCalledOnce();expect(ok.invoke).toHaveBeenCalledTimes(2);
- expect(result).not.toContain("private-one-use");
+	[
+		"attach_debug_session",
+		{
+			artifactId: id,
+			pid: 123,
+			endpoint: "ws://127.0.0.1:9229/11111111-1111-4111-8111-111111111111",
+		},
+	],
+	[
+		"set_scoped_breakpoints",
+		{ runtimeSessionId: id, locations: [{ line: 2 }] },
+	],
+	["capture_execution_trace", { runtimeSessionId: id, durationMs: 200 }],
+] as const)("%s requires fresh human approval and does not expose tokens", async (name, input) => {
+	const p = ports();
+	p.review = vi.fn(async () => false);
+	await expect(runModelInvestigation(name, input, p)).rejects.toThrow("denied");
+	expect(p.approve).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledTimes(1);
+	const ok = ports(),
+		result = await runModelInvestigation(name, input, ok);
+	expect(ok.review).toHaveBeenCalledOnce();
+	expect(ok.invoke).toHaveBeenCalledTimes(2);
+	expect(result).not.toContain("private-one-use");
 });
-it("managed stop is cleanup without manufacturing a new approval",async()=>{
- const p=ports();await runModelInvestigation("stop_runtime_session",{runtimeSessionId:id},p);
- expect(p.review).not.toHaveBeenCalled();expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();
+it("managed stop is cleanup without manufacturing a new approval", async () => {
+	const p = ports();
+	await runModelInvestigation(
+		"stop_runtime_session",
+		{ runtimeSessionId: id },
+		p,
+	);
+	expect(p.review).not.toHaveBeenCalled();
+	expect(p.approve).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledOnce();
 });
 
-it("device launch requires independent Execute review; status/cancel never manufacture approval",async()=>{
- const input={action:"start",artifactId:id,deviceSerial:"owned-device",packageName:"com.example.app",purpose:"Owned observation"};
- const ok=ports(),result=await runModelInvestigation("run_device_smoke_test",input,ok);expect(ok.review).toHaveBeenCalledOnce();expect(ok.invoke).toHaveBeenLastCalledWith("run_device_smoke_test",expect.objectContaining({phase:"run",executionToken:"private-one-use"}));expect(result).not.toContain("private-one-use");
- const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation("run_device_smoke_test",input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();
- for(const action of ["status","cancel"]){const p=ports();await runModelInvestigation("run_device_smoke_test",{action,taskId:id},p);expect(p.review).not.toHaveBeenCalled();expect(p.approve).not.toHaveBeenCalled();expect(p.invoke).toHaveBeenCalledOnce();}
+it("device launch requires independent Execute review; status/cancel never manufacture approval", async () => {
+	const input = {
+		action: "start",
+		artifactId: id,
+		deviceSerial: "owned-device",
+		packageName: "com.example.app",
+		purpose: "Owned observation",
+	};
+	const ok = ports(),
+		result = await runModelInvestigation("run_device_smoke_test", input, ok);
+	expect(ok.review).toHaveBeenCalledOnce();
+	expect(ok.invoke).toHaveBeenLastCalledWith(
+		"run_device_smoke_test",
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	expect(result).not.toContain("private-one-use");
+	const denied = ports();
+	denied.review = vi.fn(async () => false);
+	await expect(
+		runModelInvestigation("run_device_smoke_test", input, denied),
+	).rejects.toThrow("denied");
+	expect(denied.approve).not.toHaveBeenCalled();
+	for (const action of ["status", "cancel"]) {
+		const p = ports();
+		await runModelInvestigation(
+			"run_device_smoke_test",
+			{ action, taskId: id },
+			p,
+		);
+		expect(p.review).not.toHaveBeenCalled();
+		expect(p.approve).not.toHaveBeenCalled();
+		expect(p.invoke).toHaveBeenCalledOnce();
+	}
 });
 
-it("release verification requires independent Inspect review; saved read/cleanup cannot issue approvals",async()=>{
- const input={action:"check",pullNumber:133,expectedHead:"a".repeat(40)},p=ports();
- await runModelInvestigation("check_release_gate",input,p);
- expect(p.review).toHaveBeenCalledOnce();expect(p.approve).toHaveBeenCalledOnce();expect(p.invoke).toHaveBeenLastCalledWith("check_release_gate",expect.objectContaining({phase:"run",executionToken:"private-one-use"}));
- const denied=ports();denied.review=vi.fn(async()=>false);await expect(runModelInvestigation("check_release_gate",input,denied)).rejects.toThrow("denied");expect(denied.approve).not.toHaveBeenCalled();
- for(const action of ["read","cancel"]){const saved=ports();await runModelInvestigation("check_release_gate",{action,taskId:id},saved);expect(saved.review).not.toHaveBeenCalled();expect(saved.approve).not.toHaveBeenCalled();expect(saved.invoke).toHaveBeenCalledOnce();}
+it("release verification requires independent Inspect review; saved read/cleanup cannot issue approvals", async () => {
+	const input = {
+			action: "check",
+			pullNumber: 133,
+			expectedHead: "a".repeat(40),
+		},
+		p = ports();
+	await runModelInvestigation("check_release_gate", input, p);
+	expect(p.review).toHaveBeenCalledOnce();
+	expect(p.approve).toHaveBeenCalledOnce();
+	expect(p.invoke).toHaveBeenLastCalledWith(
+		"check_release_gate",
+		expect.objectContaining({
+			phase: "run",
+			executionToken: "private-one-use",
+		}),
+	);
+	const denied = ports();
+	denied.review = vi.fn(async () => false);
+	await expect(
+		runModelInvestigation("check_release_gate", input, denied),
+	).rejects.toThrow("denied");
+	expect(denied.approve).not.toHaveBeenCalled();
+	for (const action of ["read", "cancel"]) {
+		const saved = ports();
+		await runModelInvestigation(
+			"check_release_gate",
+			{ action, taskId: id },
+			saved,
+		);
+		expect(saved.review).not.toHaveBeenCalled();
+		expect(saved.approve).not.toHaveBeenCalled();
+		expect(saved.invoke).toHaveBeenCalledOnce();
+	}
+});
+it.each([
+	["inspect_artifact_metadata", { artifactId: id, reader: "go" }],
+	["recover_bundle_sources", { artifactId: id }],
+	[
+		"publish_bundle_recovery",
+		{
+			artifactId: id,
+			receiptId: id,
+			reportHash: "a".repeat(64),
+			outputFile: "C:\\Cline-Outputs\\recovery.json",
+		},
+	],
+] as const)("%s requires independent review and rejects model-supplied authority", async (name, input) => {
+	const p = ports();
+	p.review = vi.fn(async () => false);
+	await expect(runModelInvestigation(name, input, p)).rejects.toThrow("denied");
+	expect(p.approve).not.toHaveBeenCalled();
+	expect(p.invoke).toHaveBeenCalledTimes(1);
+	expect(p.cancel).toHaveBeenCalled();
+	const other = ports();
+	await expect(
+		runModelInvestigation(
+			name,
+			{ ...input, executionToken: "invented" },
+			other,
+		),
+	).rejects.toThrow();
+	expect(other.invoke).not.toHaveBeenCalled();
 });

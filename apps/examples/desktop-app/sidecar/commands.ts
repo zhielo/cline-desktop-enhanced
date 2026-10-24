@@ -1,3 +1,4 @@
+import { InvestigationSchemas } from "@cline/core";
 import { runModelBinaryTriage } from "./model-binary-triage";
 import { testSpecialistProfile } from "./setup-center";
 import { inspectInvestigationSkillPack, loadInvestigationSkills } from "./investigation-skills";
@@ -3054,6 +3055,28 @@ export async function handleCommand(
 				},
 				store,
 				{
+					unknowns: (value) => {
+						const request = InvestigationSchemas.manage_investigation_unknowns.parse(value);
+						if (request.action === "list") {
+							const current = investigations().get(root, request.caseId);
+							return {
+								caseId: current.id, revision: current.revision,
+								unknowns: current.unknowns ?? [],
+								legacyQuestions: current.questions,
+								verifiedBehavior: false,
+							};
+						}
+						const { caseId, action, ...fields } = request;
+						const current = investigations().mutate(root, {
+							...fields, id: caseId,
+							action: action === "record" ? "record_unknown" : "update_unknown",
+							confirmWrite: true,
+						});
+						return {
+							caseId: current.id, revision: current.revision,
+							unknowns: current.unknowns ?? [], verifiedBehavior: false,
+						};
+					},
 					invoke: (legacy, payload) =>
 						handleCommand(
 							ctx,
@@ -6309,7 +6332,10 @@ export async function handleCommand(
 					"decompile",
 					"disassemble_smali",
  "read_smali_method", "search_smali", "assemble_smali", "rebuild_apk", "align_apk", "sign_apk", "validate_android_container",
-				].includes(operation)
+				].includes(operation) &&
+                !(operation === "javascript_analysis" &&
+                    typeof rawInput.javascript_options === "object" && rawInput.javascript_options &&
+                    ("artifactReader" in rawInput.javascript_options || "bundleRecovery" in rawInput.javascript_options))
 			) {
 				throw new Error(
 					"This workbench action is not part of the static-analysis allowlist.",
@@ -6318,11 +6344,25 @@ export async function handleCommand(
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
   if(isAnalysisWriteOperation(input.operation)){
-   if(!options?.connection?.data?.canApproveTools)throw new Error("Candidate construction/signing requires the trusted desktop connection");
-   const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id);
+   const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id),grant=options?.modelGrant;
+   // Only the host's unforgeable investigation grant can carry a human-reviewed
+   // recovery export through its own busy model session. Other writes keep the
+   // existing trusted-desktop + idle requirements. Exact one-use Modify plan
+   // consumption below still precedes every publication.
+   const modelRecovery=input.operation==="export_bundle_recovery" && grant?.key===MODEL_INVESTIGATION && grant.sessionId===id && realpathSync(grant.workspace)===realpathSync(baseDir) && grant.mode!=="off" && grant.mode===(firstPartyStore().session(id)?.mode??"off");
+   if(!options?.connection?.data?.canApproveTools&&!modelRecovery)throw new Error("Candidate construction/signing requires the trusted desktop connection");
    const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"read-only";
-   if(!live||live.busy||live.transitioningProvider||profile!=="full-access")throw new Error("Candidate construction/signing requires an idle Full Access owning session; restricted profiles are not widened");
+   if(!live||(!modelRecovery&&live.busy)||live.transitioningProvider||profile!=="full-access")throw new Error("Candidate construction/signing requires an idle Full Access owning session or its exact host-approved recovery export; restricted profiles are not widened");
   }
+        const sessionOwnedParser = input.operation === "export_bundle_recovery" ||
+            (input.operation === "javascript_analysis" &&
+                (input.javascript_options?.artifactReader || input.javascript_options?.bundleRecovery));
+        const parserOwner = String(args?.sessionId ?? "");
+        if (sessionOwnedParser) {
+            const binding = firstPartyStore().session(parserOwner);
+            if (!binding || binding.workspace !== realpathSync(baseDir))
+                throw new Error("Parser evidence requires its exact owning session workspace");
+        }
   const planId = String(args?.planId ?? "").trim();
 		const executionToken = String(args?.executionToken ?? "").trim();
 		await desktopAnalysisTaskOrchestrator.consume({
@@ -6332,8 +6372,10 @@ export async function handleCommand(
 			kind: command === "open_analysis_gui" ? "gui" : "static",
 			request: input,
 		});
+
 		const executionContext = {
 			...toolContext,
+			...(sessionOwnedParser ? { sessionId: parserOwner } : {}),
 			signal: desktopAnalysisTaskOrchestrator.signal(planId),
 		};
 		let result: string;

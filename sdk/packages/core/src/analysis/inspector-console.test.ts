@@ -26,7 +26,7 @@ it("defaults console capture off and rejects truthy non-booleans", () => {
 	).toThrow();
 });
 it("discards pre-enable/replay, post-window and invalid-coordinate reports", () => {
-	const c = new InspectorConsoleCollector();
+	const c = new InspectorConsoleCollector("linux");
 	c.accept(event(), 102);
 	c.start(100);
 	c.accept({ ...event(), timestamp: 99 }, 102);
@@ -55,7 +55,7 @@ it("discards pre-enable/replay, post-window and invalid-coordinate reports", () 
 	expect(r.verifiedBehavior).toBe(false);
 });
 it("uses fractional receipt timestamps without widening the future guard", () => {
-	const c = new InspectorConsoleCollector();
+	const c = new InspectorConsoleCollector("linux");
 	c.start(100.25);
 	c.accept({ ...event(), timestamp: 100.2 }, 102.25);
 	c.accept({ ...event(), timestamp: 102.75 }, 102.25);
@@ -67,7 +67,7 @@ it("uses fractional receipt timestamps without widening the future guard", () =>
 	expect(r.discardReasons.futureTimestamp).toBe(1);
 });
 it("keeps primitives bounded, exact string digests, opaque objects and no remote handles", () => {
-	const c = new InspectorConsoleCollector();
+	const c = new InspectorConsoleCollector("linux");
 	c.start(100);
 	const text = "s".repeat(200);
 	c.accept(
@@ -108,18 +108,44 @@ it("rejects mismatched, unverified and ambiguous script identities", () => {
 		[{ scriptId: "1", sha256: hash, staticMatch: false }],
 		[...scripts, ...scripts],
 	]) {
-		const c = new InspectorConsoleCollector();
+		const c = new InspectorConsoleCollector("linux");
 		c.start(100);
 		c.accept(event(), 102);
 		expect(c.reconcile(ss, hash).reports).toEqual([]);
 	}
 });
 it("bounds total reports and marks saturation without implying absence", () => {
-	const c = new InspectorConsoleCollector();
+	const c = new InspectorConsoleCollector("linux");
 	c.start(100);
 	for (let i = 0; i < 30; i++) c.accept(event(), 102);
 	const r = c.reconcile(scripts, hash);
 	expect(r.reports).toHaveLength(24);
 	expect(r.saturated).toBe(true);
 	expect(r.note).toContain("not absence");
+});
+
+it("records the bounded Windows clock allowance without admitting replay or arbitrary future claims", () => {
+	const c = new InspectorConsoleCollector("win32");
+	c.start(100);
+	c.accept({ ...event(), timestamp: 99.99 }, 102);
+	c.accept({ ...event(), timestamp: 117.99 }, 102);
+	c.accept({ ...event(), timestamp: 118 }, 102);
+	c.accept({ ...event(), timestamp: 1102 }, 102);
+	c.stop();
+	c.accept(event(), 102);
+	const result = c.reconcile(scripts, hash);
+	expect(result.reports).toHaveLength(1);
+	expect(result.reports[0].protocolTimestamp).toBe(117.99);
+	expect(result.clockPolicy).toEqual({
+		basis: "untrusted-protocol-epoch-ms",
+		futureToleranceMs: 16,
+		startToleranceMs: 0,
+	});
+	expect(result.discardReasons).toEqual({
+		beforeWindow: 1,
+		futureTimestamp: 2,
+		invalidReport: 0,
+		unboundSource: 0,
+	});
+	expect(result.verifiedBehavior).toBe(false);
 });

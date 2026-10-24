@@ -1,6 +1,12 @@
 import { realpathSync } from "node:fs";
 import { bindHybridObservation } from "./hybrid-analysis";
-import { InvestigationSchemas, HybridProposalSchema, runtimeAnalysisEnabled, correlateSavedEvidence } from "@cline/core";
+import {
+	InvestigationSchemas,
+	HybridProposalSchema,
+	runtimeAnalysisEnabled,
+	correlateSavedEvidence,
+	querySavedNativeValueFlow,
+} from "@cline/core";
 import { evidenceIndex, reconcileFeature } from "./investigation-report";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -10,42 +16,59 @@ import type {
 	WorkflowScope,
 } from "./analysis-workflow-store";
 const Id = z.string().uuid();
-export const BATCH_WORKFLOW_COMMANDS = ["plan_batch", "preview_batch", "run_batch", "checkpoint_investigation", "cancel_batch", "resume_investigation"] as const;
+export const BATCH_WORKFLOW_COMMANDS = [
+	"plan_batch",
+	"preview_batch",
+	"run_batch",
+	"checkpoint_investigation",
+	"cancel_batch",
+	"resume_investigation",
+] as const;
 export const WORKFLOW_COMMANDS = [
- ...BATCH_WORKFLOW_COMMANDS,
- "check_release_gate",
- "run_device_smoke_test",
+	"manage_investigation_unknowns",
+	"trace_native_value_flow",
+	...BATCH_WORKFLOW_COMMANDS,
+	"check_release_gate",
+	"run_device_smoke_test",
 	"attach_debug_session",
- "set_scoped_breakpoints",
- "capture_execution_trace",
- "stop_runtime_session",
- "capture_process_tree",
+	"set_scoped_breakpoints",
+	"capture_execution_trace",
+	"stop_runtime_session",
+	"capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",
 	"validate_candidate",
- "review_candidate_changes",
+	"review_candidate_changes",
 	"open_binary",
 	"analyze_function",
+	"inspect_artifact_metadata",
+	"recover_bundle_sources",
+	"publish_bundle_recovery",
 	"trace_application_feature",
 	"capture_browser_scenario",
- "capture_network_metadata",
+	"capture_network_metadata",
 	"get_evidence_bundle",
- "correlate_static_runtime",
+	"correlate_static_runtime",
 	"analysis_workflow_status",
 	"analysis_workflow_hybrid_prepare",
 ] as const;
 export interface WorkflowPorts {
+	unknowns?: (input: unknown) => unknown;
 	invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>;
 	staticReceipt: (id: string) => unknown;
 	taskBundle: (id: string) => unknown;
 	capture: (input: Record<string, unknown>) => Promise<unknown>;
 	browsers?: () => unknown;
- managedSession?: (id:string)=>{target:string;expected_sha256:string;hybrid?:unknown};
- managedRuntime?: (command:string,input:unknown)=>Promise<unknown>;
- releaseGate?: (input: unknown) => Promise<unknown>;
- deviceSmoke?: (input: unknown) => Promise<unknown>;
- runtimeCapture?: (command: string, input: unknown) => Promise<unknown>;
- batch?: (command: string, input: unknown) => Promise<unknown>;
+	managedSession?: (id: string) => {
+		target: string;
+		expected_sha256: string;
+		hybrid?: unknown;
+	};
+	managedRuntime?: (command: string, input: unknown) => Promise<unknown>;
+	releaseGate?: (input: unknown) => Promise<unknown>;
+	deviceSmoke?: (input: unknown) => Promise<unknown>;
+	runtimeCapture?: (command: string, input: unknown) => Promise<unknown>;
+	batch?: (command: string, input: unknown) => Promise<unknown>;
 }
 export function sanitizeEvidence(value: unknown): unknown {
 	const secrets = Object.entries(process.env)
@@ -114,41 +137,118 @@ export async function handleAnalysisWorkflow(
 	store: AnalysisWorkflowStore,
 	ports: WorkflowPorts,
 ) {
- if(command === "check_release_gate") {
-  if(!options.trusted || !ports.releaseGate) throw new Error("Trusted owning release verification host required");
-  const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().min(1).max(512).optional()}).passthrough().parse(input);
-  const {phase,planId,executionToken,...publicInput}=envelope;
-  const params=InvestigationSchemas.check_release_gate.parse(publicInput);
-  if(params.action!=="check") return ports.releaseGate({request:params});
-  if(options.mode==="off" || (!options.idle && options.actor!=="model")) throw new Error("Release verification requires an enabled owning Analysis session");
-  return ports.releaseGate({phase,planId,executionToken,request:params});
- }
- if(command === "run_device_smoke_test") {
-  if(!options.trusted || !ports.deviceSmoke) throw new Error("Trusted owning device host required");
-  const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().min(1).max(512).optional()}).passthrough().parse(input);
-  const {phase,planId,executionToken,...publicInput}=envelope;
-  const params=InvestigationSchemas.run_device_smoke_test.parse(publicInput);
-  if(params.action!=="start") return ports.deviceSmoke({request:params});
-  if(!runtimeAnalysisEnabled(options.mode) || (!options.idle && options.actor!=="model")) throw new Error("Device launch requires an owning Runtime/Hybrid session; Static never executes targets");
-  const artifact=await store.verify(scope,params.artifactId);
-  const {artifactId:_id,hybridProposal,...request}=params;
-  if(options.mode!=="hybrid" && hybridProposal) throw new Error("Hybrid proposal requires Hybrid mode");
-  const hybrid=options.mode==="hybrid"?await bindHybridObservation(hybridProposal,scope,{receipt:ports.staticReceipt,task:(id)=>(ports.taskBundle(id) as {providerSnapshot?:unknown})?.providerSnapshot},artifact.path):undefined;
-  return ports.deviceSmoke({phase,planId,executionToken,request:{...request,target:artifact.path,expected_sha256:artifact.sha256,...(hybrid?{hybrid}:{})}});
- }
- if (command === "stop_runtime_session") {
-  if (!options.trusted || !ports.managedRuntime) throw new Error("Trusted owning cleanup host required");
-  return ports.managedRuntime(command,InvestigationSchemas.stop_runtime_session.parse(input));
- }
- if ((BATCH_WORKFLOW_COMMANDS as readonly string[]).includes(command)) {
-  const cleanup = command === "checkpoint_investigation" || command === "cancel_batch";
-  if (!options.trusted || (!cleanup && ((!options.idle && options.actor !== "model") || options.mode === "off")))
-   throw new Error("Batch work requires a trusted owning session with Analysis enabled");
-  if (!ports.batch) throw new Error("Durable batch runner unavailable");
-  return ports.batch(command, input);
- }
-	if (command === "capture_network_metadata") command = "capture_browser_scenario";
- if (command === "analysis_workflow_hybrid_prepare") {
+	if (command === "manage_investigation_unknowns") {
+		if (!options.trusted || !ports.unknowns)
+			throw new Error("Trusted owning investigation host required");
+		return ports.unknowns(
+			InvestigationSchemas.manage_investigation_unknowns.parse(input),
+		);
+	}
+	if (command === "check_release_gate") {
+		if (!options.trusted || !ports.releaseGate)
+			throw new Error("Trusted owning release verification host required");
+		const envelope = z
+			.object({
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().min(1).max(512).optional(),
+			})
+			.passthrough()
+			.parse(input);
+		const { phase, planId, executionToken, ...publicInput } = envelope;
+		const params = InvestigationSchemas.check_release_gate.parse(publicInput);
+		if (params.action !== "check")
+			return ports.releaseGate({ request: params });
+		if (options.mode === "off" || (!options.idle && options.actor !== "model"))
+			throw new Error(
+				"Release verification requires an enabled owning Analysis session",
+			);
+		return ports.releaseGate({
+			phase,
+			planId,
+			executionToken,
+			request: params,
+		});
+	}
+	if (command === "run_device_smoke_test") {
+		if (!options.trusted || !ports.deviceSmoke)
+			throw new Error("Trusted owning device host required");
+		const envelope = z
+			.object({
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().min(1).max(512).optional(),
+			})
+			.passthrough()
+			.parse(input);
+		const { phase, planId, executionToken, ...publicInput } = envelope;
+		const params =
+			InvestigationSchemas.run_device_smoke_test.parse(publicInput);
+		if (params.action !== "start")
+			return ports.deviceSmoke({ request: params });
+		if (
+			!runtimeAnalysisEnabled(options.mode) ||
+			(!options.idle && options.actor !== "model")
+		)
+			throw new Error(
+				"Device launch requires an owning Runtime/Hybrid session; Static never executes targets",
+			);
+		const artifact = await store.verify(scope, params.artifactId);
+		const { artifactId: _id, hybridProposal, ...request } = params;
+		if (options.mode !== "hybrid" && hybridProposal)
+			throw new Error("Hybrid proposal requires Hybrid mode");
+		const hybrid =
+			options.mode === "hybrid"
+				? await bindHybridObservation(
+						hybridProposal,
+						scope,
+						{
+							receipt: ports.staticReceipt,
+							task: (id) =>
+								(ports.taskBundle(id) as { providerSnapshot?: unknown })
+									?.providerSnapshot,
+						},
+						artifact.path,
+					)
+				: undefined;
+		return ports.deviceSmoke({
+			phase,
+			planId,
+			executionToken,
+			request: {
+				...request,
+				target: artifact.path,
+				expected_sha256: artifact.sha256,
+				...(hybrid ? { hybrid } : {}),
+			},
+		});
+	}
+	if (command === "stop_runtime_session") {
+		if (!options.trusted || !ports.managedRuntime)
+			throw new Error("Trusted owning cleanup host required");
+		return ports.managedRuntime(
+			command,
+			InvestigationSchemas.stop_runtime_session.parse(input),
+		);
+	}
+	if ((BATCH_WORKFLOW_COMMANDS as readonly string[]).includes(command)) {
+		const cleanup =
+			command === "checkpoint_investigation" || command === "cancel_batch";
+		if (
+			!options.trusted ||
+			(!cleanup &&
+				((!options.idle && options.actor !== "model") ||
+					options.mode === "off"))
+		)
+			throw new Error(
+				"Batch work requires a trusted owning session with Analysis enabled",
+			);
+		if (!ports.batch) throw new Error("Durable batch runner unavailable");
+		return ports.batch(command, input);
+	}
+	if (command === "capture_network_metadata")
+		command = "capture_browser_scenario";
+	if (command === "analysis_workflow_hybrid_prepare") {
 		if (
 			!options.trusted ||
 			options.mode !== "hybrid" ||
@@ -172,17 +272,47 @@ export async function handleAnalysisWorkflow(
 			browsers: ports.browsers?.() ?? [],
 			mode: options.mode,
 		};
+	if (command === "trace_native_value_flow") {
+		if (!options.trusted)
+			throw new Error("Trusted owning saved-evidence host required");
+		const query = InvestigationSchemas.trace_native_value_flow.parse(input);
+		if (new Set(query.taskIds).size !== query.taskIds.length)
+			throw new Error("Select distinct task IDs");
+		const snapshots = query.taskIds.map((id) => {
+			const bundle = ports.taskBundle(id) as { providerSnapshot?: unknown };
+			if (!bundle?.providerSnapshot)
+				throw new Error(
+					"Owning hash-checked provider snapshot unavailable; no provider will be rerun",
+				);
+			return bundle.providerSnapshot;
+		});
+		return querySavedNativeValueFlow(
+			{ ...scope, workspace: realpathSync(scope.workspace) },
+			query,
+			snapshots,
+		);
+	}
+
 	if (command === "correlate_static_runtime") {
-  if (!options.trusted) throw new Error("Trusted owning saved-evidence host required");
-  const req=InvestigationSchemas.correlate_static_runtime.parse(input);
-  if(new Set(req.taskIds).size!==req.taskIds.length)throw new Error("Select distinct task IDs");
-  const snapshots=req.taskIds.map(id=>{
-   const bundle=ports.taskBundle(id) as {providerSnapshot?:unknown};
-   if(!bundle?.providerSnapshot)throw new Error("Owning hash-checked provider snapshot unavailable; no observation will be rerun");
-   return bundle.providerSnapshot;
-  });
-  return correlateSavedEvidence({...scope,workspace:realpathSync(scope.workspace)},ports.staticReceipt(req.receiptId),snapshots);
- }
+		if (!options.trusted)
+			throw new Error("Trusted owning saved-evidence host required");
+		const req = InvestigationSchemas.correlate_static_runtime.parse(input);
+		if (new Set(req.taskIds).size !== req.taskIds.length)
+			throw new Error("Select distinct task IDs");
+		const snapshots = req.taskIds.map((id) => {
+			const bundle = ports.taskBundle(id) as { providerSnapshot?: unknown };
+			if (!bundle?.providerSnapshot)
+				throw new Error(
+					"Owning hash-checked provider snapshot unavailable; no observation will be rerun",
+				);
+			return bundle.providerSnapshot;
+		});
+		return correlateSavedEvidence(
+			{ ...scope, workspace: realpathSync(scope.workspace) },
+			ports.staticReceipt(req.receiptId),
+			snapshots,
+		);
+	}
 	if (command === "get_evidence_bundle") {
 		const req = z
 			.object({
@@ -299,64 +429,320 @@ export async function handleAnalysisWorkflow(
 				}
 			: artifact;
 	}
- if (["attach_debug_session","set_scoped_breakpoints","capture_execution_trace"].includes(command)) {
-  if(!runtimeAnalysisEnabled(options.mode))throw new Error("Managed debugger requires Runtime/Hybrid; Static never enables debug control");
-  if(!ports.managedRuntime)throw new Error("Managed runtime host unavailable");
-  const envelope=z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().max(512).optional()}).passthrough().parse(input);
-  const {phase,planId,executionToken,...publicInput}=envelope;
-  const name=command as "attach_debug_session"|"set_scoped_breakpoints"|"capture_execution_trace";
-  const params=InvestigationSchemas[name].parse(publicInput);
-  let target:string,expected_sha256:string,hybrid:unknown,controlOptions:unknown;
-  if("artifactId" in params){
-   const artifact=await store.verify(scope,params.artifactId);target=artifact.path;expected_sha256=artifact.sha256;
-   const {artifactId:_artifact,hybridProposal,...rest}=params;controlOptions=rest;
-   if(options.mode!=="hybrid"&&hybridProposal)throw new Error("Hybrid proposal requires Hybrid mode");
-   hybrid=options.mode==="hybrid"?await bindHybridObservation(hybridProposal,scope,{receipt:ports.staticReceipt,task:(id)=>(ports.taskBundle(id) as {providerSnapshot?:unknown})?.providerSnapshot},target):undefined;
-  }else{
-   const session=ports.managedSession?.(params.runtimeSessionId);if(!session)throw new Error("Owned managed runtime session unavailable");
-   target=session.target;expected_sha256=session.expected_sha256;hybrid=session.hybrid;controlOptions=params;
-  }
-  return ports.managedRuntime(command,{phase,planId,executionToken,request:{operation:command,target,expected_sha256,options:controlOptions,...(hybrid?{hybrid}:{})}});
- }
- if (command === "capture_process_tree" || command === "capture_file_activity") {
-  if (!runtimeAnalysisEnabled(options.mode)) throw new Error("Capture requires Runtime or Hybrid mode; Static never enables observation");
-  const envelope = z.object({phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().max(512).optional()}).passthrough().parse(input);
-  const {phase,planId,executionToken,...publicInput}=envelope;
-  // SDK uses Zod 4; parse plain values rather than extending it with host Zod 3.
-  const params=InvestigationSchemas[command].parse(publicInput);
-  const artifact=await store.verify(scope,params.artifactId);
-  const {hybridProposal,artifactId:_artifact,...captureOptions}=params;
-  if (options.mode !== "hybrid" && hybridProposal) throw new Error("Hybrid proposal requires Hybrid mode");
-  const hybrid=options.mode === "hybrid" ? await bindHybridObservation(hybridProposal,scope,{receipt:ports.staticReceipt,task:(id)=>(ports.taskBundle(id) as {providerSnapshot?:unknown})?.providerSnapshot},artifact.path) : undefined;
-  if (!ports.runtimeCapture) throw new Error("Runtime capture host unavailable");
-  return ports.runtimeCapture(command,{phase,planId,executionToken,request:{operation:command,target:artifact.path,expected_sha256:artifact.sha256,options:captureOptions,...(hybrid?{hybrid}:{})}});
- }
- if (command === "plan_runtime_observation") {
-  const req = z.object({artifactId: Id, observation: z.unknown(), phase: z.enum(["prepare","run"]).default("prepare"), planId: Id.optional(), executionToken: z.string().max(512).optional()}).strict().parse(input);
-  const params = InvestigationSchemas.plan_runtime_observation.parse({artifactId:req.artifactId, observation:req.observation});
-  const artifact = await store.verify(scope, req.artifactId);
-  const request = {operation: command, target: artifact.path, timeout_ms: 20000, runtime_observation_plan: {...params.observation, expected_sha256: artifact.sha256}};
-  if (req.phase === "prepare") return ports.invoke("prepare_analysis_task", {kind:"static", request});
-  if (!req.planId || !req.executionToken) throw new Error("A separately approved one-use plan is required");
-  return ports.invoke("run_static_analysis", {input:request, planId:req.planId, executionToken:req.executionToken});
- }
- if (command === "validate_candidate" || command === "review_candidate_changes") {
-  const req = z.object({
-   artifactId: Id,
-   kind: z.enum(["javascript", "typescript", "dex", "apk"]).optional(),
-   scope: z.enum(["recipe", "project-files", "project-inventory"]).optional(),
-   phase: z.enum(["prepare", "run"]).default("prepare"),
-   planId: Id.optional(), executionToken: z.string().max(512).optional(),
-  }).strict().parse(input);
-  if ((command === "validate_candidate") !== !!req.kind) throw new Error("Only validate_candidate requires a validation kind");
-  if(command === "validate_candidate" && req.scope) throw new Error("Project review scope is only accepted by review_candidate_changes");
-  const artifact = await store.verify(scope, req.artifactId);
-  const request = {operation: command, target: artifact.path, timeout_ms: 120000,
-   ...(command === "validate_candidate" ? {candidate_validation: {expected_sha256: artifact.sha256, kind: req.kind}} : {candidate_review: {manifest_sha256: artifact.sha256, ...(req.scope ? {scope:req.scope} : {})}})};
-  if (req.phase === "prepare") return ports.invoke("prepare_analysis_task", {kind: "static", request});
-  if (!req.planId || !req.executionToken) throw new Error("A separately approved one-use plan is required");
-  return ports.invoke("run_static_analysis", {input: request, planId: req.planId, executionToken: req.executionToken});
- }
+	if (
+		[
+			"attach_debug_session",
+			"set_scoped_breakpoints",
+			"capture_execution_trace",
+		].includes(command)
+	) {
+		if (!runtimeAnalysisEnabled(options.mode))
+			throw new Error(
+				"Managed debugger requires Runtime/Hybrid; Static never enables debug control",
+			);
+		if (!ports.managedRuntime)
+			throw new Error("Managed runtime host unavailable");
+		const envelope = z
+			.object({
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().max(512).optional(),
+			})
+			.passthrough()
+			.parse(input);
+		const { phase, planId, executionToken, ...publicInput } = envelope;
+		const name = command as
+			| "attach_debug_session"
+			| "set_scoped_breakpoints"
+			| "capture_execution_trace";
+		const params = InvestigationSchemas[name].parse(publicInput);
+		let target: string,
+			expected_sha256: string,
+			hybrid: unknown,
+			controlOptions: unknown;
+		if ("artifactId" in params) {
+			const artifact = await store.verify(scope, params.artifactId);
+			target = artifact.path;
+			expected_sha256 = artifact.sha256;
+			const { artifactId: _artifact, hybridProposal, ...rest } = params;
+			controlOptions = rest;
+			if (options.mode !== "hybrid" && hybridProposal)
+				throw new Error("Hybrid proposal requires Hybrid mode");
+			hybrid =
+				options.mode === "hybrid"
+					? await bindHybridObservation(
+							hybridProposal,
+							scope,
+							{
+								receipt: ports.staticReceipt,
+								task: (id) =>
+									(ports.taskBundle(id) as { providerSnapshot?: unknown })
+										?.providerSnapshot,
+							},
+							target,
+						)
+					: undefined;
+		} else {
+			const session = ports.managedSession?.(params.runtimeSessionId);
+			if (!session)
+				throw new Error("Owned managed runtime session unavailable");
+			target = session.target;
+			expected_sha256 = session.expected_sha256;
+			hybrid = session.hybrid;
+			controlOptions = params;
+		}
+		return ports.managedRuntime(command, {
+			phase,
+			planId,
+			executionToken,
+			request: {
+				operation: command,
+				target,
+				expected_sha256,
+				options: controlOptions,
+				...(hybrid ? { hybrid } : {}),
+			},
+		});
+	}
+	if (
+		command === "capture_process_tree" ||
+		command === "capture_file_activity"
+	) {
+		if (!runtimeAnalysisEnabled(options.mode))
+			throw new Error(
+				"Capture requires Runtime or Hybrid mode; Static never enables observation",
+			);
+		const envelope = z
+			.object({
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().max(512).optional(),
+			})
+			.passthrough()
+			.parse(input);
+		const { phase, planId, executionToken, ...publicInput } = envelope;
+		// SDK uses Zod 4; parse plain values rather than extending it with host Zod 3.
+		const params = InvestigationSchemas[command].parse(publicInput);
+		const artifact = await store.verify(scope, params.artifactId);
+		const { hybridProposal, artifactId: _artifact, ...captureOptions } = params;
+		if (options.mode !== "hybrid" && hybridProposal)
+			throw new Error("Hybrid proposal requires Hybrid mode");
+		const hybrid =
+			options.mode === "hybrid"
+				? await bindHybridObservation(
+						hybridProposal,
+						scope,
+						{
+							receipt: ports.staticReceipt,
+							task: (id) =>
+								(ports.taskBundle(id) as { providerSnapshot?: unknown })
+									?.providerSnapshot,
+						},
+						artifact.path,
+					)
+				: undefined;
+		if (!ports.runtimeCapture)
+			throw new Error("Runtime capture host unavailable");
+		return ports.runtimeCapture(command, {
+			phase,
+			planId,
+			executionToken,
+			request: {
+				operation: command,
+				target: artifact.path,
+				expected_sha256: artifact.sha256,
+				options: captureOptions,
+				...(hybrid ? { hybrid } : {}),
+			},
+		});
+	}
+	if (command === "plan_runtime_observation") {
+		const req = z
+			.object({
+				artifactId: Id,
+				observation: z.unknown(),
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().max(512).optional(),
+			})
+			.strict()
+			.parse(input);
+		const params = InvestigationSchemas.plan_runtime_observation.parse({
+			artifactId: req.artifactId,
+			observation: req.observation,
+		});
+		const artifact = await store.verify(scope, req.artifactId);
+		const request = {
+			operation: command,
+			target: artifact.path,
+			timeout_ms: 20000,
+			runtime_observation_plan: {
+				...params.observation,
+				expected_sha256: artifact.sha256,
+			},
+		};
+		if (req.phase === "prepare")
+			return ports.invoke("prepare_analysis_task", { kind: "static", request });
+		if (!req.planId || !req.executionToken)
+			throw new Error("A separately approved one-use plan is required");
+		return ports.invoke("run_static_analysis", {
+			input: request,
+			planId: req.planId,
+			executionToken: req.executionToken,
+		});
+	}
+	if (
+		command === "validate_candidate" ||
+		command === "review_candidate_changes"
+	) {
+		const req = z
+			.object({
+				artifactId: Id,
+				kind: z.enum(["javascript", "typescript", "dex", "apk"]).optional(),
+				scope: z
+					.enum(["recipe", "project-files", "project-inventory"])
+					.optional(),
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().max(512).optional(),
+			})
+			.strict()
+			.parse(input);
+		if ((command === "validate_candidate") !== !!req.kind)
+			throw new Error("Only validate_candidate requires a validation kind");
+		if (command === "validate_candidate" && req.scope)
+			throw new Error(
+				"Project review scope is only accepted by review_candidate_changes",
+			);
+		const artifact = await store.verify(scope, req.artifactId);
+		const request = {
+			operation: command,
+			target: artifact.path,
+			timeout_ms: 120000,
+			...(command === "validate_candidate"
+				? {
+						candidate_validation: {
+							expected_sha256: artifact.sha256,
+							kind: req.kind,
+						},
+					}
+				: {
+						candidate_review: {
+							manifest_sha256: artifact.sha256,
+							...(req.scope ? { scope: req.scope } : {}),
+						},
+					}),
+		};
+		if (req.phase === "prepare")
+			return ports.invoke("prepare_analysis_task", { kind: "static", request });
+		if (!req.planId || !req.executionToken)
+			throw new Error("A separately approved one-use plan is required");
+		return ports.invoke("run_static_analysis", {
+			input: request,
+			planId: req.planId,
+			executionToken: req.executionToken,
+		});
+	}
+	if (
+		command === "recover_bundle_sources" ||
+		command === "publish_bundle_recovery"
+	) {
+		const authority = {
+			phase: z.enum(["prepare", "run"]).default("prepare"),
+			planId: Id.optional(),
+			executionToken: z.string().max(512).optional(),
+		};
+		const req =
+			command === "recover_bundle_sources"
+				? {
+						action: "recover" as const,
+						...z
+							.object({
+								artifactId: Id,
+								engine: z.enum(["literal", "wakaru"]).optional(),
+								...authority,
+							})
+							.strict()
+							.parse(input),
+					}
+				: {
+						action: "publish" as const,
+						...z
+							.object({
+								artifactId: Id,
+								receiptId: Id,
+								reportHash: z.string().regex(/^[a-f0-9]{64}$/),
+								outputFile: z.string().min(1).max(4096),
+								...authority,
+							})
+							.strict()
+							.parse(input),
+					};
+
+		const artifact = await store.verify(scope, req.artifactId);
+		const request =
+			req.action === "publish"
+				? {
+						operation: "export_bundle_recovery",
+						target: artifact.path,
+						timeout_ms: 120000,
+						output_file: req.outputFile,
+						bundle_export: {
+							receiptId: req.receiptId,
+							reportHash: req.reportHash,
+						},
+					}
+				: {
+						operation: "javascript_analysis",
+						target: artifact.path,
+						timeout_ms: 120000,
+						javascript_options: {
+							bundleRecovery: {
+								expectedSha256: artifact.sha256,
+								...(req.engine ? { engine: req.engine } : {}),
+							},
+						},
+					};
+		if (req.phase === "prepare")
+			return ports.invoke("prepare_analysis_task", { kind: "static", request });
+		if (!req.planId || !req.executionToken)
+			throw new Error("A separately approved one-use plan is required");
+		return ports.invoke("run_static_analysis", {
+			input: request,
+			planId: req.planId,
+			executionToken: req.executionToken,
+		});
+	}
+	if (command === "inspect_artifact_metadata") {
+		const req = z
+			.object({
+				artifactId: Id,
+				reader: z.enum(["go", "rust", "pyinstaller", "il2cpp"]),
+				phase: z.enum(["prepare", "run"]).default("prepare"),
+				planId: Id.optional(),
+				executionToken: z.string().max(512).optional(),
+			})
+			.strict()
+			.parse(input);
+		const artifact = await store.verify(scope, req.artifactId);
+		const request = {
+			operation: "javascript_analysis",
+			target: artifact.path,
+			timeout_ms: 120000,
+			javascript_options: {
+				artifactReader: { reader: req.reader, expectedSha256: artifact.sha256 },
+			},
+		};
+		if (req.phase === "prepare")
+			return ports.invoke("prepare_analysis_task", { kind: "static", request });
+		if (!req.planId || !req.executionToken)
+			throw new Error("A separately approved one-use plan is required");
+		return ports.invoke("run_static_analysis", {
+			input: request,
+			planId: req.planId,
+			executionToken: req.executionToken,
+		});
+	}
 	if (command === "analyze_function") {
 		const req = z
 			.object({

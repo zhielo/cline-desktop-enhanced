@@ -1,0 +1,65 @@
+name: General Recovery Owned Engine Validation
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owned-recovery:
+    name: Pinned general recovery (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+      - name: Build SDK
+        run: bun run build:sdk
+      - name: Prepare exact pinned native engine
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/general-runtime"
+          bun scripts/prepare-wakaru-engine.ts "$RUNNER_TEMP/general-runtime/wakaru"
+      - name: Test real engine and provenance
+        shell: bash
+        working-directory: sdk/packages/core
+        env:
+          CLINE_TEST_WAKARU_ROOT: ${{ runner.temp }}/general-runtime
+        run: |
+          set -o pipefail
+          bunx vitest run src/analysis/general-recovery/engine.test.ts src/analysis/general-recovery/owned-run.test.ts src/runtime/windows-job-launcher.test.ts src/runtime/private-process-group.test.ts src/runtime/linux-recovery-deadline.test.ts src/analysis/recovery.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
+      - name: Test owning model-host recovery routes
+        shell: bash
+        working-directory: apps/examples/desktop-app
+        env:
+          CLINE_TEST_WAKARU_ROOT: ${{ runner.temp }}/general-runtime
+        run: |
+          set -o pipefail
+          bunx vitest run sidecar/commands-workbench.test.ts sidecar/general-recovery-selfcheck.test.ts sidecar/analysis-workflow.test.ts sidecar/investigation-skills.test.ts --config vitest.config.mts 2>&1 | tee general-recovery-model-host.log
+      - name: Score and exercise investigation model transport (not a live model)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          (cd apps/examples/desktop-app && bunx vitest run sidecar/investigation-eval-score.test.ts sidecar/investigation-model.live.test.ts --config vitest.config.mts)
+          node scripts/test-investigation-model-transport.mjs
+      - name: Retain bounded engine validation diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: general-recovery-validation-${{ matrix.os }}
+          path: |
+            sdk/packages/core/general-recovery-test.log
+            apps/examples/desktop-app/general-recovery-model-host.log
+            ${{ runner.temp }}/general-runtime/wakaru/manifest.json
+          retention-days: 7

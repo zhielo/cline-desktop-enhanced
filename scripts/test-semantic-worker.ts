@@ -1,3 +1,7 @@
+import { byteDigest } from "../sdk/packages/core/src/analysis/contracts";
+import { createGoBinaryFixture } from "../sdk/packages/core/src/analysis/artifact-readers/upstream/tests/fixtures/go/image";
+import { createRustImage } from "../sdk/packages/core/src/analysis/artifact-readers/upstream/tests/fixtures/rust/image";
+import { createIl2cppMetadataFixture } from "../sdk/packages/core/src/analysis/artifact-readers/upstream/tests/fixtures/il2cpp/metadata";
 import { strict as assert } from "node:assert";
 import {
 	access,
@@ -162,6 +166,64 @@ try {
 	) as { items: unknown[]; targetExecuted: boolean };
 	assert.equal(fusePage.items.length, 2);
 	assert.equal(fusePage.targetExecuted, false);
+
+	for (const reader of ["go", "rust", "il2cpp"] as const) {
+		store.setMode("owned-semantic-smoke", root, "static");
+		const bytes =
+			reader === "go"
+				? createGoBinaryFixture().bytes
+				: reader === "rust"
+					? createRustImage({ format: "pe" })
+					: createIl2cppMetadataFixture({ version: 39 }).bytes;
+		await writeFile(join(root, "owned-metadata.bin"), bytes);
+		const r = await runFirstPartyAnalysis(
+			"owned-semantic-smoke",
+			{
+				target: "owned-metadata.bin",
+				artifactReader: { reader, expectedSha256: byteDigest(bytes) },
+			},
+			undefined,
+			store,
+			host,
+		);
+		assert.equal(r.status, "partial", r.error);
+		assert.ok(r.result?.artifactMetadata?.records.length);
+		assert.equal(r.result?.artifactMetadata?.targetExecuted, false);
+		store.setMode("owned-semantic-smoke", root, "off");
+		const p = queryFirstPartyEvidence(
+			"owned-semantic-smoke",
+			{ receiptId: r.id, view: "artifact-metadata", limit: 2 },
+			store,
+		) as { items: unknown[]; providerCalls: number };
+		assert.equal(p.items.length, 2);
+		assert.equal(p.providerCalls, 0);
+	}
+	store.setMode("owned-semantic-smoke", root, "static");
+	const bundle = Buffer.from(
+		`(self.webpackChunkowned=self.webpackChunkowned||[]).push([[1],{42:function(module,exports,require){exports.value=7;throw new Error("MUST_NOT_EXECUTE")}}]);`,
+	);
+	await writeFile(join(root, "owned-bundle.js"), bundle);
+	const recovery = await runFirstPartyAnalysis(
+		"owned-semantic-smoke",
+		{
+			target: "owned-bundle.js",
+			bundleRecovery: { expectedSha256: byteDigest(bundle) },
+		},
+		undefined,
+		store,
+		host,
+	);
+	assert.equal(recovery.status, "partial", recovery.error);
+	assert.equal(recovery.result?.bundleRecovery?.modules.length, 1);
+	assert.equal(recovery.result.bundleRecovery.targetExecuted, false);
+	store.setMode("owned-semantic-smoke", root, "off");
+	const recovered = queryFirstPartyEvidence(
+		"owned-semantic-smoke",
+		{ receiptId: recovery.id, view: "bundle-recovery", limit: 1 },
+		store,
+	) as { items: unknown[]; providerCalls: number };
+	assert.equal(recovered.items.length, 1);
+	assert.equal(recovered.providerCalls, 0);
 	console.log(
 		JSON.stringify({
 			status: "passed",

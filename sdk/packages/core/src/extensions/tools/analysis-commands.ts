@@ -71,6 +71,8 @@ export const ANALYSIS_ALIAS_NAMES = Object.keys(ANALYSIS_COMMAND_ALIASES) as [
 	...(keyof typeof ANALYSIS_COMMAND_ALIASES)[],
 ];
 export const ANALYSIS_WRITE_OPERATIONS = [
+	"export_bundle_recovery",
+	"publish_bundle_recovery",
 	"export_evidence_bundle",
 	"build_android_candidate",
 	"annotate_analysis_project",
@@ -213,6 +215,11 @@ const HOST_ONLY_COMMANDS = new Set([
 	"cancel_batch",
 	"check_release_gate",
 	"correlate_static_runtime",
+	"manage_investigation_unknowns",
+	"trace_native_value_flow",
+	"inspect_artifact_metadata",
+	"recover_bundle_sources",
+	"publish_bundle_recovery",
 	"attach_debug_session",
 	"set_scoped_breakpoints",
 	"capture_execution_trace",
@@ -229,6 +236,32 @@ export function analysisCommandCatalog() {
 		schemaVersion: 1,
 		status: "completed",
 		entries: [
+			{
+				command: "export_bundle_recovery",
+				effect: "candidate-write",
+				availability: "implemented-bounded",
+				limitations:
+					"Independent Modify approval, exact owning saved report and original source hash, new staged no-overwrite JSON provenance package only; no execution or automatic promotion.",
+			},
+			...[
+				"manage_investigation_unknowns",
+				"trace_native_value_flow",
+				"inspect_artifact_metadata",
+				"recover_bundle_sources",
+				"publish_bundle_recovery",
+			].map((command) => ({
+				command,
+				effect:
+					command === "publish_bundle_recovery"
+						? "candidate-write"
+						: command === "manage_investigation_unknowns"
+							? "investigation-metadata"
+							: command === "trace_native_value_flow"
+								? "saved-evidence-read"
+								: "static-analysis",
+				availability: "implemented-bounded",
+				limitations: investigationCommandInterface(command)!.description,
+			})),
 			...[
 				"capture_network_metadata",
 				"checkpoint_investigation",

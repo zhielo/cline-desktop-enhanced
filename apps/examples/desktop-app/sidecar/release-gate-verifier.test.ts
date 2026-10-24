@@ -290,3 +290,18 @@ test("semantic workflow recipe remains hash-pinned", () => {
 		Buffer.from("changed");
 	assert.throws(() => verifyReleaseGateEvidence(133, head, e));
 });
+
+for (const os of ["ubuntu-latest", "windows-latest"]) {
+	test(`general recovery ${os} is mandatory and cannot be skipped`, () => {
+		const evidence = fixture();
+		const check = evidence.checks.check_runs.find(
+			(c) => c.name === `Pinned general recovery (${os})`,
+		);
+		assert.ok(check);
+		check.conclusion = "skipped";
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, evidence),
+			/Required check not successful/,
+		);
+	});
+}

@@ -250,6 +250,11 @@ async function runEntrypoint(): Promise<void> {
     const entry = (globalThis as {Bun?:{main?:string}}).Bun?.main;
     configureFirstPartyAnalysisHost({executable:process.execPath,
         args:entry && !entry.startsWith("/$bunfs/") ? [entry] : []});
+    if (process.argv.includes("--cline-general-recovery-selfcheck")) {
+        const {selfcheckGeneralRecovery} = await import("./general-recovery-selfcheck");
+        process.stdout.write(JSON.stringify(await selfcheckGeneralRecovery())+"\n");
+        return;
+    }
     if (process.argv.includes("--cline-analysis-selfcheck")) {
         const {testFirstPartyFixture}=await import("./first-party-analysis");
         process.stdout.write(JSON.stringify(await testFirstPartyFixture())+"\n");

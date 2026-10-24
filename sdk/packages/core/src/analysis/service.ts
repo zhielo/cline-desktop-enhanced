@@ -94,6 +94,22 @@ export async function runFirstPartyAnalysis(
 		status: "running",
 	};
 	store.start(receipt);
+	if (input.bundleRecovery?.engine === "wakaru") {
+		const abort = new AbortController();
+		controllers.set(receipt.id, { sessionId, abort });
+		const stop = () => abort.abort();
+		signal?.addEventListener("abort", stop, { once: true });
+		if (signal?.aborted) stop();
+		try {
+			const { runOwnedGeneralRecovery } = await import(
+				"./general-recovery/owned-run"
+			);
+			return await runOwnedGeneralRecovery(receipt, store, abort);
+		} finally {
+			controllers.delete(receipt.id);
+			signal?.removeEventListener("abort", stop);
+		}
+	}
 	let scratch: string | undefined;
 	try {
 		if (input.semanticGraph)
@@ -150,7 +166,9 @@ export async function runFirstPartyAnalysis(
 					if (
 						!!input.semanticGraph !== !!parsedResult.semanticGraph ||
 						!!input.applicationGraph !== !!parsedResult.applicationGraph ||
-						!!input.electronFuses !== !!parsedResult.electronFuses
+						!!input.electronFuses !== !!parsedResult.electronFuses ||
+						!!input.artifactReader !== !!parsedResult.artifactMetadata ||
+						!!input.bundleRecovery !== !!parsedResult.bundleRecovery
 					)
 						throw new Error("Requested semantic evidence was not returned");
 					if (parsedResult.acquisition) {
@@ -161,6 +179,35 @@ export async function runFirstPartyAnalysis(
 							relative(receipt.workspace, selected).split(sep).join("/") || ".";
 						if (parsedResult.acquisition.selectedPath !== label)
 							throw new Error("Acquisition selected target mismatch");
+					}
+					if (parsedResult.bundleRecovery) {
+						const b = parsedResult.bundleRecovery,
+							a = parsedResult.artifacts[0];
+						if (
+							b.sourceSha256 !== input.bundleRecovery?.expectedSha256 ||
+							parsedResult.artifacts.length !== 1 ||
+							a?.sha256 !== b.sourceSha256 ||
+							a.role !== "bundle-recovery-input" ||
+							a.bytes !== parsedResult.counters.bytes ||
+							parsedResult.facts.length ||
+							parsedResult.edges.length
+						)
+							throw new Error("Bundle recovery projection mismatch");
+					}
+					if (parsedResult.artifactMetadata) {
+						const m = parsedResult.artifactMetadata,
+							a = parsedResult.artifacts[0];
+						if (
+							m.reader !== input.artifactReader?.reader ||
+							m.inputSha256 !== input.artifactReader.expectedSha256 ||
+							parsedResult.artifacts.length !== 1 ||
+							a?.sha256 !== m.inputSha256 ||
+							a.role !== "artifact-metadata-input" ||
+							a.bytes !== parsedResult.counters.bytes ||
+							parsedResult.facts.length ||
+							parsedResult.edges.length
+						)
+							throw new Error("Metadata receipt projection mismatch");
 					}
 					if (parsedResult.electronFuses) {
 						const a = parsedResult.artifacts[0],

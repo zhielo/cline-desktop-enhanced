@@ -291,10 +291,10 @@ export async function observeJavaScriptInspector(
 				if (input.captureConsole) {
 					// Runtime.enable can replay buffered events. Do not accept events until its response.
 					await send("Runtime.enable");
-					// CDP uses fractional epoch milliseconds. Date.now can be
-					// coarsely quantized on Windows and make a received event appear
-					// to be in the future. Use the host's high-resolution epoch clock
-					// for both window start and receipt; retain the strict time guard.
+					// Use one host epoch for both receipt and window start.
+					// Windows Inspector's separate V8 clock has coarse interpolation;
+					// the collector records its fixed, bounded future allowance.
+					// Target timestamp claims never authenticate execution or freshness.
 					consoleCollector.start(performance.timeOrigin + performance.now());
 				}
 				await new Promise((r) => setTimeout(r, input.durationMs));

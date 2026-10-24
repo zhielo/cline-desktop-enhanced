@@ -80,29 +80,34 @@ const WORKSPACE_TOOLS = new Set([
 const NETWORK_TOOLS = new Set(["fetch_web_content", "web_search"]);
 const EXTERNAL_TOOLS = new Set([
 	"attach_debug_session",
- "set_scoped_breakpoints",
- "capture_execution_trace",
- "stop_runtime_session",
- "check_release_gate",
- "run_device_smoke_test",
- "capture_process_tree",
+	"set_scoped_breakpoints",
+	"capture_execution_trace",
+	"stop_runtime_session",
+	"check_release_gate",
+	"run_device_smoke_test",
+	"capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",
 	"validate_candidate",
- "review_candidate_changes",
- "open_binary",
+	"review_candidate_changes",
+	"open_binary",
 	"analyze_function",
+	"inspect_artifact_metadata",
+	"recover_bundle_sources",
+	"publish_bundle_recovery",
 	"trace_application_feature",
 	"capture_browser_scenario",
- "capture_network_metadata",
+	"capture_network_metadata",
 	"get_evidence_bundle",
- "correlate_static_runtime",
-		"plan_batch",
-		"preview_batch",
-		"run_batch",
-		"checkpoint_investigation",
-		"cancel_batch",
-		"resume_investigation",
+	"correlate_static_runtime",
+	"manage_investigation_unknowns",
+	"trace_native_value_flow",
+	"plan_batch",
+	"preview_batch",
+	"run_batch",
+	"checkpoint_investigation",
+	"cancel_batch",
+	"resume_investigation",
 
 	"android_device",
 	"live_debugger",
@@ -293,12 +298,19 @@ function evaluateTool(
 			);
 		}
 	}
+	if (!profile.allowFileWrites && isAnalysisWriteOperation(toolName))
+		return blockedReason(
+			profile.name,
+			"recovery publication requires a write-enabled profile",
+		);
 	if (
 		toolName === "reverse_engineer" &&
 		!profile.allowFileWrites &&
 		typeof context.input === "object" &&
 		context.input !== null &&
-		isAnalysisWriteOperation(String((context.input as { operation?: unknown }).operation))
+		isAnalysisWriteOperation(
+			String((context.input as { operation?: unknown }).operation),
+		)
 	)
 		return blockedReason(
 			profile.name,

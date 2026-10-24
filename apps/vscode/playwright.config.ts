@@ -9,6 +9,9 @@ export default defineConfig({
 	forbidOnly: isCI,
 	testDir: "src/test/e2e",
 	testMatch: /.*\.test\.ts/,
+	// This helper regression belongs to the isolated bun:test unit runner.
+	// Do not load bun:test inside Playwright's Node test collector.
+	testIgnore: ["**/utils/retain-diagnostics.test.ts"],
 	timeout: isCI || isWindow ? 60000 : 20000,
 	expect: {
 		timeout: isCI || isWindow ? 5000 : 2000,

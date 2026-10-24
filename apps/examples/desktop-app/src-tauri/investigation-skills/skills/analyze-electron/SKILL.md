@@ -36,3 +36,13 @@ Use actual nextOffset values for pagination and preserve the same receipt/query.
 The application root commits a virtual admitted path/hash/size manifest, not the original whole container. Existing file/byte/ASAR budgets apply. JSON, HTML, source maps and native-addon metadata contribute only when admitted. Source-map labels are untrusted and never fetched or executed. `.node` metadata is not native decompilation. File-local semantic nodes bind to application nodes; this is not a complete cross-module taint solver. Dynamic imports, unresolved modules, shadowing and omitted code remain unknown.
 
 Return a concise module/IPC/preload map with receipt-backed examples and exact source locations, a focused saved trace, unresolved frontiers and any next separately authorized analysis. Never import/evaluate target code or launch Electron to make the static result appear complete.
+
+## Saved Inspector source reconciliation
+
+Use the advertised saved static/runtime correlation tool only with an owning static receipt and selected retained runtime tasks. `inspectorSources` compares source hashes and lexical locations without attaching or reading files. Preserve exact-location byte mismatches and duplicate-byte ambiguity. Location-only matches are unverified. Parsed/loaded does not mean executed; a byte match does not authenticate the VM or establish behavior. Missing scripts can reflect a bounded observation window. Do not fetch source maps or rerun capture merely to fill a saved-evidence gap.
+
+## Recover inert bundle factories
+
+For one immutable UTF-8 JS bundle at most 1 MiB, use advertised `recover_bundle_sources` after `open_binary`. Read saved `bundle-recovery` evidence for exact module IDs, original half-open UTF-8 byte ranges, hashes and inert base64 fragments. This first-party engine recognizes literal Webpack/Rspack/esbuild factories only, not Wakaru/general deobfuscation parity. Zero recovered modules is an unsupported/absent observation, not proof that the input is unbundled.
+
+Only when the user wants an export, use `publish_bundle_recovery` with the original artifact ID, exact saved receipt/report hash and a new absolute managed `.json` output. This requires separate Modify approval and Full Access. It stages a no-overwrite provenance package; original bytes are rechecked and retained. Never run/import fragments, overwrite originals, infer source-map accuracy, or install recovered code.
