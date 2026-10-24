@@ -14,6 +14,8 @@ export const EvidenceQuerySchema = z
 				"source-acquisition",
 				"source-containers",
 				"electron-fuses",
+				"artifact-metadata",
+				"bundle-recovery",
 				"application-summary",
 				"application-nodes",
 				"application-edges",
@@ -155,6 +157,8 @@ export function semanticEvidencePage(
 	input: z.infer<typeof EvidenceQuerySchema>,
 ) {
 	const keys: Record<string, string> = {
+		"artifact-metadata": "records",
+		"bundle-recovery": "modules",
 		"source-acquisition": "sources",
 		"source-containers": "containers",
 		"application-nodes": "nodes",

@@ -332,6 +332,20 @@ export async function analyzeTarget(
 ): Promise<AnalysisResult> {
 	const input = AnalysisInputSchema.parse(value),
 		root = await realpath(workspace);
+	if (input.bundleRecovery) {
+		const { recoverOwnedBundle } = await import("./bundle-recovery");
+		return recoverOwnedBundle(root, input.target, input.bundleRecovery);
+	}
+	if (input.artifactReader) {
+		const { inspectOwnedArtifactMetadata } = await import(
+			"./artifact-readers/reader"
+		);
+		return inspectOwnedArtifactMetadata(
+			root,
+			input.target,
+			input.artifactReader,
+		);
+	}
 	if (input.electronFuses) {
 		const { inspectOwnedElectronFuses } = await import("./electron-fuses");
 		return inspectOwnedElectronFuses(root, input.target);

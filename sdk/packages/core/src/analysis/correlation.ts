@@ -1,3 +1,4 @@
+import { validateSavedTaskSnapshots } from "./saved-task-evidence";
 import { z } from "zod";
 import { digest, ResultSchema } from "./contracts";
 import { reconcileInspectorSources } from "./inspector-reconciliation";
@@ -17,30 +18,6 @@ const StaticReceipt = z
 		resultHash: Hash,
 	})
 	.passthrough();
-const Snapshot = z
-	.object({
-		id: Hash,
-		sessionId: z.string().min(1).max(128),
-		workspace: z.string().min(1).max(4096),
-		taskId: z.string().uuid(),
-		domain: z.enum([
-			"static",
-			"debugger",
-			"gui",
-			"dynamic",
-			"device",
-			"execution",
-		]),
-		operation: z.string().max(120),
-		tool: z.string().max(120),
-		targetSha256: Hash.optional(),
-		resultHash: Hash,
-		requestHash: Hash,
-		at: z.string().datetime(),
-		result: z.unknown(),
-		snapshotHash: Hash,
-	})
-	.strict();
 const object = (v: unknown): Record<string, unknown> =>
 	v && typeof v === "object" && !Array.isArray(v)
 		? (v as Record<string, unknown>)
@@ -65,24 +42,9 @@ export function correlateSavedEvidence(
 		digest(receipt.result) !== receipt.resultHash
 	)
 		throw new Error("Static receipt scope or integrity mismatch");
-	const snapshots = snapshotValues.map((v) => Snapshot.parse(v));
+	const snapshots = validateSavedTaskSnapshots(scope, snapshotValues);
 	if (!snapshots.some((s) => s.domain !== "static"))
 		throw new Error("Select at least one runtime task snapshot");
-	const seen = new Set<string>();
-	for (const s of snapshots) {
-		const { snapshotHash, ...raw } = s;
-		if (
-			s.sessionId !== scope.sessionId ||
-			s.workspace !== scope.workspace ||
-			digest(raw) !== snapshotHash ||
-			digest(s.result) !== s.resultHash ||
-			seen.has(s.taskId)
-		)
-			throw new Error(
-				"Runtime snapshot scope, integrity or uniqueness mismatch",
-			);
-		seen.add(s.taskId);
-	}
 	const selected = snapshots as TaskEvidenceSnapshot[];
 	const identity = unifiedEvidenceView(receipt.result, selected).map(
 		({ evidence: _evidence, ...summary }) => summary,
@@ -196,7 +158,11 @@ export function correlateSavedEvidence(
 		})),
 		identity,
 		sampling,
-		inspectorSources: reconcileInspectorSources(receipt.result, selected, scope.workspace),
+		inspectorSources: reconcileInspectorSources(
+			receipt.result,
+			selected,
+			scope.workspace,
+		),
 		native,
 		nativeDossiersTruncated: matchingNative.length > 50,
 		verifiedBehavior: false,

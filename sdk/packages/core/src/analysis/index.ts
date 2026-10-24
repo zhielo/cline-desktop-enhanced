@@ -29,7 +29,7 @@ import { EvidenceQuerySchema, semanticEvidencePage } from "./evidence-query";
 import { javaScriptSemanticGraphSchema } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticGraph";
 import { queryJavaScriptSemanticGraph } from "./semantic-engine/upstream/src/domain/javascript/javascriptSemanticQuery";
 import { FirstPartyAnalysisStore } from "./store";
-import { ResultSchema } from "./contracts";
+import { ResultSchema, digest } from "./contracts";
 
 export { EvidenceQuerySchema } from "./evidence-query";
 export function queryFirstPartyEvidence(
@@ -55,6 +55,45 @@ export function queryFirstPartyEvidence(
 			selection: report.selection,
 			coverage: report.coverage,
 			containerCount: report.containers.length,
+			limitations: report.limitations,
+			providerCalls: 0,
+			targetExecuted: false,
+			verifiedBehavior: false,
+			...semanticEvidencePage(report, q),
+		};
+	}
+	if (q.view === "bundle-recovery") {
+		const report = result?.bundleRecovery;
+		if (!report)
+			return { id: receipt.id, available: false, status: receipt.status };
+		return {
+			id: receipt.id,
+			available: true,
+			resultHash: receipt.resultHash,
+			reportHash: digest(report),
+			engine: report.engine,
+			sourceSha256: report.sourceSha256,
+			truncated: report.truncated,
+			omitted: report.omitted,
+			limitations: report.limitations,
+			providerCalls: 0,
+			targetExecuted: false,
+			verifiedBehavior: false,
+			...semanticEvidencePage(report, q),
+		};
+	}
+	if (q.view === "artifact-metadata") {
+		const report = result?.artifactMetadata;
+		if (!report)
+			return { id: receipt.id, available: false, status: receipt.status };
+		return {
+			id: receipt.id,
+			available: true,
+			resultHash: receipt.resultHash,
+			reader: report.reader,
+			inputSha256: report.inputSha256,
+			truncated: report.truncated,
+			omitted: report.omitted,
 			limitations: report.limitations,
 			providerCalls: 0,
 			targetExecuted: false,
@@ -192,3 +231,8 @@ export {
 } from "./scenario";
 
 export { semanticSourceNotices } from "./semantic-engine/notices";
+
+export {
+	querySavedNativeValueFlow,
+	NativeFlowQuerySchema,
+} from "./native-value-flow";

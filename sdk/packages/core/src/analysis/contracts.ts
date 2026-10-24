@@ -1,3 +1,11 @@
+import {
+	BundleRecoveryRequestSchema,
+	BundleRecoveryReportSchema,
+} from "./bundle-recovery-contracts";
+import {
+	ArtifactReaderRequestSchema,
+	ArtifactMetadataReportSchema,
+} from "./artifact-readers/contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { electronFuseReportSchema } from "./semantic-engine/upstream/src/domain/electron/electronFuses";
@@ -19,9 +27,37 @@ export const AnalysisInputSchema = z
 		semanticGraph: z.boolean().optional(),
 		applicationGraph: z.boolean().optional(),
 		electronFuses: z.boolean().optional(),
+		artifactReader: ArtifactReaderRequestSchema.optional(),
+		bundleRecovery: BundleRecoveryRequestSchema.optional(),
 	})
 	.strict()
 	.superRefine((v, ctx) => {
+		if (
+			v.bundleRecovery &&
+			(v.artifactReader ||
+				v.electronFuses ||
+				v.semanticGraph ||
+				v.applicationGraph ||
+				v.compareTarget !== undefined)
+		)
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"Bundle recovery requires one source and cannot combine other parser modes",
+			});
+		if (
+			v.artifactReader &&
+			(v.semanticGraph ||
+				v.applicationGraph ||
+				v.compareTarget !== undefined ||
+				v.electronFuses)
+		)
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"Artifact metadata requires one file and cannot combine graphs, fuses or comparison",
+				path: ["artifactReader"],
+			});
 		if (
 			v.electronFuses &&
 			(v.semanticGraph || v.applicationGraph || v.compareTarget !== undefined)
@@ -183,6 +219,8 @@ export const ResultSchema = z
 			.strict()
 			.optional(),
 		electronFuses: electronFuseReportSchema.optional(),
+		artifactMetadata: ArtifactMetadataReportSchema.optional(),
+		bundleRecovery: BundleRecoveryReportSchema.optional(),
 		acquisition: AcquisitionSchema.optional(),
 		applicationGraph: z
 			.object({

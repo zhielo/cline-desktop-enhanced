@@ -255,30 +255,31 @@ it.each([
 it("keeps investigation tools behind the external-tool permission profile", async () => {
 	for (const name of [
 		"attach_debug_session",
- "set_scoped_breakpoints",
- "capture_execution_trace",
- "stop_runtime_session",
- "run_device_smoke_test",
- "capture_process_tree",
+		"set_scoped_breakpoints",
+		"capture_execution_trace",
+		"stop_runtime_session",
+		"run_device_smoke_test",
+		"capture_process_tree",
 		"capture_file_activity",
 		"plan_runtime_observation",
 		"validate_candidate",
 		"review_candidate_changes",
 		"open_binary",
 		"analyze_function",
+		"inspect_artifact_metadata",
 		"trace_application_feature",
 		"capture_browser_scenario",
- "capture_network_metadata",
+		"capture_network_metadata",
 		"get_evidence_bundle",
- "correlate_static_runtime",
- "manage_investigation_unknowns",
+		"correlate_static_runtime",
+		"manage_investigation_unknowns",
+		"trace_native_value_flow",
 		"plan_batch",
 		"preview_batch",
 		"run_batch",
 		"checkpoint_investigation",
 		"cancel_batch",
 		"resume_investigation",
-
 	]) {
 		expect(await before("read-only", name)).toMatchObject({ skip: true });
 		expect(await before("workspace", name)).toMatchObject({ skip: true });
@@ -287,7 +288,11 @@ it("keeps investigation tools behind the external-tool permission profile", asyn
 });
 
 it.each([
- "build_apk", "recompile_smali", "validate_smali_project", "patch_smali_method", "patch_smali",
+	"build_apk",
+	"recompile_smali",
+	"validate_smali_project",
+	"patch_smali_method",
+	"patch_smali",
 	"assemble_smali",
 	"rebuild_apk",
 	"align_apk",
@@ -298,7 +303,21 @@ it.each([
 	).toBeDefined();
 });
 
-it.each(["build_android_candidate","annotate_analysis_project","patch_binary","apply_ast_transform","patch_dotnet_constant","patch_jvm_constant","apply_candidate_batch"])("new candidate write %s cannot evade either restricted profile",async(operation)=>{
- for(const profile of ["read-only","project-notion-bridge"] as const)expect((await before(profile,"reverse_engineer",{operation}))?.skip).toBe(true);
- expect(await before("full-access","reverse_engineer",{operation})).toBeUndefined();
+it.each([
+	"build_android_candidate",
+	"annotate_analysis_project",
+	"patch_binary",
+	"apply_ast_transform",
+	"patch_dotnet_constant",
+	"patch_jvm_constant",
+	"apply_candidate_batch",
+])("new candidate write %s cannot evade either restricted profile", async (operation) => {
+	for (const profile of ["read-only", "project-notion-bridge"] as const)
+		expect(
+			(await before(profile, "reverse_engineer", { operation }))?.skip,
+		).toBe(true);
+	expect(
+		await before("full-access", "reverse_engineer", { operation }),
+	).toBeUndefined();
 });
+it.each(["read-only","notion-functions"] as const)("%s never authorizes recovery publication",async profile=>{expect((await before(profile,"publish_bundle_recovery",{}))?.skip).toBe(true);expect((await before(profile,"reverse_engineer",{operation:"export_bundle_recovery"}))?.skip).toBe(true);});

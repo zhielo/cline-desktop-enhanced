@@ -1,4 +1,12 @@
-import { BinaryTriageOptionsSchema, BinaryTriageCallSchema } from "./binary-triage-schema";
+import {
+	BundleRecoveryRequestSchema,
+	BundleExportRequestSchema,
+} from "../../analysis/bundle-recovery-contracts";
+import { ArtifactReaderRequestSchema } from "../../analysis/artifact-readers/contracts";
+import {
+	BinaryTriageOptionsSchema,
+	BinaryTriageCallSchema,
+} from "./binary-triage-schema";
 import {
 	SymbolicOptionsSchema,
 	JoernOptionsSchema,
@@ -149,7 +157,7 @@ export const ReverseEngineeringInputSchema = z
 		advanced_action: z
 			.enum([
 				"toolchain",
-                "binary_triage",
+				"binary_triage",
 				"suite",
 				"triage",
 				"apk_inventory",
@@ -199,7 +207,7 @@ export const ReverseEngineeringInputSchema = z
 		advanced_options: z
 			.object({
 				binary_triage: BinaryTriageOptionsSchema.optional(),
-                symbolic: SymbolicOptionsSchema.optional(),
+				symbolic: SymbolicOptionsSchema.optional(),
 				joern: JoernOptionsSchema.optional(),
 				specialist_readiness: SpecialistReadinessSchema.optional(),
 				entrypoints: z
@@ -332,8 +340,8 @@ export const ReverseEngineeringInputSchema = z
 								"native-symbol",
 								"archive-member",
 								"unresolved-call",
-                                "source-symbol",
-                                "symbolic-finding",
+								"source-symbol",
+								"symbolic-finding",
 							])
 							.optional(),
 						text: z.string().max(512).optional(),
@@ -353,10 +361,13 @@ export const ReverseEngineeringInputSchema = z
 				semanticGraph: z.boolean().optional(),
 				applicationGraph: z.boolean().optional(),
 				electronFuses: z.boolean().optional(),
+				artifactReader: ArtifactReaderRequestSchema.optional(),
+				bundleRecovery: BundleRecoveryRequestSchema.optional(),
 			})
 			.strict()
 			.optional(),
 		evidence_query: EvidenceQuerySchema.optional(),
+		bundle_export: BundleExportRequestSchema.optional(),
 		runtime_observation_plan: RuntimeObservationPlanSchema.optional(),
 		candidate_validation: CandidateValidationSchema.optional(),
 		candidate_review: CandidateReviewSchema.optional(),
@@ -401,6 +412,7 @@ export const ReverseEngineeringInputSchema = z
 			"patch_smali",
 			"javascript_analysis",
 			"analysis_evidence",
+			"export_bundle_recovery",
 			"discover",
 			"advanced_analysis",
 			"inspect",
@@ -619,14 +631,24 @@ export const ReverseEngineeringInputSchema = z
 				"Overall deadlines above one hour require the explicit IDA engine",
 			path: ["timeout_ms"],
 		},
-	).superRefine((input, ctx) => {
- if (input.advanced_action === "binary_triage") {
-  const result = BinaryTriageCallSchema.safeParse(input);
-  if (!result.success) ctx.addIssue({code:"custom",message:"Binary triage accepts only its strict run/status/read contract"});
- } else if (input.advanced_options?.binary_triage) {
-  ctx.addIssue({code:"custom",message:"binary_triage options require advanced_analysis binary_triage"});
- }
-});
+	)
+	.superRefine((input, ctx) => {
+		if (input.advanced_action === "binary_triage") {
+			const result = BinaryTriageCallSchema.safeParse(input);
+			if (!result.success)
+				ctx.addIssue({
+					code: "custom",
+					message:
+						"Binary triage accepts only its strict run/status/read contract",
+				});
+		} else if (input.advanced_options?.binary_triage) {
+			ctx.addIssue({
+				code: "custom",
+				message:
+					"binary_triage options require advanced_analysis binary_triage",
+			});
+		}
+	});
 
 /** Only debugger locations that cannot introduce an additional GDB/LLDB command. */
 const SAFE_DEBUGGER_LOCATION_PATTERN =

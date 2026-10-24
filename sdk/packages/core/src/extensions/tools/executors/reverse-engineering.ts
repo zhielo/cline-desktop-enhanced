@@ -2544,8 +2544,13 @@ async function validateDexOutput(file: string) {
 
 export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 	return async (input, context) => {
-        if (input.advanced_action === "binary_triage" || input.advanced_options?.binary_triage)
-         throw new Error("Binary triage requires the owning Cline Desktop host service; no shell or SDK fallback");
+		if (
+			input.advanced_action === "binary_triage" ||
+			input.advanced_options?.binary_triage
+		)
+			throw new Error(
+				"Binary triage requires the owning Cline Desktop host service; no shell or SDK fallback",
+			);
 		const started = Date.now();
 		if (
 			input.advanced_options?.android_calls &&
@@ -2935,6 +2940,35 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				context.signal,
 			);
 		}
+		if (input.operation === "export_bundle_recovery") {
+			const { exportSavedBundleRecovery } = await import(
+				"../../../analysis/bundle-recovery-export"
+			);
+			if (!context.sessionId || !input.target || !input.output_file)
+				throw new Error(
+					"Recovery export requires owning session, original source and a new JSON output",
+				);
+			const outputScope = await enforceOutputPath(
+				input.output_file,
+				input.acknowledge_external_output,
+			);
+			const store = new FirstPartyAnalysisStore();
+			try {
+				return JSON.stringify({
+					...(await exportSavedBundleRecovery(
+						context.sessionId,
+						input.target,
+						input.output_file,
+						input.bundle_export,
+						context.signal,
+						store,
+					)),
+					outputScope,
+				});
+			} finally {
+				store.close();
+			}
+		}
 		if (
 			input.operation === "javascript_analysis" ||
 			input.operation === "analysis_evidence"
@@ -2952,7 +2986,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						),
 					);
 				if (!input.target)
-					throw new Error("JavaScript analysis target required");
+					throw new Error("First-party static analysis target required");
 				const receipt = await runFirstPartyAnalysis(
 					context.sessionId,
 					{ target: input.target, ...input.javascript_options },
@@ -2973,6 +3007,21 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 								artifact: receipt.result.electronFuses.artifact,
 								slices: receipt.result.electronFuses.slices.length,
 								next: "analysis_evidence electron-fuses; fuseSection slices, sentinels or runtime_implications",
+							}
+						: undefined,
+					bundleRecovery: receipt.result?.bundleRecovery
+						? {
+								modules: receipt.result.bundleRecovery.modules.length,
+								truncated: receipt.result.bundleRecovery.truncated,
+								next: "analysis_evidence bundle-recovery to obtain the reportHash and paginated module provenance",
+							}
+						: undefined,
+					artifactMetadata: receipt.result?.artifactMetadata
+						? {
+								reader: receipt.result.artifactMetadata.reader,
+								records: receipt.result.artifactMetadata.records.length,
+								truncated: receipt.result.artifactMetadata.truncated,
+								next: "analysis_evidence artifact-metadata",
 							}
 						: undefined,
 					limitations: receipt.result?.limitations,
@@ -3024,7 +3073,10 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			if (input.report_format === "html")
 				throw new Error("Advanced evidence supports JSON only");
 			const action = input.advanced_action;
-            if (action === "binary_triage") throw new Error("Binary triage requires the owning Cline Desktop host service");
+			if (action === "binary_triage")
+				throw new Error(
+					"Binary triage requires the owning Cline Desktop host service",
+				);
 			const special = {
 				joern_query: "joern",
 				angr_symbolic: "symbolic",
