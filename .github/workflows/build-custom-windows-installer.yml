@@ -566,6 +566,27 @@ jobs:
           $analysisReceipt = $analysisSelfcheck | ConvertFrom-Json
           if ($analysisReceipt.status -ne 'passed') { throw 'Installed parser did not produce a passed receipt' }
 
+          # Exercise the installed pinned engine through the owning native lifecycle.
+          # No system REA/Node/Python tool is substituted for this shipped executable.
+          $nativeRoots = @(Get-ChildItem $installLocation -Filter 'runtime-manifest.json' -Recurse |
+            Where-Object { (Split-Path $_.DirectoryName -Leaf) -eq 'analysis-runtime' })
+          if ($nativeRoots.Count -ne 1) { throw 'Expected exactly one installed core runtime manifest' }
+          $previousNativeRoot = $env:CLINE_BUNDLED_ANALYSIS_ROOT
+          try {
+            $env:CLINE_BUNDLED_ANALYSIS_ROOT = $nativeRoots[0].DirectoryName
+            $nativeSelfcheck = & $sidecarExe.FullName --cline-general-recovery-selfcheck
+            if ($LASTEXITCODE -ne 0) { throw 'Installed native recovery fixture process failed' }
+            $nativeReceipt = $nativeSelfcheck | ConvertFrom-Json
+            if ($nativeReceipt.status -ne 'passed' -or $nativeReceipt.engine -ne 'wakaru/1.14.0' -or $nativeReceipt.modules -ne 2) {
+              throw 'Installed native recovery did not produce the expected owning saved evidence'
+            }
+            $nativeSelfcheck | Out-File 'dist/custom-installer/GENERAL-RECOVERY-ACCEPTANCE.json' -Encoding utf8
+          } finally {
+            if ($null -eq $previousNativeRoot) { Remove-Item Env:CLINE_BUNDLED_ANALYSIS_ROOT -ErrorAction SilentlyContinue }
+            else { $env:CLINE_BUNDLED_ANALYSIS_ROOT = $previousNativeRoot }
+          }
+
+
           # Validate the installed sidecar by its observable contract instead of
           # relying on a Win32_Process name/path snapshot. The app can replace
           # its first sidecar with the detached Hub daemon during startup, so a

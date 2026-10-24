@@ -12,7 +12,7 @@ import path from "node:path";
 import {
 	BUNDLE_RECOVERY_REVISION,
 	BundleRecoveryRequestSchema,
-	BundleRecoveryReportSchema,
+	LiteralBundleRecoveryReportSchema,
 } from "./bundle-recovery-contracts";
 /** AST literal factories only. Recovered text is retained as inert base64, never loaded. */
 export async function recoverOwnedBundle(
@@ -27,12 +27,16 @@ export async function recoverOwnedBundle(
 			req.expectedSha256,
 			1024 * 1024,
 		);
+	if (req.engine === "wakaru")
+		throw new Error(
+			"General recovery requires the owning native-host lifecycle, never a nested parser child",
+		);
 	const source = bytes.toString("utf8");
 	if (!Buffer.from(source).equals(bytes))
 		throw new Error("Bundle recovery requires exact UTF-8 source bytes");
 	const analysis = analyzeJavaScriptStaticSource(source),
 		modules: Array<
-			z.infer<typeof BundleRecoveryReportSchema>["modules"][number]
+			z.infer<typeof LiteralBundleRecoveryReportSchema>["modules"][number]
 		> = [];
 	const starts = [0];
 	for (let i = 0; i < source.length; i++) {
@@ -99,7 +103,7 @@ export async function recoverOwnedBundle(
 				sourceBase64: content.toString("base64"),
 			});
 		}
-	const report = BundleRecoveryReportSchema.parse({
+	const report = LiteralBundleRecoveryReportSchema.parse({
 		protocol: "cline-bundle-recovery/1",
 		engine: "cline-literal-factory/1",
 		upstreamRevision: BUNDLE_RECOVERY_REVISION,

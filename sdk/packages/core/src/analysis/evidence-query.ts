@@ -199,6 +199,9 @@ export function semanticEvidencePage(
 		const shown =
 			Buffer.byteLength(text) > 65_536
 				? {
+						id: identity.id,
+						filename: identity.filename,
+						sha256: identity.sha256,
 						node_id: identity.node_id,
 						relation_id: identity.relation_id,
 						edge_id: identity.edge_id,

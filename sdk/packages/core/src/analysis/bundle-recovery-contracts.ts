@@ -1,14 +1,18 @@
+import { GeneralRecoveryReportSchema } from "./general-recovery/contracts";
 import { z } from "zod";
 export const BUNDLE_RECOVERY_REVISION =
 	"d0067ba34a39ea47dd7e11bb2e6169bc0938cc3f";
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const BundleRecoveryRequestSchema = z
-	.object({ expectedSha256: Hash })
+	.object({
+		expectedSha256: Hash,
+		engine: z.enum(["literal", "wakaru"]).optional(),
+	})
 	.strict();
 export const BundleExportRequestSchema = z
 	.object({ receiptId: z.string().uuid(), reportHash: Hash })
 	.strict();
-export const BundleRecoveryReportSchema = z
+export const LiteralBundleRecoveryReportSchema = z
 	.object({
 		protocol: z.literal("cline-bundle-recovery/1"),
 		engine: z.literal("cline-literal-factory/1"),
@@ -36,3 +40,8 @@ export const BundleRecoveryReportSchema = z
 		limitations: z.array(z.string().max(1000)).max(12),
 	})
 	.strict();
+
+export const BundleRecoveryReportSchema = z.union([
+	LiteralBundleRecoveryReportSchema,
+	GeneralRecoveryReportSchema,
+]);

@@ -1450,6 +1450,25 @@ it("bundle recovery and export are separate hash-bound Inspect/Modify requests w
 				},
 			},
 		});
+		await handleAnalysisWorkflow(
+			"recover_bundle_sources",
+			{ artifactId: artifact.id, engine: "wakaru" },
+			scope,
+			options,
+			store,
+			ports,
+		);
+		expect(ports.invoke).toHaveBeenLastCalledWith("prepare_analysis_task", {
+			kind: "static",
+			request: {
+				operation: "javascript_analysis",
+				target: artifact.path,
+				timeout_ms: 120000,
+				javascript_options: {
+					bundleRecovery: { expectedSha256: artifact.sha256, engine: "wakaru" },
+				},
+			},
+		});
 		const req = {
 			artifactId: artifact.id,
 			receiptId: artifact.id,

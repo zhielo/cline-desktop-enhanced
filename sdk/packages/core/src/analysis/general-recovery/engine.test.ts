@@ -110,6 +110,7 @@ it.skipIf(!pinnedRoot)(
 						cpuHardSeconds: 46,
 						fileBytes: 67108864,
 						hostDeadlineMs: 50000,
+						supervisorDeadlineMs: 45000,
 					},
 		);
 		expect(report.targetExecuted).toBe(false);

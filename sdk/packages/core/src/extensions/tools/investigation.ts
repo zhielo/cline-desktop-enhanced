@@ -200,7 +200,12 @@ export const InvestigationSchemas = {
 		})
 		.strict(),
 	open_binary: z.object({ target: z.string().min(1).max(4096) }).strict(),
-	recover_bundle_sources: z.object({ artifactId: Id }).strict(),
+	recover_bundle_sources: z
+		.object({
+			artifactId: Id,
+			engine: z.enum(["literal", "wakaru"]).optional(),
+		})
+		.strict(),
 	publish_bundle_recovery: z
 		.object({
 			artifactId: Id,
@@ -287,7 +292,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 	open_binary:
 		"Create an immutable workspace-confined artifact handle; does not execute or decompile the binary. Analysis mode must be enabled.",
 	recover_bundle_sources:
-		"Request independently approved inert AST literal factory recovery for an immutable UTF-8 JS bundle (1 MiB maximum). Preserves exact original half-open byte ranges and SHA256. Webpack/Rspack/esbuild syntax only; not general Wakaru/deobfuscation parity. Query saved bundle-recovery evidence with reverse_engineer analysis_evidence. No execution or writes outside retained evidence.",
+		"Request independently approved inert recovery for an immutable UTF-8 JS bundle (1 MiB maximum). Default engine literal preserves exact AST factory slices. Explicit engine wakaru uses the pinned packaged native structural recovery engine with minimal rewrites, original range hashes, separate transformed source/map hashes and OS process limits. Missing engines fail explicitly; no download, target execution, full reconstruction or runtime-equivalence claim. Query saved bundle-recovery evidence with reverse_engineer analysis_evidence. No execution or writes outside retained evidence.",
 	publish_bundle_recovery:
 		"Request separate independent Modify approval to publish one exact owning saved bundle-recovery report as a new no-overwrite JSON provenance package. Supply exact receipt/report hash, original artifact handle and new absolute managed outputFile. Full Access required; original source is rechecked. Does not execute fragments, install or overwrite files; model-supplied approval tokens are rejected.",
 	inspect_artifact_metadata:

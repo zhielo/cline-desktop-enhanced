@@ -39,6 +39,7 @@ export async function exportSavedBundleRecovery(
 			1024 * 1024,
 		);
 	if (
+		receipt.resultHash !== digest(result) ||
 		(await confinedTarget(receipt.workspace, receipt.input.target)) !==
 			resolved ||
 		result.artifacts.length !== 1 ||
@@ -47,17 +48,38 @@ export async function exportSavedBundleRecovery(
 		result.artifacts[0].sha256 !== report.sourceSha256
 	)
 		throw new Error("Saved bundle target identity mismatch");
-	for (const m of report.modules) {
-		const content = Buffer.from(m.sourceBase64, "base64");
-		if (
-			content.toString("base64") !== m.sourceBase64 ||
-			m.endByte > bytes.length ||
-			m.startByte >= m.endByte ||
-			!content.equals(bytes.subarray(m.startByte, m.endByte)) ||
-			byteDigest(content) !== m.sha256
-		)
-			throw new Error("Saved recovered source provenance mismatch");
+	const source = (base64: string, hash: string) => {
+		const content = Buffer.from(base64, "base64");
+		if (content.toString("base64") !== base64 || byteDigest(content) !== hash)
+			throw new Error("Saved recovered source identity mismatch");
+		return content;
+	};
+	if (report.engine === "cline-literal-factory/1") {
+		for (const m of report.modules) {
+			const content = source(m.sourceBase64, m.sha256);
+			if (
+				m.endByte > bytes.length ||
+				m.startByte >= m.endByte ||
+				!content.equals(bytes.subarray(m.startByte, m.endByte))
+			)
+				throw new Error("Saved recovered source provenance mismatch");
+		}
+	} else {
+		for (const m of report.modules) {
+			source(m.sourceBase64, m.sha256);
+			if (m.sourceMap) source(m.sourceMap.contentBase64, m.sourceMap.sha256);
+			for (const r of [...m.ranges, ...m.contextRanges])
+				if (
+					r.startByte >= r.endByte ||
+					r.endByte > bytes.length ||
+					byteDigest(bytes.subarray(r.startByte, r.endByte)) !== r.sha256
+				)
+					throw new Error(
+						"Saved transformed source original-range provenance mismatch",
+					);
+		}
 	}
+
 	const encoded = Buffer.from(
 		JSON.stringify(
 			{
@@ -71,7 +93,7 @@ export async function exportSavedBundleRecovery(
 			2,
 		) + "\n",
 	);
-	if (encoded.length > 3 * 1024 * 1024)
+	if (encoded.length > 4 * 1024 * 1024)
 		throw new Error("Recovery export output budget exceeded");
 	signal?.throwIfAborted();
 	const publication = await publishCandidate(

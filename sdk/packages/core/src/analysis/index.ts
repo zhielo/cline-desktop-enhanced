@@ -72,6 +72,20 @@ export function queryFirstPartyEvidence(
 			resultHash: receipt.resultHash,
 			reportHash: digest(report),
 			engine: report.engine,
+			upstreamRevision: report.upstreamRevision,
+			...(report.engine === "wakaru/1.14.0"
+				? {
+						engineSha256: report.engineSha256,
+						resourceBoundary: report.resourceBoundary,
+						detectedFormats: report.detectedFormats,
+						strategy: report.strategy,
+						safety: report.safety,
+						warnings: report.warnings
+							.slice(0, 10)
+							.map((w) => ({ ...w, message: w.message.slice(0, 500) })),
+						omittedWarnings: Math.max(0, report.warnings.length - 10),
+					}
+				: {}),
 			sourceSha256: report.sourceSha256,
 			truncated: report.truncated,
 			omitted: report.omitted,

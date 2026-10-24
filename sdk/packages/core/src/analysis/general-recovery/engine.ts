@@ -1,5 +1,5 @@
 import { privateProcessGroupGone } from "../../runtime/private-process-group";
-/** Fixed OS-bounded native parser adapter; not yet a public execution route. Never runs target code. */
+/** Fixed OS-bounded native parser adapter. Called directly by the owning host, never as a nested parser. */
 import { constants, realpathSync } from "node:fs";
 import { lstat, mkdtemp, open, opendir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -165,6 +165,7 @@ export async function runPinnedGeneralRecovery(
 	bytes: Buffer,
 	sourceSha256: string,
 	signal?: AbortSignal,
+	onSpawn?: (pid: number | null) => void,
 ): Promise<GeneralRecoveryReport> {
 	if (
 		bytes.length > MAX_FILE ||
@@ -237,8 +238,11 @@ export async function runPinnedGeneralRecovery(
 			platform === "win32"
 				? windowsJobInvocation(engine, args, scratch, 2048, 4, 45000)
 				: {
-						executable: "/usr/bin/prlimit",
+						executable: "/usr/bin/timeout",
 						args: [
+							"--signal=KILL",
+							"45s",
+							"/usr/bin/prlimit",
 							"--as=2147483648:2147483648",
 							"--cpu=45:46",
 							"--fsize=67108864:67108864",
@@ -248,25 +252,26 @@ export async function runPinnedGeneralRecovery(
 							...args,
 						],
 					};
+		cleanupConfirmed = false;
 		const result = await runSupervised(
 			launch.executable,
 			launch.args,
 			50000,
 			abort.signal,
-			undefined,
+			onSpawn,
 			env,
 			true,
 			scratch,
 		);
 		clearInterval(monitor);
 		monitor = undefined;
-		if (
-			result.outputDrainTimedOut ||
-			(platform === "linux" &&
+		cleanupConfirmed =
+			!result.outputDrainTimedOut &&
+			!(
+				platform === "linux" &&
 				result.pid &&
-				!privateProcessGroupGone(result.pid))
-		)
-			cleanupConfirmed = false;
+				!privateProcessGroupGone(result.pid)
+			);
 		if (!cleanupConfirmed)
 			throw new GeneralRecoveryTerminationUnconfirmedError();
 		if (budgetError) throw budgetError;
@@ -347,7 +352,7 @@ export async function runPinnedGeneralRecovery(
 		}
 		if ([...files.keys()].some((f) => !consumed.has(f)))
 			throw new Error("Unreported recovery output file");
-		return GeneralRecoveryReportSchema.parse({
+		const retained = GeneralRecoveryReportSchema.parse({
 			protocol: "cline-general-recovery/1",
 			engine: "wakaru/1.14.0",
 			upstreamRevision: WAKARU_REVISION,
@@ -367,8 +372,11 @@ export async function runPinnedGeneralRecovery(
 							cpuHardSeconds: 46,
 							fileBytes: 67108864,
 							hostDeadlineMs: 50000,
+							supervisorDeadlineMs: 45000,
 						},
 			sourceSha256,
+			omitted: 0,
+			truncated: false,
 			detectedFormats: report.detected_formats,
 			safety: report.safety,
 			strategy: provenance.strategy,
@@ -384,9 +392,16 @@ export async function runPinnedGeneralRecovery(
 			limitations: [
 				"Structural single-input recovery with minimal rewrites only. No claim of original names, full recovery or runtime equivalence; transformed source hashes are separate from original input-range hashes.",
 				"Recovered modules and maps are inert data. No import, target execution, source-map fetch, package installation or automatic publication occurs.",
-				"Fixed 1 MiB input, 128 modules, 2 MiB admitted file output, entry/depth and 45-second process budgets. Windows job commit and Linux per-process address/CPU/file limits apply. Output polling is not a hard disk quota or a filesystem/network sandbox.",
+				"Fixed 1 MiB input, 128 modules, 2 MiB admitted file output, entry/depth and 45-second process budgets. Independent native-owner wall deadlines, Windows job commit and Linux per-process address/CPU/file limits apply. Output polling is not a hard disk quota or a filesystem/network sandbox.",
 			],
 		});
+		if (Buffer.byteLength(JSON.stringify(retained)) > 3 * MAX_FILE)
+			throw new Error("General recovery retained report budget exceeded");
+		return retained;
+	} catch (error) {
+		if (!cleanupConfirmed)
+			throw new GeneralRecoveryTerminationUnconfirmedError();
+		throw error;
 	} finally {
 		if (monitor) clearInterval(monitor);
 		signal?.removeEventListener("abort", stop);

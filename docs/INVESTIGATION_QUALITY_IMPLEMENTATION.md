@@ -14,8 +14,8 @@ Vendor runtime errors remain errors; this project does not bypass vendor licensi
 | Evidence and unknowns | UnifiedEvidenceStore, correlation, InvestigationStore | Scoped immutable references; durable revisioned questions; contradiction retention; restart and legacy reads | Implemented; full release gates pending |
 | Native dossiers/value flow | Exact Ghidra/IDA selectors and bounded call-target evidence | Real Ghidra argument/return def-use fixtures, bounded frontiers, IDA-specific availability | Implemented bounded saved three-function dependencies; Windows exact-head and release gates pending |
 | JS static/runtime reconciliation | Saved static receipts and approved runtime snapshots | Content/location/ambiguity/mismatch fixtures; no I/O during reconciliation | Implemented for saved passive Inspector reports; broader coverage remains |
-| Bundle recovery | Source acquisition and application graphs | Reviewed engine identity; Windows process/resource boundary; staged no-overwrite publication; real bundle fixtures | Partial: fixed AST factory recovery and staged provenance export implemented; general Wakaru-equivalent recovery remains |
-| Model evaluations/skills | Six guides and installed acceptance | Known-answer model journeys with fixed scoring; real routes, not only mocks or file presence | Guides updated and integrity checked; new live-model evaluations not completed |
+| Bundle recovery | Source acquisition and application graphs | Reviewed engine identity; Windows process/resource boundary; staged no-overwrite publication; real bundle fixtures | Explicit literal and pinned Wakaru routes, direct native ownership, saved provenance and no-overwrite export implemented; exact-head Windows installed acceptance pending |
+| Model evaluations/skills | Six guides and installed acceptance | Known-answer model journeys with fixed scoring; real routes, not only mocks or file presence | Verified guides and exact-evidence production Agent harness implemented; scripted transport passes, actual configured-provider evaluation remains blocked |
 | Artifact readers | Existing format discovery and worker | Go build info, Rust auditable metadata, PyInstaller inventory, supported IL2CPP versions; malformed/bounded fixtures | Implemented bounded readers and real parser-child smoke; exact-head Windows/release gates pending |
 
 ## Release conditions
@@ -324,3 +324,62 @@ checks; no "same or higher than REA" certification is claimed.
   public/native-owner launch, receipt/export or installed packaging path. The
   existing parser still must not casually nest the native engine. Windows uses
   the already tested Job Object owner; Linux-only probes never replace that.
+
+
+## Explicit general recovery integration
+
+This section supersedes earlier foundation-only status; those entries remain as
+historical validation records, not current blockers.
+
+- `recover_bundle_sources` retains default literal behavior. Explicit
+  `engine: "wakaru"` selects the pinned packaged native structural recovery path.
+  Host configuration, not the model, supplies the executable root. Missing or
+  changed engines fail without downloads, guessed commands or silent fallback.
+- Native recovery is launched directly by the owning host, not nested beneath the
+  disposable JS parser child. Cancellation is registered against the owning
+  session and receipt. Strong available birth proofs bind the job owner/private
+  process group; missing proof never authorizes replay or reservation recovery.
+- Windows retains the suspended Job Object with a 45-second native-owner deadline.
+  Linux now uses fixed `/usr/bin/timeout --signal=KILL 45s` around fixed prlimit
+  controls, so the wall deadline survives host loss. Neither route runs target
+  code. Linux child/group absence and uncertain-stop scratch retention remain
+  fail closed. This is not a filesystem/network sandbox or hard total disk quota.
+- Saved general reports use a separate protocol/engine discriminator inside the
+  existing recovery receipt. Transformed module/map hashes are separate from
+  original input/context byte-range hashes. Retained reports are capped at 3 MiB.
+  Saved query pages expose actual engine identity and resource boundaries without
+  re-execution; oversized modules retain identity plus an explicit display omission.
+- Separate Modify-approved no-overwrite JSON export validates the saved result
+  hash, exact report hash, original source identity, transformed byte hashes,
+  original range hashes and map hashes. It never asserts transformed text equals
+  original slices, executes it, overwrites originals, installs or promotes it.
+- Build-only packaging places the pinned engine/license under the core runtime
+  before its final integrity manifest is frozen. Installed Windows smoke now must
+  run the installed sidecar's owned native fixture and read two saved modules;
+  a missing engine or unsuccessful receipt blocks installer acceptance.
+- The verified investigate-artifact guide and tool schema describe explicit engine
+  choice and unsupported claims. Both literal and general production model-host
+  routes are tested with independent fixture reviews and separate export approval.
+- Local source-level native receipt/query/export regressions passed. Windows
+  source/installed acceptance and actual provider evaluation are still required
+  on the final published head before merge. An owned source selfcheck is not
+  installed-Windows evidence, and scripted model transport is not a real LLM.
+
+### Integration validation before publication
+
+- Core development and Node/Bun smoke type checks, all SDK package builds, and
+  desktop sidecar/WebView type checks passed on the integration source.
+- Native owner/query/export/cancellation suite: 4 passed using the pinned Linux
+  engine, including rehashed corrupt-module/range export rejection. The test's
+  corruption view is injected; finalized ledger receipts remain immutable.
+- Other core lifecycle/recovery suites: 24 passed, 2 Windows-only cases explicitly
+  skipped on Linux. Independent Linux deadline survives the test host's exit.
+- Owning model-host routes, selfcheck, workflow, skills and scorer: 87 passed;
+  actual-provider evaluation explicitly skipped (no configured provider). Both
+  literal and Wakaru journeys require actual saved analysis and separate export.
+- Production Agent/HTTP transport scripted preflight passed; this tests transport
+  and host evidence, not real model reasoning. Fork preservation passed (345
+  contracts, 3 obsolete paths blocked). Changed TypeScript error-level lint passed;
+  the validator's pre-existing control-character sanitizers were not rewritten.
+- Workflow YAML parsed and whitespace checks passed. These local checks do not
+  certify final-head Windows installation, arbitrary targets or REA feature parity.

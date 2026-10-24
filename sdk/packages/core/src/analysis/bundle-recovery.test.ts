@@ -1,3 +1,4 @@
+import { LiteralBundleRecoveryReportSchema } from "./bundle-recovery-contracts";
 import { it, expect, beforeEach, afterEach } from "vitest";
 import {
 	mkdtemp,
@@ -39,7 +40,12 @@ async function recover(source = webpack()) {
 		bundleRecovery: { expectedSha256: byteDigest(bytes) },
 	};
 	const result = await analyzeTarget(root, input);
-	return { bytes, input, result, report: result.bundleRecovery! };
+	return {
+		bytes,
+		input,
+		result,
+		report: LiteralBundleRecoveryReportSchema.parse(result.bundleRecovery),
+	};
 }
 for (const runtime of ["webpackChunkowned", "webpackChunkrspack"])
 	it(`recovers exact inert UTF-8 factory byte ranges from ${runtime}`, async () => {

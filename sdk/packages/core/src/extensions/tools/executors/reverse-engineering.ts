@@ -3011,6 +3011,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 						: undefined,
 					bundleRecovery: receipt.result?.bundleRecovery
 						? {
+								engine: receipt.result.bundleRecovery.engine,
+                                sourceSha256:receipt.result.bundleRecovery.sourceSha256,
 								modules: receipt.result.bundleRecovery.modules.length,
 								truncated: receipt.result.bundleRecovery.truncated,
 								next: "analysis_evidence bundle-recovery to obtain the reportHash and paginated module provenance",

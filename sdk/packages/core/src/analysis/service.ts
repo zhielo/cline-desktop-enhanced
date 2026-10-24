@@ -94,6 +94,22 @@ export async function runFirstPartyAnalysis(
 		status: "running",
 	};
 	store.start(receipt);
+	if (input.bundleRecovery?.engine === "wakaru") {
+		const abort = new AbortController();
+		controllers.set(receipt.id, { sessionId, abort });
+		const stop = () => abort.abort();
+		signal?.addEventListener("abort", stop, { once: true });
+		if (signal?.aborted) stop();
+		try {
+			const { runOwnedGeneralRecovery } = await import(
+				"./general-recovery/owned-run"
+			);
+			return await runOwnedGeneralRecovery(receipt, store, abort);
+		} finally {
+			controllers.delete(receipt.id);
+			signal?.removeEventListener("abort", stop);
+		}
+	}
 	let scratch: string | undefined;
 	try {
 		if (input.semanticGraph)

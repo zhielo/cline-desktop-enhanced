@@ -43,6 +43,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Bundled Android owned fixtures failed' }
   & $python -I -B sdk/packages/core/scripts/full-analysis-readiness.test.py --pack angr
   if ($LASTEXITCODE -ne 0) { throw 'Isolated angr execution fixture failed' }
 }
+# Build-only pinned native recovery. Include it before freezing the shipped inventory.
+if ($Pack -eq 'core') {
+  & bun scripts/prepare-wakaru-engine.ts (Join-Path $root 'wakaru')
+  if ($LASTEXITCODE -ne 0) { throw 'Pinned native recovery preparation failed' }
+}
 # Corpus subprocesses may create bytecode even if the outer Python uses -B.
 # Freeze the shipped inventory only after all execution acceptance completes.
 Get-ChildItem $root -Directory -Filter '__pycache__' -Recurse | Remove-Item -Recurse -Force

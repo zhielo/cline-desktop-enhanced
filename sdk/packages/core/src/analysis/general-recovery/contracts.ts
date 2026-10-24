@@ -46,10 +46,13 @@ export const GeneralRecoveryReportSchema = z
 					cpuHardSeconds: z.literal(46),
 					fileBytes: z.literal(67108864),
 					hostDeadlineMs: z.literal(50000),
+					supervisorDeadlineMs: z.literal(45000),
 				})
 				.strict(),
 		]),
 		sourceSha256: Hash,
+		omitted: z.literal(0),
+		truncated: z.literal(false),
 		detectedFormats: z.array(z.string().max(100)).max(32),
 		safety: z.string().max(100),
 		strategy: z.string().max(100),

@@ -37,7 +37,12 @@ jobs:
           CLINE_TEST_WAKARU_ROOT: ${{ runner.temp }}/general-runtime
         run: |
           set -o pipefail
-          bunx vitest run src/analysis/general-recovery/engine.test.ts src/runtime/windows-job-launcher.test.ts src/runtime/private-process-group.test.ts src/analysis/recovery.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
+          bunx vitest run src/analysis/general-recovery/engine.test.ts src/analysis/general-recovery/owned-run.test.ts src/runtime/windows-job-launcher.test.ts src/runtime/private-process-group.test.ts src/runtime/linux-recovery-deadline.test.ts src/analysis/recovery.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
+      - name: Test owning model-host recovery routes
+        working-directory: apps/examples/desktop-app
+        env:
+          CLINE_TEST_WAKARU_ROOT: ${{ runner.temp }}/general-runtime
+        run: bunx vitest run sidecar/commands-workbench.test.ts sidecar/general-recovery-selfcheck.test.ts sidecar/analysis-workflow.test.ts sidecar/investigation-skills.test.ts --config vitest.config.mts
       - name: Score and exercise investigation model transport (not a live model)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         shell: bash

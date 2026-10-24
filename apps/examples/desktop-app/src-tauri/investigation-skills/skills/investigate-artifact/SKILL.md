@@ -18,6 +18,7 @@ metadata:
 ## Route supported targets
 
 - Extracted JS/TS/Electron or bounded ASAR: use `javascript_analysis`; load the analyze-electron skill for semantic/application graph options.
+- JS bundle recovery: use `open_binary`, then advertised `recover_bundle_sources` on that immutable handle. Default `literal` retains exact factory slices; explicitly choose `engine: "wakaru"` for pinned structural recovery with minimal rewrites. Preserve separate transformed-module/map hashes and original byte-range hashes. Read saved `bundle-recovery` evidence; do not claim recovered original names, complete reconstruction or runtime equivalence. Missing packaged engines fail without installation or silent fallback. Publishing requires separate `publish_bundle_recovery` Modify approval and a new JSON output.
 - Unknown binary/package: use advertised `identify_artifact` or `inspect_binary` for bounded format/architecture evidence; inventory an archive before selecting a member.
 - Go/Rust/PyInstaller/IL2CPP metadata: use `open_binary`, then advertised `inspect_artifact_metadata` with the exact returned artifact ID and reader. Read the retained `artifact-metadata` view; no guessed language verdict, extraction or execution. Go/Rust observe container metadata, PyInstaller inventories CArchive only, and IL2CPP supports metadata versions 24/27/29/31/39 without native-address linking. Preserve omitted records and unsupported layouts.
 - Native code: load investigate-native and choose an available exact engine/selector. Do not guess an address or a managed/native boundary.

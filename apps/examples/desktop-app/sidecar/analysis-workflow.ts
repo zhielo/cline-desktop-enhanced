@@ -657,7 +657,11 @@ export async function handleAnalysisWorkflow(
 				? {
 						action: "recover" as const,
 						...z
-							.object({ artifactId: Id, ...authority })
+							.object({
+								artifactId: Id,
+								engine: z.enum(["literal", "wakaru"]).optional(),
+								...authority,
+							})
 							.strict()
 							.parse(input),
 					}
@@ -693,7 +697,10 @@ export async function handleAnalysisWorkflow(
 						target: artifact.path,
 						timeout_ms: 120000,
 						javascript_options: {
-							bundleRecovery: { expectedSha256: artifact.sha256 },
+							bundleRecovery: {
+								expectedSha256: artifact.sha256,
+								...(req.engine ? { engine: req.engine } : {}),
+							},
 						},
 					};
 		if (req.phase === "prepare")
