@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import * as esbuild from "esbuild"
+import { sdkJsoncParserPlugin } from "./scripts/sdk-bundle-plugins.mjs"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -150,6 +151,7 @@ const baseConfig = {
 	define: buildEnvVars,
 	tsconfig: path.resolve(__dirname, "tsconfig.json"),
 	plugins: [
+		sdkJsoncParserPlugin,
 		aliasResolverPlugin,
 		/* add to the end of plugins array */
 		esbuildProblemMatcherPlugin,
@@ -188,7 +190,7 @@ const e2eBuildConfig = {
 	outfile: `${destDir}/e2e-build.mjs`,
 	external: ["@vscode/test-electron", "execa"],
 	sourcemap: false,
-	plugins: [aliasResolverPlugin, esbuildProblemMatcherPlugin],
+	plugins: [sdkJsoncParserPlugin, aliasResolverPlugin, esbuildProblemMatcherPlugin],
 }
 
 async function main() {

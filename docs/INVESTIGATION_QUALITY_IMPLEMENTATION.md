@@ -218,3 +218,26 @@ checks; no "same or higher than REA" certification is claimed.
   logs. Existing test commands, nonzero exits and aggregate gates remain required.
   No activation fix or timeout increase is claimed; the next diagnostics are
   needed to identify the real failure.
+
+## Reproduced extension activation regression and correction
+
+- The platform failure was reproduced with server diagnostics: bundled
+  jsonc-parser 3.3.1 loaded its UMD factory, whose forwarded relative require
+  attempted to resolve `./impl/format` beside cline-core.js. The process exited
+  before readiness. This is a concrete packaging regression, not a slow-model
+  or timeout diagnosis.
+- A narrow production esbuild plugin resolves only jsonc-parser to its upstream
+  ESM entry for extension/standalone/E2E builds. Other package entry conditions,
+  parser behavior, metadata-reader sources and vendor license handling are
+  unchanged. A real Node CJS bundle regression passes with the production plugin.
+- Rebuilt standalone, restored the local SQLite native dependency skipped by
+  the initial ignore-scripts install, then reran the real owned platform spec:
+  1 passed. The missing local SQLite binding was a separate local prerequisite,
+  not evidence of a hosted SQLite failure. Hosted extension/E2E must rerun.
+- Kept the diagnostics helper's bun:test regression in its isolated unit runner,
+  explicitly excluding that one non-Playwright helper from Playwright collection.
+  Listing still finds all 14 original setup/E2E tests in 9 files. No actual E2E
+  scenario or assertion was removed. Credential redaction now includes named
+  token/secret/password fields and URL credentials, with bounded regex scans.
+- General-recovery owned engine CI at ef0696e passed on Windows and Linux
+  (run 40079069164). This does not complete its public/installed lifecycle.

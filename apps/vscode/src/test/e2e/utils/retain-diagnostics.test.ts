@@ -11,7 +11,7 @@ test("retains only bounded profile logs and redacts credentials", async () => {
 		await mkdir(path.join(profile, "logs", "host"), { recursive: true })
 		await writeFile(
 			path.join(profile, "logs", "host", "extension.log"),
-			'activation failed\nAuthorization: Bearer SECRET\napi_key="SECRET2"\n',
+			'activation failed\nAuthorization: Bearer SENTINEL_A\napi_key="SENTINEL_B"\n{"RUNNER_SECRET":"SENTINEL_C","GITHUB_TOKEN":"SENTINEL_D","PASSWORD":"SENTINEL_E"}\nhttp://user:SENTINEL_F@example.invalid/\n',
 		)
 		await writeFile(path.join(profile, "logs", "host", "large.log"), "x".repeat(300 * 1024))
 		await writeFile(path.join(profile, "logs", "host", "state.json"), '{"private":"ignored"}')
@@ -19,7 +19,7 @@ test("retains only bounded profile logs and redacts credentials", async () => {
 		expect(result.files).toBe(2)
 		const text = await readFile(path.join(output, "host", "extension.log"), "utf8")
 		expect(text).toContain("activation failed")
-		expect(text).not.toContain("SECRET")
+		expect(text).not.toContain("SENTINEL_")
 		expect((await readFile(path.join(output, "host", "large.log"))).length).toBe(256 * 1024)
 		expect(await retainE2ELogs(path.join(root, "missing"), output)).toEqual({ files: 0, bytes: 0, entries: 0 })
 	} finally {

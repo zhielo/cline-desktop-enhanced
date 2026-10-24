@@ -31,12 +31,13 @@ export async function retainE2ELogs(profile: string, output: string) {
 					.toString("utf8")
 					.replace(/(Bearer\s+)[^\s"']+/gi, "$1[REDACTED]")
 					.replace(
-						/((?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi,
+						/((?:^|[\s{,])["']?(?:[a-z0-9_-]{0,100}(?:api[_-]?key|token|password|secret)[a-z0-9_-]{0,100}|authorization)["']?\s*[:=]\s*["']?)[^\s,"'}]+/gi,
 						"$1[REDACTED]",
 					)
+				const safeText = text.replace(/\b([a-z][a-z0-9+.-]{0,30}:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[REDACTED]@")
 				const destination = path.join(output, name)
 				await mkdir(path.dirname(destination), { recursive: true })
-				await writeFile(destination, text, { flag: "wx" })
+				await writeFile(destination, safeText, { flag: "wx" })
 				total += bytes.length
 				files++
 			}
