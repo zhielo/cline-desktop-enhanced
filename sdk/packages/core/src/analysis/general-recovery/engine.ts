@@ -1,10 +1,11 @@
-/** Fixed native parser adapter; not yet a public execution route. Never runs target code. */
+/** Fixed OS-bounded native parser adapter; not yet a public execution route. Never runs target code. */
 import { constants, realpathSync } from "node:fs";
 import { lstat, mkdtemp, open, opendir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { z } from "zod";
 import { byteDigest } from "../contracts";
+import { windowsJobInvocation } from "../../runtime/windows-job-launcher";
 import { runSupervised } from "../../extensions/tools/executors/supervised-process";
 import {
 	GeneralRecoveryReportSchema,
@@ -211,19 +212,37 @@ export async function runPinnedGeneralRecovery(
 					checking = false;
 				});
 		}, 100);
+		const args = [
+			input,
+			"--unpack=strict",
+			"--level=minimal",
+			"--provenance",
+			"--emit-source-map",
+			"--json",
+			"-o",
+			output,
+		];
+		// This parser never launches the target. These OS limits contain the
+		// fixed recovery executable; they are not a filesystem/network sandbox.
+		const launch =
+			platform === "win32"
+				? windowsJobInvocation(engine, args, scratch, 2048, 4, 45000)
+				: {
+						executable: "/usr/bin/prlimit",
+						args: [
+							"--as=2147483648:2147483648",
+							"--cpu=45:46",
+							"--fsize=67108864:67108864",
+							"--core=0:0",
+							"--",
+							engine,
+							...args,
+						],
+					};
 		const result = await runSupervised(
-			engine,
-			[
-				input,
-				"--unpack=strict",
-				"--level=minimal",
-				"--provenance",
-				"--emit-source-map",
-				"--json",
-				"-o",
-				output,
-			],
-			45000,
+			launch.executable,
+			launch.args,
+			50000,
 			abort.signal,
 			undefined,
 			env,
@@ -316,6 +335,22 @@ export async function runPinnedGeneralRecovery(
 			engine: "wakaru/1.14.0",
 			upstreamRevision: WAKARU_REVISION,
 			engineSha256: pin.sha256,
+			resourceBoundary:
+				platform === "win32"
+					? {
+							kind: "windows-job-object-suspended-launch",
+							memoryBytes: 2147483648,
+							maxProcesses: 4,
+							supervisorDeadlineMs: 45000,
+						}
+					: {
+							kind: "linux-prlimit-process-group",
+							addressSpaceBytes: 2147483648,
+							cpuSoftSeconds: 45,
+							cpuHardSeconds: 46,
+							fileBytes: 67108864,
+							hostDeadlineMs: 50000,
+						},
 			sourceSha256,
 			detectedFormats: report.detected_formats,
 			safety: report.safety,

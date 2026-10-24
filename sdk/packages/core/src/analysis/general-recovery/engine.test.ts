@@ -79,6 +79,23 @@ it.skipIf(!pinnedRoot)(
 		);
 		const report = await runPinnedGeneralRecovery(source, byteDigest(source));
 		expect(report.engine).toBe("wakaru/1.14.0");
+		expect(report.resourceBoundary).toEqual(
+			process.platform === "win32"
+				? {
+						kind: "windows-job-object-suspended-launch",
+						memoryBytes: 2147483648,
+						maxProcesses: 4,
+						supervisorDeadlineMs: 45000,
+					}
+				: {
+						kind: "linux-prlimit-process-group",
+						addressSpaceBytes: 2147483648,
+						cpuSoftSeconds: 45,
+						cpuHardSeconds: 46,
+						fileBytes: 67108864,
+						hostDeadlineMs: 50000,
+					},
+		);
 		expect(report.targetExecuted).toBe(false);
 		expect(report.verifiedBehavior).toBe(false);
 		expect(report.modules).toHaveLength(2);

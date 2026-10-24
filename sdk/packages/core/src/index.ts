@@ -1232,3 +1232,5 @@ export { resolvePermissionProfile, type PermissionProfile } from "./extensions/t
 export { RE_SPECIALIST_WORKER } from "./extensions/tools/executors/re-specialist-worker";
 
 export { BinaryTriageCallSchema, BinaryTriageOptionsSchema, BINARY_TRIAGE_OPERATIONS, type BinaryTriageCall } from "./extensions/tools/binary-triage-schema";
+
+export { windowsJobInvocation, WINDOWS_JOB_SOURCE } from "./runtime/windows-job-launcher";

@@ -262,3 +262,22 @@ checks; no "same or higher than REA" certification is claimed.
   not authenticated freshness, replay prevention or verified execution.
 - Boundary regressions and real Linux Inspector tests passed (16 tests). Exact
   final-head Windows fixtures and installer acceptance remain required.
+
+## General recovery containment foundation
+
+- Reused the app's suspended Windows Job Object launcher in the core runtime;
+  the desktop module reexports the same implementation. Existing shell calls
+  retain their unbounded-wait default; only recovery requests use a 45-second
+  job-owner deadline. No startup/shell/global timeout policy changed.
+- Fixed recovery launches use 2 GiB job commit/four processes on Windows and
+  2 GiB per-process address space, CPU 45/46 seconds and 64 MiB per-file limits
+  through `/usr/bin/prlimit` on Linux. Native execution stays in the existing
+  supervised process group on Linux. Returned internal reports identify the
+  actual platform resource controls. These controls are not a sandbox/disk quota.
+- Added real Windows owned-child stdin and descendant-deadline regressions to
+  the pinned-engine CI job. Linux real pinned recovery passed with the new OS
+  controls. Windows execution of these new paths is still required; a skipped
+  Windows-only test on Linux is not Windows evidence.
+- Public routing, parser-parent/descendant cancellation ownership, installed
+  packaging and saved/export integration are still incomplete. Do not silently
+  substitute this internal adapter for the existing literal recovery route.

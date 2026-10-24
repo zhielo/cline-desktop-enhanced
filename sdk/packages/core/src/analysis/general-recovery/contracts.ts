@@ -29,6 +29,26 @@ export const GeneralRecoveryReportSchema = z
 		engine: z.literal("wakaru/1.14.0"),
 		upstreamRevision: z.literal(WAKARU_REVISION),
 		engineSha256: Hash,
+		resourceBoundary: z.discriminatedUnion("kind", [
+			z
+				.object({
+					kind: z.literal("windows-job-object-suspended-launch"),
+					memoryBytes: z.literal(2147483648),
+					maxProcesses: z.literal(4),
+					supervisorDeadlineMs: z.literal(45000),
+				})
+				.strict(),
+			z
+				.object({
+					kind: z.literal("linux-prlimit-process-group"),
+					addressSpaceBytes: z.literal(2147483648),
+					cpuSoftSeconds: z.literal(45),
+					cpuHardSeconds: z.literal(46),
+					fileBytes: z.literal(67108864),
+					hostDeadlineMs: z.literal(50000),
+				})
+				.strict(),
+		]),
 		sourceSha256: Hash,
 		detectedFormats: z.array(z.string().max(100)).max(32),
 		safety: z.string().max(100),

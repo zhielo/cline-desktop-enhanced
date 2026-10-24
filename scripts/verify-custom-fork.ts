@@ -1114,7 +1114,7 @@ const requiredMarkers: Array<{
 		],
 	},
 	{
-		path: "apps/examples/desktop-app/sidecar/windows-job-launcher.ts",
+		path: "sdk/packages/core/src/runtime/windows-job-launcher.ts",
 		markers: [
 			"CreateProcess suspended",
 			"AssignProcessToJobObject",
