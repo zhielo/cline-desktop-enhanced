@@ -55,9 +55,19 @@ function primitive(value: unknown): Primitive {
 		return { type: v.type, value: v.unserializableValue };
 	return { type: "opaque", opaque: true };
 }
-/** Bounded receipt window (+ sub-millisecond receipt rounding only). Target timestamps and stack labels are untrusted protocol claims. */
+/** Bounded receipt window. Target timestamps and stack labels are untrusted claims.
+ * Node's Windows Inspector uses V8's process-local clock interpolation over
+ * GetSystemTimeAsFileTime (coarse ~15.625 ms), not this host's performance epoch.
+ * A fixed 16 ms future allowance avoids treating ordinary cross-process clock
+ * quantization as impossible timing. It is not authentication or replay proof.
+ * Older reports still fail the exact start boundary; larger drift fails closed.
+ */
 export class InspectorConsoleCollector {
 	private after?: number;
+	private readonly futureToleranceMs: number;
+	constructor(platform: NodeJS.Platform = process.platform) {
+		this.futureToleranceMs = platform === "win32" ? 16 : 1;
+	}
 	private active = false;
 	private reports: ConsoleProtocolReport[] = [];
 	dropped = 0;
@@ -92,7 +102,7 @@ export class InspectorConsoleCollector {
 			typeof p.timestamp !== "number" ||
 			!Number.isFinite(p.timestamp) ||
 			p.timestamp < this.after ||
-			p.timestamp >= receivedAt + 1 ||
+			p.timestamp >= receivedAt + this.futureToleranceMs ||
 			!frame ||
 			typeof frame.scriptId !== "string" ||
 			frame.scriptId.length > 80 ||
@@ -108,7 +118,8 @@ export class InspectorConsoleCollector {
 			this.dropped++;
 			if (typeof p?.timestamp === "number" && Number.isFinite(p.timestamp)) {
 				if (p.timestamp < this.after) this.discardedBeforeWindow++;
-				else if (p.timestamp >= receivedAt + 1) this.discardedFuture++;
+				else if (p.timestamp >= receivedAt + this.futureToleranceMs)
+					this.discardedFuture++;
 				else this.discardedInvalid++;
 			} else this.discardedInvalid++;
 			return;
@@ -157,6 +168,11 @@ export class InspectorConsoleCollector {
 		}
 		return {
 			reports: bound,
+			clockPolicy: {
+				basis: "untrusted-protocol-epoch-ms" as const,
+				futureToleranceMs: this.futureToleranceMs,
+				startToleranceMs: 0,
+			},
 			discarded: this.dropped + unbound,
 			discardReasons: {
 				beforeWindow: this.discardedBeforeWindow,

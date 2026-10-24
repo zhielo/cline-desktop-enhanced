@@ -241,3 +241,24 @@ checks; no "same or higher than REA" certification is claimed.
   token/secret/password fields and URL credentials, with bounded regex scans.
 - General-recovery owned engine CI at ef0696e passed on Windows and Linux
   (run 40079069164). This does not complete its public/installed lifecycle.
+
+## Windows Inspector clock-domain correction
+
+- Exact head `8c3162e` passed extension activation/platform checks, all three
+  desktop extension E2E platforms, SDK Windows/Linux, Windows regression gates,
+  and the pinned general-recovery fixtures. The installer did not build: the
+  Windows semantic-source gate failed the real running-console fixture with 22
+  reports rejected as future timestamps, despite exact loaded-source identity.
+- Node 24 Inspector uses V8 `CurrentClockTimeMillis`; on Windows this is a
+  process-local interpolation over coarse `GetSystemTimeAsFileTime`, not the
+  collector's libuv performance epoch. A high-resolution receipt timestamp alone
+  does not synchronize those clocks. See Node v24.14.0 `src/inspector_agent.cc`
+  and `deps/v8/src/base/platform/time.cc`.
+- Collector receipts now explicitly record a fixed Windows 16 ms future
+  allowance (other platforms retain 1 ms rounding). Start boundary, active-only
+  receipt admission, source identity, opaque object treatment and finite budgets
+  remain unchanged. Reports at/beyond the bound and older reports are rejected;
+  larger clock changes remain missing evidence. This is protocol-claim timing,
+  not authenticated freshness, replay prevention or verified execution.
+- Boundary regressions and real Linux Inspector tests passed (16 tests). Exact
+  final-head Windows fixtures and installer acceptance remain required.
