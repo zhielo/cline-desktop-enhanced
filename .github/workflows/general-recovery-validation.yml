@@ -1,0 +1,49 @@
+name: General Recovery Owned Engine Validation
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owned-recovery:
+    name: Pinned general recovery (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+      - name: Build SDK
+        run: bun run build:sdk
+      - name: Prepare exact pinned native engine
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/general-runtime"
+          bun scripts/prepare-wakaru-engine.ts "$RUNNER_TEMP/general-runtime/wakaru"
+      - name: Test real engine and provenance
+        shell: bash
+        working-directory: sdk/packages/core
+        env:
+          CLINE_TEST_WAKARU_ROOT: ${{ runner.temp }}/general-runtime
+        run: |
+          set -o pipefail
+          bunx vitest run src/analysis/general-recovery/engine.test.ts --config vitest.config.ts 2>&1 | tee general-recovery-test.log
+      - name: Retain bounded engine validation diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: general-recovery-validation-${{ matrix.os }}
+          path: |
+            sdk/packages/core/general-recovery-test.log
+            ${{ runner.temp }}/general-runtime/wakaru/manifest.json
+          retention-days: 7

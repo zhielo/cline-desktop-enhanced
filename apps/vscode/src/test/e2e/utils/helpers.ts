@@ -6,6 +6,7 @@ import { type ElectronApplication, expect, type Frame, type Page, test } from "@
 import { downloadAndUnzipVSCode, SilentReporter } from "@vscode/test-electron"
 import { _electron } from "playwright"
 import { ClineApiServerMock } from "../fixtures/server"
+import { retainE2ELogs } from "./retain-diagnostics"
 
 interface E2ETestDirectories {
 	workspaceDir: string
@@ -462,7 +463,11 @@ export const e2e = test
 		},
 	})
 	.extend<{ app: ElectronApplication; clineTestDir: string }>({
-		app: async ({ openVSCode, userDataDir, extensionsDir, workspaceType, workspaceDir, multiRootWorkspaceDir }, use) => {
+		app: async (
+			{ openVSCode, userDataDir, extensionsDir, workspaceType, workspaceDir, multiRootWorkspaceDir },
+			use,
+			testInfo,
+		) => {
 			const workspacePath = workspaceType === "single" ? workspaceDir : multiRootWorkspaceDir
 
 			const app = await openVSCode(workspacePath)
@@ -471,6 +476,13 @@ export const e2e = test
 				await use(app)
 			} finally {
 				await E2ETestHelper.closeAppForTeardown(app)
+				if (testInfo.status !== testInfo.expectedStatus) {
+					try {
+						await retainE2ELogs(userDataDir, testInfo.outputPath("vscode-logs"))
+					} catch (error) {
+						console.warn("Could not retain bounded extension diagnostics", String(error))
+					}
+				}
 				// Cleanup in parallel after the app process has been asked to exit.
 				const cleanupTasks = [
 					E2ETestHelper.rmForRetries(userDataDir, { recursive: true }),

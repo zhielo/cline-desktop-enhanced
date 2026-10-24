@@ -183,3 +183,38 @@ checks; no "same or higher than REA" certification is claimed.
   waitUntil timeouts. This is a separate unresolved initialization failure, not
   evidence that recovery export failed in that extension route. Extension unit
   job failures also still need their underlying diagnostics.
+
+## Pinned general-recovery foundation (not public-route completion)
+
+- Added an internal Wakaru 1.14.0 adapter for official Linux/Windows x64 binaries.
+  Build-only preparation validates exact release-archive and executed-file hashes,
+  retains the upstream Apache-2.0 license, and refuses an existing destination.
+  It does not install REA, download at app startup, or expose executable paths to
+  the model. A dedicated cross-platform CI job runs the real owned fixture.
+- The real Linux owned fixture recovered two webpack modules and their source
+  maps. Transformed-module hashes and original input-range hashes are separate;
+  no runtime-equivalence, original-name or general parity claim is made.
+- The adapter rejects changed input bytes, invalid UTF-8, missing/unpinned engines,
+  unsafe/duplicate output names, symlinks, unreported files and out-of-input ranges.
+  It retains inert module/map bytes under explicit file/entry/depth/time budgets.
+  Output polling is not a hard disk quota, and process separation is not a hard
+  memory limit or OS sandbox. Unconfirmed drainage does not authorize cleanup.
+- Public model routing, installed resource packaging, parent/descendant lifecycle,
+  and saved/export receipt integration remain incomplete. In particular, the
+  existing parser host strips resource environment configuration and kills its
+  immediate worker; adding a nested native engine there without lifecycle work
+  would risk an orphan. The new adapter is deliberately not wired into that route.
+- Local real-engine adapter tests: 4 passed. The build-only downloader passed its
+  Linux archive/executable/license checks. Windows execution is pending CI.
+
+## Extension failure diagnosis
+
+- Current local extension build passed; 1,246 adapter tests and all 81 isolated
+  unit files (1,121 passing tests reported by the runner) passed.
+  This does not negate the hosted extension integration/E2E failures.
+- Added bounded per-test VS Code activation log retention before E2E cleanup,
+  with credential-pattern redaction and a passing owned retention test. Hosted
+  extension/platform test steps now tee output with pipefail and retain failure
+  logs. Existing test commands, nonzero exits and aggregate gates remain required.
+  No activation fix or timeout increase is claimed; the next diagnostics are
+  needed to identify the real failure.
