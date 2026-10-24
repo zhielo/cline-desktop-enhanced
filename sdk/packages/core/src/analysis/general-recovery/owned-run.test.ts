@@ -1,5 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, realpath, writeFile, readFile, rm } from "node:fs/promises";
+import {
+	mkdtemp,
+	realpath,
+	writeFile,
+	readFile,
+	rm,
+	symlink,
+} from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { runFirstPartyAnalysis, cancelFirstPartyAnalysis } from "../service";
@@ -247,4 +254,40 @@ it.skipIf(!pinned)(
 		}
 	},
 	process.platform === "win32" ? 90000 : 30000,
+);
+
+it.skipIf(!pinned || process.platform === "win32")(
+	"labels native receipt artifacts against the canonical workspace rather than an alias spelling",
+	async () => {
+		const { root, store, input } = await fixture();
+		const alias = path.join(root, "workspace-alias");
+		await symlink(root, alias, "dir");
+		process.env.CLINE_BUNDLED_ANALYSIS_ROOT = pinned;
+		const receipt: AnalysisReceipt = {
+			id: randomUUID(),
+			sessionId: "owner",
+			workspace: alias,
+			profile: ANALYSIS_PROFILE,
+			input,
+			requestHash: digest(input),
+			createdAt: new Date().toISOString(),
+			status: "running",
+		};
+		// Projection-only alias fixture; production ledger admission remains covered above.
+		const projectionStore = {
+			save: vi.fn(),
+		} as unknown as FirstPartyAnalysisStore;
+		try {
+			const result = await runOwnedGeneralRecovery(
+				receipt,
+				projectionStore,
+				new AbortController(),
+			);
+			expect(result.status, result.error).toBe("partial");
+			expect(result.result?.artifacts[0].path).toBe("bundle.js");
+		} finally {
+			store.close();
+		}
+	},
+	30000,
 );

@@ -38,16 +38,19 @@ export async function exportSavedBundleRecovery(
 			report.sourceSha256,
 			1024 * 1024,
 		);
+	if (receipt.resultHash !== digest(result))
+		throw new Error("Saved bundle result identity mismatch");
 	if (
-		receipt.resultHash !== digest(result) ||
-		(await confinedTarget(receipt.workspace, receipt.input.target)) !==
-			resolved ||
+		(await confinedTarget(receipt.workspace, receipt.input.target)) !== resolved
+	)
+		throw new Error("Saved bundle target identity mismatch");
+	if (
 		result.artifacts.length !== 1 ||
 		result.artifacts[0].path !==
 			path.relative(workspace, resolved).split(path.sep).join("/") ||
 		result.artifacts[0].sha256 !== report.sourceSha256
 	)
-		throw new Error("Saved bundle target identity mismatch");
+		throw new Error("Saved bundle artifact identity mismatch");
 	const source = (base64: string, hash: string) => {
 		const content = Buffer.from(base64, "base64");
 		if (content.toString("base64") !== base64 || byteDigest(content) !== hash)

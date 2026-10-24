@@ -1,5 +1,6 @@
 /** Native parser is owned directly by the host, never nested under a disposable parser child. */
 import path from "node:path";
+import { realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import {
 	runPinnedGeneralRecovery,
@@ -85,7 +86,7 @@ export async function runOwnedGeneralRecovery(
 			artifacts: [
 				{
 					path: path
-						.relative(receipt.workspace, resolved)
+						.relative(realpathSync.native(receipt.workspace), resolved)
 						.split(path.sep)
 						.join("/"),
 					sha256,
