@@ -160,7 +160,7 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/general-recovery-validation.yml":
-			"42b793b4699b512cc776ce8dfe4249c516b0a825f1e4e86f05bffd9ee65bcdac",
+			"1660014462a0546eca828c1f246169789f1c776734a82a9efb1e607c102dab5d",
         "apps/vscode/scripts/owned-triage-model.ts": "49b6f1cc1c4477689e31eb47330fae0f9454630532efa46b347ed524d2daa0fd",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",

@@ -521,4 +521,7 @@ for (const engine of ["literal", "wakaru"] as const)
 				else process.env.CLINE_FIRST_PARTY_ANALYSIS_HOST = previousHost;
 			}
 		},
+		// Native Windows job creation and ownership proof use cold host processes.
+		// Keep the journey finite without changing any production executor deadline.
+		engine === "wakaru" ? 90000 : 20000,
 	);

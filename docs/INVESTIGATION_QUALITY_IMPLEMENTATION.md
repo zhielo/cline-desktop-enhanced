@@ -393,3 +393,17 @@ hashes were refreshed; the new general-recovery workflow is now fingerprinted an
 both pinned Windows/Linux recovery checks are mandatory. New regressions require
 both checks to fail closed when skipped. Focused verifier/collector tests passed;
 full consolidated validation must rerun on the resulting published commit.
+
+### Platform regression follow-up
+
+- Corrected the Linux independent-deadline test's procfs disappearance race:
+  ENOENT at lookup and ESRCH during read both mean its known fixture has stopped.
+  Production reservation absence rules are unchanged. The complete parser gate
+  then passed 162 tests, with 2 Windows-only tests skipped on Linux.
+- Windows native engine/provenance/Job Object tests passed, but the separate
+  owning model-host journey hit the generic 20-second test deadline. Its explicit
+  native-only journey timeout is now 90 seconds; production host/engine/shell
+  deadlines are unchanged. Both OS jobs retain model-host diagnostics. The reviewed
+  workflow fingerprint is updated; mandatory success requirements remain intact.
+- Focused owning-host/selfcheck/release-policy regressions passed locally. This is
+  a test-boundary correction, not a claim that the new Windows journey passed.

@@ -41,7 +41,9 @@ it.runIf(process.platform === "linux")(
 						break;
 					}
 				} catch (error) {
-					if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+					// procfs may disappear at lookup (ENOENT) or during read (ESRCH).
+					const code = (error as NodeJS.ErrnoException).code;
+					if (code === "ENOENT" || code === "ESRCH") {
 						stopped = true;
 						break;
 					}
