@@ -1,4 +1,5 @@
 import path from "node:path";
+import { confinedTarget } from "./worker";
 import {
 	BundleExportRequestSchema,
 	BundleRecoveryReportSchema,
@@ -29,6 +30,7 @@ export async function exportSavedBundleRecovery(
 		throw new Error(
 			"Choose an exact saved recovery hash and a new JSON provenance output",
 		);
+	const workspace = await confinedTarget(receipt.workspace, ".");
 	const result = ResultSchema.parse(receipt.result),
 		{ bytes, resolved } = await readOwnedArtifactBytes(
 			receipt.workspace,
@@ -37,10 +39,11 @@ export async function exportSavedBundleRecovery(
 			1024 * 1024,
 		);
 	if (
-		path.resolve(receipt.workspace, receipt.input.target) !== resolved ||
+		(await confinedTarget(receipt.workspace, receipt.input.target)) !==
+			resolved ||
 		result.artifacts.length !== 1 ||
 		result.artifacts[0].path !==
-			path.relative(receipt.workspace, resolved).split(path.sep).join("/") ||
+			path.relative(workspace, resolved).split(path.sep).join("/") ||
 		result.artifacts[0].sha256 !== report.sourceSha256
 	)
 		throw new Error("Saved bundle target identity mismatch");

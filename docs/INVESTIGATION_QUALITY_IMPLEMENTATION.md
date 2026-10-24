@@ -166,3 +166,20 @@ checks; no "same or higher than REA" certification is claimed.
   expanded parser test list. Required check names, core gates and installed
   acceptance labels were not removed or relaxed. Old recipe hashes correctly
   blocked the first customization gate; the new recipes must pass full CI.
+## Exact-head Windows failure follow-up
+
+- Installer run 40069541880 at 5d82271 failed both customization and sidecar
+  regression gates at the same owning-model recovery export. No installer was
+  produced; installed acceptance did not run. These are failures, not passes.
+- Canonicalize workspace and artifact identities with the native filesystem
+  resolver before confinement comparisons. This avoids comparing Windows 8.3
+  TEMP aliases against expanded paths while retaining relative traversal,
+  outside-root and linked-escape rejection. Recovery export uses the same
+  canonical identity for saved target and relative artifact labels.
+- Local checks for this fix: 32 owning-host tests and 18 analysis/recovery tests
+  passed, including canonical root aliases and linked escapes. The SDK build
+  passed. A Windows rerun is required; Linux tests do not prove the Windows fix.
+- Extension E2E run 40069541925 retained blank Cline view snapshots followed by
+  waitUntil timeouts. This is a separate unresolved initialization failure, not
+  evidence that recovery export failed in that extension route. Extension unit
+  job failures also still need their underlying diagnostics.

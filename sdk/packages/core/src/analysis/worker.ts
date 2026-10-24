@@ -1,4 +1,5 @@
-import { constants } from "node:fs";
+import { constants, realpath as fsRealpath } from "node:fs";
+import { promisify } from "node:util";
 import { lstat, open, opendir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -26,13 +27,20 @@ export function within(root: string, target: string) {
 			!child.startsWith(`..${path.sep}`))
 	);
 }
+const nativeRealpath = promisify(fsRealpath.native);
 export async function confinedTarget(root: string, target: string) {
 	if (/[\0\r\n]/.test(target)) throw new Error("Invalid target path");
+	// On Windows Node's JS resolver can retain an 8.3 TEMP alias while the
+	// native artifact resolver expands it. Compare canonical filesystem paths,
+	// not those different spellings. This is metadata resolution, not a read
+	// of target bytes; contents are admitted only after canonical confinement.
 	const lexical = path.resolve(root, target);
-	if (!within(root, lexical))
+	if (!path.isAbsolute(target) && !within(root, lexical))
 		throw new Error("Target must remain in this session workspace");
-	const actual = await realpath(lexical);
-	if (!within(root, actual)) throw new Error("Linked target escapes workspace");
+	const canonicalRoot = await nativeRealpath(root);
+	const actual = await nativeRealpath(lexical);
+	if (!within(canonicalRoot, actual))
+		throw new Error("Linked target escapes workspace");
 	if ((await lstat(lexical)).isSymbolicLink())
 		throw new Error("Linked targets are not supported");
 	return actual;
@@ -49,6 +57,7 @@ export async function readSources(
 	} = { entries: 0, bytes: 0, files: 0 },
 	extended = false,
 ) {
+	root = await nativeRealpath(root);
 	const sources: SourceArtifact[] = [],
 		limitations: string[] = [];
 	const containers: AcquisitionBody["containers"] = [];
@@ -331,7 +340,7 @@ export async function analyzeTarget(
 	semanticOutput?: string,
 ): Promise<AnalysisResult> {
 	const input = AnalysisInputSchema.parse(value),
-		root = await realpath(workspace);
+		root = await nativeRealpath(workspace);
 	if (input.bundleRecovery) {
 		const { recoverOwnedBundle } = await import("./bundle-recovery");
 		return recoverOwnedBundle(root, input.target, input.bundleRecovery);
