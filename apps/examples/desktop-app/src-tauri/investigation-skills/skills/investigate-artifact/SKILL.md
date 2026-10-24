@@ -19,6 +19,7 @@ metadata:
 
 - Extracted JS/TS/Electron or bounded ASAR: use `javascript_analysis`; load the analyze-electron skill for semantic/application graph options.
 - Unknown binary/package: use advertised `identify_artifact` or `inspect_binary` for bounded format/architecture evidence; inventory an archive before selecting a member.
+- Go/Rust/PyInstaller/IL2CPP metadata: use `open_binary`, then advertised `inspect_artifact_metadata` with the exact returned artifact ID and reader. Read the retained `artifact-metadata` view; no guessed language verdict, extraction or execution. Go/Rust observe container metadata, PyInstaller inventories CArchive only, and IL2CPP supports metadata versions 24/27/29/31/39 without native-address linking. Preserve omitted records and unsupported layouts.
 - Native code: load investigate-native and choose an available exact engine/selector. Do not guess an address or a managed/native boundary.
 - APK/DEX/Smali: load investigate-android. Keep ordinary APK, split sets and AAB workflows separate.
 - Selected managed/JVM methods: use only the advertised bounded inspection operation and preserve unsupported layouts. NativeAOT is native code, not recoverable original C# by assumption.

@@ -28,8 +28,8 @@
     },
     {
       "path": "skills/analyze-electron/SKILL.md",
-      "bytes": 3770,
-      "sha256": "e2cfc56577e23e174149ec8d744a181bbc575ee387e256bcec622f050eab31e9"
+      "bytes": 4692,
+      "sha256": "a7e97a5b5b111912ed801e07eb65156cdccea8b7b8cf23a870066465023cfec9"
     },
     {
       "path": "skills/compare-applications/SKILL.md",
@@ -43,13 +43,13 @@
     },
     {
       "path": "skills/investigate-artifact/SKILL.md",
-      "bytes": 3933,
-      "sha256": "a94d695915a661be02bcabe3c3eb0e8c03d7ff212597eb4ee9c39f6881f8bea2"
+      "bytes": 4391,
+      "sha256": "45c41a7473fbcc5aced933191fd6b128090bbbcbe59377c429dbfc4923559a0b"
     },
     {
       "path": "skills/investigate-native/SKILL.md",
-      "bytes": 3835,
-      "sha256": "d49903cc4b70d05745d7cf2f359273ea9de63163e529807036d3e115ec736674"
+      "bytes": 4656,
+      "sha256": "70729cbdd0fba10bd480f6ab53fa2d44c844c0a07048a80437f1be17e6ae8fce"
     },
     {
       "path": "skills/review-candidate/SKILL.md",

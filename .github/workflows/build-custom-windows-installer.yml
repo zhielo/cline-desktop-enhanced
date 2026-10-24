@@ -56,6 +56,8 @@ jobs:
         run: node scripts/install-test-ghidra.mjs
       - name: Test actual headless import, reuse, renamed input and multi-script decompilation
         run: bun scripts/test-ghidra-integration.ts
+      - name: Test actual bounded native arguments, returns and cross-function dependencies
+        run: bun scripts/test-owned-ghidra.ts
 
   android-toolchain-preflight:
     name: Windows Android toolchain owned fixtures

@@ -6341,10 +6341,15 @@ export async function handleCommand(
 		}
 		const input = ReverseEngineeringInputSchema.parse(rawInput);
   if(isAnalysisWriteOperation(input.operation)){
-   if(!options?.connection?.data?.canApproveTools)throw new Error("Candidate construction/signing requires the trusted desktop connection");
-   const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id);
+   const id=String(args?.sessionId??""),live=ctx.liveSessions.get(id),grant=options?.modelGrant;
+   // Only the host's unforgeable investigation grant can carry a human-reviewed
+   // recovery export through its own busy model session. Other writes keep the
+   // existing trusted-desktop + idle requirements. Exact one-use Modify plan
+   // consumption below still precedes every publication.
+   const modelRecovery=input.operation==="export_bundle_recovery" && grant?.key===MODEL_INVESTIGATION && grant.sessionId===id && realpathSync(grant.workspace)===realpathSync(baseDir) && grant.mode!=="off" && grant.mode===(firstPartyStore().session(id)?.mode??"off");
+   if(!options?.connection?.data?.canApproveTools&&!modelRecovery)throw new Error("Candidate construction/signing requires the trusted desktop connection");
    const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"read-only";
-   if(!live||live.busy||live.transitioningProvider||profile!=="full-access")throw new Error("Candidate construction/signing requires an idle Full Access owning session; restricted profiles are not widened");
+   if(!live||(!modelRecovery&&live.busy)||live.transitioningProvider||profile!=="full-access")throw new Error("Candidate construction/signing requires an idle Full Access owning session or its exact host-approved recovery export; restricted profiles are not widened");
   }
   const planId = String(args?.planId ?? "").trim();
 		const executionToken = String(args?.executionToken ?? "").trim();
@@ -6357,6 +6362,9 @@ export async function handleCommand(
 		});
 		const executionContext = {
 			...toolContext,
+			...(input.operation === "export_bundle_recovery"
+				? { sessionId: String(args?.sessionId ?? "") }
+				: {}),
 			signal: desktopAnalysisTaskOrchestrator.signal(planId),
 		};
 		let result: string;

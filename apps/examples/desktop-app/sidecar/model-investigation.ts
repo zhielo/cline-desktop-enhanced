@@ -23,7 +23,10 @@ export async function runModelInvestigation(
 		ports.assertCurrent();
 	};
 	current();
-	if (name === "capture_browser_scenario" || name === "capture_network_metadata") {
+	if (
+		name === "capture_browser_scenario" ||
+		name === "capture_network_metadata"
+	) {
 		const req = input as { action: string };
 		if (req.action === "list") {
 			const status = (await ports.invoke("analysis_workflow_status", {})) as {
@@ -72,11 +75,36 @@ export async function runModelInvestigation(
 			),
 		);
 	}
-	if (name === "check_release_gate" && (input as {action:string}).action !== "check")
-  return JSON.stringify(sanitizeEvidence(await ports.invoke(name,input)));
- if (name === "run_device_smoke_test" && (input as {action:string}).action !== "start")
-  return JSON.stringify(sanitizeEvidence(await ports.invoke(name,input)));
- if (!["check_release_gate", "run_device_smoke_test", "attach_debug_session", "set_scoped_breakpoints", "capture_execution_trace", "analyze_function", "capture_process_tree", "capture_file_activity", "plan_runtime_observation", "validate_candidate", "review_candidate_changes", "run_batch", "resume_investigation"].includes(name))
+	if (
+		name === "check_release_gate" &&
+		(input as { action: string }).action !== "check"
+	)
+		return JSON.stringify(sanitizeEvidence(await ports.invoke(name, input)));
+	if (
+		name === "run_device_smoke_test" &&
+		(input as { action: string }).action !== "start"
+	)
+		return JSON.stringify(sanitizeEvidence(await ports.invoke(name, input)));
+	if (
+		![
+			"check_release_gate",
+			"run_device_smoke_test",
+			"attach_debug_session",
+			"set_scoped_breakpoints",
+			"capture_execution_trace",
+			"analyze_function",
+			"inspect_artifact_metadata",
+			"recover_bundle_sources",
+			"publish_bundle_recovery",
+			"capture_process_tree",
+			"capture_file_activity",
+			"plan_runtime_observation",
+			"validate_candidate",
+			"review_candidate_changes",
+			"run_batch",
+			"resume_investigation",
+		].includes(name)
+	)
 		return JSON.stringify(sanitizeEvidence(await ports.invoke(name, input)));
 	const plan = (await ports.invoke(name, { ...input, phase: "prepare" })) as {
 		id: string;
