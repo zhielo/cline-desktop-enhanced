@@ -83,7 +83,7 @@ const ownCommands = (c: Catalog) =>
 		s.id.startsWith(`${INVESTIGATION_PLUGIN_NAME}:`),
 	);
 describe("shipped investigation command integration", () => {
-	it("lists six namespaced bodies with immutable Agent Plugin controls and no Hub startup", async () => {
+	it("lists all namespaced bodies with immutable Agent Plugin controls and no Hub startup", async () => {
 		const { ctx, command } = context();
 		const catalog = (await handleCommand(
 			ctx,
@@ -99,7 +99,7 @@ describe("shipped investigation command integration", () => {
 				(n) => `${INVESTIGATION_PLUGIN_NAME}:${n}`,
 			).sort(),
 		);
-		expect(ownCommands(catalog)).toHaveLength(6);
+		expect(ownCommands(catalog)).toHaveLength(10);
 		for (const skill of ownSkills(catalog)) {
 			expect(skill.agentPlugin).toBe(true);
 			expect(skill.pluginName).toBe(INVESTIGATION_PLUGIN_NAME);
@@ -140,8 +140,8 @@ describe("shipped investigation command integration", () => {
 			path,
 			disabled: false,
 		})) as Catalog;
-		expect(ownSkills(on)).toHaveLength(6);
-		expect(ownCommands(on)).toHaveLength(6);
+		expect(ownSkills(on)).toHaveLength(10);
+		expect(ownCommands(on)).toHaveLength(10);
 		expect(readFileSync(member)).toEqual(before);
 	});
 	it("does not project host skill paths or bodies into a nonlocal environment", async () => {

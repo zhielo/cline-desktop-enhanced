@@ -76,10 +76,10 @@ describe("pinned instruction-only investigation pack", () => {
 		});
 		await expect(selfcheckInvestigationSkills()).rejects.toThrow("unavailable");
 	});
-	it("verifies all nine fixed files and exposes exactly six unique names", () => {
+	it("verifies all fixed files and exposes the complete unique skill inventory", () => {
 		expect(() => verifyInvestigationSkillPack(pack)).not.toThrow();
-		expect(manifest.files).toHaveLength(9);
-		expect(new Set(INVESTIGATION_SKILL_NAMES).size).toBe(6);
+		expect(manifest.files).toHaveLength(13);
+		expect(new Set(INVESTIGATION_SKILL_NAMES).size).toBe(10);
 		expect(inspect()).toMatchObject({
 			status: "available",
 			root: pack,
@@ -236,7 +236,7 @@ describe("pinned instruction-only investigation pack", () => {
 		const before = readdirSync(pack);
 		try {
 			await service.start();
-			expect(service.listRecords("skill")).toHaveLength(6);
+			expect(service.listRecords("skill")).toHaveLength(10);
 			const executor = service.createSkillsExecutor!();
 			expect(executor.configuredSkills?.map((s) => s.id)).toContain(
 				"cline-investigation:analyze-electron",
@@ -280,7 +280,7 @@ describe("pinned instruction-only investigation pack", () => {
 		});
 		try {
 			await service.start();
-			expect(service.listRecords("skill")).toHaveLength(7);
+			expect(service.listRecords("skill")).toHaveLength(11);
 			expect(
 				service.resolveRuntimeSlashCommand("/analyze-electron owned"),
 			).toContain("USER_GUIDE_NOT_SHIPPED");
@@ -323,17 +323,17 @@ describe("pinned instruction-only investigation pack", () => {
 		);
 		expect(JSON.parse(stdout)).toMatchObject({
 			status: "passed",
-			loadedInstructions: 6,
+			loadedInstructions: 10,
 			instructionOnly: true,
 		});
 		expect(stdout).not.toContain('"type":"ready"');
 		expect(existsSync(discovery)).toBe(false);
 		expect(existsSync(profile)).toBe(false);
 	});
-	it("selfchecks all six bodies with no target/provider/MCP and honors disablement", async () => {
+	it("selfchecks all bundled bodies with no target/provider/MCP and honors disablement", async () => {
 		expect(await selfcheckInvestigationSkills()).toMatchObject({
 			status: "passed",
-			loadedInstructions: 6,
+			loadedInstructions: 10,
 			instructionOnly: true,
 			providerCalls: 0,
 			mcpServers: 0,

@@ -206,7 +206,7 @@ export function validateTimezone(timezone: string | undefined): void {
 function getZonedCronDateParts(
 	timestampMs: number,
 	timezone: string,
-): CronDateParts {
+): CronDateParts & { year: number } {
 	const parts = getTimezoneFormatter(timezone).formatToParts(
 		new Date(timestampMs),
 	);
@@ -219,6 +219,7 @@ function getZonedCronDateParts(
 		throw new Error(`Unable to resolve weekday for timezone "${timezone}"`);
 	}
 	return {
+		year: Number(byType.get("year")),
 		month: Number(byType.get("month")),
 		dayOfMonth: Number(byType.get("day")),
 		dayOfWeek,
@@ -248,27 +249,76 @@ function cronMatchesParts(cron: ParsedCron, parts: CronDateParts): boolean {
 	);
 }
 
-function getNextCronTimeByMinuteScan(
+/** Enumerate Gregorian dates instead of formatting every minute for four years.
+ * Resolve each eligible wall time against offsets surrounding that date, then
+ * round-trip through Intl. This preserves gap/fold behavior, fractional-hour
+ * offsets and the existing AND semantics for day-of-month/day-of-week.
+ */
+function getNextZonedCronTime(
 	pattern: string,
 	after: number,
 	timezone: string,
 ): number {
 	const cron = parseCron(pattern);
-	const next = new Date(after);
-	next.setSeconds(0, 0);
-	let nextMs = next.getTime() + 60_000;
-
+	const current = getZonedCronDateParts(after, timezone);
+	const firstDay = Date.UTC(
+		current.year,
+		current.month - 1,
+		current.dayOfMonth,
+	);
 	const limit = new Date(after);
-	limit.setFullYear(limit.getFullYear() + 4);
+	limit.setUTCFullYear(limit.getUTCFullYear() + 4);
 	const limitMs = limit.getTime();
-
-	while (nextMs <= limitMs) {
-		if (cronMatchesParts(cron, getZonedCronDateParts(nextMs, timezone))) {
-			return nextMs;
+	for (let dayIndex = 0; dayIndex < 1464; dayIndex++) {
+		const wallDay = firstDay + dayIndex * 86_400_000;
+		if (wallDay > limitMs + 86_400_000) break;
+		const date = new Date(wallDay);
+		if (
+			!cron.months.includes(date.getUTCMonth() + 1) ||
+			!cron.daysOfMonth.includes(date.getUTCDate()) ||
+			!cron.daysOfWeek.includes(date.getUTCDay())
+		)
+			continue;
+		const offsets = new Set<number>();
+		// IANA offset transitions can include non-hour changes or skipped dates.
+		// Probe a four-day window, then require exact wall-time round trips.
+		for (let hours = -48; hours <= 48; hours++) {
+			const instant = wallDay + hours * 3_600_000;
+			const parts = getZonedCronDateParts(instant, timezone);
+			offsets.add(
+				Date.UTC(
+					parts.year,
+					parts.month - 1,
+					parts.dayOfMonth,
+					parts.hour,
+					parts.minute,
+				) - instant,
+			);
 		}
-		nextMs += 60_000;
+		let earliest = Number.POSITIVE_INFINITY;
+		for (const offset of offsets) {
+			candidate: for (const hour of cron.hours) {
+				for (const minute of cron.minutes) {
+					const instant = wallDay + hour * 3_600_000 + minute * 60_000 - offset;
+					if (instant <= after || instant > limitMs || instant >= earliest)
+						continue;
+					const parts = getZonedCronDateParts(instant, timezone);
+					if (
+						parts.year === date.getUTCFullYear() &&
+						parts.month === date.getUTCMonth() + 1 &&
+						parts.dayOfMonth === date.getUTCDate() &&
+						parts.hour === hour &&
+						parts.minute === minute &&
+						cronMatchesParts(cron, parts)
+					) {
+						earliest = instant;
+						break candidate;
+					}
+				}
+			}
+		}
+		if (Number.isFinite(earliest)) return earliest;
 	}
-
 	throw new Error(
 		`No cron occurrence found within 4 years for pattern "${pattern}" in timezone "${timezone}"`,
 	);
@@ -279,10 +329,12 @@ export function getNextCronTime(
 	after: number,
 	timezone?: string,
 ): number {
+	if (!Number.isFinite(after) || !Number.isFinite(new Date(after).getTime()))
+		throw new Error("Invalid cron start timestamp");
 	const normalizedTimezone = normalizeTimezone(timezone);
 	if (normalizedTimezone) {
 		validateTimezone(normalizedTimezone);
-		return getNextCronTimeByMinuteScan(pattern, after, normalizedTimezone);
+		return getNextZonedCronTime(pattern, after, normalizedTimezone);
 	}
 
 	const cron = parseCron(pattern);

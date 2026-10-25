@@ -518,3 +518,5 @@ export { createTool } from "./tools/create";
 export { AUTH_ERROR_PATTERNS, isLikelyAuthError } from "./types/auth";
 // VCR is Node-only (uses node:fs, node:path), excluded from browser build
 export type { VcrRecording } from "./types/vcr";
+
+export { AGENDA_TODO_ENABLED, DESKTOP_CHANNELS_VISIBLE } from "./desktop-feature-policy";

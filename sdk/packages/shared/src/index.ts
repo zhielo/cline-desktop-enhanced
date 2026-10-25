@@ -607,3 +607,5 @@ export { createTool } from "./tools/create";
 export * from "./types";
 export { AUTH_ERROR_PATTERNS, isLikelyAuthError } from "./types/auth";
 export { initVcr } from "./vcr";
+
+export { AGENDA_TODO_ENABLED, DESKTOP_CHANNELS_VISIBLE } from "./desktop-feature-policy";

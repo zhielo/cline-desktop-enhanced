@@ -156,6 +156,7 @@ const SETTINGS_SECTION_ICONS = {
 	Import: Import,
 	Remote: Network,
 	Diagnostics: Stethoscope,
+	Capabilities: Blocks,
 	"Analysis environment": Stethoscope,
   "Setup Center": Stethoscope,
 	Account: CircleUserRound,

@@ -11,6 +11,7 @@ import type {
 	ToolApprovalRequest,
 } from "@cline/shared";
 import {
+	AGENDA_TODO_ENABLED,
 	CLINE_DEFAULT_MODEL_ID,
 	captureSdkError,
 	createSessionId,
@@ -134,7 +135,7 @@ import {
  * commands, storage, persisted policies) stays fully wired so flipping this
  * back on restores the feature.
  */
-const AGENDA_TODO_TOOL_ENABLED = false;
+const AGENDA_TODO_TOOL_ENABLED = AGENDA_TODO_ENABLED;
 
 const SETTINGS_TYPES = new Set<CoreSettingsType>([
 	"skills",

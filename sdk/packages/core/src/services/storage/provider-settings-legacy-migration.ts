@@ -975,7 +975,7 @@ export function migrateLegacyProviderSettings(
 			? migratedPreferredProvider
 			: Object.keys(next.providers)[0]);
 
-	options.providerSettingsManager.write(next);
+	options.providerSettingsManager.write(next, existing);
 	if (addedCustomProviderCount > 0) {
 		writeModelsFileSync(modelsPath, modelsState);
 	}

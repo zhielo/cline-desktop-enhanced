@@ -1,3 +1,4 @@
+import { DESKTOP_CHANNELS_VISIBLE } from "@cline/shared/browser";
 /**
  * Settings navigation constants, split from settings-view.tsx so the sidebar
  * (always mounted) can reference section names without pulling the entire
@@ -15,6 +16,7 @@ const ALL_SETTINGS_SECTIONS = [
 	"Import",
 	"Remote",
 	"Diagnostics",
+	"Capabilities",
 	"Analysis environment",
   "Setup Center",
 	"Account",
@@ -42,7 +44,7 @@ export type SettingsSection =
 
 // Temporarily hidden from the sidebar. The views and routes still exist —
 // remove a section from this set to surface it again.
-const HIDDEN_SECTIONS: ReadonlySet<SettingsSection> = new Set(["Channels"]);
+const HIDDEN_SECTIONS: ReadonlySet<SettingsSection> = new Set(DESKTOP_CHANNELS_VISIBLE ? [] : ["Channels"]);
 
 export const SETTINGS_SECTIONS = ALL_SETTINGS_SECTIONS.filter(
 	(section) => !HIDDEN_SECTIONS.has(section),

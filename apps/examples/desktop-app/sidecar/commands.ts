@@ -1,3 +1,4 @@
+import { listWorkspaceFiles } from "./workspace-file-search";
 import { assertSessionCleanupId, removeOwnedSessionArtifacts } from "./session-cleanup";
 import { InvestigationSchemas } from "@cline/core";
 import { runModelBinaryTriage } from "./model-binary-triage";
@@ -185,6 +186,7 @@ import {
 	ensureSharedHubClient,
 	findSessionRuntimeBinding,
 	getEnvironmentContext,
+	getSidecarContextOwner,
 	getEnvironmentContexts,
 	getRuntimeBinding,
 	resolveSidecarAskQuestion,
@@ -2619,55 +2621,7 @@ async function mutateGitPaths(
 	return { action, paths };
 }
 
-const WORKSPACE_FILE_LIMIT = 2_000;
-const WORKSPACE_SEARCH_IGNORES = new Set([
-	".git",
-	".next",
-	".turbo",
-	"build",
-	"coverage",
-	"dist",
-	"node_modules",
-	"target",
-]);
-
-function listWorkspaceFiles(baseDir: string, queryValue: unknown): string[] {
-	const root = resolve(baseDir);
-	const query = String(queryValue ?? "")
-		.trim()
-		.toLowerCase();
-	const matches: string[] = [];
-	const pending = [root];
-	while (pending.length > 0 && matches.length < WORKSPACE_FILE_LIMIT) {
-		const directory = pending.pop();
-		if (!directory) break;
-		let entries: Dirent[];
-		try {
-			entries = readdirSync(directory, { withFileTypes: true });
-		} catch {
-			continue;
-		}
-		entries.sort((left, right) => left.name.localeCompare(right.name));
-		for (const entry of entries) {
-			if (
-				entry.isDirectory() &&
-				(WORKSPACE_SEARCH_IGNORES.has(entry.name) || entry.name.startsWith("."))
-			) {
-				continue;
-			}
-			const absolutePath = join(directory, entry.name);
-			if (entry.isDirectory()) {
-				pending.push(absolutePath);
-				continue;
-			}
-			if (!entry.isFile()) continue;
-			const path = relative(root, absolutePath);
-			if (!query || path.toLowerCase().includes(query)) matches.push(path);
-			if (matches.length >= WORKSPACE_FILE_LIMIT) break;
-		}
-	}
-	return matches.sort((left, right) => left.localeCompare(right));
-}
+const workspaceFileSearches = new WeakMap<SidecarContext, Map<string, AbortController>>();
 
 function openWorkspaceTerminal(directory: string): string {
 	const options = {
@@ -5491,6 +5445,12 @@ export async function handleCommand(
 			confirm: args?.confirm === true,
 		});
 	}
+ if (command === "cancel_workspace_file_search") {
+  const searchId = typeof args?.searchId === "string" ? args.searchId : "";
+  const controller = workspaceFileSearches.get(getSidecarContextOwner(ctx))?.get(searchId);
+  controller?.abort();
+  return { cancelled: controller !== undefined };
+ }
 	if (command === "list_workspace_files") {
 		if (getCommandRuntimeBinding(ctx, args).kind === "ssh") {
 			throw new Error("Workspace file search is not available over SSH yet.");
@@ -5499,11 +5459,17 @@ export async function handleCommand(
 			typeof args?.cwd === "string" && args.cwd.trim()
 				? args.cwd.trim()
 				: ctx.localWorkspaceRoot;
-		return {
-			root: resolve(baseDir),
-			files: listWorkspaceFiles(baseDir, args?.query),
-			limit: WORKSPACE_FILE_LIMIT,
-		};
+  const searchId = typeof args?.searchId === "string" ? args.searchId : randomUUID();
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(searchId)) throw new Error("Invalid workspace search identity");
+  const searchOwner = getSidecarContextOwner(ctx);
+  let searches = workspaceFileSearches.get(searchOwner);
+  if (!searches) { searches = new Map(); workspaceFileSearches.set(searchOwner, searches); }
+  if (searches.has(searchId)) throw new Error("Workspace search identity is already active");
+  if (searches.size >= 8) throw new Error("Too many active workspace searches; cancel a previous search first");
+  const controller = new AbortController();
+  searches.set(searchId, controller);
+  try { return await listWorkspaceFiles(baseDir, args?.query, { signal: controller.signal }); }
+  finally { searches.delete(searchId); }
 	}
 	if (
 		command === "get_engineering_workspace" ||

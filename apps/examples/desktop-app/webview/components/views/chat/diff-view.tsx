@@ -58,7 +58,7 @@ type DiffViewProps = {
 
 type EditorOption = { id: string; label: string };
 type ReviewScope = "all" | "staged" | "unstaged";
-type WorkspaceFileResult = { root: string; files: string[]; limit: number };
+type WorkspaceFileResult = { root: string; files: string[]; limit: number; complete?: boolean; stopReason?: string; inaccessibleDirectories?: number };
 
 export function DiffView({
  sessionId,initialTab="changes",messages=[],status="idle",
@@ -80,6 +80,7 @@ export function DiffView({
 	const [fileQuery, setFileQuery] = useState("");
 	const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
 	const [filesLoading, setFilesLoading] = useState(false);
+ const [fileSearchIncomplete, setFileSearchIncomplete] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -97,16 +98,24 @@ export function DiffView({
 	useEffect(() => {
 		if (activeTab !== "files") return;
 		let cancelled = false;
+  const searchId = crypto.randomUUID();
+  let started = false;
 		const timer = window.setTimeout(() => {
 			setFilesLoading(true);
+   setFileSearchIncomplete(false);
+   started = true;
 			desktopClient
 				.invoke<WorkspaceFileResult>("list_workspace_files", {
 					environmentId,
 					...(cwd?.trim() ? { cwd } : {}),
 					query: fileQuery,
+     searchId,
 				})
 				.then((result) => {
-					if (!cancelled) setWorkspaceFiles(result.files ?? []);
+     if (!cancelled) {
+      setWorkspaceFiles(result.files ?? []);
+      setFileSearchIncomplete(result.complete === false);
+     }
 				})
 				.catch((error) => {
 					if (!cancelled)
@@ -124,10 +133,11 @@ export function DiffView({
 				});
 		}, 180);
 		return () => {
-			cancelled = true;
-			window.clearTimeout(timer);
-		};
-	}, [activeTab, cwd, environmentId, fileQuery]);
+   cancelled = true;
+   window.clearTimeout(timer);
+   if (started) void desktopClient.invoke("cancel_workspace_file_search", { searchId }).catch(() => {});
+  };
+ }, [activeTab, cwd, environmentId, fileQuery]);
 
 	const reviewFiles = useMemo(
 		() =>
@@ -355,6 +365,11 @@ export function DiffView({
 				</>
 			) : activeTab === "files" ? (
 				<>
+     {fileSearchIncomplete && !filesLoading ? (
+      <output className="block border-b border-border p-3 text-xs text-muted-foreground">
+       File search is incomplete because a work limit or inaccessible directory was reached. Refine the query or choose a narrower workspace.
+      </output>
+     ) : null}
 					<div className="relative shrink-0 border-b border-border p-3">
 						<Search className="absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 						<Input

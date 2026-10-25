@@ -7,7 +7,7 @@ import type { SessionFileDiff } from "@/lib/session-diff";
 import { DiffView } from "./diff-view";
 
 const { invokeMock } = vi.hoisted(() => ({
-	invokeMock: vi.fn(async (command: string) =>
+	invokeMock: vi.fn(async (command: string, _args?: unknown) =>
 		command === "list_available_editors"
 			? [{ id: "vscode", label: "VS Code" }]
 			: { path: "/repo/docs/a.mdx", editor: "VS Code" },
@@ -349,4 +349,26 @@ describe("DiffView hunk rendering", () => {
 		expect(container.textContent).toContain("+1");
 		expect(container.textContent).toContain("-1");
 	});
+});
+
+
+describe("DiffView bounded workspace discovery", () => {
+ it("shows partial results explicitly and cancels its owned request on tab cleanup", async () => {
+  invokeMock.mockImplementation(async (command: string) => {
+   if (command === "list_workspace_files") return {files:[".github/workflows/build.yml"], complete:false, limit:2000} as never;
+   if (command === "list_available_editors") return [] as never;
+   return {} as never;
+  });
+  await act(async () => { root.render(<DiffView cwd="/repo" environmentId="local" fileDiffs={[]} onClose={vi.fn()} />); });
+  await click(buttonWithText("files"));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 220)); });
+  expect(container.textContent).toContain("File search is incomplete");
+  expect(container.textContent).toContain(".github/workflows/build.yml");
+  const request = invokeMock.mock.calls.find(call => call[0] === "list_workspace_files");
+  expect(request).toBeDefined();
+  const changes = Array.from(container.querySelectorAll("button")).find(button => button.textContent?.trim() === "changes");
+  expect(changes).toBeDefined();
+  await click(changes!);
+  expect(invokeMock).toHaveBeenCalledWith("cancel_workspace_file_search", {searchId:(request as unknown as [string,{searchId:string}])[1].searchId});
+ });
 });

@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "basis": "Source inventory; not live-provider or installed-engine certification",
+  "features": [
+    {
+      "domain": "Chat, streaming and conversation control",
+      "status": "Implemented; source-reviewed",
+      "verified_scope": "Local/cloud flows, authoritative session status, queued submissions and reconnect handling exist.",
+      "gap_or_next_step": "Run a single behavioral contract across local, SSH and cloud; expose cancellation/queued/blocked states consistently.",
+      "acceptance": "Disconnect mid-stream, change session, reconnect, cancel and resend: no duplicate turn, stale status or lost draft.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/hooks/use-chat-session.ts"
+    },
+    {
+      "domain": "Message queue, steering and attachments",
+      "status": "Implemented with deliberate limit",
+      "verified_scope": "Attachment-bearing work waits for a normal multimodal turn; direct steering remains text-only.",
+      "gap_or_next_step": "Make \u201cqueued for next turn\u201d explicit; do not pretend queued media was already seen.",
+      "acceptance": "Busy-session image + identical text submissions preserve separate identities and reach the intended turn.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/DEEP_AUDIT_REMEDIATION.md"
+    },
+    {
+      "domain": "Image understanding",
+      "status": "Implemented; provider-dependent",
+      "verified_scope": "Composer checks image capabilities; media format/budget checks exist; unresolved capabilities can fail visibly at runtime.",
+      "gap_or_next_step": "Add an unknown/verified/unsupported readiness badge and a safe optional synthetic image test for an exact provider/model.",
+      "acceptance": "Known vision, non-vision, unknown metadata, corrupt image, oversized image and model-switch cases. No silent stripping.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.tsx"
+    },
+    {
+      "domain": "Providers, model discovery and reasoning",
+      "status": "Implemented; remote readiness unverified",
+      "verified_scope": "Provider catalog supports custom configurations, model preservation and modality/reasoning metadata.",
+      "gap_or_next_step": "Catalog presence is not endpoint capability proof; retain exact model identity and never silently substitute after partial discovery.",
+      "acceptance": "Provider-specific multimodal/tool/reasoning contract matrix and explicit reauthorization/fallback behavior.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/lib/provider-model-catalog.ts"
+    },
+    {
+      "domain": "Voice input",
+      "status": "Implemented; transcription-provider dependent",
+      "verified_scope": "Streaming or stop-to-transcribe models are selected independently from chat.",
+      "gap_or_next_step": "Do not equate voice dictation with full real-time voice conversation; test microphone privacy and failed upload recovery.",
+      "acceptance": "Permission denied, stop/cancel, device switch, offline provider, long recording and restart tests.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/components/views/settings/voice-input-view.tsx"
+    },
+    {
+      "domain": "Session history and search",
+      "status": "Implemented with degraded fallback",
+      "verified_scope": "Local content search has deadlines; metadata fallback and cloud metadata search exist.",
+      "gap_or_next_step": "Expose content-index unavailable versus no result; test fallback coverage beyond recent local sessions.",
+      "acceptance": "Older session, isolated workspace, cloud-only hit, offline index and query cancellation cases.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/commands.ts"
+    },
+    {
+      "domain": "Workspace file picker and search",
+      "status": "Implemented; bounded discovery",
+      "verified_scope": "Asynchronous streaming discovery includes approved project configuration directories, cancellation and independent traversal budgets.",
+      "gap_or_next_step": "An incomplete search is explicitly marked; filesystem I/O already in progress may outlast the elapsed-time budget.",
+      "acceptance": "Find .github/.agents configuration, remain responsive on large no-match trees, support cancellation.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/commands.ts"
+    },
+    {
+      "domain": "Project organization",
+      "status": "Implemented; consolidation recommended",
+      "verified_scope": "Sidebar has project grouping, schedules and dedicated Functions/Engineering/Customize paths.",
+      "gap_or_next_step": "Add persistent project overview with goals, instructions, artifacts, environments and runs; keep existing paths reachable.",
+      "acceptance": "Users can identify current project/environment/model/profile from every workspace and recover selection after restart.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/components/agent-sidebar.tsx"
+    },
+    {
+      "domain": "Git worktrees and handoff",
+      "status": "Implemented; strong documented contract",
+      "verified_scope": "Exact-revision worktrees, dirty/conflict checks, Apply/Create Branch/Open PR/Keep/Discard are documented.",
+      "gap_or_next_step": "Protect these behaviors during navigation redesign; make committed/uncommitted work and ownership visible.",
+      "acceptance": "Dirty checkout, cherry-pick conflict, retained worktree deletion and repeated cleanup fixtures.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/WORKTREE_HANDOFF.md"
+    },
+    {
+      "domain": "Git review and release workflow",
+      "status": "Implemented; finite evidence policy",
+      "verified_scope": "Tracked/untracked review and exact-head/current-base installer evidence checks exist.",
+      "gap_or_next_step": "Give users a coherent plan \u2192 diff \u2192 tests \u2192 PR \u2192 CI \u2192 merge journey; never promote an unknown CI state.",
+      "acceptance": "Branch changes during review, stale base, cancelled runs, duplicate contexts and artifact expiry block approval.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/DEEP_AUDIT_REMEDIATION.md"
+    },
+    {
+      "domain": "Parallel agents",
+      "status": "Implemented; scope-specific",
+      "verified_scope": "Team task controls and isolated-writer worktrees are documented.",
+      "gap_or_next_step": "Use one task ownership/readiness model and aggregate budgets; add multi-writer conflict/failure drills.",
+      "acceptance": "Parent cancellation, child retry, stale roster, independent outputs, bounded concurrency and least-privilege inheritance.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/CODEX_PARITY_ROADMAP.md"
+    },
+    {
+      "domain": "Terminal/process sessions",
+      "status": "Implemented; recovery limits explicit",
+      "verified_scope": "Owner-scoped process lifecycle, stdin/resize/PTY and PID start-token recovery are documented.",
+      "gap_or_next_step": "Restored processes cannot promise recovered stdin/terminal state; show that distinction prominently.",
+      "acceptance": "Foreground/background, detached owner loss, exact PID identity, secret output redaction and Windows ConPTY.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/CODEX_PARITY_ROADMAP.md"
+    },
+    {
+      "domain": "Durable plan and verification state",
+      "status": "Implemented; scoped automatic validation",
+      "verified_scope": "Atomic task-state, transition validation, bounded history and checkpoint reconciliation exist.",
+      "gap_or_next_step": "Automatic validation is restricted to eligible local approval modes; do not claim all remote tasks auto-verify.",
+      "acceptance": "Crash between step completion and verification, stale plan update, rollback and remote declared-only commands.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/DURABLE_TASK_EXECUTION.md"
+    },
+    {
+      "domain": "Draft and long-session recovery",
+      "status": "Implemented; long-tail behavior not certified",
+      "verified_scope": "Draft recovery controls and session-owned persisted state are present.",
+      "gap_or_next_step": "Add power-loss/large-history/operator-recovery suites; distinguish conversation restore from process replay.",
+      "acceptance": "Unsent draft survives crash; explicit opt-in recovery; no duplicated write effects on reconnect.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/LONG_SESSION_RECOVERY.md"
+    },
+    {
+      "domain": "Permissions and sandboxing",
+      "status": "Implemented tool policy; not general OS containment",
+      "verified_scope": "Profiles enforce registered tools; arbitrary allowed shell keeps the parent process OS access.",
+      "gap_or_next_step": "Introduce a separate sandbox tier; retain clearly labeled Full Access for trusted work.",
+      "acceptance": "Restrict unapproved reads/network at OS boundary for sandboxed tasks; prove no silent fallback.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/PERMISSION_PROFILES.md"
+    },
+    {
+      "domain": "Credential storage",
+      "status": "Implemented; hardening required",
+      "verified_scope": "Provider settings serialize credential fields to JSON with owner-only POSIX modes; Windows chmod is not ACL enforcement.",
+      "gap_or_next_step": "Store secrets in OS vaults and keep references in settings; avoid plaintext exports and support safe migration.",
+      "acceptance": "Vault unavailable fails visibly; legacy migration is recoverable; fixture secrets absent from config/log/export.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/sdk/packages/core/src/services/storage/provider-settings-manager.ts"
+    },
+    {
+      "domain": "Desktop transport authentication",
+      "status": "Implemented; targeted re-audit recommended",
+      "verified_scope": "Dedicated desktop transport authentication and boundary tests are documented.",
+      "gap_or_next_step": "Retain endpoint token rotation/origin/identity checks across Hub upgrades and shared-client recovery.",
+      "acceptance": "Expired token, wrong origin, replaced Hub, malformed frame, pending-call limit and cancellation tests.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/DESKTOP_TRANSPORT_AUTH.md"
+    },
+    {
+      "domain": "MCP and connectors",
+      "status": "Implemented; service-specific readiness",
+      "verified_scope": "MCP settings, connection/OAuth surfaces and provider integration modules exist.",
+      "gap_or_next_step": "Per-connector capability/authorization health and revocation tests; registry presence must not imply a usable service.",
+      "acceptance": "Revoked/expired token, substituted server, tool schema drift, reconnect and read/write permission tests.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/components/views/settings/mcp-view.tsx"
+    },
+    {
+      "domain": "Plugins and marketplace",
+      "status": "Implemented; provenance assurance not established by this audit",
+      "verified_scope": "Install/uninstall flows, official plugin paths and partial-install detection exist.",
+      "gap_or_next_step": "Audit dependency provenance, install effects, capability grants and rollback before a trusted-extension maturity label.",
+      "acceptance": "Tampered/unpinned source, interrupted install, privilege expansion and uninstall boundary fixtures.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/marketplace.ts"
+    },
+    {
+      "domain": "Bundled skills",
+      "status": "Implemented; specialist-first",
+      "verified_scope": "Six integrity-checked instruction-only investigation skills ship.",
+      "gap_or_next_step": "Add tested engineering and document workflows; do not confuse instructions with an executable engine or guaranteed expertise.",
+      "acceptance": "Skill discovery, exact version, dependency readiness, disabled skill and known-answer success/failure cases.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/investigation-skill-manifest.json"
+    },
+    {
+      "domain": "Custom instructions",
+      "status": "Implemented",
+      "verified_scope": "Permanent instructions and plugin/rule customization exist.",
+      "gap_or_next_step": "Separate global/project/task instructions, show precedence and use untrusted-context boundaries; add conflicts/size tests.",
+      "acceptance": "Project change updates effective instructions without leaking another project\u2019s context.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/desktop-settings.ts"
+    },
+    {
+      "domain": "Project knowledge and durable memory",
+      "status": "Partial product-level integration",
+      "verified_scope": "Custom instructions, session search, saved investigation notebooks and project-to-Notion memory are distinct systems.",
+      "gap_or_next_step": "Define an explicit project knowledge index, consent, source citations, stale-source handling and forget/export UX.",
+      "acceptance": "Deletion removes derived index entries; revoked source is unreadable; stale claims are labeled. Not a claim that all memory code is absent.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/PROJECT_NOTION_BRIDGE.md"
+    },
+    {
+      "domain": "Functions and Notion bridge",
+      "status": "Implemented; exact external tool availability required",
+      "verified_scope": "Read-only evidence packaging, official Notion MCP isolation, iterative evidence requests and bounded resume are documented.",
+      "gap_or_next_step": "Keep this as a connector-backed knowledge workflow\u2014not a clone of Notion\u2019s databases/collaborative editor.",
+      "acceptance": "Missing Agent discovery/messaging blocks honestly; redacted evidence transfer and resumed session identity are checked.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/PROJECT_NOTION_BRIDGE.md"
+    },
+    {
+      "domain": "Schedules and routines",
+      "status": "Implemented; scheduler latency defect reproduced",
+      "verified_scope": "Durable cron runner uses leases, bounded concurrency and sleep/cancel handling.",
+      "gap_or_next_step": "Replace synchronous timezone minute scanning; display next runs/timezone, offline behavior and overlap/retry semantics.",
+      "acceptance": "DST gap/fold, sparse/impossible expressions, sleep/wake, cancellation and duplicate-leasing tests.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/sdk/packages/core/src/cron/runner/cron-runner.ts"
+    },
+    {
+      "domain": "Agenda and Channels",
+      "status": "Disabled/hidden surfaces",
+      "verified_scope": "Agenda UI and Hub todo kind are disabled; Channels is hidden from navigation while its route remains.",
+      "gap_or_next_step": "Make status and reason discoverable; do not simply flip flags without complete UX and lifecycle acceptance.",
+      "acceptance": "Both Hub/UI agree on capability; no ghost commands, unreachable tasks or lost persisted data.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/lib/feature-flags.ts"
+    },
+    {
+      "domain": "Notifications",
+      "status": "Implemented; platform acceptance pending",
+      "verified_scope": "Background-only completion/approval notification preferences and permission handling exist.",
+      "gap_or_next_step": "A unified activity inbox should collect approvals, failures, scheduled results and agent handoffs.",
+      "acceptance": "Denied OS permission, stale session click, quiet mode and multi-window focus behavior.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/components/views/settings/notification-settings.tsx"
+    },
+    {
+      "domain": "Cloud sessions and cross-device work",
+      "status": "Preview/gated",
+      "verified_scope": "Cloud sessions are account/rollout gated and explicitly preview-labeled.",
+      "gap_or_next_step": "Do not claim cross-device parity; verify data residency, reconnect, local-folder reachability and permission scope.",
+      "acceptance": "Account switch, cancelled provisioning, disconnected desktop, artifact persistence and cross-device continuation.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/feature-flags.ts"
+    },
+    {
+      "domain": "SSH remote environments",
+      "status": "Implemented; trust prerequisites",
+      "verified_scope": "Remote commands, environment binding and strict host-key checking exist.",
+      "gap_or_next_step": "Show where each tool/file/terminal executes; expose reconnect and remote readiness without weakening host-key trust.",
+      "acceptance": "Wrong host key, absent remote runtime, stale host, same session ID in two environments and owner-safe deletion.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/sdk/packages/core/src/remote/remote-environments.ts"
+    },
+    {
+      "domain": "Built-in browser",
+      "status": "Implemented Windows subset",
+      "verified_scope": "Structured WebView2 browser supports navigation/inspection/actions; user-driven auth and password rejection are documented.",
+      "gap_or_next_step": "Provide clear auth handoff and limitations; robust consequence approval needs more than text labels.",
+      "acceptance": "Authenticated state handoff, lost target, protected inputs, ambiguous consequence and browser expiry.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/BUILT_IN_BROWSER.md"
+    },
+    {
+      "domain": "Computer use",
+      "status": "Implemented scoped Windows capability",
+      "verified_scope": "Opt-in exact-application targeting, owner leases, action budgets and Stop/Take Over are documented.",
+      "gap_or_next_step": "Keep browser/API-first routing and exact process identity; do not represent it as unrestricted safe desktop autonomy.",
+      "acceptance": "Focus theft, process replacement, protected surface, lease expiry, agent cancellation and takeover.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/SCOPED_COMPUTER_USE.md"
+    },
+    {
+      "domain": "Artifact preview and document workflows",
+      "status": "Partial",
+      "verified_scope": "Native preview is bounded text/image/PDF; larger/other formats become metadata and external-open.",
+      "gap_or_next_step": "Add paged safe previews and first-class DOCX/XLSX/PPTX workflows if general-purpose document work is a target.",
+      "acceptance": "Large PDFs, malicious active content, Office files, edit/export/reopen round trip; external applications are not embedded previews.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/commands.ts"
+    },
+    {
+      "domain": "First-party JS/TS/Electron analysis",
+      "status": "Implemented supported subsets",
+      "verified_scope": "Static parser, closed-inventory bindings, saved provenance, limited source maps and explicit runtime observations exist.",
+      "gap_or_next_step": "Runtime source-map reconciliation and broader semantic coverage remain partial; support manifests must describe supported syntax.",
+      "acceptance": "Bundlers, dynamic imports, closures, source maps and unresolved-edge negative fixtures.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/first-party-analysis.ts"
+    },
+    {
+      "domain": "Native and managed-code analysis",
+      "status": "Implemented engine-specific subsets",
+      "verified_scope": "Managed metadata/selected IL, native analysis projects and external engine readiness exist.",
+      "gap_or_next_step": "General native rewriting, complete .NET recovery and universal cross-language analysis are not established.",
+      "acceptance": "Per-format/ISA/generics/exception fixtures; distinguish inferred source from exact bytes and licensed decompiler results.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/ADVANCED_ANALYSIS_ROADMAP.md"
+    },
+    {
+      "domain": "Android analysis and rebuild",
+      "status": "Implemented bounded workflows",
+      "verified_scope": "Static APK/DEX/resource evidence and separately authorized candidate/build/sign/verify/device operations are documented.",
+      "gap_or_next_step": "Do not promise unattended install-to-verification or universal APK reconstruction; typed receipts and device/key scope are essential.",
+      "acceptance": "Multidex, malformed resource, package/signature mismatch, authorized device, failure recovery and original preservation.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/ANDROID_ANALYSIS_REBUILD_PACK.md"
+    },
+    {
+      "domain": "Engine setup, repair and rollback",
+      "status": "Implemented; external readiness required",
+      "verified_scope": "Integrity-checked packs, eleven owned engine fixtures, separate angr runtime and idle apply/rollback exist.",
+      "gap_or_next_step": "Pack retention/storage policy is unfinished; IDA license, devices and remote isolation remain external prerequisites.",
+      "acceptance": "Disk pressure, corrupt pack, busy backend, revoked license, device identity and rollback with active shared Hub.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/FULL_SETUP_CENTER.md"
+    },
+    {
+      "domain": "Dynamic execution, debugging and JNI",
+      "status": "Implemented narrowly scoped paths",
+      "verified_scope": "Approved isolation/Inspector/device observation and signed-worker evidence workflows are documented.",
+      "gap_or_next_step": "No generic \u201cexecute anything safely\u201d guarantee; remote signatures are not hardware attestation or proof of remote teardown.",
+      "acceptance": "Exact binary/process/device identity, time budget, cancellation, failed isolation and worker loss.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/EXECUTION_EVIDENCE_LAB.md"
+    },
+    {
+      "domain": "Evidence graphs and candidate patches",
+      "status": "Implemented bounded / partial semantics",
+      "verified_scope": "Hash-bound candidates, saved graph witnesses, audit outcomes and separate approvals exist.",
+      "gap_or_next_step": "Whole-program taint/alias/semantic correctness and general refactoring are not provided by a relationship graph.",
+      "acceptance": "Negative/unresolved paths, stale evidence, overlapping edits, signature/checksum implications and failed candidate retention.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/ADVANCED_ANALYSIS_ROADMAP.md"
+    },
+    {
+      "domain": "Engineering Control Center",
+      "status": "Implemented control surface; quality needs live measurement",
+      "verified_scope": "Mission/worktree/review/model-route controls are present.",
+      "gap_or_next_step": "Tie every mission result to the same task, diff, tests and CI authorities; do not infer real-model competence from scripted transport.",
+      "acceptance": "Known-answer coding/review tasks, controlled model comparison, failed repairs and reproducible run identity.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/docs/ENGINEERING_CONTROL_CENTER.md"
+    },
+    {
+      "domain": "Performance/resource profiles",
+      "status": "Implemented admission controls; speedup unproved",
+      "verified_scope": "Economy/Balanced/Deep are per owning process; baseline status remains required.",
+      "gap_or_next_step": "Measure startup, event-loop delay, memory, large history, command latency and multi-agent contention before optimization claims.",
+      "acceptance": "Cold/warm controlled before/after corpus; no removed acceptance assertions or machine-wide-quota claims.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/optimization-status.ts"
+    },
+    {
+      "domain": "Release, updates and recovery",
+      "status": "Build/release verification implemented; desktop auto-update disabled",
+      "verified_scope": "Exact-head/base/merge receipts; private unsigned artifact-only distribution; desktop updater endpoints empty.",
+      "gap_or_next_step": "Safe private update/rollback is a separate project; retain manual distribution until owner signing/migration acceptance exists.",
+      "acceptance": "Bad signature/hash, incompatible schema, downgrade, interrupted activation and rollback without losing projects.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/sidecar/trusted-update.ts"
+    },
+    {
+      "domain": "Accessibility and usability quality",
+      "status": "Some tests; comprehensive coverage not established",
+      "verified_scope": "Semantic UI elements, notification permissions and targeted interaction tests exist.",
+      "gap_or_next_step": "Keyboard/screen-reader/high-contrast/zoom/localization validation must span the whole app; no complete accessibility audit was performed.",
+      "acceptance": "Windows Narrator + keyboard-only journeys, 200% zoom, focus restoration and long live-region content.",
+      "source": "https://github.com/zhielo/cline-desktop-enhanced/blob/1bd931317e12adf995dfeec1dedc4c018571b2ed/apps/examples/desktop-app/webview/components/views/chat/transcript-row.tsx"
+    }
+  ]
+}
