@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	advanceDurableTaskState,
 	beginDurableTaskValidation,
@@ -13,10 +13,20 @@ import {
 	rollbackDurableTaskState,
 } from "./task-state-machine";
 
+vi.mock("node:fs", async (importOriginal) => {
+	const fs = await importOriginal<typeof import("node:fs")>();
+	return { ...fs, renameSync: vi.fn(fs.renameSync) };
+});
+
+const originalRenameSync = (
+	await vi.importActual<typeof import("node:fs")>("node:fs")
+).renameSync;
 const previousSessionDataDir = process.env.CLINE_SESSION_DATA_DIR;
 let sessionDataDir: string | undefined;
 
 afterEach(() => {
+	vi.mocked(renameSync).mockReset();
+	vi.mocked(renameSync).mockImplementation(originalRenameSync);
 	if (sessionDataDir) rmSync(sessionDataDir, { recursive: true, force: true });
 	sessionDataDir = undefined;
 	if (previousSessionDataDir === undefined) {
@@ -240,4 +250,22 @@ describe("advanceDurableTaskState", () => {
 		});
 		expect(readDurableTaskState("legacy-session")).toEqual(migrated);
 	});
+});
+
+it("preserves the last valid task state when replacement is denied", () => {
+	sessionDataDir = mkdtempSync(join(tmpdir(), "cline-task-state-failure-"));
+	process.env.CLINE_SESSION_DATA_DIR = sessionDataDir;
+	const original = advanceDurableTaskState({
+		planId: "safe",
+		steps: steps(["pending"]),
+		atMs: 10,
+	});
+	persistDurableTaskState("session-1", original);
+	vi.mocked(renameSync).mockImplementation(() => {
+		throw Object.assign(new Error("sharing denied"), { code: "EPERM" });
+	});
+	expect(() =>
+		persistDurableTaskState("session-1", { ...original, updatedAtMs: 20 }),
+	).toThrow("sharing denied");
+	expect(readDurableTaskState("session-1")).toEqual(original);
 });

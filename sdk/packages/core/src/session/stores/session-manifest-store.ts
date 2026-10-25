@@ -5,7 +5,7 @@ import {
 	readFileSync,
 	writeFileSync,
 } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type * as LlmsProviders from "@cline/llms";
 import type { BasicLogger } from "@cline/shared";
@@ -313,8 +313,18 @@ export class SessionManifestStore {
 	}
 
 	async deleteSessionCompactionState(sessionId: string): Promise<void> {
-		await rm(this.resolveCompactionPath(sessionId), { force: true });
-		this.updateCompactionPath(sessionId, undefined);
+		// Persisted compaction_path may belong to another machine or workspace.
+		// Deletion derives its owned artifact identity rather than trusting it.
+		this.artifacts.removeOwnedFile(
+			this.artifacts.sessionCompactionPath(sessionId),
+		);
+		if (
+			this.artifacts.isOwnedArtifactPath(
+				this.artifacts.sessionManifestPath(sessionId),
+			)
+		) {
+			this.updateCompactionPath(sessionId, undefined);
+		}
 	}
 
 	appendStaleSessionHookLog(

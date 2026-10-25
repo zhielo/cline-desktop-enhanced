@@ -1,3 +1,4 @@
+import { assertSessionCleanupId, removeOwnedSessionArtifacts } from "./session-cleanup";
 import { InvestigationSchemas } from "@cline/core";
 import { runModelBinaryTriage } from "./model-binary-triage";
 import { testSpecialistProfile } from "./setup-center";
@@ -258,11 +259,8 @@ import {
 } from "./oauth-login";
 import { optimizationStatus, setResourceProfile } from "./optimization-status";
 import {
-	findArtifactUnderDir,
 	readSessionManifest,
 	resolveMcpSettingsPath,
-	rootSessionIdFrom,
-	sessionLogPath,
 	sharedSessionDataDir,
 } from "./paths";
 import {
@@ -3949,6 +3947,7 @@ export async function handleCommand(
 			await cloud.delete(sessionId);
 			return true;
 		}
+		assertSessionCleanupId(sessionId);
 		ctx.logger?.log("Deleting desktop chat session", { command, sessionId });
 		const store = new SqliteSessionStore();
 		try {
@@ -3958,6 +3957,16 @@ export async function handleCommand(
 				row?.cwd?.trim() ||
 				(typeof manifest?.cwd === "string" ? manifest.cwd.trim() : "");
 			const binding = await getCommandSessionBinding(ctx, sessionId, args);
+			// Local identifiers must be known before filesystem cleanup. SSH deletion
+			// is owned by the remote manager and never reaches local artifact cleanup.
+			if (
+				binding?.kind !== "ssh" &&
+				!row &&
+				!manifest &&
+				!ctx.liveSessions.has(sessionId)
+			) {
+				return false;
+			}
 			let deleted = false;
 			let deleteError: Error | null = null;
 			try {
@@ -3998,51 +4007,7 @@ export async function handleCommand(
 				}
 				return deleted;
 			}
-			const directoryCandidates = new Set<string>([
-				join(sharedSessionDataDir(), sessionId),
-			]);
-			for (const path of [
-				row?.messagesPath,
-				typeof manifest?.messages_path === "string"
-					? manifest.messages_path
-					: null,
-			]) {
-				if (typeof path === "string" && path.trim().length > 0) {
-					directoryCandidates.add(dirname(path));
-				}
-			}
-			for (const path of [sessionLogPath(sessionId)]) {
-				if (removePathIfExists(path, { recursive: true })) {
-					deleted = true;
-				}
-			}
-			for (const dir of directoryCandidates) {
-				if (removePathIfExists(dir, { recursive: true })) {
-					deleted = true;
-				}
-			}
-			for (const path of [
-				row?.messagesPath,
-				typeof manifest?.messages_path === "string"
-					? manifest.messages_path
-					: null,
-				join(sharedSessionDataDir(), sessionId, `${sessionId}.json`),
-			].filter((v): v is string => typeof v === "string" && v.length > 0)) {
-				if (removePathIfExists(path)) {
-					deleted = true;
-				}
-			}
-			for (const suffix of ["messages.json", "task-state.json"]) {
-				const fileName = `${sessionId}.${suffix}`;
-				const found = findArtifactUnderDir(
-					join(sharedSessionDataDir(), rootSessionIdFrom(sessionId)),
-					fileName,
-					4,
-				);
-				if (found && removePathIfExists(found)) {
-					deleted = true;
-				}
-			}
+			if (removeOwnedSessionArtifacts(sessionId)) deleted = true;
 			if (!deleted && deleteError) {
 				ctx.logger?.error?.("Failed to delete desktop chat session", {
 					sessionId,

@@ -66,3 +66,24 @@ it("returns bounded import-impact and non-executing suggested tests", () => {
 	expect(review.impact.suggestedTestFiles).toContain("consumer.test.ts");
 	expect(review.impact.executedTests).toBe(false);
 });
+
+it("includes untracked Unicode/whitespace source and reports checks unknown", () => {
+	const root = repository();
+	writeFileSync(
+		join(root, "new file-名.ts"),
+		"export function newlyAdded() {}\n",
+	);
+	writeFileSync(join(root, ".gitignore"), "ignored.ts\n");
+	writeFileSync(join(root, "ignored.ts"), "ignored");
+	const review = buildEngineeringGitReview(root);
+	expect(review.files).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({ path: "new file-名.ts", status: "?" }),
+		]),
+	);
+	expect(review.files.some((file) => file.path === "ignored.ts")).toBe(false);
+	expect(review.risk).toMatchObject({
+		checksStatus: "unknown",
+		mergeAllowed: false,
+	});
+});

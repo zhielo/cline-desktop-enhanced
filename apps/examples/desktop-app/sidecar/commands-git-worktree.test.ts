@@ -51,9 +51,9 @@ beforeEach(() => {
 	git(repo, "config", "user.email", "test@example.com");
 	git(repo, "commit", "-q", "--allow-empty", "-m", "init");
 	vi.stubEnv("CLINE_DIR", join(sandbox, "cline-dir"));
-// Four separately bounded Git processes can exceed Vitest's default 10s hook
-// on a cold, contended Windows runner. Keep setup finite without weakening
-// any worktree assertions or extending production command deadlines.
+	// Four separately bounded Git processes can exceed Vitest's default 10s hook
+	// on a cold, contended Windows runner. Keep setup finite without weakening
+	// any worktree assertions or extending production command deadlines.
 }, 45_000);
 
 afterEach(() => {
@@ -313,6 +313,30 @@ describe("delete_chat_session worktree cleanup", () => {
 		expect(listedWorktreePaths()).toContain(pathKey(worktree.path));
 	});
 
+	it("does not delete an external stored messages directory", async () => {
+		const store = new SqliteSessionStore();
+		const external = join(sandbox, "external-project");
+		mkdirSync(external);
+		writeFileSync(join(external, "keep.txt"), "keep");
+		store.create({
+			...sessionRecord("session-external", repo),
+			messagesPath: join(external, "messages.json"),
+		} as never);
+		await deleteSession(store, "session-external");
+		expect(existsSync(join(external, "keep.txt"))).toBe(true);
+	});
+	it("does not delete artifacts for an unknown session", async () => {
+		const root = join(sandbox, "sessions");
+		vi.stubEnv("CLINE_SESSION_DATA_DIR", root);
+		mkdirSync(join(root, "unknown-session"), { recursive: true });
+		writeFileSync(join(root, "unknown-session", "keep.txt"), "keep");
+		const result = await deleteSession(
+			new SqliteSessionStore(),
+			"unknown-session",
+		);
+		expect(result.deleted).toBe(false);
+		expect(existsSync(join(root, "unknown-session", "keep.txt"))).toBe(true);
+	});
 	it("leaves a regular workspace folder alone", async () => {
 		const store = new SqliteSessionStore();
 		store.create(sessionRecord("session-plain", repo) as never);

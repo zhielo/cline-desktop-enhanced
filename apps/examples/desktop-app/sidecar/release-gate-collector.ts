@@ -126,7 +126,8 @@ export async function collectReleaseGate(
 	check(
 		pull.head?.sha === expectedHead &&
 			pull.head?.repo?.full_name === repo &&
-			pull.base?.repo?.full_name === repo,
+			pull.base?.repo?.full_name === repo &&
+			/^[a-f0-9]{40}$/.test(pull.base?.sha),
 		"PR exact head or repository changed",
 	);
 	const checks = await json(`commits/${expectedHead}/check-runs?per_page=100`);
@@ -266,10 +267,12 @@ export async function collectReleaseGate(
 		finalChecks = await json(`commits/${expectedHead}/check-runs?per_page=100`);
 	check(
 		finalPull.head?.sha === expectedHead &&
+			finalPull.base?.sha === pull.base.sha &&
+			finalPull.merge_commit_sha === pull.merge_commit_sha &&
 			finalRun.run_attempt === run.run_attempt &&
 			finalRun.status === "completed" &&
 			finalRun.conclusion === "success",
-		"PR head or workflow attempt changed during verification",
+		"PR head, base or workflow attempt changed during verification",
 	);
 	verifyReleaseGateEvidence(pullNumber, expectedHead, {
 		pull: finalPull,

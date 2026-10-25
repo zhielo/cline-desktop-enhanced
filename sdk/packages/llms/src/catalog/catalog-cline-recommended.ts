@@ -18,10 +18,13 @@ export interface ClineRecommendedModelsPayload {
 
 type ModelCapabilities = Pick<
 	ModelInfo,
+	| "name"
 	| "contextWindow"
 	| "maxInputTokens"
 	| "maxTokens"
 	| "capabilities"
+	| "modalities"
+	| "metadata"
 	| "reasoningOptions"
 	| "pricing"
 >;
@@ -88,6 +91,11 @@ export function normalizeClineRecommendedProviderModels(
 			// We should use the OR name, unless there is not one (like when using defaults)
 			name: entry.name,
 			...capabilities,
+			metadata: {
+				...capabilities.metadata,
+				inputCapabilitiesStatus:
+					capabilities === CLINE_PASS_MODEL_DEFAULTS ? "unknown" : "resolved",
+			},
 			pricing: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			id: entry.id,
 			description: entry.description,
@@ -98,7 +106,7 @@ export function normalizeClineRecommendedProviderModels(
 		entry: ClineRecommendedModelEntry,
 		includeInClinePass: boolean,
 	) => {
-		const capabilities =
+		const capabilities: ModelCapabilities =
 			openRouterModels?.[entry.id] ??
 			findORModelCapabilities(entry, openRouterModelsByName);
 		// The recommended-models endpoint only sends slug-like names (e.g.
@@ -117,6 +125,9 @@ export function normalizeClineRecommendedProviderModels(
 
 		const modelInfo = {
 			...capabilities,
+			...(capabilities === CLINE_PASS_MODEL_DEFAULTS
+				? { metadata: { inputCapabilitiesStatus: "unknown" as const } }
+				: {}),
 			name,
 			id: entry.id,
 			description: entry.description,

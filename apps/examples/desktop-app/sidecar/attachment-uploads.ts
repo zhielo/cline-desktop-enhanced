@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
 	appendFileSync,
+	copyFileSync,
+	constants,
 	existsSync,
 	mkdirSync,
 	readdirSync,
-	renameSync,
 	rmSync,
 	statSync,
 	writeFileSync,
@@ -125,7 +126,7 @@ export function finishAttachmentUpload(uploadId: string): {
 	return { uploadId, size: upload.receivedSize };
 }
 
-export function consumeAttachmentUpload(
+export function copyAttachmentUpload(
 	uploadId: string,
 	destinationPath: string,
 ): void {
@@ -133,8 +134,15 @@ export function consumeAttachmentUpload(
 	if (!upload || !upload.complete) {
 		throw new Error("Attachment upload was not completed or has expired");
 	}
-	renameSync(upload.path, destinationPath);
-	uploads.delete(uploadId);
+	copyFileSync(upload.path, destinationPath, constants.COPYFILE_EXCL); // COPYFILE_EXCL: owned unique destination only.
+}
+
+export function consumeAttachmentUpload(
+	uploadId: string,
+	destinationPath: string,
+): void {
+	copyAttachmentUpload(uploadId, destinationPath);
+	discardAttachmentUploads([uploadId]);
 }
 
 export function discardAttachmentUploads(uploadIds: string[]): void {

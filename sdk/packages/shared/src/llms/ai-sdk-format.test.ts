@@ -1723,3 +1723,24 @@ describe("formatMessagesForAiSdk - models without image support", () => {
 		});
 	});
 });
+
+it("reserves media budget for the current user before historical images", () => {
+	const data = Buffer.alloc(3_600_000, 1).toString("base64");
+	const messages = formatMessagesForAiSdk(undefined, [
+		{
+			role: "user",
+			content: [{ type: "image", image: data, mediaType: "image/png" }],
+		},
+		{ role: "assistant", content: [{ type: "text", text: "Earlier image" }] },
+		{
+			role: "user",
+			content: [{ type: "image", image: data, mediaType: "image/png" }],
+		},
+	]);
+	expect(messages[0].content).toEqual([
+		{ type: "text", text: expect.stringContaining("media omitted") },
+	]);
+	expect(messages[2].content).toEqual([
+		expect.objectContaining({ type: "file", mediaType: "image/png" }),
+	]);
+});

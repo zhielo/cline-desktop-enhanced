@@ -905,7 +905,13 @@ export function scoreReviewRisk(inputValue: unknown) {
 		score += 15;
 		reasons.push("Migration or schema changed");
 	}
-	const failedChecks = Math.max(0, Number(input.failedChecks ?? 0));
+	const checksKnown =
+		typeof input.failedChecks === "number" &&
+		Number.isFinite(input.failedChecks) &&
+		input.failedChecks >= 0;
+	const failedChecks = checksKnown ? Number(input.failedChecks) : 0;
+	if (!checksKnown)
+		reasons.push("CI checks unknown; merge readiness not established");
 	if (failedChecks) {
 		score += Math.min(30, failedChecks * 10);
 		reasons.push(`${failedChecks} check(s) failing`);
@@ -926,7 +932,12 @@ export function scoreReviewRisk(inputValue: unknown) {
 						? "medium"
 						: "low",
 		reasons,
-		mergeAllowed: score < 70 && failedChecks === 0,
+		checksStatus: checksKnown
+			? failedChecks > 0
+				? "failed"
+				: "passed"
+			: "unknown",
+		mergeAllowed: checksKnown && score < 70 && failedChecks === 0,
 	};
 }
 

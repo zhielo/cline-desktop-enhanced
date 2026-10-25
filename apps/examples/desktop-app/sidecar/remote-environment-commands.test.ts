@@ -1109,6 +1109,8 @@ describe("remote environment command routing", () => {
 			title: "Remote title",
 		});
 
+		// A remote session needs no local live-session entry to be deleted.
+		expect(ctx.liveSessions.has("remote-session")).toBe(false);
 		await expect(
 			handleCommand(ctx, "delete_chat_session", {
 				environmentId: profile.id,

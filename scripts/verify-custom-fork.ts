@@ -4,6 +4,42 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ { path: "sdk/packages/core/src/services/session-artifacts.ts", markers: ["isOwnedArtifactPath", "removeSessionMessages", "no junction aliases"] },
+	{
+		path: "apps/examples/desktop-app/sidecar/session-cleanup.ts",
+		markers: [
+			"assertSessionCleanupId",
+			"Session cleanup refuses links",
+			"Stored messagesPath is NOT authority",
+		],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/session-data/discovery.ts",
+		markers: ["Discovery is read-only"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/attachments.ts",
+		markers: ["Originals remain staged", "copyAttachmentUpload"],
+	},
+	{
+		path: "sdk/packages/core/src/runtime/turn-queue/pending-prompt-service.ts",
+		markers: ["submissionId", "Steering is text-only today"],
+	},
+	{
+		path: "sdk/packages/llms/src/providers/ai-sdk.ts",
+		markers: ["Image delivery blocked", "inputCapabilitiesStatus"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/release-gate-verifier.ts",
+		markers: ["current base/head PR merge", "merge_commit_sha", "baseCommit"],
+	},
+	{
+		path: "apps/examples/desktop-app/sidecar/engineering-control-plane.ts",
+		markers: [
+			"CI checks unknown; merge readiness not established",
+			"checksStatus",
+		],
+	},
  {path:"scripts/validate-advanced-build.mjs",markers:["probeValidationBun", "spawn(validationExecutable(step, bun.executable), step.args", 'supervisorRuntime: "node"', "timeoutMs: 20 * 60 * 1000"]},
  {path:"scripts/validate-advanced-build.test.mjs",markers:["isolated bounded probes", "without leaking child errors"]},
  {path:"sdk/packages/core/src/analysis/profile.ts",markers:['export const ANALYSIS_PROFILE = "cline-js-static/7";']},

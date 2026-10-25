@@ -122,9 +122,9 @@ const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
 		},
 	],
 	[
-		"different test tree",
+		"invalid integration tree identity",
 		(e) => {
-			e.testedCommit.tree.sha = "e".repeat(40);
+			e.testedCommit.tree.sha = "not-a-commit-tree";
 		},
 	],
 	[
@@ -305,3 +305,35 @@ for (const os of ["ubuntu-latest", "windows-latest"]) {
 		);
 	});
 }
+
+test("rejects evidence built against a stale base even when head is unchanged", () => {
+	const e = fixture();
+	e.pull.base.sha = "f".repeat(40);
+	assert.throws(
+		() => verifyReleaseGateEvidence(133, head, e),
+		/current base\/head/,
+	);
+});
+test("requires a two-parent current-base integration commit, not a direct head build", () => {
+	const e = fixture();
+	e.core.sourceCommit = head;
+	e.testedCommit.sha = head;
+	assert.throws(
+		() => verifyReleaseGateEvidence(133, head, e),
+		/current base\/head/,
+	);
+});
+
+test("accepts the current merge tree even when it differs from the head tree", () => {
+	const e = fixture();
+	e.testedCommit.tree.sha = "f".repeat(40);
+	assert.equal(verifyReleaseGateEvidence(133, head, e).tree, "f".repeat(40));
+});
+test("rejects a superseded synthetic merge identity", () => {
+	const e = fixture();
+	e.pull.merge_commit_sha = "f".repeat(40);
+	assert.throws(
+		() => verifyReleaseGateEvidence(133, head, e),
+		/current base\/head/,
+	);
+});

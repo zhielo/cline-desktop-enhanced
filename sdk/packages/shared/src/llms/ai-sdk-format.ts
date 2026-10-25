@@ -658,6 +658,32 @@ export function formatMessagesForAiSdk(
 		!supportedInputModalities || supportedInputModalities.includes("image");
 	const result: AiSdkMessage[] = [];
 	const mediaState = createMediaBudgetState();
+	// Reserve the current user's media first, without reordering history or
+	// modifying stored messages. Historical/tool media uses the remaining budget.
+	const currentMedia = new Map<AiSdkFormatterPart, AiSdkMessagePart>();
+	const currentUser = [...messages]
+		.reverse()
+		.find(
+			(message) =>
+				message.role === "user" &&
+				(typeof message.content === "string" ||
+					!message.content.some((part) => part.type === "tool-result")),
+		);
+	if (currentUser && Array.isArray(currentUser.content)) {
+		for (const part of currentUser.content) {
+			if (part.type === "image" && supportsImages)
+				currentMedia.set(part, toUserImagePart(part, mediaState));
+			else if (part.type === "media")
+				currentMedia.set(
+					part,
+					toUserGeneratedMediaPart(
+						part.media,
+						mediaState,
+						supportedInputModalities,
+					),
+				);
+		}
+	}
 	const pendingAssistantMedia: Array<
 		| Extract<AiSdkFormatterPart, { type: "image" }>
 		| Extract<AiSdkFormatterPart, { type: "media" }>
@@ -774,7 +800,7 @@ export function formatMessagesForAiSdk(
 					} else {
 						messageParts.push(
 							supportsImages
-								? toUserImagePart(part, mediaState)
+								? (currentMedia.get(part) ?? toUserImagePart(part, mediaState))
 								: { type: "text", text: IMAGE_UNSUPPORTED_PLACEHOLDER },
 						);
 					}
@@ -788,11 +814,12 @@ export function formatMessagesForAiSdk(
 						});
 					} else {
 						messageParts.push(
-							toUserGeneratedMediaPart(
-								part.media,
-								mediaState,
-								supportedInputModalities,
-							),
+							currentMedia.get(part) ??
+								toUserGeneratedMediaPart(
+									part.media,
+									mediaState,
+									supportedInputModalities,
+								),
 						);
 					}
 					break;

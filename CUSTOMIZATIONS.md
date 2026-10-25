@@ -2,6 +2,20 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Deep audit lifecycle hardening (2026-10-25)
+
+- Local session deletion validates opaque IDs, requires an existing session and deletes only its canonical owned directory and derived regular log file. Stored message paths never authorize recursive parent cleanup; linked directories/junctions are refused. Unknown session IDs do not trigger artifact deletion. Legacy external artifacts remain untouched rather than being guessed as owned.
+- The shared core persistence backend uses the same ownership rule: it derives message artifact identities rather than deleting persisted `messagesPath` parents, rejects unsafe deletion IDs and refuses canonical path/junction aliases.
+- Session discovery is read-only, including reserved upload staging and unindexed artifacts. It performs no garbage collection.
+- Attachment materialization copies completed uploads provisionally, rolls back partial outputs and preserves original upload IDs on failure; staging is consumed only after all outputs succeed. Attachment-bearing steering remains visibly queued for the regular multimodal turn because the existing steering callback is text-only. Text-only steering remains unchanged.
+- Pending prompts represent distinct submissions even with identical text. Only an explicit submission identity can deduplicate a replay; editing/promoting a queued prompt uses its prompt ID, not its text.
+- Task-state replacement never unlinks the previous valid state after a failed rename. Replacement errors remain failures and do not claim a saved state.
+- ClinePass unknown capability facts are explicit and survive all catalog-to-gateway producers. Exact known model identities may supply bundled facts; no dated-name guessing or blanket vision enabling is introduced. Image input with unresolved facts fails visibly instead of being silently removed. Current user media reserves budget ahead of historical media while existing limits stay enforced.
+- External evidence packages redact nested quoted JSON sensitive keys and quoted source/YAML assignments before sharing. Preview/approval and best-effort limitations remain; this is not a perfect secret-scanning guarantee.
+- Engineering review includes NUL-delimited tracked and untracked nonignored paths, bounded new-text line counts, rename parsing and explicit unknown CI status. Unknown checks do not authorize a merge.
+- Release policy v2 requires the live two-parent current-base/head synthetic merge identity and checks base/merge identity again at final collection. A direct-head build or stale-base receipt cannot certify integration. The merge tree may legitimately differ from the head tree and is reported as the tested tree.
+- Regression tests accompany these invariants. Source/unit results do not substitute for installed Windows or live-provider acceptance. No merge, release publication or automatic update is added.
+
 ## AI-callable Binary Triage Pack
 
 - `reverse_engineer` → `advanced_analysis` → `binary_triage` runs the existing seven fixed operations through a dedicated `binaryTriage` desktop/Hub capability. Other reverse-engineering executors are unchanged; no headless, generic RPC or shell fallback is added.
