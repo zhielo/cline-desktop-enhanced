@@ -585,6 +585,9 @@ function modelInfoToGateway(
 	if (typeof info.metadata?.reasoningDefaultOn === "boolean") {
 		metadata.reasoningDefaultOn = info.metadata.reasoningDefaultOn;
 	}
+	if (info.metadata?.inputCapabilitiesStatus) {
+		metadata.inputCapabilitiesStatus = info.metadata.inputCapabilitiesStatus;
+	}
 	if (info.metadata?.apiProtocol) {
 		metadata.apiProtocol = info.metadata.apiProtocol;
 	}

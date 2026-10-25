@@ -978,6 +978,33 @@ describe("UnifiedSessionPersistenceService", () => {
 		expect(existsSync(externalCompactionPath)).toBe(true);
 	}, 10_000);
 
+	it("leaves indexed external message files and directories untouched on deletion", async () => {
+		const sessionsDir = mkdtempSync(join(tmpdir(), "indexed-owned-sessions-"));
+		const externalDir = mkdtempSync(
+			join(tmpdir(), "indexed-external-messages-"),
+		);
+		tempDirs.push(sessionsDir, externalDir);
+		const service = new FileSessionService(sessionsDir);
+		const id = "indexed-external";
+		await createRootSession(service, id, "delete owned session only");
+		const external = join(externalDir, "messages.json");
+		writeFileSync(external, "keep");
+		const indexPath = join(sessionsDir, "sessions.index.json");
+		const index = JSON.parse(readFileSync(indexPath, "utf8"));
+		index.sessions[id].messagesPath = external;
+		writeFileSync(indexPath, JSON.stringify(index));
+		const externalCompaction = join(externalDir, "compaction.json");
+		writeFileSync(externalCompaction, "keep compaction");
+		const manifestPath = join(sessionsDir, id, `${id}.json`);
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+		manifest.compaction_path = externalCompaction;
+		writeFileSync(manifestPath, JSON.stringify(manifest));
+		expect(await service.deleteSession(id)).toEqual({ deleted: true });
+		expect(readFileSync(external, "utf8")).toBe("keep");
+		expect(readFileSync(externalCompaction, "utf8")).toBe("keep compaction");
+		expect(existsSync(join(sessionsDir, id))).toBe(false);
+	});
+
 	it("rejects a restored manifest whose embedded session id does not match its directory", async () => {
 		const sessionsDir = mkdtempSync(
 			join(tmpdir(), "delete-mismatched-session-manifest-"),

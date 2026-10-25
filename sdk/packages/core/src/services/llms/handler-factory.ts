@@ -157,6 +157,9 @@ function toGatewayConfiguredModel(
 		capabilities: toGatewayModelCapabilities(model.capabilities),
 		reasoningOptions: model.reasoningOptions,
 		metadata: {
+			...(model.metadata?.inputCapabilitiesStatus
+				? { inputCapabilitiesStatus: model.metadata.inputCapabilitiesStatus }
+				: {}),
 			family: model.family,
 			pricing: model.pricing,
 			status: model.status,

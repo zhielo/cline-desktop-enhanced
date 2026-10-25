@@ -70,6 +70,9 @@ function toGatewayModelDefinition(
 		capabilities: toGatewayModelCapabilities(model.capabilities),
 		reasoningOptions: model.reasoningOptions,
 		metadata: {
+			...(model.metadata?.inputCapabilitiesStatus
+				? { inputCapabilitiesStatus: model.metadata.inputCapabilitiesStatus }
+				: {}),
 			...(model.metadata?.apiProtocol
 				? { apiProtocol: model.metadata.apiProtocol }
 				: {}),

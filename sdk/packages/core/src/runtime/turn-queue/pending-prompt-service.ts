@@ -15,6 +15,7 @@ export type PendingPromptDelivery = "queue" | "steer";
 
 export interface PendingPromptEntry {
 	id: string;
+	submissionId?: string;
 	prompt: string;
 	mode?: AgentMode;
 	delivery: PendingPromptDelivery;
@@ -39,6 +40,7 @@ export interface PendingPromptsControllerDeps {
 }
 
 export interface PendingPromptEnqueueInput {
+	submissionId?: string;
 	prompt: string;
 	mode?: AgentMode;
 	delivery: PendingPromptDelivery;
@@ -90,7 +92,11 @@ export class PendingPromptService {
 		if (!prompt) {
 			throw new Error("prompt cannot be empty");
 		}
-		const delivery = input.delivery ?? existing.delivery;
+		const requestedDelivery = input.delivery ?? existing.delivery;
+		const delivery =
+			existing.userImages?.length || existing.userFiles?.length
+				? "queue"
+				: requestedDelivery;
 		const next: PendingPromptEntry = {
 			...existing,
 			prompt,
@@ -138,9 +144,14 @@ export class PendingPromptService {
 		state: PendingPromptQueueState,
 		input: PendingPromptEnqueueInput,
 	): SessionPendingPrompt[] {
-		const { prompt, mode, delivery, userImages, userFiles } = input;
+		const { prompt, mode, userImages, userFiles } = input;
+		// Steering is text-only today. Preserve attachments for a normal turn,
+		// and return delivery=queue so the UI reflects the actual delivery path.
+		const delivery =
+			userImages?.length || userFiles?.length ? "queue" : input.delivery;
 		const existingIndex = state.pendingPrompts.findIndex(
-			(queued) => queued.prompt === prompt,
+			(queued) =>
+				!!input.submissionId && queued.submissionId === input.submissionId,
 		);
 		if (existingIndex >= 0) {
 			const [existing] = state.pendingPrompts.splice(existingIndex, 1);
@@ -151,14 +162,19 @@ export class PendingPromptService {
 				userImages: userImages ?? existing.userImages,
 				userFiles: userFiles ?? existing.userFiles,
 			};
-			if (delivery === "steer" || existing.delivery === "steer") {
+			if (
+				delivery === "steer" &&
+				!next.userImages?.length &&
+				!next.userFiles?.length
+			) {
 				state.pendingPrompts.unshift({ ...next, delivery: "steer" });
 			} else {
-				state.pendingPrompts.push(next);
+				state.pendingPrompts.push({ ...next, delivery });
 			}
 		} else {
 			const newEntry: PendingPromptEntry = {
 				id: `pending_${Date.now()}_${nanoid(5)}`,
+				submissionId: input.submissionId,
 				prompt,
 				mode,
 				delivery,
@@ -176,7 +192,10 @@ export class PendingPromptService {
 
 	consumeSteer(state: PendingPromptQueueState): PendingPromptConsumeResult {
 		const steerIndex = state.pendingPrompts.findIndex(
-			(entry) => entry.delivery === "steer",
+			(entry) =>
+				entry.delivery === "steer" &&
+				!entry.userImages?.length &&
+				!entry.userFiles?.length,
 		);
 		if (steerIndex < 0) {
 			return { prompts: snapshotPrompts(state) };
@@ -273,7 +292,12 @@ export class PendingPromptsController {
 		// abort is settling.
 		this.service.enqueue(session, entry);
 		this.emitPrompts(session);
-		if (entry.delivery === "steer" && !session.aborting) {
+		if (
+			entry.delivery === "steer" &&
+			!entry.userImages?.length &&
+			!entry.userFiles?.length &&
+			!session.aborting
+		) {
 			session.agent.notifyPendingUserMessage();
 		}
 		this.scheduleDrain(sessionId, session);

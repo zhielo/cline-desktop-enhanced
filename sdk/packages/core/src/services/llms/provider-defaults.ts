@@ -191,7 +191,32 @@ async function mergeKnownModels(
 		// the fallback default when the bundled default id rotates out of the
 		// live list, and it must stay a subscription model, not a free one.
 		return {
-			...liveModels,
+			...Object.fromEntries(
+				Object.entries(liveModels).map(([id, live]) => {
+					const bundled = defaultKnownModels[id] ?? generated[id];
+					// Only exact known identities may supply missing capability facts.
+					// Never guess from a similar/datestamped model name.
+					if (
+						live.metadata?.inputCapabilitiesStatus !== "unknown" ||
+						!bundled ||
+						bundled.metadata?.inputCapabilitiesStatus === "unknown" ||
+						(!bundled.capabilities && !bundled.modalities)
+					)
+						return [id, live];
+					return [
+						id,
+						{
+							...live,
+							capabilities: bundled.capabilities,
+							modalities: bundled.modalities,
+							metadata: {
+								...live.metadata,
+								inputCapabilitiesStatus: "resolved",
+							},
+						},
+					];
+				}),
+			),
 			...userKnownModels,
 		};
 	}

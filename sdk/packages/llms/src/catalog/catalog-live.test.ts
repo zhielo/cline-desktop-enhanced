@@ -513,6 +513,7 @@ describe("models-dev-catalog", () => {
 				maxInputTokens: 180_000,
 				maxTokens: 16_384,
 				capabilities: ["tools", "reasoning", "images"],
+				metadata: { inputCapabilitiesStatus: "resolved" },
 				reasoningOptions: [
 					{ type: "effort", values: ["low", "medium", "high"] },
 				],
@@ -528,6 +529,7 @@ describe("models-dev-catalog", () => {
 				maxInputTokens: 128_000,
 				maxTokens: 8_192,
 				capabilities: ["tools", "reasoning", "temperature"],
+				metadata: { inputCapabilitiesStatus: "unknown" },
 				pricing: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			},
 		});
@@ -1238,4 +1240,32 @@ describe("models-dev-catalog", () => {
 			"Failed to load model catalog from https://models.dev/api.json: HTTP 503",
 		);
 	});
+});
+
+it("marks unmatched ClinePass capability facts unknown instead of verified text-only", () => {
+	const unknown = normalizeClineRecommendedProviderModels(
+		{ clinePass: [{ id: "cline-pass/synthetic-vision-20990101" }] },
+		{},
+	);
+	expect(
+		unknown["cline-pass"]["cline-pass/synthetic-vision-20990101"].metadata
+			?.inputCapabilitiesStatus,
+	).toBe("unknown");
+	const known = normalizeClineRecommendedProviderModels(
+		{ clinePass: [{ id: "cline-pass/text-only" }] },
+		{
+			"provider/text-only": {
+				id: "provider/text-only",
+				capabilities: ["tools"],
+				modalities: { input: ["text"], output: ["text"] },
+			},
+		},
+	);
+	expect(known["cline-pass"]["cline-pass/text-only"]).toMatchObject({
+		metadata: { inputCapabilitiesStatus: "resolved" },
+		modalities: { input: ["text"] },
+	});
+	expect(
+		known["cline-pass"]["cline-pass/text-only"].capabilities,
+	).not.toContain("images");
 });

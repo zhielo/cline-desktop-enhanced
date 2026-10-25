@@ -971,3 +971,45 @@ describe("buildGatewayModels", () => {
 		).toBeUndefined();
 	});
 });
+
+it("does not silently drop images when model capabilities are unknown", async () => {
+	const handler = createGatewayApiHandler({
+		providerId: "openai-compatible",
+		clientType: "openai-compatible",
+		modelId: "unknown-model",
+		apiKey: "test-key",
+		knownModels: {
+			"unknown-model": {
+				id: "unknown-model",
+				capabilities: ["tools"],
+				metadata: { inputCapabilitiesStatus: "unknown" },
+			},
+		},
+	});
+	const chunks: unknown[] = [];
+	const run = async () => {
+		for await (const chunk of handler.createMessage("", [
+			{
+				role: "user",
+				content: [
+					{
+						type: "image",
+						source: { type: "base64", media_type: "image/png", data: "YWJj" },
+					},
+				],
+			},
+		])) {
+			chunks.push(chunk);
+		}
+	};
+	await run();
+	expect(chunks).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				type: "done",
+				success: false,
+				error: expect.stringMatching(/capabilities.*unknown/),
+			}),
+		]),
+	);
+});

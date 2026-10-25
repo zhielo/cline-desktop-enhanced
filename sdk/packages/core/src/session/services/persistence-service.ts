@@ -1,4 +1,3 @@
-import { dirname } from "node:path";
 import type * as LlmsProviders from "@cline/llms";
 import type { AgentResult, BasicLogger, TeamRunRecord } from "@cline/shared";
 import { nanoid } from "nanoid";
@@ -8,7 +7,7 @@ import type {
 } from "../../extensions/tools/team";
 import type { HookEventPayload } from "../../hooks";
 import { deleteCheckpointRefs } from "../../hooks/checkpoint-hooks";
-import { nowIso, unlinkIfExists } from "../../services/session-artifacts";
+import { nowIso } from "../../services/session-artifacts";
 import {
 	buildManifestFromRow,
 	deriveTitleFromPrompt,
@@ -593,6 +592,8 @@ export class UnifiedSessionPersistenceService {
 	async deleteSession(sessionId: string): Promise<{ deleted: boolean }> {
 		const id = sessionId.trim();
 		if (!id) throw new Error("session id is required");
+		if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,239}$/.test(id))
+			return { deleted: false };
 
 		const indexedRow = await this.adapter.getSession(id);
 		const row = indexedRow ?? this.manifestStore.readSessionRowFromManifest(id);
@@ -608,10 +609,12 @@ export class UnifiedSessionPersistenceService {
 			await this.adapter.deleteSession(id, true);
 			await Promise.allSettled(
 				children.map(async (child) => {
+					if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,239}$/.test(child.sessionId))
+						return;
 					await deleteCheckpointRefs(child.cwd, child.sessionId);
-					unlinkIfExists(child.messagesPath);
+					this.manifestStore.artifacts.removeSessionMessages(child.sessionId);
 					await this.deleteSessionCompactionStateIfExists(child.sessionId);
-					unlinkIfExists(
+					this.manifestStore.artifacts.removeOwnedFile(
 						this.manifestStore.artifacts.sessionManifestPath(
 							child.sessionId,
 							false,
@@ -630,23 +633,16 @@ export class UnifiedSessionPersistenceService {
 		}
 
 		await deleteCheckpointRefs(row.cwd, id);
-		unlinkIfExists(row.messagesPath);
+		this.manifestStore.artifacts.removeSessionMessages(id);
 		await this.deleteSessionCompactionStateIfExists(id);
-		unlinkIfExists(this.manifestStore.artifacts.sessionManifestPath(id, false));
+		this.manifestStore.artifacts.removeOwnedFile(
+			this.manifestStore.artifacts.sessionManifestPath(id, false),
+		);
 		if (row.isSubagent) {
 			this.manifestStore.artifacts.removeSessionDirIfEmpty(id);
 		} else {
-			const candidateDirs = new Set<string>([
-				this.manifestStore.artifacts.sessionArtifactsDir(id),
-			]);
-			for (const path of [row.messagesPath]) {
-				if (typeof path === "string" && path.trim().length > 0) {
-					candidateDirs.add(dirname(path));
-				}
-			}
-			for (const dir of candidateDirs) {
-				this.manifestStore.artifacts.removeDir(dir);
-			}
+			// A stored file path never authorizes recursive deletion of its parent.
+			this.manifestStore.artifacts.removeSessionDir(id);
 		}
 		return { deleted: true };
 	}

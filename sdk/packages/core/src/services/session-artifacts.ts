@@ -1,12 +1,14 @@
 import {
 	existsSync,
+	lstatSync,
+	realpathSync,
 	mkdirSync,
 	readdirSync,
 	rmdirSync,
 	rmSync,
 	unlinkSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
 	parseSubSessionId,
 	parseTeamTaskSubSessionId,
@@ -118,8 +120,38 @@ export class SessionArtifacts {
 		this.removeDir(this.sessionArtifactsDir(sessionId));
 	}
 
+	/** Canonical identity must match the lexical owned path; no junction aliases. */
+	public isOwnedArtifactPath(path: string): boolean {
+		const root = this.ensureSessionsDir();
+		if (!existsSync(root) || !existsSync(path)) return false;
+		const lexical = relative(resolve(root), resolve(path));
+		if (
+			!lexical ||
+			lexical === ".." ||
+			lexical.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+			isAbsolute(lexical)
+		)
+			return false;
+		if (lstatSync(path).isSymbolicLink()) return false;
+		return relative(realpathSync(root), realpathSync(path)) === lexical;
+	}
+
+	public removeOwnedFile(path: string): void {
+		if (this.isOwnedArtifactPath(path) && lstatSync(path).isFile())
+			unlinkIfExists(path);
+	}
+
+	public removeSessionMessages(sessionId: string): void {
+		if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,239}$/.test(sessionId)) return;
+		// Derive identities from the session, never arbitrary persisted messagesPath.
+		this.removeOwnedFile(this.sessionMessagesPath(sessionId));
+		this.removeOwnedFile(
+			this.subagentArtifactPaths(sessionId, "").messagesPath,
+		);
+	}
+
 	public removeDir(dir: string): void {
-		if (!existsSync(dir)) {
+		if (!this.isOwnedArtifactPath(dir)) {
 			return;
 		}
 		try {

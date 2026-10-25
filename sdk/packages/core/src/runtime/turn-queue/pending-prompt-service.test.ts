@@ -12,7 +12,7 @@ function createState(): PendingPromptQueueState {
 }
 
 describe("PendingPromptService", () => {
-	it("deduplicates prompts and prioritizes steer delivery", () => {
+	it("keeps distinct submissions and prioritizes steer delivery", () => {
 		const service = new PendingPromptService();
 		const state = createState();
 
@@ -24,9 +24,10 @@ describe("PendingPromptService", () => {
 			service.list(state).map(({ prompt, delivery }) => ({ prompt, delivery })),
 		).toEqual([
 			{ prompt: "first", delivery: "steer" },
+			{ prompt: "first", delivery: "queue" },
 			{ prompt: "second", delivery: "queue" },
 		]);
-		expect(state.pendingPrompts).toHaveLength(2);
+		expect(state.pendingPrompts).toHaveLength(3);
 	});
 
 	it("updates prompts and reorders when delivery changes", () => {
@@ -172,8 +173,17 @@ describe("PendingPromptService", () => {
 		if (mutation === "remove") {
 			controller.delete({ sessionId: "session", promptId: staleHead.id });
 		} else if (mutation === "reorder") {
-			// Re-enqueueing the same queued text moves that entry to the tail.
-			controller.enqueue("session", { prompt: "first", delivery: "queue" });
+			// Reordering is an explicit queue edit, not text-based deduplication.
+			controller.update({
+				sessionId: "session",
+				promptId: staleHead.id,
+				delivery: "steer",
+			});
+			controller.update({
+				sessionId: "session",
+				promptId: staleHead.id,
+				delivery: "queue",
+			});
 		} else {
 			controller.enqueue("session", { prompt: "urgent", delivery: "steer" });
 		}
@@ -322,4 +332,52 @@ it("starts an idle queued turn without awaiting its approval-blocked execution",
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	expect(session.drainingPendingPrompts).toBe(false);
 	expect(send).toHaveBeenCalledTimes(1);
+});
+
+it("preserves distinct image submissions with identical text", () => {
+	const service = new PendingPromptService();
+	const state = createState();
+	for (const image of ["image-A", "image-B"])
+		service.enqueue(state, {
+			prompt: "What is this?",
+			delivery: "queue",
+			userImages: [image],
+		});
+	expect(state.pendingPrompts.map((entry) => entry.userImages)).toEqual([
+		["image-A"],
+		["image-B"],
+	]);
+});
+it("deduplicates only an explicit submission identity", () => {
+	const service = new PendingPromptService();
+	const state = createState();
+	for (let i = 0; i < 2; i++)
+		service.enqueue(state, {
+			submissionId: "same-operation",
+			prompt: "hello",
+			delivery: "queue",
+		});
+	expect(state.pendingPrompts).toHaveLength(1);
+});
+it("queues attachment-bearing steering without losing its media", () => {
+	const service = new PendingPromptService();
+	const state = createState();
+	service.enqueue(state, {
+		prompt: "look",
+		delivery: "steer",
+		userImages: ["image-A"],
+		userFiles: ["owned.txt"],
+	});
+	expect(service.list(state)[0]?.delivery).toBe("queue");
+	const id = state.pendingPrompts[0].id;
+	service.update(state, {
+		sessionId: "session",
+		promptId: id,
+		delivery: "steer",
+	});
+	expect(service.consumeSteer(state).entry).toBeUndefined();
+	expect(service.shiftNext(state).entry).toMatchObject({
+		userImages: ["image-A"],
+		userFiles: ["owned.txt"],
+	});
 });

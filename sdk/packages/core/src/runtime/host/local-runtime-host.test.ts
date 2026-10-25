@@ -367,7 +367,10 @@ describe("LocalRuntimeHost", () => {
 		const agent = {
 			run: vi.fn(async () => {
 				initialManifest = JSON.parse(
-					readFileSync(join(sessionsDir, sessionId, `${sessionId}.json`), "utf8"),
+					readFileSync(
+						join(sessionsDir, sessionId, `${sessionId}.json`),
+						"utf8",
+					),
 				) as SessionManifest;
 				await git.checkoutLocalBranch("feature/session-git");
 				await git.remote([
@@ -1743,7 +1746,11 @@ describe("LocalRuntimeHost", () => {
 			// the git refresh on resume must not persist it over the stored one.
 			await manager.startSession(
 				normalizeStartInput({
-					config: createConfig({ sessionId, cwd: workspaceRoot, workspaceRoot }),
+					config: createConfig({
+						sessionId,
+						cwd: workspaceRoot,
+						workspaceRoot,
+					}),
 					interactive: true,
 					initialMessages: [{ role: "user", content: "imported prompt" }],
 					sessionMetadata: { sessionHistoryOrigin: { mode: "user" } },
@@ -2921,9 +2928,11 @@ describe("LocalRuntimeHost", () => {
 			name: "queue_message",
 			payload: { prompt: "queued second" },
 		});
-		await harness.handlePluginEvent(sessionId, {
-			name: "steer_message",
-			payload: { prompt: "queued first" },
+		const queued = await manager.pendingPrompts.list({ sessionId });
+		await manager.pendingPrompts.update({
+			sessionId,
+			promptId: queued[0]!.id,
+			delivery: "steer",
 		});
 
 		expect(harness.getPendingPrompts(sessionId)).toEqual([

@@ -387,6 +387,16 @@ function buildAiSdkRequestMessages(
 	context: GatewayProviderContext,
 	systemPrompt?: string,
 ) {
+	if (
+		context.model.metadata?.inputCapabilitiesStatus === "unknown" &&
+		request.messages.some((message) =>
+			message.content.some((part) => part.type === "image"),
+		)
+	) {
+		throw new Error(
+			"Image delivery blocked: input capabilities for this model are unknown. Refresh model metadata or choose a model with verified image support; no attachment was silently removed.",
+		);
+	}
 	const aiMessages = toAiSdkMessages(request.messages, systemPrompt, {
 		includeReasoning: shouldIncludeReasoningHistory(request, context),
 		supportedInputModalities:
