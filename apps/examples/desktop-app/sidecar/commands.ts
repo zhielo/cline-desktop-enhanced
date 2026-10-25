@@ -3957,8 +3957,16 @@ export async function handleCommand(
 				row?.cwd?.trim() ||
 				(typeof manifest?.cwd === "string" ? manifest.cwd.trim() : "");
 			const binding = await getCommandSessionBinding(ctx, sessionId, args);
-			// Unknown identifiers must never become filesystem cleanup requests.
-			if (!row && !manifest && !ctx.liveSessions.has(sessionId)) return false;
+			// Local identifiers must be known before filesystem cleanup. SSH deletion
+			// is owned by the remote manager and never reaches local artifact cleanup.
+			if (
+				binding?.kind !== "ssh" &&
+				!row &&
+				!manifest &&
+				!ctx.liveSessions.has(sessionId)
+			) {
+				return false;
+			}
 			let deleted = false;
 			let deleteError: Error | null = null;
 			try {

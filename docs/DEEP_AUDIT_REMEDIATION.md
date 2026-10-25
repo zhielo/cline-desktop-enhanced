@@ -64,3 +64,9 @@ The new ownership/discovery suites are included by the existing desktop sidecar 
 7. Advance the PR base without changing the head; old release evidence must fail until the current merge candidate is rebuilt and verified.
 
 The exact cause of the historical image screenshot still needs installed-build identity and sanitized attachment/provider diagnostics. Source fixes prevent the audited mechanisms; they do not retroactively prove which mechanism occurred in that session.
+
+## CI follow-up: remote deletion routing
+
+The full desktop suite exposed a regression in the F01 command guard: SSH sessions without a local session record were rejected before the remote manager could delete them. The local known-session prerequisite now applies only to local cleanup; SSH deletion stays delegated to the selected remote manager and returns before local artifact cleanup. Existing unknown-local-session protections remain enabled. The remote-routing regression test explicitly asserts there is no local live-session entry.
+
+Follow-up local validation: the full desktop sidecar/WebView suite passed 1,931 tests (five existing skips), the compiled desktop startup test passed, desktop typechecks passed, and all 353 preservation contracts passed. GitHub CI and the Windows installer gate must still succeed for this exact follow-up commit before merge.
