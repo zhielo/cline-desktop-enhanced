@@ -30,6 +30,10 @@ const INSTALLED_INVESTIGATION_NAMES = [
 	"investigate-native",
 	"investigate-android",
 	"review-candidate",
+	"orient-repository",
+	"debug-and-repair",
+	"review-release",
+	"research-and-handoff",
 ]
 type InstalledInvestigationCatalog = {
 	bundledInvestigationSkills: { status: string; root?: string; paths: string[]; skills: string[] }
@@ -1010,13 +1014,13 @@ ConvertTo-Json -InputObject @($rows) -Compress
 				skillSelfcheckResult.status !== "passed" ||
 				skillSelfcheckResult.plugin !== INSTALLED_INVESTIGATION_PLUGIN ||
 				JSON.stringify(skillSelfcheckResult.skills) !== JSON.stringify(INSTALLED_INVESTIGATION_NAMES) ||
-				skillSelfcheckResult.loadedInstructions !== 6 ||
+				skillSelfcheckResult.loadedInstructions !== INSTALLED_INVESTIGATION_NAMES.length ||
 				skillSelfcheckResult.instructionOnly !== true ||
 				skillSelfcheckResult.mcpServers !== 0 ||
 				skillSelfcheckResult.providerCalls !== 0 ||
 				skillSelfcheckResult.targetExecuted !== false
 			)
-				throw new Error("Installed investigation selfcheck did not confirm six instruction-only skills")
+				throw new Error("Installed investigation selfcheck did not confirm all ten instruction-only skills")
 			await writeFile(join(evidence, "investigation-skills-selfcheck.json"), JSON.stringify(skillSelfcheckResult, null, 2))
 		} finally {
 			if (skillSelfcheck.child.pid && skillSelfcheck.child.exitCode === null) {

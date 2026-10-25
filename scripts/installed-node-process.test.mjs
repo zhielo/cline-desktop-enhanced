@@ -530,7 +530,7 @@ test('installed handshake error sends no command and never automatically reconne
 
 
 test("installed skill catalog requires fixed namespaced instructions and plugin-only controls", () => {
- const names=["investigate-artifact","analyze-electron","compare-applications","investigate-native","investigate-android","review-candidate"];
+ const names=["investigate-artifact","analyze-electron","compare-applications","investigate-native","investigate-android","review-candidate","orient-repository","debug-and-repair","review-release","research-and-handoff"];
  const root="/owned/installed/investigation-skills";
  const skills=names.map(name=>({id:`cline-investigation:${name}`,description:"Owned guide",instructions:"Retain the receipt",enabled:true,agentPlugin:true,pluginName:"cline-investigation"}));
  const catalog={bundledInvestigationSkills:{status:"available",root,paths:[root],skills:names},skills,
