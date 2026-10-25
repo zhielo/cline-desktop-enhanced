@@ -5,7 +5,10 @@ import { isDeepStrictEqual } from "node:util";
 import type { SessionPendingPrompt } from "@cline/core";
 import { sharedSessionDataDir } from "./paths";
 import type { ChatTurnAttachments, LiveSession } from "./types";
-import { consumeAttachmentUpload } from "./attachment-uploads";
+import {
+	copyAttachmentUpload,
+	discardAttachmentUploads,
+} from "./attachment-uploads";
 
 function queuedFilesMap(session: LiveSession): Map<string, string[]> {
 	if (!session.queuedAttachmentFiles) {
@@ -45,20 +48,36 @@ export function materializeUserFiles(
 	}
 	const attachmentDir = sessionAttachmentsDir(sessionId);
 	mkdirSync(attachmentDir, { recursive: true });
-	return files.map((file) => {
-		const requestedName = basename(file.name.trim());
-		const safeName =
-			requestedName && requestedName !== "." && requestedName !== ".."
-				? requestedName
-				: "attachment.txt";
-		const path = join(attachmentDir, `${randomUUID()}-${safeName}`);
-		if ("uploadId" in file) {
-			consumeAttachmentUpload(file.uploadId, path);
-		} else {
-			writeFileSync(path, file.content, "utf8");
+	const paths: string[] = [];
+	const uploadIds: string[] = [];
+	try {
+		for (const file of files) {
+			const requestedName = basename(file.name.trim());
+			const safeName =
+				requestedName && requestedName !== "." && requestedName !== ".."
+					? requestedName
+					: "attachment.txt";
+			const path = join(attachmentDir, `${randomUUID()}-${safeName}`);
+			// Record before writing: even a failed partial write must be rolled back.
+			paths.push(path);
+			if ("uploadId" in file) {
+				copyAttachmentUpload(file.uploadId, path);
+				uploadIds.push(file.uploadId);
+			} else {
+				writeFileSync(path, file.content, {
+					encoding: "utf8",
+					flag: "wx",
+					mode: 0o600,
+				});
+			}
 		}
-		return path;
-	});
+	} catch (error) {
+		deleteMaterializedAttachments(sessionId, paths);
+		// Originals remain staged: retry uses the same upload IDs safely.
+		throw error;
+	}
+	discardAttachmentUploads(uploadIds);
+	return paths;
 }
 
 /**

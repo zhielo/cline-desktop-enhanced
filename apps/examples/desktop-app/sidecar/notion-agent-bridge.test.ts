@@ -292,3 +292,31 @@ describe("bridge adversarial evidence contracts", () => {
     );
   });
 });
+
+it("redacts nested quoted JSON secrets and quoted non-JSON assignments", () => {
+	const root = fixture();
+	const secret = "SYNTHETIC_NOT_A_REAL_SECRET_123456";
+	writeFileSync(
+		join(root, "config.json"),
+		JSON.stringify({
+			apiKey: secret,
+			nested: [{ password: secret, access_token: secret }],
+			safe: "visible",
+		}),
+	);
+	writeFileSync(
+		join(root, "quoted.txt"),
+		`"password": "${secret}"\n"api_key": '${secret}'`,
+	);
+	const result = prepareNotionAgentBridgePackage({
+		root,
+		question: "Review",
+		paths: ["config.json", "quoted.txt"],
+	});
+	expect(result.files).toHaveLength(2);
+	for (const file of result.files) expect(file.content).not.toContain(secret);
+	expect(
+		result.files.find((file) => file.path === "config.json")?.content,
+	).toContain("visible");
+	expect(result.totalRedactions).toBe(5);
+});

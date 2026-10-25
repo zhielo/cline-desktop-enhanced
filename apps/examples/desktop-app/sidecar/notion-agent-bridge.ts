@@ -453,30 +453,56 @@ function fileEligibility(path: string): string | null {
 }
 
 function redactContent(value: string): { content: string; redactions: number } {
-  let content = value;
-  let redactions = 0;
-  const replace = (pattern: RegExp, replacement: string) => {
-    content = content.replace(pattern, (...args) => {
-      redactions += 1;
-      return typeof args[1] === "string"
-        ? `${args[1]}${replacement}`
-        : replacement;
-    });
-  };
-  replace(
-    /(-----BEGIN [A-Z ]*PRIVATE KEY-----)[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-    "[REDACTED:private-key]",
-  );
-  replace(
-    /\b((?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|cookie)\s*[:=]\s*["']?)[^\s"']{6,}/gi,
-    "[REDACTED:secret]",
-  );
-  replace(
-    /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})\b/g,
-    "[REDACTED:token]",
-  );
-  replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, "[REDACTED:bearer-token]");
-  return { content, redactions };
+	let content = value;
+	let redactions = 0;
+	let structuredJson = false;
+	// Parse ordinary JSON so whitespace, nesting and quoted keys cannot bypass
+	// redaction. Preserve original formatting when no structured secret exists.
+	try {
+		const parsed: unknown = JSON.parse(value);
+		structuredJson = true;
+		const visit = (node: unknown): void => {
+			if (!node || typeof node !== "object") return;
+			for (const [key, child] of Object.entries(node)) {
+				const normalized = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+				if (
+					/^(?:apikey|accesstoken|authtoken|password|secret|cookie|authorization)$/.test(
+						normalized,
+					)
+				) {
+					(node as Record<string, unknown>)[key] = "[REDACTED:secret]";
+					redactions += 1;
+				} else visit(child);
+			}
+		};
+		visit(parsed);
+		if (redactions) content = JSON.stringify(parsed, null, 2);
+	} catch {
+		// Non-JSON source and YAML retain conservative text scanning below.
+	}
+	const replace = (pattern: RegExp, replacement: string) => {
+		content = content.replace(pattern, (...args) => {
+			redactions += 1;
+			return typeof args[1] === "string"
+				? `${args[1]}${replacement}`
+				: replacement;
+		});
+	};
+	replace(
+		/(-----BEGIN [A-Z ]*PRIVATE KEY-----)[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+		"[REDACTED:private-key]",
+	);
+	if (!structuredJson)
+		replace(
+			/((?:["']?(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|cookie)["']?)\s*[:=]\s*["']?)[^\s"',}\]]+/gi,
+			"[REDACTED:secret]",
+		);
+	replace(
+		/\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})\b/g,
+		"[REDACTED:token]",
+	);
+	replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, "[REDACTED:bearer-token]");
+	return { content, redactions };
 }
 
 function markdownPackage(

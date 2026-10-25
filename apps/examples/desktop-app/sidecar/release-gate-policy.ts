@@ -1,6 +1,6 @@
 /** Host-owned finite release policy. Changes require explicit review and full CI. */
 export const RELEASE_GATE_POLICY = {
-	version: "cline-desktop-release-gate/v1",
+	version: "cline-desktop-release-gate/v2",
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
@@ -133,7 +133,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed",
 		"installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed",
 		"installed-binary-triage-target-report-scope-and-replay-passed",
-        "installed-ai-binary-triage-seven-operations-approval-and-evidence-passed",
+		"installed-ai-binary-triage-seven-operations-approval-and-evidence-passed",
 		"installed-tracked-full-setup-job-passed",
 		"installed-full-eleven-engine-owned-fixtures-passed",
 		"installed-full-pack-exact-range-dual-decoder-passed",
@@ -161,7 +161,8 @@ export const RELEASE_GATE_POLICY = {
 	policyFiles: {
 		".github/workflows/general-recovery-validation.yml":
 			"1660014462a0546eca828c1f246169789f1c776734a82a9efb1e607c102dab5d",
-        "apps/vscode/scripts/owned-triage-model.ts": "49b6f1cc1c4477689e31eb47330fae0f9454630532efa46b347ed524d2daa0fd",
+		"apps/vscode/scripts/owned-triage-model.ts":
+			"49b6f1cc1c4477689e31eb47330fae0f9454630532efa46b347ed524d2daa0fd",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":

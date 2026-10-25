@@ -11,6 +11,7 @@ function network(
 		unsafeZip?: boolean;
 		missingCore?: boolean;
 		movedHead?: boolean;
+		movedBase?: boolean;
 		changedAttempt?: boolean;
 		redirect?: string;
 		pending?: boolean;
@@ -73,9 +74,11 @@ function network(
 		if (path === "pulls/133") {
 			pulls++;
 			return response(
-				options.movedHead && pulls > 1
-					? { ...e.pull, head: { ...e.pull.head, sha: "e".repeat(40) } }
-					: e.pull,
+				options.movedBase && pulls > 1
+					? { ...e.pull, base: { ...e.pull.base, sha: "f".repeat(40) } }
+					: options.movedHead && pulls > 1
+						? { ...e.pull, head: { ...e.pull.head, sha: "e".repeat(40) } }
+						: e.pull,
 			);
 		}
 		if (path.endsWith("/check-runs")) return response(e.checks);
@@ -174,4 +177,14 @@ test("arbitrary head/URL never reaches network", async () => {
 		collectReleaseGate(133, "https://attacker.invalid/", { fetch: n.fetcher }),
 	);
 	assert.equal(n.urls.length, 0);
+});
+
+test("rejects a base advance during final collection with an unchanged head", async () => {
+	await assert.rejects(
+		() =>
+			collectReleaseGate(133, head, {
+				fetch: network({ movedBase: true }).fetcher,
+			}),
+		/base.*changed/,
+	);
 });

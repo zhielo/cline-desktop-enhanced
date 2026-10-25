@@ -44,8 +44,9 @@ export function fixture(): ReleaseGateEvidence {
 	return {
 		pull: {
 			number: 133,
+			merge_commit_sha: tested,
 			head: { sha: head, repo: { full_name: repo } },
-			base: { repo: { full_name: repo } },
+			base: { sha: "e".repeat(40), repo: { full_name: repo } },
 		},
 		checks: { total_count: checks.length, check_runs: checks },
 		run: {
@@ -93,7 +94,7 @@ export function fixture(): ReleaseGateEvidence {
 		testedCommit: {
 			sha: tested,
 			tree: { sha: tree },
-			parents: [{ sha: head }],
+			parents: [{ sha: "e".repeat(40) }, { sha: head }],
 		},
 		core: receipt(p.coreGates, "not-requested"),
 		engines: receipt(p.engineGates, "windows-portable"),

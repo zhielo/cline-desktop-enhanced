@@ -1,4 +1,10 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -78,7 +84,11 @@ describe("materialized attachment lifecycle", () => {
 	it("rejects out-of-order attachment chunks", () => {
 		const { uploadId } = beginAttachmentUpload(4);
 		expect(() =>
-			appendAttachmentUpload(uploadId, 2, Buffer.from("test").toString("base64")),
+			appendAttachmentUpload(
+				uploadId,
+				2,
+				Buffer.from("test").toString("base64"),
+			),
 		).toThrow("offset mismatch");
 	});
 
@@ -189,4 +199,25 @@ describe("materialized attachment lifecycle", () => {
 		expect(existsSync(consumed[0] as string)).toBe(false);
 		expect(existsSync(sessionAttachmentsDir(sessionId))).toBe(true);
 	});
+});
+
+it("rolls back partial attachment materialization and preserves uploads for retry", () => {
+	const first = beginAttachmentUpload(3);
+	appendAttachmentUpload(
+		first.uploadId,
+		0,
+		Buffer.from("one").toString("base64"),
+	);
+	finishAttachmentUpload(first.uploadId);
+	expect(() =>
+		materializeUserFiles(sessionId, [
+			{ name: "first.txt", uploadId: first.uploadId },
+			{ name: "missing.txt", uploadId: "missing" },
+		]),
+	).toThrow();
+	expect(readdirSync(sessionAttachmentsDir(sessionId))).toEqual([]);
+	const retried = materializeUserFiles(sessionId, [
+		{ name: "first.txt", uploadId: first.uploadId },
+	]);
+	expect(readFileSync(retried![0], "utf8")).toBe("one");
 });

@@ -1,5 +1,4 @@
-import { existsSync, readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
 import { SqliteSessionStore } from "@cline/core";
 import { readSessionManifest, sharedSessionDataDir } from "../paths";
 import type { JsonRecord } from "../types";
@@ -100,14 +99,8 @@ export function discoverChatSessions(
 				) {
 					continue;
 				}
-				if (!store.get(sessionId)) {
-					try {
-						rmSync(join(base, sessionId), { recursive: true, force: true });
-					} catch {
-						// Ignore cleanup failures and keep orphaned artifacts hidden.
-					}
-					continue;
-				}
+				// Discovery is read-only. Missing rows are not deletion authorization.
+				if (sessionId.startsWith("_") || !store.get(sessionId)) continue;
 				const manifest = readSessionManifest(sessionId) ?? {};
 				// Skip sessions explicitly marked as subagent.
 				if (manifest.source === "subagent") {

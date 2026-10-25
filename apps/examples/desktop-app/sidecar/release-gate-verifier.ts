@@ -18,8 +18,9 @@ type Check = {
 export type ReleaseGateEvidence = {
 	pull: {
 		number: number;
+		merge_commit_sha: string | null;
 		head: { sha: string; repo: { full_name: string } };
-		base: { repo: { full_name: string } };
+		base: { sha: string; repo: { full_name: string } };
 	};
 	checks: { total_count: number; check_runs: Check[] };
 	run: {
@@ -193,13 +194,17 @@ export function verifyReleaseGateEvidence(
 			/^[a-f0-9]{40}$/.test(e.headCommit.tree.sha) &&
 			e.headCommit.sha === expectedHead &&
 			e.testedCommit.sha === tested &&
-			e.testedCommit.tree.sha === e.headCommit.tree.sha,
-		"Receipt commit tree does not match exact proposed head",
+			/^[a-f0-9]{40}$/.test(e.testedCommit.tree.sha),
+		"Receipt commit identity or integration tree is invalid",
 	);
 	requireProof(
-		tested === expectedHead ||
-			e.testedCommit.parents.some((p) => p.sha === expectedHead),
-		"Tested commit is not this head or its PR test merge",
+		/^[a-f0-9]{40}$/.test(e.pull.base.sha) &&
+			tested !== expectedHead &&
+			e.pull.merge_commit_sha === tested &&
+			e.testedCommit.parents.length === 2 &&
+			e.testedCommit.parents[0]?.sha === e.pull.base.sha &&
+			e.testedCommit.parents[1]?.sha === expectedHead,
+		"Tested integration commit is not the current base/head PR merge",
 	);
 	const validateReceipt = (v: any, names: readonly string[]) => {
 		requireProof(
@@ -281,7 +286,8 @@ export function verifyReleaseGateEvidence(
 		pullNumber,
 		expectedHead,
 		testedCommit: tested,
-		tree: e.headCommit.tree.sha,
+		baseCommit: e.pull.base.sha,
+		tree: e.testedCommit.tree.sha,
 		runId: r.id,
 		runAttempt: r.run_attempt,
 		checks: requiredCheckCount,

@@ -754,14 +754,9 @@ export function persistDurableTaskState(
 			`${JSON.stringify({ version: 1, state }, null, 2)}\n`,
 			{ encoding: "utf8", mode: 0o600 },
 		);
-		try {
-			renameSync(temporaryPath, path);
-		} catch {
-			// Windows can refuse an otherwise valid replacement rename. Keep the
-			// fully-written temporary file until the old artifact is removed.
-			rmSync(path, { force: true });
-			renameSync(temporaryPath, path);
-		}
+		// A failed replace must leave the previous valid snapshot untouched.
+		// In particular, do not unlink it to work around a Windows sharing error.
+		renameSync(temporaryPath, path);
 	} catch (error) {
 		rmSync(temporaryPath, { force: true });
 		throw error;
