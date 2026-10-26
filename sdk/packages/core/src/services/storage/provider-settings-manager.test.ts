@@ -9,13 +9,22 @@ import {
 import os from "node:os";
 import path from "node:path";
 import * as LlmsModels from "@cline/llms";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+const { renameFailure } = vi.hoisted(() => ({ renameFailure: { path: "" } }));
+vi.mock("node:fs", async (importOriginal) => {
+ const original = await importOriginal<typeof import("node:fs")>();
+ return { ...original, renameSync: (from: import("node:fs").PathLike, to: import("node:fs").PathLike) => {
+  if (String(to) === renameFailure.path) throw Object.assign(new Error("Synthetic rename failure"), { code: "EPERM" });
+  return original.renameSync(from, to);
+ } };
+});
 import { ProviderSettingsManager } from "./provider-settings-manager";
 
 describe("ProviderSettingsManager", () => {
 	const tempDirs: string[] = [];
 
 	afterEach(() => {
+  renameFailure.path = "";
 		LlmsModels.resetRegistry();
 		for (const dir of tempDirs.splice(0)) {
 			rmSync(dir, { recursive: true, force: true });
@@ -122,7 +131,7 @@ describe("ProviderSettingsManager", () => {
 		);
 
 		const siblings = readdirSync(tempDir);
-		expect(siblings).toEqual(["provider-settings.json"]);
+		expect(siblings.sort()).toEqual(["provider-settings.json", "provider-settings.json.mutation-lock.db"]);
 	});
 
 	it("preserves the previous file when the staged write cannot be renamed", () => {
@@ -138,16 +147,15 @@ describe("ProviderSettingsManager", () => {
 		);
 		const before = readFileSync(filePath, "utf8");
 
-		// Occupying the temp path with a directory makes writeFileSync fail,
-		// simulating a mid-write crash: the destination must be untouched.
-		mkdirSync(`${filePath}.${process.pid}.tmp`);
+		// Inject a rename failure after staging: the destination must remain intact.
+		renameFailure.path = filePath;
 		expect(() =>
 			manager.saveProviderSettings(
 				{ provider: "anthropic", apiKey: "after" },
 				{ setLastUsed: true },
 			),
 		).toThrow();
-		rmSync(`${filePath}.${process.pid}.tmp`, { recursive: true, force: true });
+		renameFailure.path = "";
 
 		expect(readFileSync(filePath, "utf8")).toBe(before);
 	});
@@ -576,7 +584,7 @@ describe("ProviderSettingsManager", () => {
 		expect(manager.read().providers["openai-codex"]?.tokenSource).toBe("oauth");
 	});
 
-	it("ignores invalid persisted JSON and falls back to empty state", () => {
+	it("rejects invalid persisted JSON without overwriting the original", () => {
 		const tempDir = mkdtempSync(
 			path.join(os.tmpdir(), "core-provider-settings-"),
 		);
@@ -584,12 +592,8 @@ describe("ProviderSettingsManager", () => {
 		const filePath = path.join(tempDir, "provider-settings.json");
 		writeFileSync(filePath, "{ not-json", "utf8");
 
-		const manager = new ProviderSettingsManager({ filePath });
-		expect(manager.read()).toEqual({
-			version: 1,
-			modes: {},
-			providers: {},
-		});
+  expect(() => new ProviderSettingsManager({ filePath })).toThrow(/corrupt/);
+  expect(readFileSync(filePath, "utf8")).toBe("{ not-json");
 	});
 
 	describe("credential sanitization on save", () => {

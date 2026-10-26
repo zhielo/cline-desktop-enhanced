@@ -384,21 +384,13 @@ function removeProviderFromSettingsState(
 	manager: ProviderSettingsManager,
 	providerId: string,
 ): void {
-	const state = manager.read();
-	let mutated = false;
-	if (state.providers[providerId]) {
+	manager.update((state) => {
 		delete state.providers[providerId];
-		mutated = true;
-	}
-	if (state.lastUsedProvider === providerId) {
-		delete state.lastUsedProvider;
-		mutated = true;
-	}
-	if (state.modes.voiceInput?.providerId === providerId) {
-		delete state.modes.voiceInput;
-		mutated = true;
-	}
-	if (mutated) manager.write(state);
+		if (state.lastUsedProvider === providerId) delete state.lastUsedProvider;
+		if (state.modes.voiceInput?.providerId === providerId)
+			delete state.modes.voiceInput;
+		return state;
+	});
 	LlmsModels.unregisterProvider(providerId);
 }
 
@@ -1059,13 +1051,13 @@ export function saveLocalProviderSettings(
 	const providerId = request.providerId.trim();
 
 	if (request.enabled === false) {
-		const state = manager.read();
-		delete state.providers[providerId];
-		if (state.lastUsedProvider === providerId) delete state.lastUsedProvider;
-		if (state.modes.voiceInput?.providerId === providerId) {
-			delete state.modes.voiceInput;
-		}
-		manager.write(state);
+		manager.update((state) => {
+			delete state.providers[providerId];
+			if (state.lastUsedProvider === providerId) delete state.lastUsedProvider;
+			if (state.modes.voiceInput?.providerId === providerId)
+				delete state.modes.voiceInput;
+			return state;
+		});
 		return { providerId, enabled: false, settingsPath: manager.getFilePath() };
 	}
 

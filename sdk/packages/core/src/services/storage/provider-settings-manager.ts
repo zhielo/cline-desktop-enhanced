@@ -1,7 +1,10 @@
+import { createHash, randomUUID } from "node:crypto";
 import {
 	chmodSync,
+	closeSync,
+	fsyncSync,
+	openSync,
 	existsSync,
-	mkdirSync,
 	readFileSync,
 	renameSync,
 	rmSync,
@@ -30,6 +33,7 @@ import {
 	registerConfiguredProvidersFromSettings,
 } from "../providers/local-provider-registry";
 import { migrateLegacyProviderSettings } from "./provider-settings-legacy-migration";
+import { withProviderSettingsTransaction } from "./provider-settings-transaction";
 
 function nowIso(): string {
 	return new Date().toISOString();
@@ -132,6 +136,11 @@ function inferLegacyDataDir(filePath: string): string | undefined {
 export class ProviderSettingsManager {
 	private readonly filePath: string;
 	private readonly dataDir?: string;
+	private observedRevision: string | null | undefined;
+	private readonly snapshotRevisions = new WeakMap<
+		StoredProviderSettings,
+		string | null
+	>();
 
 	constructor(options: ProviderSettingsManagerOptions = {}) {
 		this.filePath = options.filePath ?? resolveProviderSettingsPath();
@@ -160,56 +169,103 @@ export class ProviderSettingsManager {
 	}
 
 	read(): StoredProviderSettings {
-		if (!existsSync(this.filePath)) {
-			return emptyStoredProviderSettings();
-		}
-
+		let raw: string;
 		try {
-			const raw = readFileSync(this.filePath, "utf8");
-			const parsed = JSON.parse(raw) as unknown;
-			const result = StoredProviderSettingsSchema.safeParse(parsed);
-			if (result.success) {
-				registerConfiguredProvidersFromSettings(result.data);
-				const clineAuth = result.data.providers["cline"]?.settings?.auth;
-				sdkDebug(
-					`providers.read providers=[${Object.keys(result.data.providers).join(",")}] lastUsed=${result.data.lastUsedProvider ?? "none"} clineAuthPresent=${!!clineAuth?.accessToken} clineAccessTokenHash=${hashSecret(clineAuth?.accessToken)} clineRefreshTokenHash=${hashSecret(clineAuth?.refreshToken)}`,
-				);
-				return result.data;
+			raw = readFileSync(this.filePath, "utf8");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				this.observedRevision = null;
+				const empty = emptyStoredProviderSettings();
+				this.snapshotRevisions.set(empty, null);
+				return empty;
 			}
-		} catch {
-			// Invalid content falls back to a clean state.
+			throw new Error(
+				"Provider settings cannot be read. Check file access; the existing configuration was not reset.",
+			);
 		}
-
-		return emptyStoredProviderSettings();
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			throw new Error(
+				"Provider settings are corrupt. Preserve the file and restore a verified backup or explicitly reset it; no settings were overwritten.",
+			);
+		}
+		const result = StoredProviderSettingsSchema.safeParse(parsed);
+		if (!result.success)
+			throw new Error(
+				"Provider settings have an invalid or unsupported schema. Preserve the file and restore a compatible backup; no settings were overwritten.",
+			);
+		this.observedRevision = createHash("sha256").update(raw).digest("hex");
+		this.snapshotRevisions.set(result.data, this.observedRevision);
+		registerConfiguredProvidersFromSettings(result.data);
+		const clineAuth = result.data.providers["cline"]?.settings?.auth;
+		sdkDebug(
+			`providers.read providers=[${Object.keys(result.data.providers).join(",")}] lastUsed=${result.data.lastUsedProvider ?? "none"} clineAuthPresent=${!!clineAuth?.accessToken} clineAccessTokenHash=${hashSecret(clineAuth?.accessToken)} clineRefreshTokenHash=${hashSecret(clineAuth?.refreshToken)}`,
+		);
+		return result.data;
 	}
 
-	write(state: StoredProviderSettings): void {
-		const normalized = StoredProviderSettingsSchema.parse(state);
-		const dir = dirname(this.filePath);
-		if (!existsSync(dir)) {
-			mkdirSync(dir, { recursive: true, mode: 0o700 });
+	/** Compatibility replacement: reject stale snapshots instead of losing edits.
+	 * Prefer update() for read/modify/write. No corrupt input is silently reset.
+	 */
+	write(
+		state: StoredProviderSettings,
+		sourceSnapshot: StoredProviderSettings = state,
+	): void {
+		if (!this.snapshotRevisions.has(sourceSnapshot)) {
+			throw new Error(
+				"Provider settings replacement requires its original read snapshot. Use update() or pass that snapshot explicitly; no changes were overwritten.",
+			);
 		}
-		// Stage to a pid-unique temp file and rename into place. Concurrent
-		// Cline processes (CLI, extension, hub) share this file; a bare
-		// writeFileSync lets readers catch a partial file, which read() treats
-		// as empty settings — indistinguishable from being logged out.
-		const tempPath = `${this.filePath}.${process.pid}.tmp`;
+		const expected = this.snapshotRevisions.get(sourceSnapshot);
+		withProviderSettingsTransaction(this.filePath, () => {
+			this.read();
+			if (expected === undefined || expected !== this.observedRevision) {
+				this.observedRevision = expected;
+				throw new Error(
+					"Provider settings changed in another process. Reload the latest settings and retry; no changes were overwritten.",
+				);
+			}
+			this.writeUnlocked(state);
+		});
+	}
+
+	/** Synchronous, non-reentrant transaction; the callback must not do external IO. */
+	update(
+		mutator: (current: StoredProviderSettings) => StoredProviderSettings,
+	): StoredProviderSettings {
+		return withProviderSettingsTransaction(this.filePath, () => {
+			const next = mutator(this.read());
+			this.writeUnlocked(next);
+			return next;
+		});
+	}
+
+	private writeUnlocked(state: StoredProviderSettings): void {
+		const normalized = StoredProviderSettingsSchema.parse(state);
+		const tempPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+		const contents = `${JSON.stringify(normalized, null, 2)}\n`;
 		try {
-			writeFileSync(tempPath, `${JSON.stringify(normalized, null, 2)}\n`, {
-				encoding: "utf8",
-				mode: 0o600,
-			});
+			const descriptor = openSync(tempPath, "wx", 0o600);
+			try {
+				writeFileSync(descriptor, contents, { encoding: "utf8" });
+				fsyncSync(descriptor);
+			} finally {
+				closeSync(descriptor);
+			}
 			renameSync(tempPath, this.filePath);
 		} catch (error) {
 			rmSync(tempPath, { force: true });
 			throw error;
 		}
-		// Restrict file to owner-only read/write (best-effort; no-op on Windows).
 		try {
 			chmodSync(this.filePath, 0o600);
 		} catch {
-			// Ignore — Windows does not support POSIX chmod.
+			/* POSIX modes are best-effort on Windows. */
 		}
+		this.observedRevision = createHash("sha256").update(contents).digest("hex");
+		this.snapshotRevisions.set(state, this.observedRevision);
 		registerConfiguredProvidersFromSettings(normalized);
 	}
 
@@ -220,38 +276,38 @@ export class ProviderSettingsManager {
 		const validatedSettings = sanitizeCredentialFields(
 			ProviderSettingsSchema.parse(settings),
 		);
-		const previous = this.read();
-		const providerId = validatedSettings.provider;
-		const shouldSetLastUsed = options.setLastUsed !== false;
-		const previousEntry = previous.providers[providerId];
-		const tokenSource =
-			options.tokenSource ?? previousEntry?.tokenSource ?? "manual";
-		const next: StoredProviderSettings = {
-			...previous,
-			providers: {
-				...previous.providers,
-				[providerId]: {
-					settings: validatedSettings,
-					updatedAt: nowIso(),
-					tokenSource,
+		return this.update((previous) => {
+			const providerId = validatedSettings.provider;
+			const shouldSetLastUsed = options.setLastUsed !== false;
+			const previousEntry = previous.providers[providerId];
+			const tokenSource =
+				options.tokenSource ?? previousEntry?.tokenSource ?? "manual";
+			const next: StoredProviderSettings = {
+				...previous,
+				providers: {
+					...previous.providers,
+					[providerId]: {
+						settings: validatedSettings,
+						updatedAt: nowIso(),
+						tokenSource,
+					},
 				},
-			},
-			lastUsedProvider: shouldSetLastUsed
-				? providerId
-				: previous.lastUsedProvider,
-		};
-		this.write(next);
-		const prevClineAuth = previous.providers["cline"]?.settings?.auth;
-		const nextClineAuth =
-			validatedSettings.provider === "cline"
-				? validatedSettings.auth
-				: next.providers["cline"]?.settings?.auth;
-		const authDropped =
-			!!prevClineAuth?.accessToken && !nextClineAuth?.accessToken;
-		sdkDebug(
-			`providers.save providerId=${providerId} tokenSource=${tokenSource} clineAuthWasPresent=${!!prevClineAuth?.accessToken} clineAuthIsPresent=${!!nextClineAuth?.accessToken} authDropped=${authDropped}`,
-		);
-		return next;
+				lastUsedProvider: shouldSetLastUsed
+					? providerId
+					: previous.lastUsedProvider,
+			};
+			const prevClineAuth = previous.providers["cline"]?.settings?.auth;
+			const nextClineAuth =
+				validatedSettings.provider === "cline"
+					? validatedSettings.auth
+					: next.providers["cline"]?.settings?.auth;
+			const authDropped =
+				!!prevClineAuth?.accessToken && !nextClineAuth?.accessToken;
+			sdkDebug(
+				`providers.save providerId=${providerId} tokenSource=${tokenSource} clineAuthWasPresent=${!!prevClineAuth?.accessToken} clineAuthIsPresent=${!!nextClineAuth?.accessToken} authDropped=${authDropped}`,
+			);
+			return next;
+		});
 	}
 
 	private resolveProviderSettings(
@@ -291,14 +347,14 @@ export class ProviderSettingsManager {
 	setVoiceInputSettings(
 		settings: VoiceInputSettings | undefined,
 	): StoredProviderSettings {
-		const state = this.read();
-		if (settings) {
-			state.modes.voiceInput = VoiceInputSettingsSchema.parse(settings);
-		} else {
-			delete state.modes.voiceInput;
-		}
-		this.write(state);
-		return state;
+		return this.update((state) => {
+			if (settings) {
+				state.modes.voiceInput = VoiceInputSettingsSchema.parse(settings);
+			} else {
+				delete state.modes.voiceInput;
+			}
+			return state;
+		});
 	}
 
 	private resolveLastUsedProviderId(

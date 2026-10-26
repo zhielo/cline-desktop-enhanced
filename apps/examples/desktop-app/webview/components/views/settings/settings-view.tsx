@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+const CapabilitiesView = dynamic(() => import("./capabilities-view").then(m => m.CapabilitiesView));
 const SetupCenter = dynamic(() => import("./setup-center-view").then(m => m.SetupCenter));
 import { providerOffersModelTool } from "@cline/llms/browser";
 import { Switch } from "@cline/ui";
@@ -705,6 +706,8 @@ export function SettingsView({
 			<ImportContent />
 		) : activeNav === "Remote" ? (
 			<RemoteEnvironmentsContent />
+		) : activeNav === "Capabilities" ? (
+			<CapabilitiesView />
 		) : activeNav === "Diagnostics" ? (
 			<DiagnosticsContent />
     ) : activeNav === "Setup Center" ? (

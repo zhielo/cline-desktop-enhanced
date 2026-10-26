@@ -1,14 +1,18 @@
 {
   "schema": "cline-investigation-skills/1",
   "pluginName": "cline-investigation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "skills": [
     "investigate-artifact",
     "analyze-electron",
     "compare-applications",
     "investigate-native",
     "investigate-android",
-    "review-candidate"
+    "review-candidate",
+    "orient-repository",
+    "debug-and-repair",
+    "review-release",
+    "research-and-handoff"
   ],
   "files": [
     {
@@ -24,7 +28,7 @@
     {
       "path": "plugin.json",
       "bytes": 403,
-      "sha256": "8c3be3f9f04f3170fc55929a02c817c1d3f80d9ec36961b22b041e47e617ac08"
+      "sha256": "34cfd2568a720e4402de82a5b8f057ec0d2109c8f254be6c97b0551fde2dabe5"
     },
     {
       "path": "skills/analyze-electron/SKILL.md",
@@ -55,6 +59,26 @@
       "path": "skills/review-candidate/SKILL.md",
       "bytes": 2989,
       "sha256": "e64a3b03558141243f84862e482016e2113951e2ade9f3f87db74eb6408581af"
+    },
+    {
+      "path": "skills/orient-repository/SKILL.md",
+      "bytes": 1803,
+      "sha256": "1c38d72e86f4676eda44e638a03f73c28d1aaa9276a1d48e97439a9b669abc96"
+    },
+    {
+      "path": "skills/debug-and-repair/SKILL.md",
+      "bytes": 1903,
+      "sha256": "1378cef1923b8ab12831788d7544d2c989eaf50a571dd4032b7ff9986c2c591e"
+    },
+    {
+      "path": "skills/review-release/SKILL.md",
+      "bytes": 1890,
+      "sha256": "a9280ed9ae2618646104c4bd22a4e1e2af6375951c73f5081a8796a4d2ac8433"
+    },
+    {
+      "path": "skills/research-and-handoff/SKILL.md",
+      "bytes": 1841,
+      "sha256": "3c904b5bfb15e478e0729913e7fab8eca33ce0c9fec97c894a4c20ccd63e4e11"
     }
   ]
 }
