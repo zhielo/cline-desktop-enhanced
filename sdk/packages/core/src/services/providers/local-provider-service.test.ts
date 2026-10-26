@@ -2408,6 +2408,60 @@ describe("refreshProviderModelsFromSource", () => {
 
 	afterEach(() => cleanup());
 
+	it.each([
+		false,
+		true,
+	])("preserves unrelated refresh-time edits and rejects a changed endpoint (%s)", async (changeEndpoint) => {
+		let finish!: (value: Response) => void;
+		let entered!: () => void;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(() => {
+				entered();
+				return new Promise<Response>((resolve) => {
+					finish = resolve;
+				});
+			}),
+		);
+		saveLocalProviderSettings(manager, {
+			providerId: "ollama",
+			baseUrl: "http://original.invalid:11434/v1",
+			model: "original-model",
+			headers: { "x-original": "yes" },
+		});
+		const pending = refreshProviderModelsFromSource(manager, "ollama");
+		await started;
+		manager.updateProviderSettings("ollama", (current) => ({
+			...current,
+			provider: "ollama",
+			model: "remote-llama",
+			headers: { "x-fresh": "yes" },
+			timeout: 12345,
+			...(changeEndpoint ? { baseUrl: "http://new.invalid:11434/v1" } : {}),
+		}));
+		finish(Response.json({ models: [{ name: "remote-llama" }] }));
+		if (changeEndpoint)
+			await expect(pending).rejects.toThrow("changed during model refresh");
+		else await expect(pending).resolves.toMatchObject({ refreshed: true });
+		expect(manager.getProviderSettings("ollama")).toMatchObject({
+			model: "remote-llama",
+			headers: { "x-fresh": "yes" },
+			timeout: 12345,
+			baseUrl: changeEndpoint
+				? "http://new.invalid:11434/v1"
+				: "http://original.invalid:11434/v1",
+		});
+		if (changeEndpoint) {
+			const modelsState = await readModelsFile(
+				resolveModelsRegistryPath(manager),
+			);
+			expect(modelsState.providers.ollama).toBeUndefined();
+		}
+	});
+
 	it("refreshes built-in Ollama models through modelsSourceUrl using the saved base URL", async () => {
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,

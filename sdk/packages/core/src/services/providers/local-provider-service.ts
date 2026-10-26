@@ -11,6 +11,7 @@ import type {
 	VoiceInputSelection,
 } from "@cline/shared";
 import { createOAuthClientCallbacks } from "../../auth/client";
+import { providerAuthContextEqual } from "../../auth/provider-auth-state";
 import {
 	getProviderAuthHandler,
 	loginAndSaveProviderOAuthCredentials,
@@ -509,6 +510,7 @@ export async function addLocalProvider(
 export async function updateLocalProvider(
 	manager: ProviderSettingsManager,
 	request: UpdateLocalProviderRequest,
+	options: { expectedAuthContext?: ProviderSettings } = {},
 ): Promise<{
 	providerId: string;
 	settingsPath: string;
@@ -627,9 +629,17 @@ export async function updateLocalProvider(
 			? defaultModelCandidate
 			: modelIds[0];
 
-	manager.updateProviderSettings(
+	const committedSettings = manager.updateProviderSettings(
 		providerId,
 		(existingSettings) => {
+			if (
+				options.expectedAuthContext &&
+				!providerAuthContextEqual(options.expectedAuthContext, existingSettings)
+			) {
+				throw new Error(
+					"Provider authentication or endpoint changed during model refresh; retry the refresh",
+				);
+			}
 			if (initiallyConfigured && !existingSettings) {
 				throw new Error(
 					`provider "${providerId}" was removed while updating; retry the edit`,
@@ -686,10 +696,10 @@ export async function updateLocalProvider(
 	modelsState.providers[providerId] = {
 		provider: {
 			name: providerName,
-			baseUrl,
-			defaultModelId,
-			protocol,
-			client,
+			baseUrl: committedSettings?.baseUrl ?? baseUrl,
+			defaultModelId: committedSettings?.model ?? defaultModelId,
+			protocol: committedSettings?.protocol,
+			client: committedSettings?.client,
 			capabilities,
 			modelsSourceUrl: nextModelsSourceUrl,
 		},
@@ -1164,18 +1174,17 @@ export async function refreshProviderModelsFromSource(
 		return { providerId: id, refreshed: false };
 	}
 
-	const result = await updateLocalProvider(manager, {
-		providerId: id,
-		name: provider.name,
-		baseUrl,
-		apiKey: settings.apiKey,
-		headers: settings.headers ?? null,
-		timeoutMs: settings.timeout ?? null,
-		modelsSourceUrl,
-		protocol: settings.protocol ?? provider.protocol ?? null,
-		client: settings.client ?? provider.client ?? null,
-		capabilities: settings.capabilities ?? null,
-	});
+	// Refreshing a catalog is not an explicit settings edit. Do not forward a
+	// stale credential/configuration snapshot across the discovery await.
+	const result = await updateLocalProvider(
+		manager,
+		{
+			providerId: id,
+			modelsSourceUrl,
+			capabilities: settings.capabilities ?? null,
+		},
+		{ expectedAuthContext: settings },
+	);
 	return { providerId: id, refreshed: true, modelsCount: result.modelsCount };
 }
 
