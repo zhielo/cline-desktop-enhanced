@@ -1694,6 +1694,78 @@ describe("updateLocalProvider", () => {
 		).toBe(true);
 	});
 
+	it("preserves fresh omitted fields after asynchronous model discovery", async () => {
+		let finish!: (value: Response) => void;
+		let entered!: () => void;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(() => {
+				entered();
+				return new Promise<Response>((resolve) => {
+					finish = resolve;
+				});
+			}),
+		);
+		const pending = updateLocalProvider(manager, {
+			providerId: "editable-provider",
+			modelsSourceUrl: "https://example.invalid/models",
+		});
+		await started;
+		const other = new ProviderSettingsManager({
+			filePath: manager.getFilePath(),
+		});
+		other.updateProviderSettings("editable-provider", (current) => ({
+			...current,
+			provider: "editable-provider",
+			apiKey: "refreshed-test-key",
+			baseUrl: "https://new.example.invalid/v1",
+			model: "model-b",
+			protocol: "anthropic",
+			headers: { "x-fresh": "yes" },
+		}));
+		finish(Response.json(["model-a", "model-b"]));
+		await pending;
+		expect(manager.getProviderSettings("editable-provider")).toMatchObject({
+			apiKey: "refreshed-test-key",
+			baseUrl: "https://new.example.invalid/v1",
+			model: "model-b",
+			protocol: "anthropic",
+			headers: { "x-fresh": "yes" },
+		});
+	});
+
+	it("does not recreate removed settings after asynchronous discovery", async () => {
+		let finish!: (value: Response) => void;
+		let entered!: () => void;
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(() => {
+				entered();
+				return new Promise<Response>((resolve) => {
+					finish = resolve;
+				});
+			}),
+		);
+		const pending = updateLocalProvider(manager, {
+			providerId: "editable-provider",
+			modelsSourceUrl: "https://example.invalid/models",
+		});
+		await started;
+		manager.update((state) => {
+			delete state.providers["editable-provider"];
+			return state;
+		});
+		finish(Response.json(["model-a"]));
+		await expect(pending).rejects.toThrow("was removed while updating");
+		expect(manager.getProviderSettings("editable-provider")).toBeUndefined();
+	});
+
 	it("updates provider settings and can clear optional fields", async () => {
 		await updateLocalProvider(manager, {
 			providerId: "editable-provider",

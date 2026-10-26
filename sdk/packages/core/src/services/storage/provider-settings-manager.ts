@@ -273,41 +273,74 @@ export class ProviderSettingsManager {
 		settings: unknown,
 		options: SaveProviderSettingsOptions = {},
 	): StoredProviderSettings {
-		const validatedSettings = sanitizeCredentialFields(
+		const validated = sanitizeCredentialFields(
 			ProviderSettingsSchema.parse(settings),
 		);
-		return this.update((previous) => {
-			const providerId = validatedSettings.provider;
-			const shouldSetLastUsed = options.setLastUsed !== false;
-			const previousEntry = previous.providers[providerId];
-			const tokenSource =
-				options.tokenSource ?? previousEntry?.tokenSource ?? "manual";
-			const next: StoredProviderSettings = {
-				...previous,
-				providers: {
-					...previous.providers,
-					[providerId]: {
-						settings: validatedSettings,
-						updatedAt: nowIso(),
-						tokenSource,
-					},
-				},
-				lastUsedProvider: shouldSetLastUsed
-					? providerId
-					: previous.lastUsedProvider,
-			};
-			const prevClineAuth = previous.providers["cline"]?.settings?.auth;
-			const nextClineAuth =
-				validatedSettings.provider === "cline"
-					? validatedSettings.auth
-					: next.providers["cline"]?.settings?.auth;
-			const authDropped =
-				!!prevClineAuth?.accessToken && !nextClineAuth?.accessToken;
-			sdkDebug(
-				`providers.save providerId=${providerId} tokenSource=${tokenSource} clineAuthWasPresent=${!!prevClineAuth?.accessToken} clineAuthIsPresent=${!!nextClineAuth?.accessToken} authDropped=${authDropped}`,
+		return this.update((previous) =>
+			this.mergeProviderSettings(previous, validated, options),
+		);
+	}
+
+	/** Merge a provider patch against fresh settings while holding the cross-process
+	 * transaction. Return undefined to decline a stale mutation without any write.
+	 * The callback must be synchronous and must not perform external IO.
+	 */
+	updateProviderSettings(
+		providerId: string,
+		mutator: (
+			current: ProviderSettings | undefined,
+		) => ProviderSettings | Record<string, unknown> | undefined,
+		options: SaveProviderSettingsOptions = {},
+	): ProviderSettings | undefined {
+		return withProviderSettingsTransaction(this.filePath, () => {
+			const state = this.read();
+			const proposed = mutator(state.providers[providerId]?.settings);
+			if (proposed === undefined) return undefined;
+			const validated = sanitizeCredentialFields(
+				ProviderSettingsSchema.parse(proposed),
 			);
-			return next;
+			if (validated.provider !== providerId)
+				throw new Error("Provider patch cannot change its provider identity");
+			this.writeUnlocked(this.mergeProviderSettings(state, validated, options));
+			return validated;
 		});
+	}
+
+	private mergeProviderSettings(
+		previous: StoredProviderSettings,
+		validatedSettings: ProviderSettings,
+		options: SaveProviderSettingsOptions,
+	): StoredProviderSettings {
+		const providerId = validatedSettings.provider;
+		const shouldSetLastUsed = options.setLastUsed !== false;
+		const previousEntry = previous.providers[providerId];
+		const tokenSource =
+			options.tokenSource ?? previousEntry?.tokenSource ?? "manual";
+		const next: StoredProviderSettings = {
+			...previous,
+			providers: {
+				...previous.providers,
+				[providerId]: {
+					settings: validatedSettings,
+					updatedAt: nowIso(),
+					tokenSource,
+				},
+			},
+			lastUsedProvider: shouldSetLastUsed
+				? providerId
+				: previous.lastUsedProvider,
+		};
+		const prevClineAuth = previous.providers["cline"]?.settings?.auth;
+		const nextClineAuth =
+			validatedSettings.provider === "cline"
+				? validatedSettings.auth
+				: next.providers["cline"]?.settings?.auth;
+		const authDropped =
+			!!prevClineAuth?.accessToken && !nextClineAuth?.accessToken;
+		sdkDebug(
+			`providers.save providerId=${providerId} tokenSource=${tokenSource} clineAuthWasPresent=${!!prevClineAuth?.accessToken} clineAuthIsPresent=${!!nextClineAuth?.accessToken} authDropped=${authDropped}`,
+		);
+		return next;
 	}
 
 	private resolveProviderSettings(

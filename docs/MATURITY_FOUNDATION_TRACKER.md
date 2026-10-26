@@ -15,7 +15,7 @@ Baseline: `1bd931317e12adf995dfeec1dedc4c018571b2ed`. This is a scoped foundatio
 | ID | Finding | Patch status | Scope / remaining work |
 | --- | --- | --- | --- |
 | M01 | Provider credentials are persisted as readable JSON | Open — not implemented in this patch | Use Windows Credential Manager/DPAPI-backed protected storage, macOS Keychain and Linux Secret Service. Store opaque references in settings. Add recoverable one-way legacy migration, redacted exports and explicit vault-unavailable errors. |
-| M02 | Atomic replacement does not prevent concurrent settings lost updates | Implemented, targeted validation | Kernel-released cross-process mutex for save/voice/delete transactions; atomic exclusive temp + fsync; stale full-file writes reject. Same-provider field-level merge conflicts still need an explicit API/contract. |
+| M02 | Atomic replacement does not prevent concurrent settings lost updates | Implemented, targeted validation | Kernel-released cross-process mutex for save/voice/delete transactions; atomic exclusive temp + fsync; stale full-file writes reject. Follow-up adds locked per-provider transforms for settings patches, OAuth refresh/sign-in and telemetry. Refresh/sign-in commit guards reject changed credential/origin context; asynchronous edits preserve fresh omitted fields. Overlapping explicit field edits remain last-committed intent; model-registry transactions and UI revision/conflict UX remain open. |
 | M03 | Corrupt provider settings silently become an empty configuration | Implemented, targeted validation | Missing files initialize normally; corrupt, incompatible or unreadable input fails visibly and is preserved. No automatic reset. |
 | M04 | Timezone next-run calculation can monopolize the event loop | Implemented, targeted validation | Calendar-date candidate search replaces multi-year minute-format scans. Modern IANA DST/fractional-offset/skipped-day fixtures pass; not a universal historical-timezone proof. |
 | M05 | File picker excludes essential dot-directory configuration | Implemented, targeted validation | Approved project configuration directories are discoverable; internal and unknown hidden directories remain excluded. |
@@ -39,7 +39,7 @@ Baseline: `1bd931317e12adf995dfeec1dedc4c018571b2ed`. This is a scoped foundatio
 
 | Risk | Regression evidence in source | Still required |
 | --- | --- | --- |
-| Concurrent settings writers and killed holder | `provider-settings-durability.test.ts`: two real owned OS processes, stale replacement, exception/reentrancy, owned-holder termination | Windows execution, same-provider patch conflict policy, OAuth race journeys |
+| Concurrent settings writers and killed holder | `provider-settings-durability.test.ts`: two real owned OS processes, stale replacement, exception/reentrancy, owned-holder termination | Windows execution of new same-provider process regressions; explicit overlapping-edit conflict UX and full OAuth journeys |
 | Corrupt or incompatible settings | durability + manager tests preserve original bytes; existing atomic rename-failure tests retained | Installed recovery UX, volume-full and permission-denied platform matrix |
 | Timezone scheduling cost/correctness | scheduler tests: DST gap/fold, Lord Howe half-hour, Apia skipped date, leap day and impossible-date format-call bound | Installed multi-schedule load and long-running restart soak |
 | Large/no-match workspace search | streaming discovery tests: entry/directory/result limits, config inclusion, cancellation, missing root, outside symlink; DiffView partial/cancel regression | Remote file search remains unsupported; filesystem replacement races and network filesystem latency are not containment guarantees |
@@ -50,3 +50,13 @@ Baseline: `1bd931317e12adf995dfeec1dedc4c018571b2ed`. This is a scoped foundatio
 Provider credentials remain JSON at rest pending a reviewed native-vault implementation and migration. No claim of encryption is made. Tool permission profiles are not a general OS sandbox. Office editing, persistent project knowledge, private browser input, signed updating, reference-aware pack collection, full transcript virtualization and controlled whole-app benchmarks remain open. Do not close these items by adding a prompt, a label or a passing compilation.
 
 File fsync before rename improves write flushing; parent-directory crash durability and storage hardware guarantees vary by platform. The mutex database stores locking state only, never provider settings or credentials. A process holding the SQLite transaction may cause a bounded busy error; errors must not trigger silent resets.
+
+
+## Follow-up: same-provider mutation races
+
+- `updateProviderSettings` reads, transforms, validates and commits a single provider under the existing cross-process lock. A declined transform does not rewrite settings; provider identity cannot change. No network I/O belongs inside this synchronous transaction.
+- Settings service patches merge against current fields. Model discovery remains outside the lock; omitted settings survive concurrent changes, and an edit cannot recreate settings removed while discovery was pending.
+- OAuth refresh checks credential/account/API-key/endpoint/OCA-mode context inside the commit transaction, not before a separate save. Concurrent sign-out, account switch and endpoint changes discard obsolete refresh results; unrelated preferences/metadata survive. Sign-in rejects changed auth context and preserves unrelated settings.
+- Telemetry metadata writes preserve fresh credential fields and decline missing providers. This does not yet bind delayed account API responses to an account-generation token.
+- Regressions include two real same-provider writer processes, exact refresh commit-boundary interleavings, delayed sign-in and delayed model discovery. Four refresh regressions were independently confirmed to fail against the previous runtime implementation before restoring the patch.
+- Remaining boundaries: no native credential vault; no per-field UI revision tokens or persisted sign-out generation/tombstones; no atomic settings-plus-`models.json` transaction. Explicit overlapping edits and observationally identical auth changes require a stronger intent/version contract. These are not closed by this follow-up.

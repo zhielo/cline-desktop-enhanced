@@ -30,6 +30,33 @@ vi.mock("../../auth/oca", () => ({
 	getValidOcaCredentials,
 }));
 
+// This lightweight unit fixture models the new transactional callback contract.
+// Cross-process locking and fresh-disk behavior use real managers in integration tests.
+function withTransactionalProviderFixture<
+	T extends Pick<
+		ProviderSettingsManager,
+		"getProviderSettings" | "saveProviderSettings"
+	>,
+>(manager: T) {
+	return {
+		...manager,
+		updateProviderSettings: (
+			providerId: string,
+			mutator: Parameters<ProviderSettingsManager["updateProviderSettings"]>[1],
+			options: Parameters<
+				ProviderSettingsManager["updateProviderSettings"]
+			>[2] = {},
+		) => {
+			const proposed = mutator(manager.getProviderSettings(providerId));
+			if (proposed === undefined) return undefined;
+			manager.saveProviderSettings(proposed, options);
+			return proposed as NonNullable<
+				ReturnType<ProviderSettingsManager["getProviderSettings"]>
+			>;
+		},
+	};
+}
+
 describe("RuntimeOAuthTokenManager", () => {
 	let testDir: string;
 	afterEach(() => rmSync(testDir, { recursive: true, force: true }));
@@ -58,11 +85,11 @@ describe("RuntimeOAuthTokenManager", () => {
 		});
 
 		const manager = new RuntimeOAuthTokenManager({
-			providerSettingsManager: {
+			providerSettingsManager: withTransactionalProviderFixture({
 				getFilePath: () => join(testDir, "providers.json"),
 				getProviderSettings,
 				saveProviderSettings,
-			} as never,
+			}) as never,
 		});
 
 		const result = await manager.resolveProviderApiKey({
@@ -108,11 +135,11 @@ describe("RuntimeOAuthTokenManager", () => {
 		});
 
 		const manager = new RuntimeOAuthTokenManager({
-			providerSettingsManager: {
+			providerSettingsManager: withTransactionalProviderFixture({
 				getFilePath: () => join(testDir, "providers.json"),
 				getProviderSettings,
 				saveProviderSettings,
-			} as never,
+			}) as never,
 		});
 
 		const result = await manager.resolveProviderApiKey({
@@ -150,7 +177,7 @@ describe("RuntimeOAuthTokenManager", () => {
 	it("throws re-auth required when refresh returns null", async () => {
 		getValidOpenAICodexCredentials.mockResolvedValueOnce(null);
 		const manager = new RuntimeOAuthTokenManager({
-			providerSettingsManager: {
+			providerSettingsManager: withTransactionalProviderFixture({
 				getFilePath: () => join(testDir, "providers.json"),
 				getProviderSettings: vi.fn().mockReturnValue({
 					provider: "openai-codex",
@@ -161,7 +188,7 @@ describe("RuntimeOAuthTokenManager", () => {
 					},
 				}),
 				saveProviderSettings: vi.fn(),
-			} as never,
+			}) as never,
 		});
 
 		await expect(
@@ -180,7 +207,7 @@ describe("RuntimeOAuthTokenManager", () => {
 		);
 
 		const manager = new RuntimeOAuthTokenManager({
-			providerSettingsManager: {
+			providerSettingsManager: withTransactionalProviderFixture({
 				getFilePath: () => join(testDir, "providers.json"),
 				getProviderSettings: vi.fn().mockReturnValue({
 					provider: "openai-codex",
@@ -191,7 +218,7 @@ describe("RuntimeOAuthTokenManager", () => {
 					},
 				}),
 				saveProviderSettings: vi.fn(),
-			} as never,
+			}) as never,
 		});
 
 		const [first, second] = await Promise.all([
@@ -253,6 +280,145 @@ describe("RuntimeOAuthTokenManager", () => {
 		);
 		expect(getValidClineCredentials.mock.calls[1][2]).toEqual({
 			forceRefresh: false,
+		});
+	});
+
+	it.each([
+		"sign-out",
+		"account-switch",
+		"endpoint-change",
+	] as const)("guards %s at the exact refresh commit boundary", async (change) => {
+		const filePath = join(testDir, "providers.json"),
+			settings = new ProviderSettingsManager({ filePath }),
+			other = new ProviderSettingsManager({ filePath });
+		settings.saveProviderSettings({
+			provider: "cline",
+			model: "original",
+			auth: {
+				accessToken: "old",
+				refreshToken: "single-use",
+				expiresAt: 1,
+				accountId: "old-account",
+			},
+		});
+		getValidClineCredentials.mockResolvedValueOnce({
+			access: "refreshed",
+			refresh: "rotated",
+			expires: Date.now() + 3600000,
+			accountId: "old-account",
+		});
+		let interleaved = false;
+		const inject = () => {
+			if (interleaved) return;
+			interleaved = true;
+			if (change === "sign-out")
+				other.updateProviderSettings(
+					"cline",
+					() => ({ provider: "cline", auth: {} }),
+					{ setLastUsed: false },
+				);
+			else if (change === "account-switch")
+				other.saveProviderSettings({
+					provider: "cline",
+					auth: {
+						accessToken: "new-login",
+						refreshToken: "new-login-refresh",
+						expiresAt: Date.now() + 3600000,
+						accountId: "new-account",
+					},
+				});
+			else
+				other.updateProviderSettings(
+					"cline",
+					(current) => ({
+						...current,
+						provider: "cline",
+						baseUrl: "https://new-origin.invalid/v1",
+					}),
+					{ setLastUsed: false },
+				);
+		};
+		const save = settings.saveProviderSettings.bind(settings),
+			update = settings.updateProviderSettings.bind(settings);
+		vi.spyOn(settings, "saveProviderSettings").mockImplementation((...args) => {
+			inject();
+			return save(...args);
+		});
+		vi.spyOn(settings, "updateProviderSettings").mockImplementation(
+			(...args) => {
+				inject();
+				return update(...args);
+			},
+		);
+		const result = await new RuntimeOAuthTokenManager({
+			providerSettingsManager: settings,
+		}).resolveProviderApiKey({ providerId: "cline" });
+		expect(interleaved).toBe(true);
+		expect(result).toBeNull();
+		const persisted = other.getProviderSettings("cline");
+		expect(persisted?.auth?.accessToken).not.toBe("workos:refreshed");
+		if (change === "sign-out")
+			expect(persisted?.auth?.accessToken).toBeUndefined();
+		if (change === "account-switch")
+			expect(persisted?.auth?.accountId).toBe("new-account");
+		if (change === "endpoint-change")
+			expect(persisted?.baseUrl).toBe("https://new-origin.invalid/v1");
+	});
+	it("retains a concurrent preference and auth metadata edit when refreshing credentials", async () => {
+		const filePath = join(testDir, "providers.json"),
+			settings = new ProviderSettingsManager({ filePath }),
+			other = new ProviderSettingsManager({ filePath });
+		settings.saveProviderSettings({
+			provider: "cline",
+			model: "old-model",
+			auth: {
+				accessToken: "old",
+				refreshToken: "single-use",
+				expiresAt: 1,
+				accountId: "account-a",
+			},
+		});
+		getValidClineCredentials.mockResolvedValueOnce({
+			access: "new",
+			refresh: "rotated",
+			expires: Date.now() + 3600000,
+			accountId: "account-a",
+		});
+		let interleaved = false;
+		const inject = () => {
+			if (interleaved) return;
+			interleaved = true;
+			other.updateProviderSettings(
+				"cline",
+				(current) => ({
+					...current,
+					provider: "cline",
+					model: "fresh-model",
+					auth: { ...current?.auth, metadata: { retained: "fresh" } },
+				}),
+				{ setLastUsed: false },
+			);
+		};
+		const save = settings.saveProviderSettings.bind(settings),
+			update = settings.updateProviderSettings.bind(settings);
+		vi.spyOn(settings, "saveProviderSettings").mockImplementation((...args) => {
+			inject();
+			return save(...args);
+		});
+		vi.spyOn(settings, "updateProviderSettings").mockImplementation(
+			(...args) => {
+				inject();
+				return update(...args);
+			},
+		);
+		const result = await new RuntimeOAuthTokenManager({
+			providerSettingsManager: settings,
+		}).resolveProviderApiKey({ providerId: "cline" });
+		expect(interleaved).toBe(true);
+		expect(result?.apiKey).toBe("workos:new");
+		expect(other.getProviderSettings("cline")).toMatchObject({
+			model: "fresh-model",
+			auth: { accessToken: "workos:new", metadata: { retained: "fresh" } },
 		});
 	});
 

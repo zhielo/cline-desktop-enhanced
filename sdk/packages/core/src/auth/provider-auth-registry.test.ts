@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ProviderSettingsManager } from "../services/storage/provider-settings-manager";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	formatProviderOAuthApiKey,
@@ -28,6 +32,33 @@ vi.mock("./codex", () => ({
 	getValidOpenAICodexCredentials: vi.fn(),
 	loginOpenAICodex: vi.fn(),
 }));
+
+// This lightweight unit fixture models the new transactional callback contract.
+// Cross-process locking and fresh-disk behavior use real managers in integration tests.
+function withTransactionalProviderFixture<
+	T extends Pick<
+		ProviderSettingsManager,
+		"getProviderSettings" | "saveProviderSettings"
+	>,
+>(manager: T) {
+	return {
+		...manager,
+		updateProviderSettings: (
+			providerId: string,
+			mutator: Parameters<ProviderSettingsManager["updateProviderSettings"]>[1],
+			options: Parameters<
+				ProviderSettingsManager["updateProviderSettings"]
+			>[2] = {},
+		) => {
+			const proposed = mutator(manager.getProviderSettings(providerId));
+			if (proposed === undefined) return undefined;
+			manager.saveProviderSettings(proposed, options);
+			return proposed as NonNullable<
+				ReturnType<ProviderSettingsManager["getProviderSettings"]>
+			>;
+		},
+	};
+}
 
 describe("provider auth registry", () => {
 	beforeEach(() => {
@@ -84,10 +115,10 @@ describe("provider auth registry", () => {
 			apiKey: "manual-key",
 		});
 		const saveProviderSettings = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			getProviderSettings,
 			saveProviderSettings,
-		} as never;
+		}) as never;
 
 		const saved = await loginAndSaveProviderOAuthCredentials(
 			manager,
@@ -144,10 +175,10 @@ describe("provider auth registry", () => {
 			apiKey: "manual-key",
 		});
 		const saveProviderSettings = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			getProviderSettings,
 			saveProviderSettings,
-		} as never;
+		}) as never;
 
 		const saved = await loginAndSaveProviderOAuthCredentials(manager, "cline", {
 			callbacks: {
@@ -194,10 +225,10 @@ describe("provider auth registry", () => {
 			},
 		});
 		const saveProviderSettings = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			getProviderSettings,
 			saveProviderSettings,
-		} as never;
+		}) as never;
 
 		const saved = await loginAndSaveProviderOAuthCredentials(manager, "cline", {
 			callbacks: {
@@ -238,10 +269,10 @@ describe("provider auth registry", () => {
 			},
 		});
 		const saveProviderSettings = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			getProviderSettings,
 			saveProviderSettings,
-		} as never;
+		}) as never;
 
 		const saved = await loginAndSaveProviderOAuthCredentials(manager, "cline", {
 			callbacks: {
@@ -283,5 +314,98 @@ describe("provider auth registry", () => {
 			accountId: "acct-stored",
 			metadata: { sessionStartedAtMs: 1_700_000_000_002 },
 		});
+	});
+});
+
+describe("sign-in transactional persistence", () => {
+	it("rejects a delayed sign-in after a newer account replaces its auth context", async () => {
+		const root = mkdtempSync(join(tmpdir(), "cline-sign-in-race-"));
+		try {
+			const manager = new ProviderSettingsManager({
+				filePath: join(root, "providers.json"),
+			});
+			manager.saveProviderSettings({
+				provider: "cline",
+				auth: {
+					accessToken: "old",
+					refreshToken: "old-refresh",
+					accountId: "old-account",
+					expiresAt: 1,
+				},
+			});
+			let finish!: () => void;
+			loginClineOAuth.mockImplementationOnce(async () => {
+				await new Promise<void>((resolve) => {
+					finish = resolve;
+				});
+				return {
+					access: "stale-login",
+					refresh: "stale-refresh",
+					expires: 4000000000000,
+					accountId: "old-account",
+				};
+			});
+			const pending = loginAndSaveProviderOAuthCredentials(manager, "cline", {
+				callbacks: { onAuth: vi.fn(), onPrompt: vi.fn(async () => "") },
+			});
+			await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+			manager.saveProviderSettings({
+				provider: "cline",
+				auth: {
+					accessToken: "new-login",
+					refreshToken: "new-refresh",
+					accountId: "new-account",
+					expiresAt: 4000000000000,
+				},
+			});
+			const rejected = expect(pending).rejects.toThrow(
+				/authentication changed/,
+			);
+			finish();
+			await rejected;
+			expect(manager.getProviderSettings("cline")?.auth?.accessToken).toBe(
+				"new-login",
+			);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+	it("preserves preferences edited while the sign-in network request is pending", async () => {
+		const root = mkdtempSync(join(tmpdir(), "cline-sign-in-preferences-"));
+		try {
+			const manager = new ProviderSettingsManager({
+				filePath: join(root, "providers.json"),
+			});
+			manager.saveProviderSettings({ provider: "cline", model: "old-model" });
+			let finish!: () => void;
+			loginClineOAuth.mockImplementationOnce(async () => {
+				await new Promise<void>((resolve) => {
+					finish = resolve;
+				});
+				return {
+					access: "login",
+					refresh: "refresh",
+					expires: 4000000000000,
+					accountId: "account",
+				};
+			});
+			const pending = loginAndSaveProviderOAuthCredentials(manager, "cline", {
+				callbacks: { onAuth: vi.fn(), onPrompt: vi.fn(async () => "") },
+			});
+			await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+			manager.updateProviderSettings(
+				"cline",
+				(current) => ({ ...current, provider: "cline", model: "fresh-model" }),
+				{ setLastUsed: false },
+			);
+			finish();
+			expect(await pending).toMatchObject({
+				model: "fresh-model",
+				auth: { accessToken: "workos:login" },
+			});
+			expect(manager.getProviderSettings("cline")?.model).toBe("fresh-model");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });

@@ -518,6 +518,8 @@ export async function updateLocalProvider(
 	const providerId = request.providerId.trim().toLowerCase();
 	if (!providerId) throw new Error("providerId is required");
 
+	const initiallyConfigured =
+		manager.getProviderSettings(providerId) !== undefined;
 	const modelsPath = resolveModelsRegistryPath(manager);
 	const modelsState = await readModelsFile(modelsPath);
 	let existingEntry = modelsState.providers[providerId];
@@ -625,36 +627,61 @@ export async function updateLocalProvider(
 			? defaultModelCandidate
 			: modelIds[0];
 
-	const existingSettings = manager.getProviderSettings(providerId);
-	const nextSettings: Record<string, unknown> = {
-		...(existingSettings ?? {}),
-		provider: providerId,
-		baseUrl,
-		model: defaultModelId,
-	};
-	if (protocol) nextSettings.protocol = protocol;
-	else delete nextSettings.protocol;
-	if (client) nextSettings.client = client;
-	else delete nextSettings.client;
-	if (request.apiKey !== undefined) {
-		const apiKey = request.apiKey?.trim() ?? "";
-		if (apiKey) nextSettings.apiKey = apiKey;
-		else delete nextSettings.apiKey;
-	}
-	if (request.headers !== undefined) {
-		const normalizedHeaders = normalizeHeaders(request.headers);
-		if (normalizedHeaders) nextSettings.headers = normalizedHeaders;
-		else delete nextSettings.headers;
-	}
-	if (request.timeoutMs !== undefined) {
-		if (typeof request.timeoutMs === "number") {
-			nextSettings.timeout = request.timeoutMs;
-		} else {
-			delete nextSettings.timeout;
-		}
-	}
+	manager.updateProviderSettings(
+		providerId,
+		(existingSettings) => {
+			if (initiallyConfigured && !existingSettings) {
+				throw new Error(
+					`provider "${providerId}" was removed while updating; retry the edit`,
+				);
+			}
+			// Model discovery can await network I/O. Only explicitly supplied fields
+			// may replace settings committed while that request was in flight.
+			const currentModel = existingSettings?.model;
+			const nextSettings: Record<string, unknown> = {
+				...(existingSettings ?? {}),
+				provider: providerId,
+				baseUrl:
+					request.baseUrl === undefined
+						? (existingSettings?.baseUrl ?? baseUrl)
+						: baseUrl,
+				model:
+					request.defaultModelId === undefined &&
+					currentModel &&
+					(!shouldRecomputeModels || modelIds.includes(currentModel))
+						? currentModel
+						: defaultModelId,
+			};
+			if (request.protocol !== undefined || !existingSettings) {
+				if (protocol) nextSettings.protocol = protocol;
+				else delete nextSettings.protocol;
+			}
+			if (request.client !== undefined || !existingSettings) {
+				if (client) nextSettings.client = client;
+				else delete nextSettings.client;
+			}
+			if (request.apiKey !== undefined) {
+				const apiKey = request.apiKey?.trim() ?? "";
+				if (apiKey) nextSettings.apiKey = apiKey;
+				else delete nextSettings.apiKey;
+			}
+			if (request.headers !== undefined) {
+				const normalizedHeaders = normalizeHeaders(request.headers);
+				if (normalizedHeaders) nextSettings.headers = normalizedHeaders;
+				else delete nextSettings.headers;
+			}
+			if (request.timeoutMs !== undefined) {
+				if (typeof request.timeoutMs === "number") {
+					nextSettings.timeout = request.timeoutMs;
+				} else {
+					delete nextSettings.timeout;
+				}
+			}
 
-	manager.saveProviderSettings(nextSettings, { setLastUsed: false });
+			return nextSettings;
+		},
+		{ setLastUsed: false },
+	);
 
 	modelsState.providers[providerId] = {
 		provider: {
@@ -717,12 +744,12 @@ export function markLocalProviderEnabled(
 	const id = providerId.trim();
 	if (!id) throw new Error("providerId is required");
 
-	const directSettings = manager.read().providers[id]?.settings;
-	manager.saveProviderSettings(
-		{
+	manager.updateProviderSettings(
+		id,
+		(directSettings) => ({
 			...(directSettings ?? {}),
 			provider: id,
-		},
+		}),
 		{ setLastUsed: false, tokenSource: options.tokenSource },
 	);
 
@@ -1061,54 +1088,59 @@ export function saveLocalProviderSettings(
 		return { providerId, enabled: false, settingsPath: manager.getFilePath() };
 	}
 
-	const existing = manager.getProviderSettings(providerId);
-	const next: Record<string, unknown> = {
-		...(existing ?? {}),
-		provider: providerId,
-	};
+	manager.updateProviderSettings(
+		providerId,
+		(existing) => {
+			const next: Record<string, unknown> = {
+				...(existing ?? {}),
+				provider: providerId,
+			};
 
-	// String fields that should be cleared when empty
-	for (const key of ["apiKey", "baseUrl", "model", "region"] as const) {
-		if (Object.hasOwn(request, key) && typeof request[key] === "string") {
-			const val = (request[key] as string).trim();
-			if (val.length === 0) delete next[key];
-			else next[key] = request[key];
-		}
-	}
+			// String fields that should be cleared when empty
+			for (const key of ["apiKey", "baseUrl", "model", "region"] as const) {
+				if (Object.hasOwn(request, key) && typeof request[key] === "string") {
+					const val = (request[key] as string).trim();
+					if (val.length === 0) delete next[key];
+					else next[key] = request[key];
+				}
+			}
 
-	// Scalar passthrough fields
-	for (const key of [
-		"maxTokens",
-		"contextWindow",
-		"timeout",
-		"apiLine",
-		"protocol",
-		"client",
-		"routingProviderId",
-		"capabilities",
-	] as const) {
-		if (Object.hasOwn(request, key)) next[key] = request[key];
-	}
+			// Scalar passthrough fields
+			for (const key of [
+				"maxTokens",
+				"contextWindow",
+				"timeout",
+				"apiLine",
+				"protocol",
+				"client",
+				"routingProviderId",
+				"capabilities",
+			] as const) {
+				if (Object.hasOwn(request, key)) next[key] = request[key];
+			}
 
-	// Merged object fields
-	for (const key of [
-		"auth",
-		"headers",
-		"reasoning",
-		"aws",
-		"gcp",
-		"azure",
-		"sap",
-		"oca",
-	] as const) {
-		if (Object.hasOwn(request, key) && request[key] != null) {
-			const merged = applySettingsObjectPatch(next[key], request[key]);
-			if (merged) next[key] = merged;
-			else delete next[key];
-		}
-	}
+			// Merged object fields
+			for (const key of [
+				"auth",
+				"headers",
+				"reasoning",
+				"aws",
+				"gcp",
+				"azure",
+				"sap",
+				"oca",
+			] as const) {
+				if (Object.hasOwn(request, key) && request[key] != null) {
+					const merged = applySettingsObjectPatch(next[key], request[key]);
+					if (merged) next[key] = merged;
+					else delete next[key];
+				}
+			}
 
-	manager.saveProviderSettings(next, { setLastUsed: false });
+			return next;
+		},
+		{ setLastUsed: false },
+	);
 	return { providerId, enabled: true, settingsPath: manager.getFilePath() };
 }
 

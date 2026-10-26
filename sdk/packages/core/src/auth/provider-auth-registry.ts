@@ -1,3 +1,4 @@
+import { providerAuthContextEqual } from "./provider-auth-state";
 import {
 	decodeJwtPayload,
 	getClineEnvironmentConfig,
@@ -37,6 +38,7 @@ export interface ProviderAuthSaveCredentialsInput {
 	credentials: ProviderOAuthCredentials;
 	setLastUsed?: boolean;
 	save?: boolean;
+	requireUnchangedAuth?: boolean;
 }
 
 export interface ProviderAuthHandler {
@@ -128,46 +130,64 @@ function saveOAuthCredentials(input: {
 	formatAccessToken?: (accessToken: string) => string;
 	setLastUsed?: boolean;
 	save?: boolean;
+	requireUnchangedAuth?: boolean;
 }): ProviderSettings {
-	const accessToken =
-		input.formatAccessToken?.(input.credentials.access) ??
-		input.credentials.access;
-	const auth: NonNullable<ProviderSettings["auth"]> = {
-		...(input.settings?.auth ?? {}),
-		accessToken,
-		refreshToken: input.credentials.refresh,
-		accountId: input.credentials.accountId,
-		expiresAt: input.credentials.expires,
-	};
-	const incomingMetadata = Object.fromEntries(
-		Object.entries(input.credentials.metadata ?? {}).filter(
-			([, value]) => value !== undefined,
-		),
-	);
-	const metadata = {
-		...(input.settings?.auth?.metadata ?? {}),
-		...incomingMetadata,
-	};
-	if (Object.keys(metadata).length > 0) {
-		auth.metadata = metadata;
-	}
+	const merge = (settings: ProviderSettings | undefined): ProviderSettings => {
+		const accessToken =
+			input.formatAccessToken?.(input.credentials.access) ??
+			input.credentials.access;
+		const auth: NonNullable<ProviderSettings["auth"]> = {
+			...(settings?.auth ?? {}),
+			accessToken,
+			refreshToken: input.credentials.refresh,
+			accountId: input.credentials.accountId,
+			expiresAt: input.credentials.expires,
+		};
+		const incomingMetadata = Object.fromEntries(
+			Object.entries(input.credentials.metadata ?? {}).filter(
+				([, value]) => value !== undefined,
+			),
+		);
+		const metadata = {
+			...(settings?.auth?.metadata ?? {}),
+			...incomingMetadata,
+		};
+		if (Object.keys(metadata).length > 0) {
+			auth.metadata = metadata;
+		}
 
-	const merged: ProviderSettings = {
-		...(input.settings ?? {
+		const merged: ProviderSettings = {
+			...(settings ?? {
+				provider: input.storageProviderId as ProviderSettings["provider"],
+			}),
 			provider: input.storageProviderId as ProviderSettings["provider"],
-		}),
-		provider: input.storageProviderId as ProviderSettings["provider"],
-		auth,
+			auth,
+		};
+		return merged;
 	};
-	if (input.save !== false) {
-		input.manager.saveProviderSettings(merged, {
+	if (input.save === false) return merge(input.settings);
+	const saved = input.manager.updateProviderSettings(
+		input.storageProviderId,
+		(current) => {
+			if (
+				input.requireUnchangedAuth &&
+				!providerAuthContextEqual(input.settings, current)
+			) {
+				throw new Error(
+					"Provider authentication changed while sign-in was in progress. Retry sign-in; newer settings were not overwritten.",
+				);
+			}
+			return merge(current ?? input.settings);
+		},
+		{
 			...(input.setLastUsed === undefined
 				? {}
 				: { setLastUsed: input.setLastUsed }),
 			tokenSource: "oauth",
-		});
-	}
-	return merged;
+		},
+	);
+	if (!saved) throw new Error("OAuth credential persistence was declined");
+	return saved;
 }
 
 function createOAuthHandler(input: {
@@ -323,7 +343,12 @@ export async function loginAndSaveProviderOAuthCredentials(
 		callbacks: input.callbacks,
 		telemetry: input.telemetry,
 	});
-	return handler.saveCredentials({ manager, settings: existing, credentials });
+	return handler.saveCredentials({
+		manager,
+		settings: existing,
+		credentials,
+		requireUnchangedAuth: true,
+	});
 }
 
 export function getProviderOAuthCredentialsFromSettings(
@@ -344,6 +369,7 @@ export function saveProviderOAuthCredentials(input: {
 	credentials: ProviderOAuthCredentials;
 	setLastUsed?: boolean;
 	save?: boolean;
+	requireUnchangedAuth?: boolean;
 }): ProviderSettings {
 	const handler = getProviderAuthHandler(input.providerId);
 	if (!handler) {
@@ -357,6 +383,7 @@ export function saveProviderOAuthCredentials(input: {
 		credentials: input.credentials,
 		setLastUsed: input.setLastUsed,
 		save: input.save,
+		requireUnchangedAuth: input.requireUnchangedAuth,
 	});
 }
 
