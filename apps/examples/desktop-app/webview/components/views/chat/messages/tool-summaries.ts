@@ -2,6 +2,7 @@ import {
 	buildToolSummary,
 	type ToolSummary,
 } from "@cline/ui/components/agent-chat/tool-summary";
+import { TaskObservationSchema } from "../../../../../shared/task-observation";
 import type { ChatMessage } from "@/lib/chat-schema";
 
 /**
@@ -117,6 +118,7 @@ export type ToolPresentation = {
 	payload: ToolPayload | null;
 	toolName: string;
 	inProgress: boolean;
+	failed: boolean;
 	summary: ToolSummary;
 };
 
@@ -124,16 +126,44 @@ export function buildToolPresentation(message: ChatMessage): ToolPresentation {
 	const payload = parseToolPayload(message.content);
 	const toolName = message.meta?.toolName || payload?.toolName || "tool";
 	const hookEventName = message.meta?.hookEventName;
-	const inProgress =
+	const fallbackInProgress =
 		hookEventName === "tool_call_start" ||
 		hookEventName === "history_tool_use" ||
 		(Boolean(payload) && payload?.result == null && !payload?.isError);
+	const event = message.meta?.taskEvent;
+	const matchingEvent =
+		event &&
+		"toolCallId" in event &&
+		event.toolCallId === message.meta?.toolCallId &&
+		event.toolName === toolName
+			? event
+			: undefined;
+	const receipt = TaskObservationSchema.safeParse(event?.observation);
+	const observation =
+		receipt.success &&
+		receipt.data.sessionId === message.sessionId &&
+		receipt.data.toolCallId === message.meta?.toolCallId &&
+		receipt.data.toolName === toolName
+			? receipt.data
+			: undefined;
+	const inProgress = observation
+		? observation.execution === "running"
+		: matchingEvent
+			? matchingEvent.type === "tool.started"
+			: fallbackInProgress;
+	const failed = Boolean(
+		payload?.isError ||
+			matchingEvent?.type === "tool.failed" ||
+			observation?.execution === "failed" ||
+			observation?.execution === "timed_out" ||
+			observation?.outcome === "failed",
+	);
 	const summary = buildToolSummary({
 		toolName,
 		input: payload?.input,
 		result: payload?.result,
-		isError: Boolean(payload?.isError),
+		isError: failed,
 		inProgress,
 	});
-	return { message, payload, toolName, inProgress, summary };
+	return { message, payload, toolName, inProgress, failed, summary };
 }

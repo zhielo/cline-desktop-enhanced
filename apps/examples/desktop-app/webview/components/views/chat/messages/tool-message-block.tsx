@@ -86,7 +86,7 @@ const ToolCallRow = memo(function ToolCallRow({
 	onExpandImage?: (image: ChatMessageImage) => void;
 	onProceedWhileRunning?: ProceedWhileRunningHandler;
 }) {
-	const { payload, toolName, inProgress, summary } = useMemo(
+	const { payload, toolName, inProgress, failed, summary } = useMemo(
 		() => buildToolPresentation(message),
 		[message],
 	);
@@ -234,7 +234,7 @@ const ToolCallRow = memo(function ToolCallRow({
 			? nativeExecutionFailure(payload?.result)
 			: null;
 	const hasError = Boolean(
-		payload?.isError ||
+		failed ||
 			nativeFailure ||
 			outcome === "failed" ||
 			observation?.execution === "failed" ||

@@ -187,3 +187,76 @@ describe("buildGroupedToolLabel over presentations", () => {
 		).toBe("Read 2 files · Running 1 command");
 	});
 });
+
+describe("host-owned tool lifecycle", () => {
+	const message: ChatMessage = {
+		id: "m",
+		sessionId: "s",
+		role: "tool",
+		createdAt: 1,
+		content: JSON.stringify({
+			toolName: "run_commands",
+			input: { commands: ["test"] },
+			result: null,
+		}),
+		meta: {
+			toolName: "run_commands",
+			toolCallId: "call",
+			hookEventName: "tool_call_start",
+		},
+	};
+	it("does not keep a failed or completed host event spinning because a payload is stale", () => {
+		for (const type of ["tool.failed", "tool.completed"] as const) {
+			const p = buildToolPresentation({
+				...message,
+				meta: {
+					...message.meta,
+					taskEvent: { type, toolCallId: "call", toolName: "run_commands" },
+				},
+			});
+			expect(p.inProgress).toBe(false);
+			expect(p.failed).toBe(type === "tool.failed");
+		}
+	});
+	it("does not join a foreign call's terminal event", () => {
+		expect(
+			buildToolPresentation({
+				...message,
+				meta: {
+					...message.meta,
+					taskEvent: {
+						type: "tool.completed",
+						toolCallId: "foreign",
+						toolName: "run_commands",
+					},
+				},
+			}).inProgress,
+		).toBe(true);
+	});
+	it("uses a bound terminal receipt without reviving its stale start payload", () => {
+		const p = buildToolPresentation({
+			...message,
+			meta: {
+				...message.meta,
+				taskEvent: {
+					type: "tool.completed",
+					toolCallId: "call",
+					toolName: "run_commands",
+					observation: {
+						version: "task-observation/v1",
+						id: "receipt",
+						sessionId: "s",
+						toolCallId: "call",
+						toolName: "run_commands",
+						execution: "failed",
+						outcome: "unverified",
+						source: "host-tool",
+						recordedAtMs: 20,
+					},
+				},
+			},
+		});
+		expect(p.inProgress).toBe(false);
+		expect(p.failed).toBe(true);
+	});
+});
