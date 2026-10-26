@@ -892,6 +892,15 @@ function ChatMessagesImpl({
 												);
 											}
 											if (item.type === "work") {
+												if (fullActivity)
+													return (
+														<div
+															key={`activity_work_${item.id}`}
+															className="flex min-w-0 flex-col gap-1"
+														>
+															{item.items.map(renderWorkingRow)}
+														</div>
+													);
 												return (
 													<WorkBlock
 														id={item.id}

@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
+import { TaskReportPanel } from "./task-report-panel";
 import { TaskReportDetails, ChatReports } from "./task-report-details";
 import { AnalysisResultView } from "./analysis-result-view";
 let container: HTMLDivElement;
@@ -181,4 +182,53 @@ describe("bounded report navigation", () => {
 		).toHaveLength(0);
 		expect(container.querySelectorAll("details")).toHaveLength(5);
 	});
+});
+
+it("keeps task header execution separate from an evidence-verified outcome", async () => {
+	const report = {
+		...longReport(),
+		mode: "plan" as const,
+		goal: "Declared scope",
+		planId: "plan",
+		steps: [
+			{
+				id: "step",
+				label: "Check",
+				kind: "work" as const,
+				status: "completed" as const,
+				validationScope: "scope",
+			},
+		],
+		completedCount: 1,
+		evidence: [
+			{
+				id: "check",
+				label: "Check",
+				toolName: "task_validation",
+				status: "completed" as const,
+				createdAt: 20,
+				observation: {
+					version: "task-observation/v1" as const,
+					id: "check",
+					sessionId: "s",
+					toolCallId: "check",
+					toolName: "task_validation",
+					source: "host-validation" as const,
+					execution: "finished" as const,
+					outcome: "bounded-checks-passed" as const,
+					checkCount: 1,
+					planId: "plan",
+					stepId: "step",
+					validationScope: "scope",
+					recordedAtMs: 20,
+				},
+			},
+		],
+	};
+	await act(async () =>
+		root.render(<TaskReportPanel report={report} status="running" />),
+	);
+	expect(container.textContent).toContain("Running");
+	expect(container.textContent).toContain("Declared checks passed");
+	expect(container.textContent).not.toContain("outcome unverified");
 });

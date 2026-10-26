@@ -2754,3 +2754,47 @@ describe("task workspace destinations", () => {
 		expect(onApproveToolApproval).not.toHaveBeenCalled();
 	});
 });
+
+it("shows completed-run activity without losing its chat disclosure choice", async () => {
+	const messages: ChatMessage[] = [
+		{
+			id: "u",
+			sessionId: "session-1",
+			role: "user",
+			content: "Inspect",
+			createdAt: 1,
+		},
+		...Array.from(
+			{ length: 3 },
+			(_, i): ChatMessage => ({
+				id: `t${i}`,
+				sessionId: "session-1",
+				role: "tool",
+				createdAt: i + 2,
+				content: JSON.stringify({
+					toolName: "read_files",
+					input: { paths: ["a.ts"] },
+					result: { ok: true },
+				}),
+			}),
+		),
+		{
+			id: "answer",
+			sessionId: "session-1",
+			role: "assistant",
+			content: "Inspection recorded. Outcome not verified.",
+			createdAt: 10,
+		},
+	];
+	await renderMessages(messages, { status: "completed" });
+	expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(0);
+	const nav = container.querySelector('[aria-label="Task destinations"]')!;
+	const destination = (label: string) =>
+		[...nav.querySelectorAll<HTMLButtonElement>("button")].find(
+			(button) => button.textContent === label,
+		)!;
+	await act(async () => destination("Activity").click());
+	expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(3);
+	await act(async () => destination("Chat").click());
+	expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(0);
+});

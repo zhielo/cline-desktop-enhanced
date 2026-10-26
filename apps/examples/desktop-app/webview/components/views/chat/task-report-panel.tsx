@@ -26,6 +26,7 @@ import {
 	type TaskReportStepStatus,
 } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
+import { taskOutcomeTone } from "@/lib/task-presentation";
 import { taskReportView, isTaskActive } from "@/lib/task-report-view";
 
 function statusIcon(status: TaskReportStepStatus) {
@@ -57,46 +58,6 @@ function evidenceIcon(status: TaskEvidenceStatus) {
 		case "completed":
 			return <CheckCircle2 className="size-3.5 text-blue-500" />;
 	}
-}
-
-function reportState(report: SessionTaskReport, status?: ChatSessionStatus) {
-	if (status === "failed" || status === "error") {
-		return { label: "Failed", tone: "destructive" as const };
-	}
-	if (status === "cancelled") {
-		return { label: "Cancelled", tone: "muted" as const };
-	}
-	if (report.repair?.state === "blocked") {
-		return { label: "Blocked", tone: "destructive" as const };
-	}
-	if (report.repair?.state === "repairing") {
-		return { label: "Repairing", tone: "warning" as const };
-	}
-	if (report.repair?.state === "verifying") {
-		return { label: "Verifying", tone: "warning" as const };
-	}
-	if (
-		report.mode === "plan" &&
-		report.steps.length > 0 &&
-		report.completedCount === report.steps.length
-	) {
-		return {
-			label: "Plan finished · outcome unverified",
-			tone: "warning" as const,
-		};
-	}
-	if (
-		status === "running" ||
-		status === "starting" ||
-		report.steps.some((step) => step.status === "in_progress") ||
-		report.evidence.some((item) => item.status === "running")
-	) {
-		return { label: "Executing", tone: "active" as const };
-	}
-	if (report.mode === "activity") {
-		return { label: "Activity", tone: "muted" as const };
-	}
-	return { label: "Planned", tone: "muted" as const };
 }
 
 function stepTone(step: TaskReportStep) {
@@ -157,9 +118,18 @@ export function TaskReportPanel({
 		[report.activeStepId, report.steps],
 	);
 	const view = taskReportView(report, status);
-	const state = !isTaskActive(status)
-		? { label: `${view.execution} · ${view.outcome}`, tone: "muted" as const }
-		: reportState(report, status);
+	const outcomeTone = taskOutcomeTone(view.outcome);
+	const state = {
+		label: view.execution,
+		tone:
+			outcomeTone === "failed"
+				? ("destructive" as const)
+				: outcomeTone === "attention"
+					? ("warning" as const)
+					: isTaskActive(status)
+						? ("active" as const)
+						: ("muted" as const),
+	};
 	const latestActivity =
 		report.evidence.find((item) => item.status === "running") ??
 		report.evidence[0];

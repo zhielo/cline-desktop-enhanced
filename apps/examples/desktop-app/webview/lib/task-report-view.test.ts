@@ -232,3 +232,32 @@ describe("complete available evidence exports", () => {
 		).toBe("e224");
 	});
 });
+
+it("downgrades adverse host execution receipts even when their outcome field is unverified", () => {
+	for (const execution of [
+		"failed",
+		"timed_out",
+		"blocked",
+		"cancelled",
+	] as const) {
+		const r = checked();
+		r.evidence.push({
+			id: "adverse",
+			label: "Other tool",
+			status: "completed",
+			toolName: "read_files",
+			createdAt: 30,
+			observation: {
+				...receipt,
+				id: "adverse",
+				toolCallId: "adverse",
+				source: "host-tool",
+				execution,
+				outcome: "unverified",
+			},
+		});
+		expect(taskReportView(r, "completed").outcome).not.toBe(
+			"Declared checks passed",
+		);
+	}
+});

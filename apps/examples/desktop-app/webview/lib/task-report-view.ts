@@ -104,15 +104,25 @@ export function taskReportView(
 		status === "error" ||
 		status === "failed" ||
 		currentEvidence.some(
-			(e) => e.status === "failed" || e.observation?.outcome === "failed",
+			(e) =>
+				e.status === "failed" ||
+				e.observation?.outcome === "failed" ||
+				e.observation?.execution === "failed" ||
+				e.observation?.execution === "timed_out",
 		);
 	const partial = currentEvidence.some(
-		(e) => e.outcome === "partial" || e.outcome === "inconclusive",
+		(e) =>
+			e.outcome === "partial" ||
+			e.outcome === "inconclusive" ||
+			e.observation?.execution === "cancelled",
 	);
 	const blocked =
 		steps.some(
 			(s) => s.status === "blocked" || s.status === "waiting_for_user",
-		) || currentEvidence.some((e) => e.outcome === "blocked");
+		) ||
+		currentEvidence.some(
+			(e) => e.outcome === "blocked" || e.observation?.execution === "blocked",
+		);
 	const outcome = failed
 		? "Failed checks / unverified outcome"
 		: status === "cancelled"
