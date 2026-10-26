@@ -37,29 +37,28 @@ export function resolveClineAccountTelemetryIdentity(
  * without making their own account API request.
  */
 export function persistClineAccountTelemetryIdentity(
-	manager: Pick<
-		ProviderSettingsManager,
-		"getProviderSettings" | "saveProviderSettings"
-	>,
+	manager: Pick<ProviderSettingsManager, "updateProviderSettings">,
 	identity: ClineAccountTelemetryIdentity,
 ): boolean {
 	try {
-		const persisted = manager.getProviderSettings("cline");
-		if (!persisted) return false;
-		manager.saveProviderSettings(
-			{
-				...persisted,
-				auth: {
-					...persisted.auth,
-					accountId: identity.id,
-					organizationId: identity.organizationId,
-					organizationName: identity.organizationName,
-					memberId: identity.memberId,
-				},
+		const updated = manager.updateProviderSettings(
+			"cline",
+			(persisted) => {
+				if (!persisted) return undefined;
+				return {
+					...persisted,
+					auth: {
+						...persisted.auth,
+						accountId: identity.id,
+						organizationId: identity.organizationId,
+						organizationName: identity.organizationName,
+						memberId: identity.memberId,
+					},
+				};
 			},
 			{ setLastUsed: false },
 		);
-		return true;
+		return updated !== undefined;
 	} catch {
 		// Account display and telemetry must continue if settings are read-only.
 		return false;

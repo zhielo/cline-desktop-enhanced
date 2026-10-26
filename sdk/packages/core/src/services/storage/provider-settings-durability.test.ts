@@ -183,3 +183,63 @@ describe("real provider settings process coordination", () => {
 		}
 	});
 });
+
+describe("atomic provider patches", () => {
+	it("preserves record metadata and untouched credential fields", () => {
+		const filePath = fixture(),
+			manager = new ProviderSettingsManager({ filePath });
+		manager.saveProviderSettings(
+			{ provider: "openai", model: "old", apiKey: "synthetic-only" },
+			{ tokenSource: "oauth" },
+		);
+		const patched = manager.updateProviderSettings(
+			"openai",
+			(current) => ({ ...current, provider: "openai", model: "new" }),
+			{ setLastUsed: false },
+		);
+		expect(patched).toMatchObject({
+			provider: "openai",
+			model: "new",
+			apiKey: "synthetic-only",
+		});
+		expect(manager.read().providers.openai?.tokenSource).toBe("oauth");
+		expect(manager.read().lastUsedProvider).toBe("openai");
+	});
+	it("declines stale mutations without rewriting file bytes", () => {
+		const filePath = fixture(),
+			manager = new ProviderSettingsManager({ filePath });
+		expect(
+			manager.updateProviderSettings("openai", () => undefined),
+		).toBeUndefined();
+		manager.saveProviderSettings({ provider: "openai", model: "fixture" });
+		const original = readFileSync(filePath);
+		expect(
+			manager.updateProviderSettings("openai", () => undefined),
+		).toBeUndefined();
+		expect(readFileSync(filePath)).toEqual(original);
+		expect(() =>
+			manager.updateProviderSettings("openai", () => ({
+				provider: "anthropic",
+			})),
+		).toThrow(/provider identity/);
+		expect(readFileSync(filePath)).toEqual(original);
+	});
+	it("preserves two independent field streams for the same provider across real processes", async () => {
+		const filePath = fixture(),
+			source = fileURLToPath(
+				new URL("./provider-settings-manager.ts", import.meta.url),
+			);
+		const script = (field: string) =>
+			`import {ProviderSettingsManager} from ${JSON.stringify(source)};const manager=new ProviderSettingsManager({filePath:${JSON.stringify(filePath)}});for(let i=0;i<16;i++)manager.updateProviderSettings("openai",current=>({...current,provider:"openai",[${JSON.stringify(field)}]:${field === "model" ? '"fixture-"+i' : '"https://fixture-"+i+".invalid/v1"'}}));`;
+		await Promise.all([
+			completed(child(script("model"), filePath)),
+			completed(child(script("baseUrl"), filePath)),
+		]);
+		expect(
+			new ProviderSettingsManager({ filePath }).getProviderSettings("openai"),
+		).toMatchObject({
+			model: "fixture-15",
+			baseUrl: "https://fixture-15.invalid/v1",
+		});
+	});
+});

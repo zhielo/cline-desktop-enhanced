@@ -38,6 +38,17 @@ vi.mock("@cline/core", async () => {
 		ProviderSettingsManager: class {
 			getProviderSettings = getProviderSettingsMock;
 			saveProviderSettings = persistProviderSettingsMock;
+			updateProviderSettings: InstanceType<
+				typeof actual.ProviderSettingsManager
+			>["updateProviderSettings"] = (providerId, mutator, options) => {
+				const next = mutator(getProviderSettingsMock(providerId));
+				if (next !== undefined) persistProviderSettingsMock(next, options);
+				return next as ReturnType<
+					InstanceType<
+						typeof actual.ProviderSettingsManager
+					>["updateProviderSettings"]
+				>;
+			};
 		},
 		saveLocalProviderSettings: saveProviderSettingsMock,
 		RuntimeOAuthTokenManager: class {

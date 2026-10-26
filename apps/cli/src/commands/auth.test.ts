@@ -9,6 +9,32 @@ import {
 	saveOAuthProviderSettings,
 } from "./auth";
 
+// Models the transaction callback contract; real locking is covered by SDK integration tests.
+function withTransactionalProviderFixture<
+	T extends Pick<
+		ProviderSettingsManager,
+		"getProviderSettings" | "saveProviderSettings"
+	>,
+>(manager: T) {
+	return {
+		...manager,
+		updateProviderSettings: (
+			providerId: string,
+			mutator: Parameters<ProviderSettingsManager["updateProviderSettings"]>[1],
+			options: Parameters<
+				ProviderSettingsManager["updateProviderSettings"]
+			>[2] = {},
+		) => {
+			const proposed = mutator(manager.getProviderSettings(providerId));
+			if (proposed === undefined) return undefined;
+			manager.saveProviderSettings(proposed, options);
+			return proposed as NonNullable<
+				ReturnType<ProviderSettingsManager["getProviderSettings"]>
+			>;
+		},
+	};
+}
+
 describe("parseAuthCommandArgs", () => {
 	it("parses Azure API version quick setup option", () => {
 		expect(
@@ -37,9 +63,10 @@ describe("parseAuthCommandArgs", () => {
 describe("saveOAuthProviderSettings", () => {
 	it("preserves existing manual apiKey while updating OAuth tokens", () => {
 		const save = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			saveProviderSettings: save,
-		} as unknown as ProviderSettingsManager;
+			getProviderSettings: vi.fn(),
+		}) as unknown as ProviderSettingsManager;
 
 		const merged = saveOAuthProviderSettings(
 			manager,

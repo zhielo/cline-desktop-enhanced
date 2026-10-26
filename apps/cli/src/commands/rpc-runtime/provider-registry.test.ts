@@ -5,10 +5,36 @@ import {
 } from "@cline/core";
 import { describe, expect, it, vi } from "vitest";
 
+// Models the transaction callback contract; real locking is covered by SDK integration tests.
+function withTransactionalProviderFixture<
+	T extends Pick<
+		ProviderSettingsManager,
+		"getProviderSettings" | "saveProviderSettings"
+	>,
+>(manager: T) {
+	return {
+		...manager,
+		updateProviderSettings: (
+			providerId: string,
+			mutator: Parameters<ProviderSettingsManager["updateProviderSettings"]>[1],
+			options: Parameters<
+				ProviderSettingsManager["updateProviderSettings"]
+			>[2] = {},
+		) => {
+			const proposed = mutator(manager.getProviderSettings(providerId));
+			if (proposed === undefined) return undefined;
+			manager.saveProviderSettings(proposed, options);
+			return proposed as NonNullable<
+				ReturnType<ProviderSettingsManager["getProviderSettings"]>
+			>;
+		},
+	};
+}
+
 describe("saveLocalProviderSettings", () => {
 	it("ignores null apiKey/baseUrl updates", () => {
 		const save = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			read: vi.fn().mockReturnValue({
 				providers: {},
 			}),
@@ -20,7 +46,7 @@ describe("saveLocalProviderSettings", () => {
 				baseUrl: "https://api.example.com",
 			}),
 			saveProviderSettings: save,
-		};
+		});
 
 		saveLocalProviderSettings(
 			manager as unknown as ProviderSettingsManager,
@@ -45,7 +71,7 @@ describe("saveLocalProviderSettings", () => {
 
 	it("clears apiKey/baseUrl when explicit blank strings are provided", () => {
 		const save = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			read: vi.fn().mockReturnValue({
 				providers: {},
 			}),
@@ -57,7 +83,7 @@ describe("saveLocalProviderSettings", () => {
 				baseUrl: "https://api.example.com",
 			}),
 			saveProviderSettings: save,
-		};
+		});
 
 		saveLocalProviderSettings(
 			manager as unknown as ProviderSettingsManager,
@@ -80,7 +106,7 @@ describe("saveLocalProviderSettings", () => {
 
 	it("merges and clears Azure provider settings", () => {
 		const save = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			read: vi.fn().mockReturnValue({
 				providers: {},
 			}),
@@ -94,7 +120,7 @@ describe("saveLocalProviderSettings", () => {
 				},
 			}),
 			saveProviderSettings: save,
-		};
+		});
 
 		saveLocalProviderSettings(
 			manager as unknown as ProviderSettingsManager,
@@ -148,7 +174,7 @@ describe("saveLocalProviderSettings", () => {
 
 	it("keeps OAuth auth fields when updating manual apiKey", () => {
 		const save = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			read: vi.fn().mockReturnValue({
 				providers: {},
 			}),
@@ -164,7 +190,7 @@ describe("saveLocalProviderSettings", () => {
 				},
 			}),
 			saveProviderSettings: save,
-		};
+		});
 
 		saveLocalProviderSettings(
 			manager as unknown as ProviderSettingsManager,

@@ -1,3 +1,4 @@
+import type { ProviderSettingsManager } from "../services/storage/provider-settings-manager";
 import { describe, expect, it, vi } from "vitest";
 import {
 	persistClineAccountTelemetryIdentity,
@@ -17,6 +18,33 @@ function createUser(
 		updatedAt: "",
 		organizations: [],
 		...overrides,
+	};
+}
+
+// This lightweight unit fixture models the new transactional callback contract.
+// Cross-process locking and fresh-disk behavior use real managers in integration tests.
+function withTransactionalProviderFixture<
+	T extends Pick<
+		ProviderSettingsManager,
+		"getProviderSettings" | "saveProviderSettings"
+	>,
+>(manager: T) {
+	return {
+		...manager,
+		updateProviderSettings: (
+			providerId: string,
+			mutator: Parameters<ProviderSettingsManager["updateProviderSettings"]>[1],
+			options: Parameters<
+				ProviderSettingsManager["updateProviderSettings"]
+			>[2] = {},
+		) => {
+			const proposed = mutator(manager.getProviderSettings(providerId));
+			if (proposed === undefined) return undefined;
+			manager.saveProviderSettings(proposed, options);
+			return proposed as NonNullable<
+				ReturnType<ProviderSettingsManager["getProviderSettings"]>
+			>;
+		},
 	};
 }
 
@@ -48,13 +76,13 @@ describe("Cline account telemetry identity", () => {
 
 	it("persists organization context for detached runtimes", () => {
 		const saveProviderSettings = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			getProviderSettings: vi.fn(() => ({
 				provider: "cline" as const,
 				auth: { accountId: "user-1", accessToken: "secret" },
 			})),
 			saveProviderSettings,
-		};
+		});
 		const identity = resolveClineAccountTelemetryIdentity(
 			createUser({
 				organizations: [
@@ -87,13 +115,13 @@ describe("Cline account telemetry identity", () => {
 
 	it("replaces stale persisted account identity after an account switch", () => {
 		const saveProviderSettings = vi.fn();
-		const manager = {
+		const manager = withTransactionalProviderFixture({
 			getProviderSettings: vi.fn(() => ({
 				provider: "cline" as const,
 				auth: { accountId: "old-user", accessToken: "secret" },
 			})),
 			saveProviderSettings,
-		};
+		});
 
 		persistClineAccountTelemetryIdentity(manager, {
 			id: "new-user",

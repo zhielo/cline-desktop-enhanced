@@ -1,3 +1,7 @@
+import {
+	authSettingsEqual,
+	providerAuthContextEqual,
+} from "../../auth/provider-auth-state";
 import type { ITelemetryService } from "@cline/shared";
 import {
 	getProviderAuthHandler,
@@ -10,24 +14,6 @@ import type { ProviderSettings } from "../../types/provider-settings";
 import { withOAuthRefreshLock } from "./oauth-refresh-lock";
 
 type ManagedOAuthProviderId = string;
-
-function authSettingsEqual(
-	a: ProviderSettings["auth"] | undefined,
-	b: ProviderSettings["auth"] | undefined,
-): boolean {
-	const aExpiry = (
-		a as (ProviderSettings["auth"] & { expiresAt?: number }) | undefined
-	)?.expiresAt;
-	const bExpiry = (
-		b as (ProviderSettings["auth"] & { expiresAt?: number }) | undefined
-	)?.expiresAt;
-	return (
-		a?.accessToken === b?.accessToken &&
-		a?.refreshToken === b?.refreshToken &&
-		a?.accountId === b?.accountId &&
-		aExpiry === bExpiry
-	);
-}
 
 export class OAuthReauthRequiredError extends Error {
 	public readonly providerId: ManagedOAuthProviderId;
@@ -160,40 +146,41 @@ export class RuntimeOAuthTokenManager {
 			forceRefresh,
 			telemetry: this.telemetry,
 		});
-		// A settings write (sign-out or a new sign-in) need not wait for an
-		// HTTP refresh. Never resurrect/overwrite credentials it replaced.
-		const latestSettings =
-			this.providerSettingsManager.getProviderSettings(storageProviderId);
-		if (!authSettingsEqual(settings.auth, latestSettings?.auth)) {
-			return null;
-		}
-		if (!nextCredentials) {
-			sdkDebug(
-				`oauth.resolve providerId=${providerId} outcome=refresh_returned_null`,
-			);
-			throw new OAuthReauthRequiredError(providerId);
-		}
-
-		const nextSettings: ProviderSettings = saveProviderOAuthCredentials({
-			manager: this.providerSettingsManager,
-			providerId,
-			settings: { ...settings, ...latestSettings },
-			credentials: nextCredentials,
-			setLastUsed: false,
-			save: false,
-		});
-		const wasRefreshed = !authSettingsEqual(settings.auth, nextSettings.auth);
-		if (wasRefreshed) {
-			sdkDebug(
-				`oauth.resolve.refreshed providerId=${providerId} newAccessTokenHash=${hashSecret(nextCredentials.access)} newRefreshTokenHash=${hashSecret(nextCredentials.refresh)} savingToDisk=true`,
-			);
-			this.providerSettingsManager.saveProviderSettings(nextSettings, {
-				setLastUsed: false,
-				tokenSource: "oauth",
-			});
-		} else {
-			sdkDebug(`oauth.resolve providerId=${providerId} outcome=not_refreshed`);
-		}
+		// Compare the credentials and merge only under the settings transaction.
+		// A check followed by a separate save would still permit sign-out/new-login
+		// to race between those operations and resurrect an obsolete credential.
+		let resolvedSettings: ProviderSettings | undefined;
+		let wasRefreshed = false;
+		const saved = this.providerSettingsManager.updateProviderSettings(
+			storageProviderId,
+			(latestSettings) => {
+				if (
+					!latestSettings ||
+					!providerAuthContextEqual(settings, latestSettings)
+				)
+					return undefined;
+				if (!nextCredentials) throw new OAuthReauthRequiredError(providerId);
+				resolvedSettings = saveProviderOAuthCredentials({
+					manager: this.providerSettingsManager,
+					providerId,
+					settings: latestSettings,
+					credentials: nextCredentials,
+					setLastUsed: false,
+					save: false,
+				});
+				wasRefreshed = !authSettingsEqual(
+					latestSettings.auth,
+					resolvedSettings.auth,
+				);
+				return wasRefreshed ? resolvedSettings : undefined;
+			},
+			{ setLastUsed: false, tokenSource: "oauth" },
+		);
+		const nextSettings = saved ?? resolvedSettings;
+		if (!nextSettings || !nextCredentials) return null;
+		sdkDebug(
+			`oauth.resolve providerId=${providerId} outcome=${wasRefreshed ? "refreshed" : "not_refreshed"}`,
+		);
 
 		return {
 			apiKey: handler.getApiKey(nextSettings) ?? nextCredentials.access,
