@@ -1,4 +1,7 @@
 "use client";
+import { processContext } from "./process-context";
+import { toolExecutionState } from "@/lib/task-presentation";
+import { useActivityDisclosure } from "../activity-presentation";
 
 import { GeneratedMediaContent } from "@cline/ui";
 import {
@@ -9,10 +12,13 @@ import {
 	ToolActivityTrigger,
 } from "@cline/ui/components/agent-chat";
 import { ToolFileDiff } from "@cline/ui/components/agent-chat/tool-diff";
-import type { ToolLabelPart, ToolSummaryItem } from "@cline/ui/components/agent-chat/tool-summary";
+import type {
+	ToolLabelPart,
+	ToolSummaryItem,
+} from "@cline/ui/components/agent-chat/tool-summary";
 import Ansi from "ansi-to-react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	type ChatMessage,
@@ -26,7 +32,10 @@ import {
 	nativeExecutionFailure,
 } from "@/lib/native-tool-progress";
 import { cn } from "@/lib/utils";
-import { TaskObservationSchema, reportedOutcome } from "../../../../../shared/task-observation";
+import {
+	TaskObservationSchema,
+	reportedOutcome,
+} from "../../../../../shared/task-observation";
 import { MemoizedMarkdown } from "../../../ui/markdown";
 import { CodeChangePreview } from "./code-change-preview";
 import { IS_DEBUG, STREAMING_TITLE_CLASS } from "./constants";
@@ -77,14 +86,26 @@ const ToolCallRow = memo(function ToolCallRow({
 	onExpandImage?: (image: ChatMessageImage) => void;
 	onProceedWhileRunning?: ProceedWhileRunningHandler;
 }) {
-	const { payload, toolName, inProgress, summary } =
-		buildToolPresentation(message);
+	const { payload, toolName, inProgress, failed, summary } = useMemo(
+		() => buildToolPresentation(message),
+		[message],
+	);
 	// A missing result can outlive its run. Only gate the running display;
 	// keep the message intact so a later result can still replace it.
 	const isRunning = inProgress && isRunActive;
-    const receipt=TaskObservationSchema.safeParse(message.meta?.taskEvent?.observation);
-    const observation=receipt.success && receipt.data.sessionId===message.sessionId && receipt.data.toolCallId===message.meta?.toolCallId && receipt.data.toolName===String(message.meta?.toolName??payload?.toolName??"") ? receipt.data : undefined;
-    const outcome=observation?.outcome??reportedOutcome(payload?.result);
+	const receipt = TaskObservationSchema.safeParse(
+		message.meta?.taskEvent?.observation,
+	);
+	const observation =
+		receipt.success &&
+		receipt.data.sessionId === message.sessionId &&
+		receipt.data.toolCallId === message.meta?.toolCallId &&
+		receipt.data.toolName ===
+			String(message.meta?.toolName ?? payload?.toolName ?? "")
+			? receipt.data
+			: undefined;
+	const outcome = observation?.outcome ?? reportedOutcome(payload?.result);
+	const recordedProcess = processContext(message);
 	const isCommand = summary.kind === "command";
 	// submit_and_exit carries the run's final answer (scheduled tasks end with
 	// it), so surface it expanded and rendered as markdown rather than leaving
@@ -131,9 +152,12 @@ const ToolCallRow = memo(function ToolCallRow({
 			toolSessionId &&
 			onProceedWhileRunning,
 	);
-	type FileItem = Extract<ToolSummaryItem,{type:"file"}>;
- type FileDiff = {key:string;item:FileItem} & ({kind:"rich";hunk:{oldText:string;newText:string}}|{kind:"text";hunk:null});
- const fileDiffs = summary.items.flatMap<FileDiff>((item, index) => {
+	type FileItem = Extract<ToolSummaryItem, { type: "file" }>;
+	type FileDiff = { key: string; item: FileItem } & (
+		| { kind: "rich"; hunk: { oldText: string; newText: string } }
+		| { kind: "text"; hunk: null }
+	);
+	const fileDiffs = summary.items.flatMap<FileDiff>((item, index) => {
 		if (item.type !== "file") return [];
 		const hunks =
 			item.hunks ??
@@ -159,7 +183,6 @@ const ToolCallRow = memo(function ToolCallRow({
 				]
 			: [];
 	});
-	const hasFileDiffs = fileDiffs.length > 0;
 	const outputImages = summary.outputMedia.flatMap((media, index) => {
 		if (media.modality !== "image") return [];
 		const image = ChatMessageImageSchema.safeParse({
@@ -173,21 +196,22 @@ const ToolCallRow = memo(function ToolCallRow({
 		(media) => media.modality !== "image",
 	);
 	const shouldAutoOpen =
-		hasFileDiffs ||
 		Boolean(submitText) ||
 		summary.outputMedia.length > 0 ||
 		(inProgress && (Boolean(commandOutput) || canProceed));
-	const [open, setOpen] = useState(shouldAutoOpen);
-	const [userToggled, setUserToggled] = useState(false);
+	const [open, setOpen] = useActivityDisclosure(
+		message.sessionId,
+		`tool:${message.id}`,
+		shouldAutoOpen,
+	);
 	const [isProceeding, setIsProceeding] = useState(false);
 	const [proceedError, setProceedError] = useState<string | null>(null);
-	useEffect(() => {
-		if (shouldAutoOpen && !userToggled) setOpen(true);
-	}, [shouldAutoOpen, userToggled]);
-	const handleOpenChange = useCallback((nextOpen: boolean) => {
-		setUserToggled(true);
-		setOpen(nextOpen);
-	}, []);
+	const handleOpenChange = useCallback(
+		(nextOpen: boolean) => {
+			setOpen(nextOpen);
+		},
+		[setOpen],
+	);
 	const handleProceedWhileRunning = useCallback(async () => {
 		if (!onProceedWhileRunning || !toolSessionId || isProceeding) return;
 		setIsProceeding(true);
@@ -209,7 +233,18 @@ const ToolCallRow = memo(function ToolCallRow({
 		toolName === "reverse_engineer" && !inProgress
 			? nativeExecutionFailure(payload?.result)
 			: null;
-	const hasError = Boolean(payload?.isError || nativeFailure || outcome==="failed");
+	const hasError = Boolean(
+		failed ||
+			nativeFailure ||
+			outcome === "failed" ||
+			observation?.execution === "failed" ||
+			observation?.execution === "timed_out",
+	);
+	const execution = toolExecutionState({
+		running: isRunning,
+		missingReceipt: inProgress,
+		failed: hasError,
+	});
 	const Icon = getToolNameIcon(toolName);
 	const details = summary.details.map((detail, index) => ({
 		detail,
@@ -249,10 +284,22 @@ const ToolCallRow = memo(function ToolCallRow({
 				label={
 					<>
 						<ToolLabel isRunning={isRunning} parts={labelParts} />
-                        {!isSubmit&&<span className="ml-2 text-[10px] text-muted-foreground" data-testid="tool-outcome-status">{isRunning?"Running":inProgress?"No terminal receipt":hasError?"Failed":`Tool finished · ${outcome}`}{observation?.durationMs!==undefined?` · ${(observation.durationMs/1000).toFixed(1)}s`:""}</span>}
+						{!isSubmit && (
+							<span
+								className="ml-2 text-sm font-normal text-muted-foreground"
+								data-testid="tool-outcome-status"
+							>
+								{execution.status === "finished" && !inProgress
+									? `${execution.label} · ${outcome}`
+									: execution.label}
+								{observation?.durationMs !== undefined
+									? ` · ${(observation.durationMs / 1000).toFixed(1)}s`
+									: ""}
+							</span>
+						)}
 						{nativeProgress && (
 							<span
-								className="ml-2 text-xs text-muted-foreground"
+								className="ml-2 text-sm text-muted-foreground"
 								data-testid="ida-live-tool-progress"
 							>
 								{isRunning
@@ -262,17 +309,29 @@ const ToolCallRow = memo(function ToolCallRow({
 						)}
 					</>
 				}
-				showDisclosureIcon={false}
-				status={hasError ? "error" : isRunning ? "running" : "success"}
+				showDisclosureIcon={true}
+				status={execution.status}
 			/>
+			{recordedProcess && (
+				<p
+					className="px-2 pb-1 text-sm text-muted-foreground break-words"
+					data-testid="recorded-process-context"
+				>
+					Process {recordedProcess.action} ·{" "}
+					{recordedProcess.id ?? "ID unavailable"}
+					{recordedProcess.executable ? ` · ${recordedProcess.executable}` : ""}
+					{recordedProcess.cwd ? ` · ${recordedProcess.cwd}` : ""}
+					{" · Recorded context, not current liveness"}
+				</p>
+			)}
 			<ToolActivityContent presentation="rail">
 				{nativeFailure && (
-					<p role="alert" className="text-destructive text-xs">
+					<p role="alert" className="text-destructive text-sm">
 						{nativeFailure}
 					</p>
 				)}
 				{nativeProgressOutput && (
-					<ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">
+					<ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm">
 						{nativeProgressOutput}
 					</ToolActivityCode>
 				)}
@@ -280,7 +339,7 @@ const ToolCallRow = memo(function ToolCallRow({
 					<ToolActivityDetails
 						className={cn(
 							"whitespace-pre-wrap",
-							isCommand && "font-mono text-xs",
+							isCommand && "font-mono text-sm",
 						)}
 					>
 						{details.map(({ detail, key }) => (
@@ -289,30 +348,31 @@ const ToolCallRow = memo(function ToolCallRow({
 					</ToolActivityDetails>
 				) : null}
 
-				{fileDiffs.map((entry) => (
-					<CodeChangePreview
-						key={entry.key}
-						path={entry.item.path}
-						fragment={entry.item.fragment}
-						newText={entry.hunk?.newText}
-						oldText={entry.hunk?.oldText}
-						diff={entry.item.diff}
-					>
-						{entry.kind === "rich" && entry.hunk ? (
-							<ToolFileDiff
-								className="mt-1"
-								fragment={entry.item.fragment}
-								newText={entry.hunk.newText}
-								oldText={entry.hunk.oldText}
-								path={entry.item.path}
-							/>
-						) : (
-							<ToolActivityCode className="mt-1 overflow-x-auto text-xs">
-								{entry.item.diff}
-							</ToolActivityCode>
-						)}
-					</CodeChangePreview>
-				))}
+				{open &&
+					fileDiffs.map((entry) => (
+						<CodeChangePreview
+							key={entry.key}
+							path={entry.item.path}
+							fragment={entry.item.fragment}
+							newText={entry.hunk?.newText}
+							oldText={entry.hunk?.oldText}
+							diff={entry.item.diff}
+						>
+							{entry.kind === "rich" && entry.hunk ? (
+								<ToolFileDiff
+									className="mt-1"
+									fragment={entry.item.fragment}
+									newText={entry.hunk.newText}
+									oldText={entry.hunk.oldText}
+									path={entry.item.path}
+								/>
+							) : (
+								<ToolActivityCode className="mt-1 overflow-x-auto text-sm">
+									{entry.item.diff}
+								</ToolActivityCode>
+							)}
+						</CodeChangePreview>
+					))}
 				{commandOutput ? (
 					<CommandOutputTerminal isRunning={isRunning} output={commandOutput} />
 				) : submitText ? (
@@ -322,7 +382,7 @@ const ToolCallRow = memo(function ToolCallRow({
 						<MemoizedMarkdown content={submitText} />
 					</div>
 				) : summary.outputText ? (
-					<ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+					<ToolActivityCode className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-sm">
 						{summary.outputText}
 					</ToolActivityCode>
 				) : null}
@@ -359,7 +419,7 @@ const ToolCallRow = memo(function ToolCallRow({
 				) : null}
 				{inputPreview ? (
 					<div className="space-y-1">
-						<div className="text-[11px] uppercase tracking-wide text-muted-foreground/80">
+						<div className="text-sm uppercase tracking-wide text-muted-foreground/80">
 							Input
 						</div>
 						<ToolActivityCode className="text-sm">
@@ -386,8 +446,12 @@ const ToolCallRow = memo(function ToolCallRow({
 							) : null}
 							Proceed while running
 						</Button>
+						<p className="text-sm text-muted-foreground">
+							Continue the conversation without waiting. This does not stop or
+							retry the command.
+						</p>
 						{proceedError ? (
-							<div className="text-xs text-destructive">{proceedError}</div>
+							<div className="text-sm text-destructive">{proceedError}</div>
 						) : null}
 					</div>
 				) : null}
@@ -414,13 +478,13 @@ function CommandOutputTerminal({
 
 	return (
 		<div className="mt-2 space-y-1">
-			<div className="text-[11px] uppercase tracking-wide text-muted-foreground/80">
+			<div className="text-sm uppercase tracking-wide text-muted-foreground/80">
 				Output
 			</div>
 			<div
 				aria-label="Command output"
 				aria-live="off"
-				className="cline-command-output max-h-64 overflow-auto rounded-md border border-border/70 bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-100"
+				className="cline-command-output max-h-64 overflow-auto rounded-md border border-border/70 bg-zinc-950 p-3 font-mono text-sm leading-relaxed text-zinc-100"
 				onScroll={(event) => {
 					const container = event.currentTarget;
 					shouldAutoScrollRef.current =

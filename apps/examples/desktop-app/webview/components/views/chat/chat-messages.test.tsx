@@ -253,27 +253,65 @@ describe("ChatMessages tool disclosures", () => {
 		).toBe(false);
 	});
 
-  it("shows explicit IDA phase and deadline while the non-command tool is still running", async () => {
-    const tool: ChatMessage = {id:"ida-running",sessionId:"session-1",role:"tool",createdAt:1,
-      content:JSON.stringify({toolName:"reverse_engineer",input:{engine:"ida",operation:"decompile"},result:null}),
-      meta:{toolName:"reverse_engineer",hookEventName:"tool_call_start",toolOutput:"[IDA progress] running; PID 42; phase: auto-analysis-waiting; elapsed 30s; deadline remaining 270s\n"}};
-    await renderMessages([tool],{status:"running"});
-    const progress=container.querySelector('[data-testid="ida-live-tool-progress"]');
-    expect(progress?.textContent).toContain("auto-analysis-waiting");
-    expect(progress?.textContent).toContain("deadline remaining 270s");
-    await renderMessages([tool],{status:"completed"});
-    expect(container.querySelector('[data-testid="ida-live-tool-progress"]')?.textContent).toContain("Last recorded:");
-  });
+	it("shows explicit IDA phase and deadline while the non-command tool is still running", async () => {
+		const tool: ChatMessage = {
+			id: "ida-running",
+			sessionId: "session-1",
+			role: "tool",
+			createdAt: 1,
+			content: JSON.stringify({
+				toolName: "reverse_engineer",
+				input: { engine: "ida", operation: "decompile" },
+				result: null,
+			}),
+			meta: {
+				toolName: "reverse_engineer",
+				hookEventName: "tool_call_start",
+				toolOutput:
+					"[IDA progress] running; PID 42; phase: auto-analysis-waiting; elapsed 30s; deadline remaining 270s\n",
+			},
+		};
+		await renderMessages([tool], { status: "running" });
+		const progress = container.querySelector(
+			'[data-testid="ida-live-tool-progress"]',
+		);
+		expect(progress?.textContent).toContain("auto-analysis-waiting");
+		expect(progress?.textContent).toContain("deadline remaining 270s");
+		await renderMessages([tool], { status: "completed" });
+		expect(
+			container.querySelector('[data-testid="ida-live-tool-progress"]')
+				?.textContent,
+		).toContain("Last recorded:");
+	});
 
-  it("shows a failed native deadline receipt as unsuccessful rather than a success row", async () => {
-    await renderMessages([{id:"ida-failed",sessionId:"session-1",role:"tool",createdAt:1,
-      content:JSON.stringify({toolName:"reverse_engineer",input:{engine:"ida",operation:"decompile"},result:JSON.stringify({engine:"ida",succeeded:false,timedOut:true})}),
-      meta:{toolName:"reverse_engineer"}}]);
-    const trigger=container.querySelector(".cline-chat-tool-trigger") as HTMLElement | null;
-    await act(async()=>trigger?.click());
-    expect(container.textContent).toContain("Native execution deadline exceeded");
-    expect(container.querySelector(".text-destructive\\/80")).not.toBeNull();
-  });
+	it("shows a failed native deadline receipt as unsuccessful rather than a success row", async () => {
+		await renderMessages([
+			{
+				id: "ida-failed",
+				sessionId: "session-1",
+				role: "tool",
+				createdAt: 1,
+				content: JSON.stringify({
+					toolName: "reverse_engineer",
+					input: { engine: "ida", operation: "decompile" },
+					result: JSON.stringify({
+						engine: "ida",
+						succeeded: false,
+						timedOut: true,
+					}),
+				}),
+				meta: { toolName: "reverse_engineer" },
+			},
+		]);
+		const trigger = container.querySelector(
+			".cline-chat-tool-trigger",
+		) as HTMLElement | null;
+		await act(async () => trigger?.click());
+		expect(container.textContent).toContain(
+			"Native execution deadline exceeded",
+		);
+		expect(container.querySelector(".text-destructive\\/80")).not.toBeNull();
+	});
 
 	it.each([
 		"cancelled",
@@ -624,9 +662,9 @@ describe("ChatMessages tool disclosures", () => {
 			expect(container.textContent).toContain(`Edited file ${path}`);
 		}
 		for (const row of container.querySelectorAll(".cline-chat-tool")) {
-            expect(row.textContent).not.toContain("Edited file ·");
-            expect(row.textContent).not.toContain("Read 2 files ·");
-        }
+			expect(row.textContent).not.toContain("Edited file ·");
+			expect(row.textContent).not.toContain("Read 2 files ·");
+		}
 	});
 
 	it("leads a command row with the action and shows output on expand", async () => {
@@ -652,7 +690,7 @@ describe("ChatMessages tool disclosures", () => {
 		expect(container.textContent).toContain("45 tests passed");
 	});
 
-	it("pre-expands tool groups that contain edit diffs", async () => {
+	it("keeps edit diffs lazy until explicitly opened", async () => {
 		await renderMessages([
 			{
 				id: "edit-open",
@@ -688,13 +726,21 @@ describe("ChatMessages tool disclosures", () => {
 		const [editBlock, readBlock] = [
 			...container.querySelectorAll(".cline-chat-tool"),
 		];
-		// The edit group's diff panel is visible without a click…
+		// Routine diffs stay closed until explicitly reviewed.
+		expect(
+			editBlock
+				?.querySelector(".cline-chat-disclosure-content-motion")
+				?.getAttribute("data-state"),
+		).toBe("closed");
+		await act(async () =>
+			editBlock?.querySelector<HTMLButtonElement>("button")?.click(),
+		);
 		expect(
 			editBlock
 				?.querySelector(".cline-chat-disclosure-content-motion")
 				?.getAttribute("data-state"),
 		).toBe("open");
-		// …while the read group stays collapsed.
+		// The read group stays collapsed.
 		expect(
 			readBlock
 				?.querySelector(".cline-chat-disclosure-content-motion")
@@ -702,7 +748,7 @@ describe("ChatMessages tool disclosures", () => {
 		).toBe("closed");
 	});
 
-	it("opens a streaming group when an edit diff arrives after mount", async () => {
+	it("keeps streaming edit diffs closed until explicitly opened", async () => {
 		const read: ChatMessage = {
 			id: "stream-read",
 			sessionId: "session-1",
@@ -738,6 +784,16 @@ describe("ChatMessages tool disclosures", () => {
 				createdAt: 2,
 			},
 		]);
+		expect(
+			[
+				...container.querySelectorAll(".cline-chat-disclosure-content-motion"),
+			].some((panel) => panel.getAttribute("data-state") === "open"),
+		).toBe(false);
+		const editTrigger = [
+			...container.querySelectorAll<HTMLButtonElement>("button"),
+		].find((button) => button.textContent?.includes("Edited file"));
+		expect(editTrigger).toBeDefined();
+		await act(async () => editTrigger!.click());
 		expect(
 			[
 				...container.querySelectorAll(".cline-chat-disclosure-content-motion"),
@@ -2169,6 +2225,12 @@ describe("ChatMessages work collapse", () => {
 		await renderMessages(completedRun, { status: "running" });
 
 		expect(container.querySelector(".cline-chat-work")).toBeNull();
+		expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(1);
+		const expand = [
+			...container.querySelectorAll<HTMLButtonElement>("button"),
+		].find((button) => button.textContent?.includes("Show routine activity"));
+		expect(expand).toBeDefined();
+		await act(async () => expand!.click());
 		expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(2);
 	});
 
@@ -2598,14 +2660,141 @@ describe("transcript artifact workspace context", () => {
 	});
 });
 
-it("opens read-only Reports and resets its destination when switching sessions",async()=>{
- const onOpenAnalysis=vi.fn(),onProceedWhileRunning=vi.fn();
- const messages:ChatMessage[]=[{id:"u1",sessionId:"session-1",role:"user",content:"Inspect owned report",createdAt:1},{id:"t1",sessionId:"session-1",role:"tool",content:JSON.stringify({toolName:"read_files",result:{status:"partial"}}),createdAt:2,meta:{toolName:"read_files",toolCallId:"r1"}}];
- await renderMessages(messages,{onOpenAnalysis,onProceedWhileRunning});
- const destinations=()=>container.querySelector('[aria-label="Task destinations"]')!;
- const button=(label:string)=>[...destinations().querySelectorAll('button')].find(b=>b.textContent===label)!;
- await act(async()=>button("Reports").click());expect(container.querySelector('[aria-label="Session reports"]')).not.toBeNull();expect(container.textContent).toContain("Partial / unverified");expect(onProceedWhileRunning).not.toHaveBeenCalled();
- await act(async()=>button("Analysis").click());expect(onOpenAnalysis).toHaveBeenCalledOnce();
- await renderMessages(messages.map(m=>({...m,sessionId:"session-2"})),{sessionId:"session-2",onOpenAnalysis,onProceedWhileRunning});
- expect(container.querySelector('[aria-label="Session reports"]')).toBeNull();expect(button("Chat").getAttribute("aria-pressed")).toBe("true");expect(onProceedWhileRunning).not.toHaveBeenCalled();
+it("opens read-only Reports and resets its destination when switching sessions", async () => {
+	const onOpenAnalysis = vi.fn(),
+		onProceedWhileRunning = vi.fn();
+	const messages: ChatMessage[] = [
+		{
+			id: "u1",
+			sessionId: "session-1",
+			role: "user",
+			content: "Inspect owned report",
+			createdAt: 1,
+		},
+		{
+			id: "t1",
+			sessionId: "session-1",
+			role: "tool",
+			content: JSON.stringify({
+				toolName: "read_files",
+				result: { status: "partial" },
+			}),
+			createdAt: 2,
+			meta: { toolName: "read_files", toolCallId: "r1" },
+		},
+	];
+	await renderMessages(messages, { onOpenAnalysis, onProceedWhileRunning });
+	const destinations = () =>
+		container.querySelector('[aria-label="Task destinations"]')!;
+	const button = (label: string) =>
+		[...destinations().querySelectorAll("button")].find(
+			(b) => b.textContent === label,
+		)!;
+	await act(async () => button("Reports").click());
+	expect(
+		container.querySelector('[aria-label="Session reports"]'),
+	).not.toBeNull();
+	expect(container.textContent).toContain("Partial / unverified");
+	expect(onProceedWhileRunning).not.toHaveBeenCalled();
+	await act(async () => button("Analysis").click());
+	expect(onOpenAnalysis).toHaveBeenCalledOnce();
+	await renderMessages(
+		messages.map((m) => ({ ...m, sessionId: "session-2" })),
+		{ sessionId: "session-2", onOpenAnalysis, onProceedWhileRunning },
+	);
+	expect(container.querySelector('[aria-label="Session reports"]')).toBeNull();
+	expect(button("Chat").getAttribute("aria-pressed")).toBe("true");
+	expect(onProceedWhileRunning).not.toHaveBeenCalled();
+});
+
+describe("task workspace destinations", () => {
+	it("keeps all activity and consolidated changes reachable without granting permission", async () => {
+		const messages: ChatMessage[] = [
+			{
+				id: "u",
+				sessionId: "session-1",
+				role: "user",
+				content: "Inspect project",
+				createdAt: 1,
+			},
+			...Array.from({ length: 3 }, (_, i) => ({
+				id: `t${i}`,
+				sessionId: "session-1",
+				role: "tool" as const,
+				createdAt: i + 2,
+				content: JSON.stringify({
+					toolName: "read_files",
+					input: { paths: [`file${i}.ts`] },
+					result: { ok: true },
+				}),
+			})),
+		];
+		const onOpenDiff = vi.fn(),
+			onApproveToolApproval = vi.fn();
+		await renderMessages(messages, {
+			status: "running",
+			onOpenDiff,
+			onApproveToolApproval,
+			fileDiffs: [{ path: "app.ts", additions: 2, deletions: 1, hunks: [] }],
+		});
+		expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(1);
+		const destinations = container.querySelector(
+			'[aria-label="Task destinations"]',
+		)!;
+		const activity = [...destinations.querySelectorAll("button")].find(
+			(button) => button.textContent === "Activity",
+		)!;
+		await act(async () => activity.click());
+		expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(3);
+		const changes = [...destinations.querySelectorAll("button")].find(
+			(button) => button.textContent?.startsWith("Changes"),
+		)!;
+		await act(async () => changes.click());
+		expect(onOpenDiff).toHaveBeenCalledOnce();
+		expect(onApproveToolApproval).not.toHaveBeenCalled();
+	});
+});
+
+it("shows completed-run activity without losing its chat disclosure choice", async () => {
+	const messages: ChatMessage[] = [
+		{
+			id: "u",
+			sessionId: "session-1",
+			role: "user",
+			content: "Inspect",
+			createdAt: 1,
+		},
+		...Array.from(
+			{ length: 3 },
+			(_, i): ChatMessage => ({
+				id: `t${i}`,
+				sessionId: "session-1",
+				role: "tool",
+				createdAt: i + 2,
+				content: JSON.stringify({
+					toolName: "read_files",
+					input: { paths: ["a.ts"] },
+					result: { ok: true },
+				}),
+			}),
+		),
+		{
+			id: "answer",
+			sessionId: "session-1",
+			role: "assistant",
+			content: "Inspection recorded. Outcome not verified.",
+			createdAt: 10,
+		},
+	];
+	await renderMessages(messages, { status: "completed" });
+	expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(0);
+	const nav = container.querySelector('[aria-label="Task destinations"]')!;
+	const destination = (label: string) =>
+		[...nav.querySelectorAll<HTMLButtonElement>("button")].find(
+			(button) => button.textContent === label,
+		)!;
+	await act(async () => destination("Activity").click());
+	expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(3);
+	await act(async () => destination("Chat").click());
+	expect(container.querySelectorAll(".cline-chat-tool")).toHaveLength(0);
 });

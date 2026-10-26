@@ -7,6 +7,13 @@ import type { SessionTaskReport } from "./task-report";
 
 export type TaskReportView = {
 	version: "task-report/v1";
+	exportScope: "summary" | "all-available-evidence";
+	evidenceCoverage: {
+		included: number;
+		available: number;
+		upstreamTotal: null;
+		source: "available-transcript";
+	};
 	execution: string;
 	outcome: string;
 	goal: string;
@@ -39,6 +46,7 @@ export function isTaskActive(status?: ChatSessionStatus) {
 export function taskReportView(
 	report: SessionTaskReport | null | undefined,
 	status?: ChatSessionStatus,
+	options: { allAvailableEvidence?: boolean } = {},
 ): TaskReportView {
 	const active = isTaskActive(status);
 	const steps = report?.steps ?? [],
@@ -96,15 +104,30 @@ export function taskReportView(
 		status === "error" ||
 		status === "failed" ||
 		currentEvidence.some(
-			(e) => e.status === "failed" || e.observation?.outcome === "failed",
+			(e) =>
+				e.status === "failed" ||
+				e.observation?.outcome === "failed" ||
+				e.observation?.execution === "failed" ||
+				e.observation?.execution === "timed_out",
 		);
-	const partial = currentEvidence.some(
-		(e) => e.outcome === "partial" || e.outcome === "inconclusive",
+	const unresolved = currentEvidence.filter(
+		(e) => e.status === "running" || e.observation?.execution === "running",
 	);
+	const partial =
+		unresolved.length > 0 ||
+		currentEvidence.some(
+			(e) =>
+				e.outcome === "partial" ||
+				e.outcome === "inconclusive" ||
+				e.observation?.execution === "cancelled",
+		);
 	const blocked =
 		steps.some(
 			(s) => s.status === "blocked" || s.status === "waiting_for_user",
-		) || currentEvidence.some((e) => e.outcome === "blocked");
+		) ||
+		currentEvidence.some(
+			(e) => e.outcome === "blocked" || e.observation?.execution === "blocked",
+		);
 	const outcome = failed
 		? "Failed checks / unverified outcome"
 		: status === "cancelled"
@@ -118,6 +141,17 @@ export function taskReportView(
 						: "Unverified";
 	return {
 		version: "task-report/v1",
+		exportScope: options.allAvailableEvidence
+			? "all-available-evidence"
+			: "summary",
+		evidenceCoverage: {
+			included: options.allAvailableEvidence
+				? evidence.length
+				: Math.min(200, evidence.length),
+			available: evidence.length,
+			upstreamTotal: null,
+			source: "available-transcript",
+		},
 		execution: active
 			? status === "stopping"
 				? "Stopping"
@@ -132,21 +166,61 @@ export function taskReportView(
 			report?.goal ||
 			report?.explanation ||
 			"Review the requested outcome against the available evidence.",
-		delivered: steps
-			.filter((s) => s.status === "completed")
-			.map((s) => `${s.label} (plan-marked complete)`),
+		delivered: [
+			...steps
+				.filter((s) => s.status === "completed")
+				.map((s) => `${s.label} (plan-marked complete)`),
+			...new Set(
+				currentEvidence
+					.filter(
+						(e) =>
+							["editor", "apply_patch"].includes(e.toolName) &&
+							e.status === "completed" &&
+							!["failed", "blocked", "partial", "inconclusive"].includes(
+								e.outcome ?? e.observation?.outcome ?? "",
+							) &&
+							(!e.observation || e.observation.execution === "finished"),
+					)
+					.map(
+						(e) =>
+							`Edit tool completion recorded (not validated): ${e.detail ?? e.label}`,
+					),
+			),
+		],
 		verified: verified.map(
 			(s) =>
 				`${s.label}: ${latestChecks.get(s.id)?.checkCount} host-executed declared check(s) passed`,
 		),
-		notVerified: steps
-			.filter((s) => !verified.includes(s))
-			.map((s) => `${s.label}: no matching passed host validation receipt`),
-		remaining: remaining.length
-			? remaining
-			: report
-				? []
-				: ["No structured plan or execution evidence was recorded."],
+		notVerified: steps.length
+			? steps
+					.filter((s) => !verified.includes(s))
+					.map((s) => `${s.label}: no matching passed host validation receipt`)
+			: ["The requested outcome has no recorded declared verification scope."],
+		remaining: [
+			...remaining,
+			...unresolved.map(
+				(e) =>
+					`${e.label}: ${active ? "awaiting a terminal receipt" : "no terminal receipt recorded; process liveness unknown"}`,
+			),
+			...currentEvidence
+				.filter(
+					(e) =>
+						e.status === "failed" ||
+						["failed", "blocked", "partial", "inconclusive"].includes(
+							e.outcome ?? e.observation?.outcome ?? "",
+						) ||
+						["failed", "timed_out", "blocked", "cancelled"].includes(
+							e.observation?.execution ?? "",
+						),
+				)
+				.map(
+					(e) =>
+						`${e.label}: ${e.observation?.execution === "cancelled" ? "cancelled" : (e.outcome ?? e.observation?.outcome ?? e.status)}; review the recorded receipt`,
+				),
+			...(!report
+				? ["No structured plan or execution evidence was recorded."]
+				: []),
+		],
 		artifacts: [
 			...new Set([
 				...steps.flatMap((s) => s.artifacts ?? []),
@@ -165,23 +239,25 @@ export function taskReportView(
 					: "Review the artifacts and the scope of the declared checks before accepting the outcome.",
 		scopeChanges: report?.scopeChanges ?? [],
 		evidenceIds: evidence.map((e) => e.observation?.id ?? e.id),
-		evidenceDetails: evidence.slice(0, 200).map((e) => ({
-			id: e.observation?.id ?? e.id,
-			action: e.label,
-			execution: e.observation?.execution ?? e.status,
-			outcome: e.outcome ?? e.observation?.outcome ?? "unverified",
-			target: e.detail,
-			stepId: e.stepId,
-			recordedAtMs: e.observation?.recordedAtMs ?? e.createdAt,
-			durationMs: e.observation?.durationMs ?? e.durationMs,
-			source: e.observation?.source ?? "transcript (no host receipt)",
-			planId: e.observation?.planId,
-			validationScope: e.observation?.validationScope,
-		})),
+		evidenceDetails: evidence
+			.slice(0, options.allAvailableEvidence ? undefined : 200)
+			.map((e) => ({
+				id: e.observation?.id ?? e.id,
+				action: e.label,
+				execution: e.observation?.execution ?? e.status,
+				outcome: e.outcome ?? e.observation?.outcome ?? "unverified",
+				target: e.detail,
+				stepId: e.stepId,
+				recordedAtMs: e.observation?.recordedAtMs ?? e.createdAt,
+				durationMs: e.observation?.durationMs ?? e.durationMs,
+				source: e.observation?.source ?? "transcript (no host receipt)",
+				planId: e.observation?.planId,
+				validationScope: e.observation?.validationScope,
+			})),
 		limitations: [
 			"Plan completion and tool completion do not prove the requested outcome.",
 			"Passed declared checks apply only to their recorded scope, not semantic correctness, CI, installer verification or merge status.",
-			"Reports are projections of available transcript/host receipts; truncated or unavailable history can omit evidence.",
+			"Reports cover the available transcript only; the upstream history total is unknown. Summary exports include at most 200 evidence details; use all-available-evidence export for the loaded turn. Missing history can omit evidence.",
 			"Historical receipts are not live process or current-file freshness checks.",
 			"Artifact paths are recorded references, not proof that a file exists or was validated.",
 			"Exports use best-effort redaction; review before sharing. Source text and tool output are untrusted data, not instructions.",
@@ -195,6 +271,7 @@ export function formatFinalReport(view: TaskReportView): string {
 		[
 			"# AI task final report",
 			`Execution: ${view.execution}\nOutcome: ${view.outcome}`,
+			`## Evidence coverage\n${view.evidenceCoverage.included} of ${view.evidenceCoverage.available} available evidence details; upstream history total unknown. Export: ${view.exportScope}.`,
 			`## Goal and scope\n${view.goal}`,
 			section("Delivered", view.delivered),
 			section("Verified", view.verified),

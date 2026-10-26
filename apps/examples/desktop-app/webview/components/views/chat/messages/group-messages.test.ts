@@ -696,7 +696,7 @@ describe("collapseCompletedWork", () => {
 			true,
 		);
 
-		expect(items.map((item) => item.type)).toEqual(["message", "tools"]);
+		expect(items.map((item) => item.type)).toEqual(["message", "run"]);
 	});
 
 	it("measures duration from the first working row when no user message precedes it", () => {

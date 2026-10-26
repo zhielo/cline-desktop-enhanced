@@ -197,3 +197,113 @@ it("never clears unassigned or different-scope failures with an unrelated succes
 		expect(taskReportView(r, "completed").outcome).toContain("Failed");
 	}
 });
+
+describe("complete available evidence exports", () => {
+	it("retains old unresolved failures outside the summary window and discloses export coverage", () => {
+		const r = report();
+		r.evidence = Array.from({ length: 225 }, (_, i) => ({
+			id: `e${i}`,
+			label: "Read",
+			status: "completed",
+			toolName: "read_files",
+			createdAt: 1000 - i,
+		}));
+		r.evidence[224] = {
+			...r.evidence[224],
+			status: "failed",
+			outcome: "failed",
+		};
+		const summary = taskReportView(r, "completed");
+		expect(summary.outcome).toContain("Failed");
+		expect(summary.evidenceDetails).toHaveLength(200);
+		expect(summary.evidenceCoverage).toEqual({
+			included: 200,
+			available: 225,
+			upstreamTotal: null,
+			source: "available-transcript",
+		});
+		const full = taskReportView(r, "completed", { allAvailableEvidence: true });
+		expect(full.evidenceDetails).toHaveLength(225);
+		expect(full.evidenceCoverage.included).toBe(225);
+		expect(full.exportScope).toBe("all-available-evidence");
+		expect(formatFinalReport(full)).toContain("upstream history total unknown");
+		expect(
+			JSON.parse(exportReport(full, "json").content).evidenceDetails.at(-1).id,
+		).toBe("e224");
+	});
+});
+
+it("downgrades adverse host execution receipts even when their outcome field is unverified", () => {
+	for (const execution of [
+		"failed",
+		"timed_out",
+		"blocked",
+		"cancelled",
+	] as const) {
+		const r = checked();
+		r.evidence.push({
+			id: "adverse",
+			label: "Other tool",
+			status: "completed",
+			toolName: "read_files",
+			createdAt: 30,
+			observation: {
+				...receipt,
+				id: "adverse",
+				toolCallId: "adverse",
+				source: "host-tool",
+				execution,
+				outcome: "unverified",
+			},
+		});
+		expect(taskReportView(r, "completed").outcome).not.toBe(
+			"Declared checks passed",
+		);
+	}
+});
+
+it("makes activity-only edits and absent verification scope explicit without claiming a validated deliverable", () => {
+	const r = {
+		...report(),
+		steps: [],
+		mode: "activity" as const,
+		evidence: [
+			{
+				id: "edit",
+				label: "Editor",
+				detail: "tools/recover_strings.py",
+				toolName: "editor",
+				status: "completed" as const,
+				createdAt: 10,
+			},
+		],
+	};
+	const view = taskReportView(r, "completed");
+	expect(view.delivered).toEqual([
+		"Edit tool completion recorded (not validated): tools/recover_strings.py",
+	]);
+	expect(view.notVerified[0]).toContain(
+		"no recorded declared verification scope",
+	);
+	expect(view.outcome).toBe("Unverified");
+});
+it("keeps missing terminal results and adverse receipts in remaining work even when every declared step passed", () => {
+	const r = checked();
+	r.evidence.push({
+		id: "running",
+		label: "Command",
+		toolName: "run_commands",
+		status: "running",
+		createdAt: 30,
+	});
+	const view = taskReportView(r, "completed");
+	expect(view.outcome).toBe("Partial / unverified");
+	expect(view.verified).toHaveLength(1);
+	expect(view.remaining).toContain(
+		"Command: no terminal receipt recorded; process liveness unknown",
+	);
+	const failed = checked({ outcome: "failed", execution: "failed" });
+	expect(taskReportView(failed, "completed").remaining.join(" ")).toContain(
+		"review the recorded receipt",
+	);
+});
