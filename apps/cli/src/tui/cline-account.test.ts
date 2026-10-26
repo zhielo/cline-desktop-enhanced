@@ -51,6 +51,17 @@ vi.mock("@cline/core", async (importOriginal) => {
 			}
 		},
 		ProviderSettingsManager: class {
+			updateProviderSettings: InstanceType<
+				typeof actual.ProviderSettingsManager
+			>["updateProviderSettings"] = (providerId, mutator, options) => {
+				const next = mutator(coreMocks.getProviderSettings(providerId));
+				if (next !== undefined) coreMocks.saveProviderSettings(next, options);
+				return next as ReturnType<
+					InstanceType<
+						typeof actual.ProviderSettingsManager
+					>["updateProviderSettings"]
+				>;
+			};
 			getProviderSettings(providerId: string) {
 				return coreMocks.getProviderSettings(providerId);
 			}
