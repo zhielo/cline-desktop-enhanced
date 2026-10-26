@@ -261,3 +261,49 @@ it("downgrades adverse host execution receipts even when their outcome field is 
 		);
 	}
 });
+
+it("makes activity-only edits and absent verification scope explicit without claiming a validated deliverable", () => {
+	const r = {
+		...report(),
+		steps: [],
+		mode: "activity" as const,
+		evidence: [
+			{
+				id: "edit",
+				label: "Editor",
+				detail: "tools/recover_strings.py",
+				toolName: "editor",
+				status: "completed" as const,
+				createdAt: 10,
+			},
+		],
+	};
+	const view = taskReportView(r, "completed");
+	expect(view.delivered).toEqual([
+		"Edit tool completion recorded (not validated): tools/recover_strings.py",
+	]);
+	expect(view.notVerified[0]).toContain(
+		"no recorded declared verification scope",
+	);
+	expect(view.outcome).toBe("Unverified");
+});
+it("keeps missing terminal results and adverse receipts in remaining work even when every declared step passed", () => {
+	const r = checked();
+	r.evidence.push({
+		id: "running",
+		label: "Command",
+		toolName: "run_commands",
+		status: "running",
+		createdAt: 30,
+	});
+	const view = taskReportView(r, "completed");
+	expect(view.outcome).toBe("Partial / unverified");
+	expect(view.verified).toHaveLength(1);
+	expect(view.remaining).toContain(
+		"Command: no terminal receipt recorded; process liveness unknown",
+	);
+	const failed = checked({ outcome: "failed", execution: "failed" });
+	expect(taskReportView(failed, "completed").remaining.join(" ")).toContain(
+		"review the recorded receipt",
+	);
+});

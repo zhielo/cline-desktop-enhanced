@@ -110,12 +110,17 @@ export function taskReportView(
 				e.observation?.execution === "failed" ||
 				e.observation?.execution === "timed_out",
 		);
-	const partial = currentEvidence.some(
-		(e) =>
-			e.outcome === "partial" ||
-			e.outcome === "inconclusive" ||
-			e.observation?.execution === "cancelled",
+	const unresolved = currentEvidence.filter(
+		(e) => e.status === "running" || e.observation?.execution === "running",
 	);
+	const partial =
+		unresolved.length > 0 ||
+		currentEvidence.some(
+			(e) =>
+				e.outcome === "partial" ||
+				e.outcome === "inconclusive" ||
+				e.observation?.execution === "cancelled",
+		);
 	const blocked =
 		steps.some(
 			(s) => s.status === "blocked" || s.status === "waiting_for_user",
@@ -161,21 +166,61 @@ export function taskReportView(
 			report?.goal ||
 			report?.explanation ||
 			"Review the requested outcome against the available evidence.",
-		delivered: steps
-			.filter((s) => s.status === "completed")
-			.map((s) => `${s.label} (plan-marked complete)`),
+		delivered: [
+			...steps
+				.filter((s) => s.status === "completed")
+				.map((s) => `${s.label} (plan-marked complete)`),
+			...new Set(
+				currentEvidence
+					.filter(
+						(e) =>
+							["editor", "apply_patch"].includes(e.toolName) &&
+							e.status === "completed" &&
+							!["failed", "blocked", "partial", "inconclusive"].includes(
+								e.outcome ?? e.observation?.outcome ?? "",
+							) &&
+							(!e.observation || e.observation.execution === "finished"),
+					)
+					.map(
+						(e) =>
+							`Edit tool completion recorded (not validated): ${e.detail ?? e.label}`,
+					),
+			),
+		],
 		verified: verified.map(
 			(s) =>
 				`${s.label}: ${latestChecks.get(s.id)?.checkCount} host-executed declared check(s) passed`,
 		),
-		notVerified: steps
-			.filter((s) => !verified.includes(s))
-			.map((s) => `${s.label}: no matching passed host validation receipt`),
-		remaining: remaining.length
-			? remaining
-			: report
-				? []
-				: ["No structured plan or execution evidence was recorded."],
+		notVerified: steps.length
+			? steps
+					.filter((s) => !verified.includes(s))
+					.map((s) => `${s.label}: no matching passed host validation receipt`)
+			: ["The requested outcome has no recorded declared verification scope."],
+		remaining: [
+			...remaining,
+			...unresolved.map(
+				(e) =>
+					`${e.label}: ${active ? "awaiting a terminal receipt" : "no terminal receipt recorded; process liveness unknown"}`,
+			),
+			...currentEvidence
+				.filter(
+					(e) =>
+						e.status === "failed" ||
+						["failed", "blocked", "partial", "inconclusive"].includes(
+							e.outcome ?? e.observation?.outcome ?? "",
+						) ||
+						["failed", "timed_out", "blocked", "cancelled"].includes(
+							e.observation?.execution ?? "",
+						),
+				)
+				.map(
+					(e) =>
+						`${e.label}: ${e.observation?.execution === "cancelled" ? "cancelled" : (e.outcome ?? e.observation?.outcome ?? e.status)}; review the recorded receipt`,
+				),
+			...(!report
+				? ["No structured plan or execution evidence was recorded."]
+				: []),
+		],
 		artifacts: [
 			...new Set([
 				...steps.flatMap((s) => s.artifacts ?? []),
