@@ -6,7 +6,7 @@ import {
 } from "@/lib/chat-schema";
 import {
 	buildSessionTaskReport,
-    buildSessionTaskReports,
+	buildSessionTaskReports,
 	formatTaskReportText,
 } from "@/lib/task-report";
 
@@ -382,32 +382,99 @@ describe("buildSessionTaskReport", () => {
 	});
 });
 
-describe("report session, restart and scope projections",()=>{
- it("never joins identical tool IDs across different sessions",()=>{
-  const other={...toolMessage("other1","read_file",{}, {toolCallId:"shared",result:{ok:false}}),sessionId:"other"};
-  const own=toolMessage("own2","read_file",{}, {toolCallId:"shared"});
-  const r=buildSessionTaskReport([other,userMessage("u1"),own],"idle")!;
-  expect(r.evidence).toHaveLength(1);expect(r.evidence[0].status).toBe("completed");
- });
- it("records removal as a scope change, not completed work",()=>{
-  const plan=(id:string,steps:Array<{id:string;label:string;status:"pending"|"completed"}>)=>toolMessage(id,"update_plan",{}, {taskEvent:{type:"plan.updated",planId:"p1",steps:steps.map(s=>({...s,kind:"work" as const}))}});
-  const r=buildSessionTaskReport([userMessage("u1"),plan("p2",[{id:"a",label:"Keep",status:"pending"},{id:"b",label:"Removed task",status:"pending"}]),plan("p3",[{id:"a",label:"Keep",status:"completed"}])],"idle")!;
-  expect(r.scopeChanges).toContain("Removed from plan (not completed): Removed task");expect(r.steps).toHaveLength(1);
- });
- it("deduplicates replayed starts without reanimating finished tools",()=>{
-  const start=toolMessage("m1","read_file",{}, {toolCallId:"t1",result:null,hookEventName:"tool_call_start"});
-  const end=toolMessage("m2","read_file",{}, {toolCallId:"t1",hookEventName:"tool_call_end"});
-  const r=buildSessionTaskReport([userMessage("u1"),start,end,start],"idle")!;
-  expect(r.evidence).toHaveLength(1);expect(r.evidence[0].status).toBe("completed");
- });
- it("retains up to 200 evidence entries and 50 historical reports without rerunning tools",()=>{
-  const events=Array.from({length:220},(_,i)=>toolMessage(`m${i+2}`,"read_file",{}, {toolCallId:`t${i}`}));
-  expect(buildSessionTaskReport([userMessage("u1"),...events],"idle")?.evidence).toHaveLength(200);
-  const turns=Array.from({length:55},(_,i)=>[userMessage(`u${i*2+1}`),toolMessage(`t${i*2+2}`,"read_file",{})]).flat();
-  expect(buildSessionTaskReports(turns,"idle")).toHaveLength(50);
- });
- it("treats malformed optional receipt metadata as unavailable",()=>{
-  const event={type:"tool.completed",toolCallId:"t1",toolName:"read_file",observation:{version:"bad"}};
-  expect(TaskProtocolEventSchema.parse(event).observation).toBeUndefined();
- });
+describe("report session, restart and scope projections", () => {
+	it("never joins identical tool IDs across different sessions", () => {
+		const other = {
+			...toolMessage(
+				"other1",
+				"read_file",
+				{},
+				{ toolCallId: "shared", result: { ok: false } },
+			),
+			sessionId: "other",
+		};
+		const own = toolMessage("own2", "read_file", {}, { toolCallId: "shared" });
+		const r = buildSessionTaskReport([other, userMessage("u1"), own], "idle")!;
+		expect(r.evidence).toHaveLength(1);
+		expect(r.evidence[0].status).toBe("completed");
+	});
+	it("records removal as a scope change, not completed work", () => {
+		const plan = (
+			id: string,
+			steps: Array<{
+				id: string;
+				label: string;
+				status: "pending" | "completed";
+			}>,
+		) =>
+			toolMessage(
+				id,
+				"update_plan",
+				{},
+				{
+					taskEvent: {
+						type: "plan.updated",
+						planId: "p1",
+						steps: steps.map((s) => ({ ...s, kind: "work" as const })),
+					},
+				},
+			);
+		const r = buildSessionTaskReport(
+			[
+				userMessage("u1"),
+				plan("p2", [
+					{ id: "a", label: "Keep", status: "pending" },
+					{ id: "b", label: "Removed task", status: "pending" },
+				]),
+				plan("p3", [{ id: "a", label: "Keep", status: "completed" }]),
+			],
+			"idle",
+		)!;
+		expect(r.scopeChanges).toContain(
+			"Removed from plan (not completed): Removed task",
+		);
+		expect(r.steps).toHaveLength(1);
+	});
+	it("deduplicates replayed starts without reanimating finished tools", () => {
+		const start = toolMessage(
+			"m1",
+			"read_file",
+			{},
+			{ toolCallId: "t1", result: null, hookEventName: "tool_call_start" },
+		);
+		const end = toolMessage(
+			"m2",
+			"read_file",
+			{},
+			{ toolCallId: "t1", hookEventName: "tool_call_end" },
+		);
+		const r = buildSessionTaskReport(
+			[userMessage("u1"), start, end, start],
+			"idle",
+		)!;
+		expect(r.evidence).toHaveLength(1);
+		expect(r.evidence[0].status).toBe("completed");
+	});
+	it("retains all available evidence and historical reports without rerunning tools", () => {
+		const events = Array.from({ length: 220 }, (_, i) =>
+			toolMessage(`m${i + 2}`, "read_file", {}, { toolCallId: `t${i}` }),
+		);
+		expect(
+			buildSessionTaskReport([userMessage("u1"), ...events], "idle")?.evidence,
+		).toHaveLength(220);
+		const turns = Array.from({ length: 55 }, (_, i) => [
+			userMessage(`u${i * 2 + 1}`),
+			toolMessage(`t${i * 2 + 2}`, "read_file", {}),
+		]).flat();
+		expect(buildSessionTaskReports(turns, "idle")).toHaveLength(55);
+	});
+	it("treats malformed optional receipt metadata as unavailable", () => {
+		const event = {
+			type: "tool.completed",
+			toolCallId: "t1",
+			toolName: "read_file",
+			observation: { version: "bad" },
+		};
+		expect(TaskProtocolEventSchema.parse(event).observation).toBeUndefined();
+	});
 });

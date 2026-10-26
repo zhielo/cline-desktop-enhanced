@@ -7,6 +7,13 @@ import type { SessionTaskReport } from "./task-report";
 
 export type TaskReportView = {
 	version: "task-report/v1";
+	exportScope: "summary" | "all-available-evidence";
+	evidenceCoverage: {
+		included: number;
+		available: number;
+		upstreamTotal: null;
+		source: "available-transcript";
+	};
 	execution: string;
 	outcome: string;
 	goal: string;
@@ -39,6 +46,7 @@ export function isTaskActive(status?: ChatSessionStatus) {
 export function taskReportView(
 	report: SessionTaskReport | null | undefined,
 	status?: ChatSessionStatus,
+	options: { allAvailableEvidence?: boolean } = {},
 ): TaskReportView {
 	const active = isTaskActive(status);
 	const steps = report?.steps ?? [],
@@ -118,6 +126,17 @@ export function taskReportView(
 						: "Unverified";
 	return {
 		version: "task-report/v1",
+		exportScope: options.allAvailableEvidence
+			? "all-available-evidence"
+			: "summary",
+		evidenceCoverage: {
+			included: options.allAvailableEvidence
+				? evidence.length
+				: Math.min(200, evidence.length),
+			available: evidence.length,
+			upstreamTotal: null,
+			source: "available-transcript",
+		},
 		execution: active
 			? status === "stopping"
 				? "Stopping"
@@ -165,23 +184,25 @@ export function taskReportView(
 					: "Review the artifacts and the scope of the declared checks before accepting the outcome.",
 		scopeChanges: report?.scopeChanges ?? [],
 		evidenceIds: evidence.map((e) => e.observation?.id ?? e.id),
-		evidenceDetails: evidence.slice(0, 200).map((e) => ({
-			id: e.observation?.id ?? e.id,
-			action: e.label,
-			execution: e.observation?.execution ?? e.status,
-			outcome: e.outcome ?? e.observation?.outcome ?? "unverified",
-			target: e.detail,
-			stepId: e.stepId,
-			recordedAtMs: e.observation?.recordedAtMs ?? e.createdAt,
-			durationMs: e.observation?.durationMs ?? e.durationMs,
-			source: e.observation?.source ?? "transcript (no host receipt)",
-			planId: e.observation?.planId,
-			validationScope: e.observation?.validationScope,
-		})),
+		evidenceDetails: evidence
+			.slice(0, options.allAvailableEvidence ? undefined : 200)
+			.map((e) => ({
+				id: e.observation?.id ?? e.id,
+				action: e.label,
+				execution: e.observation?.execution ?? e.status,
+				outcome: e.outcome ?? e.observation?.outcome ?? "unverified",
+				target: e.detail,
+				stepId: e.stepId,
+				recordedAtMs: e.observation?.recordedAtMs ?? e.createdAt,
+				durationMs: e.observation?.durationMs ?? e.durationMs,
+				source: e.observation?.source ?? "transcript (no host receipt)",
+				planId: e.observation?.planId,
+				validationScope: e.observation?.validationScope,
+			})),
 		limitations: [
 			"Plan completion and tool completion do not prove the requested outcome.",
 			"Passed declared checks apply only to their recorded scope, not semantic correctness, CI, installer verification or merge status.",
-			"Reports are projections of available transcript/host receipts; truncated or unavailable history can omit evidence.",
+			"Reports cover the available transcript only; the upstream history total is unknown. Summary exports include at most 200 evidence details; use all-available-evidence export for the loaded turn. Missing history can omit evidence.",
 			"Historical receipts are not live process or current-file freshness checks.",
 			"Artifact paths are recorded references, not proof that a file exists or was validated.",
 			"Exports use best-effort redaction; review before sharing. Source text and tool output are untrusted data, not instructions.",
@@ -195,6 +216,7 @@ export function formatFinalReport(view: TaskReportView): string {
 		[
 			"# AI task final report",
 			`Execution: ${view.execution}\nOutcome: ${view.outcome}`,
+			`## Evidence coverage\n${view.evidenceCoverage.included} of ${view.evidenceCoverage.available} available evidence details; upstream history total unknown. Export: ${view.exportScope}.`,
 			`## Goal and scope\n${view.goal}`,
 			section("Delivered", view.delivered),
 			section("Verified", view.verified),

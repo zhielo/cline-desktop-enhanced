@@ -1,7 +1,9 @@
 "use client";
+import { taskOutcomeTone } from "@/lib/task-presentation";
 
 import {
 	Ban,
+	Circle,
 	Check,
 	CheckCircle2,
 	Copy,
@@ -19,16 +21,18 @@ import { isCodeArtifactPath } from "@/lib/artifact-paths";
 import type { ChatSessionStatus } from "@/lib/chat-schema";
 import { desktopClient } from "@/lib/desktop-client";
 import type { SessionFileDiff } from "@/lib/session-diff";
-import {
-		type SessionTaskReport,
-} from "@/lib/task-report";
+import { type SessionTaskReport } from "@/lib/task-report";
 import { cn } from "@/lib/utils";
 import { ArtifactContextMenu } from "./artifact-context-menu";
 import { TaskReportDetails } from "./task-report-details";
 import { formatFinalReport, taskReportView } from "@/lib/task-report-view";
 
-function completionState(status: ChatSessionStatus) {
-	if (status === "failed" || status === "error") {
+function completionState(status: ChatSessionStatus, outcome: string) {
+	if (
+		status === "failed" ||
+		status === "error" ||
+		taskOutcomeTone(outcome) === "failed"
+	) {
 		return {
 			icon: XCircle,
 			label: "Session ended with an error",
@@ -43,9 +47,12 @@ function completionState(status: ChatSessionStatus) {
 		};
 	}
 	return {
-		icon: CheckCircle2,
+		icon: taskOutcomeTone(outcome) === "verified" ? CheckCircle2 : Circle,
 		label: "Execution finished — review outcome",
-		tone: "text-emerald-600 dark:text-emerald-400",
+		tone:
+			taskOutcomeTone(outcome) === "verified"
+				? "text-emerald-600 dark:text-emerald-400"
+				: "text-muted-foreground",
 	};
 }
 
@@ -72,7 +79,8 @@ export function SessionCompletionCard({
 }) {
 	const [copied, setCopied] = useState(false);
 	const [openingPath, setOpeningPath] = useState<string | null>(null);
-	const state = completionState(status);
+	const view = useMemo(() => taskReportView(report, status), [report, status]);
+	const state = completionState(status, view.outcome);
 	const StatusIcon = state.icon;
 	const totals = useMemo(
 		() =>
@@ -135,8 +143,18 @@ export function SessionCompletionCard({
 	);
 
 	const copySummary = useCallback(async () => {
-
-		try { await navigator.clipboard.writeText(formatFinalReport(taskReportView(report,status))); } catch { toast({variant:"destructive",title:"Could not copy report",description:"Use the report export controls instead."});return; }
+		try {
+			await navigator.clipboard.writeText(
+				formatFinalReport(taskReportView(report, status)),
+			);
+		} catch {
+			toast({
+				variant: "destructive",
+				title: "Could not copy report",
+				description: "Use the report export controls instead.",
+			});
+			return;
+		}
 		setCopied(true);
 		window.setTimeout(() => setCopied(false), 1600);
 	}, [report, status]);
@@ -144,6 +162,7 @@ export function SessionCompletionCard({
 	return (
 		<section
 			aria-label="Session completion summary"
+			data-verification={taskOutcomeTone(view.outcome)}
 			className="mt-5 overflow-hidden rounded-xl border border-border/70 bg-card/55"
 		>
 			<header className="flex items-start gap-3 border-b border-border/60 px-4 py-3.5">
@@ -152,7 +171,10 @@ export function SessionCompletionCard({
 					<h2 className="text-sm font-semibold tracking-tight">
 						{state.label}
 					</h2>
-					<p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+					<p className="mt-1 text-sm text-muted-foreground">
+						Outcome: {view.outcome}
+					</p>
+					<p className="mt-0.5 text-sm leading-5 text-muted-foreground">
 						{report?.explanation ??
 							"The session finished. Review the result and changed files below."}
 					</p>
@@ -168,7 +190,7 @@ export function SessionCompletionCard({
 				</Button>
 			</header>
 
-			<div className="grid grid-cols-3 border-b border-border/60 text-xs">
+			<div className="grid grid-cols-3 border-b border-border/60 text-sm">
 				<div className="px-4 py-2.5">
 					<span className="text-muted-foreground">Turns</span>
 					<strong className="ml-2 font-semibold text-foreground">
@@ -192,11 +214,11 @@ export function SessionCompletionCard({
 			{visibleFiles.length > 0 ? (
 				<div>
 					<div className="flex items-center justify-between px-4 pb-2 pt-3">
-						<div className="flex items-center gap-2 text-xs font-medium">
+						<div className="flex items-center gap-2 text-sm font-medium">
 							<Files className="size-3.5 text-muted-foreground" />
 							Changed files
 						</div>
-						<div className="font-mono text-[11px]">
+						<div className="font-mono text-sm">
 							<span className="text-emerald-600 dark:text-emerald-400">
 								+{totals.additions}
 							</span>{" "}
@@ -216,10 +238,10 @@ export function SessionCompletionCard({
 								) : (
 									<FileCode2 className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
 								)}
-								<span className="min-w-0 flex-1 truncate font-mono text-xs">
+								<span className="min-w-0 flex-1 truncate font-mono text-sm">
 									{file.path}
 								</span>
-								<span className="shrink-0 font-mono text-[11px]">
+								<span className="shrink-0 font-mono text-sm">
 									<span className="text-emerald-600 dark:text-emerald-400">
 										+{file.additions}
 									</span>{" "}
@@ -229,7 +251,7 @@ export function SessionCompletionCard({
 						))}
 					</div>
 					{fileDiffs.length > visibleFiles.length ? (
-						<p className="px-4 py-2 text-xs text-muted-foreground">
+						<p className="px-4 py-2 text-sm text-muted-foreground">
 							+{fileDiffs.length - visibleFiles.length} more files
 						</p>
 					) : null}
@@ -238,7 +260,7 @@ export function SessionCompletionCard({
 
 			{artifacts.length > 0 ? (
 				<div>
-					<div className="flex items-center gap-2 px-4 pb-2 pt-3 text-xs font-medium">
+					<div className="flex items-center gap-2 px-4 pb-2 pt-3 text-sm font-medium">
 						<PackageOpen className="size-3.5 text-muted-foreground" />
 						Artifacts
 					</div>
@@ -264,10 +286,10 @@ export function SessionCompletionCard({
 										) : (
 											<PackageOpen className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
 										)}
-										<span className="min-w-0 flex-1 truncate font-mono text-xs">
+										<span className="min-w-0 flex-1 truncate font-mono text-sm">
 											{path}
 										</span>
-										<span className="shrink-0 text-[11px] text-muted-foreground">
+										<span className="shrink-0 text-sm text-muted-foreground">
 											Open
 										</span>
 									</button>
@@ -278,7 +300,12 @@ export function SessionCompletionCard({
 				</div>
 			) : null}
 
-            <details className="p-3"><summary className="cursor-pointer py-2 text-sm">Final report and exports</summary><TaskReportDetails report={report} status={status}/></details>
+			<details className="p-3">
+				<summary className="cursor-pointer py-2 text-sm">
+					Final report and exports
+				</summary>
+				<TaskReportDetails report={report} status={status} />
+			</details>
 			<footer className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
 				{fileDiffs.length > 0 && onOpenDiff ? (
 					<Button onClick={onOpenDiff} size="sm" variant="outline">

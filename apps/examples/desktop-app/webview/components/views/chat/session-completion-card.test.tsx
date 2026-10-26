@@ -127,3 +127,24 @@ describe("SessionCompletionCard", () => {
 		});
 	});
 });
+
+it("does not decorate unverified completion as verified success", async () => {
+	await act(async () =>
+		root.render(
+			<SessionCompletionCard
+				environmentId="local"
+				fileDiffs={[]}
+				status="completed"
+				tools={1}
+				turns={1}
+			/>,
+		),
+	);
+	expect(
+		container.querySelector('[data-verification="unverified"]'),
+	).not.toBeNull();
+	expect(container.textContent).toContain("Outcome: Unverified");
+	expect(
+		container.querySelector(".lucide-circle-check, .lucide-circle-check-big"),
+	).toBeNull();
+});

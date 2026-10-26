@@ -643,7 +643,12 @@ export const ThinkingBlock = ({
 	);
 };
 
-export type ToolActivityStatus = "pending" | "running" | "success" | "error";
+export type ToolActivityStatus =
+	| "pending"
+	| "running"
+	| "success"
+	| "error"
+	| "finished";
 
 type ToolActivityContextValue = DisclosureState & {
 	expandable: boolean;

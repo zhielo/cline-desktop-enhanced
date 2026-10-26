@@ -9,24 +9,28 @@ export function SessionContent({
 	className,
 	status,
 	taskReport,
+	onReviewChanges,
+	onOpenReport,
+	onOpenActivity,
 }: {
 	children: ReactNode;
 	className?: string;
 	status?: ChatSessionStatus;
 	taskReport?: SessionTaskReport | null;
+	onReviewChanges?: () => void;
+	onOpenReport?: () => void;
+	onOpenActivity?: () => void;
 }) {
 	return (
-		<div
-			className={cn(
-				"mx-auto w-full min-w-0 max-w-[880px]",
-				className,
-			)}
-		>
+		<div className={cn("mx-auto w-full min-w-0 max-w-[880px]", className)}>
 			{taskReport ? (
 				<div className="mb-4">
 					<TaskReportPanel
-						key={taskReport.sourceMessageId}
+						key={taskReport.turnId ?? taskReport.sourceMessageId}
 						report={taskReport}
+						onReviewChanges={onReviewChanges}
+						onOpenReport={onOpenReport}
+						onOpenActivity={onOpenActivity}
 						status={status}
 					/>
 				</div>

@@ -1,4 +1,9 @@
 "use client";
+import {
+	ActivityPresentationProvider,
+	useActivityDisclosure,
+} from "./activity-presentation";
+import { LiveActivityGroup } from "./messages/live-activity-group";
 
 import { AgentAskQuestion } from "@cline/ui";
 import {
@@ -68,7 +73,7 @@ import { SessionContent } from "./session-content";
 import { ArtifactWorkspaceProvider } from "@/lib/artifact-workspace";
 
 type ChatMessagesProps = {
-    onOpenAnalysis?: () => void;
+	onOpenAnalysis?: () => void;
 	sessionId: string | null;
 	environmentId?: string;
 	cwd?: string;
@@ -251,7 +256,7 @@ function SessionRunBar({
 }
 
 function ChatMessagesImpl({
-    onOpenAnalysis,
+	onOpenAnalysis,
 	sessionId,
 	environmentId = "local",
 	cwd,
@@ -379,8 +384,14 @@ function ChatMessagesImpl({
 			}),
 		[messages, collapseTrailingRun],
 	);
-	const [reportsSession,setReportsSession] = useState<string|null>(null);
-    const reportsOpen=reportsSession===(sessionId??"draft");
+	const [reportsOpen, setReportsOpen] = useActivityDisclosure(
+		sessionId,
+		"reports",
+	);
+	const [fullActivity, setFullActivity] = useActivityDisclosure(
+		sessionId,
+		"full-activity",
+	);
 	const taskReport = useMemo(
 		() => buildSessionTaskReport(messages, status),
 		[messages, status],
@@ -714,400 +725,471 @@ function ChatMessagesImpl({
 	);
 
 	return (
-        <div className="flex h-full min-h-0 flex-col">
-        {hasMessages && <nav aria-label="Task destinations" className="flex shrink-0 gap-2 border-b px-4 py-2 text-xs">
-          <button type="button" aria-pressed={!reportsOpen} className="min-h-11 rounded border px-3 py-2 text-sm" onClick={()=>setReportsSession(null)}>Chat</button>
-          {onOpenAnalysis&&<button type="button" className="min-h-11 rounded border px-3 py-2 text-sm" onClick={onOpenAnalysis}>Analysis</button>}
-          <button type="button" aria-pressed={reportsOpen} className="min-h-11 rounded border px-3 py-2 text-sm" onClick={()=>setReportsSession(sessionId??"draft")}>Reports</button>
-        </nav>}
-        {reportsOpen&&<div className="min-h-0 flex-1 overflow-auto"><ChatReports key={sessionId} messages={messages} status={status}/></div>}
-		<Conversation
-			className={cn("relative isolate min-h-0 min-w-0 flex-1 overflow-hidden",reportsOpen&&"hidden")}
-			key={sessionId ?? "new-chat"}
-		>
-			<ConversationViewport
-				aria-label="Agent conversation"
-				className="h-full min-h-0 min-w-0"
-			>
-				<ConversationContent
-					className={cn(
-						"mx-auto min-h-full w-full min-w-0 max-w-[980px]",
-						showIdleDetails ? "p-0" : "px-6",
-					)}
+		<div className="flex h-full min-h-0 flex-col">
+			{hasMessages && (
+				<nav
+					aria-label="Task destinations"
+					className="flex shrink-0 flex-wrap gap-2 border-b px-4 py-2 text-sm"
 				>
-					<SessionContent
-						status={status}
-						taskReport={taskReport}
+					<button
+						type="button"
+						aria-pressed={!reportsOpen && !fullActivity}
+						className="min-h-11 rounded border px-3 py-2 text-sm"
+						onClick={() => {
+							setReportsOpen(false);
+							setFullActivity(false);
+						}}
+					>
+						Chat
+					</button>
+					<button
+						type="button"
+						aria-pressed={!reportsOpen && fullActivity}
+						className="min-h-11 rounded border px-3 py-2 text-sm"
+						onClick={() => {
+							setReportsOpen(false);
+							setFullActivity(true);
+						}}
+					>
+						Activity
+					</button>
+					{onOpenDiff && (
+						<button
+							type="button"
+							className="min-h-11 rounded border px-3 py-2 text-sm"
+							onClick={onOpenDiff}
+						>
+							Changes{fileDiffs.length ? ` (${fileDiffs.length})` : ""}
+						</button>
+					)}
+					{onOpenAnalysis && (
+						<button
+							type="button"
+							className="min-h-11 rounded border px-3 py-2 text-sm"
+							onClick={onOpenAnalysis}
+						>
+							Analysis
+						</button>
+					)}
+					<button
+						type="button"
+						aria-pressed={reportsOpen}
+						className="min-h-11 rounded border px-3 py-2 text-sm"
+						onClick={() => setReportsOpen(true)}
+					>
+						Reports
+					</button>
+				</nav>
+			)}
+			{reportsOpen && (
+				<div className="min-h-0 flex-1 overflow-auto">
+					<ChatReports key={sessionId} messages={messages} status={status} />
+				</div>
+			)}
+			<Conversation
+				className={cn(
+					"relative isolate min-h-0 min-w-0 flex-1 overflow-hidden",
+					reportsOpen && "hidden",
+				)}
+				key={sessionId ?? "new-chat"}
+			>
+				<ConversationViewport
+					aria-label="Agent conversation"
+					className="h-full min-h-0 min-w-0"
+				>
+					<ConversationContent
 						className={cn(
-							"relative min-h-full",
-							// Bottom padding clears a pinned action pill (~40px with its
-							// offset) plus a comfortable gap before the composer, which
-							// sits below the scroller, not over it.
-							showIdleDetails ? "p-0" : "pt-6 pb-16",
+							"mx-auto min-h-full w-full min-w-0 max-w-[980px]",
+							showIdleDetails ? "p-0" : "px-6",
 						)}
 					>
-						{showIdleDetails ? null : (
-							<div className="flex min-h-full w-full min-w-0 flex-col gap-4">
-								{importedFromTool ? (
-									<ImportedSessionNotice tool={importedFromTool} />
-								) : null}
-								<SessionRunBar
-									messages={messages}
-									sessionId={sessionId}
-									status={status}
-									transportState={chatTransportState}
-								/>
-								{renderItems
-									.map((item, itemIndex) => {
-										// Working rows — live (`run`) or folded (`work`) — render
-										// through one child renderer so a row keeps its exact look
-										// and position when the run collapses. Those rows keep
-										// copy/expand but drop the session-versioning actions
-										// (edit, restore, fork), which belong to top-level
-										// transcript rows.
-										const renderWorkingRow = (child: typeof item) => {
-											if (child.type === "tools") {
+						<SessionContent
+							status={status}
+							taskReport={taskReport}
+							onReviewChanges={onOpenDiff}
+							onOpenReport={() => setReportsOpen(true)}
+							onOpenActivity={() => {
+								setReportsOpen(false);
+								setFullActivity(true);
+							}}
+							className={cn(
+								"relative min-h-full",
+								// Bottom padding clears a pinned action pill (~40px with its
+								// offset) plus a comfortable gap before the composer, which
+								// sits below the scroller, not over it.
+								showIdleDetails ? "p-0" : "pt-6 pb-16",
+							)}
+						>
+							{showIdleDetails ? null : (
+								<div className="flex min-h-full w-full min-w-0 flex-col gap-4">
+									{importedFromTool ? (
+										<ImportedSessionNotice tool={importedFromTool} />
+									) : null}
+									<SessionRunBar
+										messages={messages}
+										sessionId={sessionId}
+										status={status}
+										transportState={chatTransportState}
+									/>
+									{renderItems
+										.map((item, itemIndex) => {
+											// Working rows — live (`run`) or folded (`work`) — render
+											// through one child renderer so a row keeps its exact look
+											// and position when the run collapses. Those rows keep
+											// copy/expand but drop the session-versioning actions
+											// (edit, restore, fork), which belong to top-level
+											// transcript rows.
+											const renderWorkingRow = (child: typeof item) => {
+												if (child.type === "tools") {
+													return (
+														<ToolMessageBlock
+															isRunActive={
+																isRunActive && itemIndex > lastUserItemIndex
+															}
+															key={`tools_${child.messages[0]?.id ?? "empty"}`}
+															messages={child.messages}
+															onExpandImage={handleExpandImage}
+															onProceedWhileRunning={onProceedWhileRunning}
+														/>
+													);
+												}
+												if (child.type !== "message") {
+													return null;
+												}
 												return (
-													<ToolMessageBlock
-														isRunActive={
-															isRunActive && itemIndex > lastUserItemIndex
+													<MessageBubble
+														agentRole={child.agentRole}
+														isLastAssistantMessage={
+															child.message.role === "assistant" &&
+															lastConversationMessage === child.message
 														}
-														key={`tools_${child.messages[0]?.id ?? "empty"}`}
-														messages={child.messages}
+														isStreaming={
+															streamingMessageId === child.message.id
+														}
+														key={child.message.id}
+														message={child.message}
+														onCopyMessage={handleCopyMessage}
 														onExpandImage={handleExpandImage}
-														onProceedWhileRunning={onProceedWhileRunning}
+														wasCopied={copiedMessageId === child.message.id}
+														{...getReasoningProps(child.reasoningMessages)}
+													/>
+												);
+											};
+											if (item.type === "tools") {
+												return renderWorkingRow(item);
+											}
+											if (item.type === "run") {
+												return (
+													<LiveActivityGroup
+														key={`run_${item.id}`}
+														id={item.id}
+														sessionId={sessionId}
+														items={item.items}
+														status={status}
+														fullActivity={fullActivity}
+														renderItem={renderWorkingRow}
 													/>
 												);
 											}
-											if (child.type !== "message") {
-												return null;
+											if (item.type === "work") {
+												return (
+													<WorkBlock
+														id={item.id}
+														sessionId={sessionId}
+														durationMilliseconds={item.durationMilliseconds}
+														key={`work_${item.id}`}
+														toolCallCount={item.toolCallCount}
+													>
+														{item.items.map(renderWorkingRow)}
+													</WorkBlock>
+												);
 											}
+											const { agentRole, message, reasoningMessages } = item;
+											// An answer directly under its run's working rows belongs
+											// to them — pull it closer than the full transcript gap.
+											const previousItem = renderItems[itemIndex - 1];
+											const followsWorkingRows =
+												message.role === "assistant" &&
+												previousItem !== undefined &&
+												previousItem.type !== "message";
 											return (
 												<MessageBubble
-													agentRole={child.agentRole}
+													agentRole={agentRole}
+													followsWorkingRows={followsWorkingRows}
 													isLastAssistantMessage={
-														child.message.role === "assistant" &&
-														lastConversationMessage === child.message
+														message.role === "assistant" &&
+														lastConversationMessage === message
 													}
-													isStreaming={streamingMessageId === child.message.id}
-													key={child.message.id}
-													message={child.message}
-													onCopyMessage={handleCopyMessage}
+													isStreaming={streamingMessageId === message.id}
+													key={message.id}
+													message={message}
+													runCount={userRunCountByMessage.get(message)}
 													onExpandImage={handleExpandImage}
-													wasCopied={copiedMessageId === child.message.id}
-													{...getReasoningProps(child.reasoningMessages)}
+													onCopyMessage={handleCopyMessage}
+													onEditMessage={
+														onEditMessage ? requestEditMessage : undefined
+													}
+													editDisabled={
+														!onEditMessage ||
+														status === "starting" ||
+														status === "running" ||
+														status === "stopping" ||
+														isSessionSwitching ||
+														sessionVersioningPending
+													}
+													editError={editErrors[message.id]}
+													editPending={editingMessageId === message.id}
+													onRestoreCheckpoint={
+														onRestoreCheckpoint
+															? requestRestoreCheckpoint
+															: undefined
+													}
+													restoreDisabled={
+														!onRestoreCheckpoint ||
+														status === "starting" ||
+														status === "running" ||
+														status === "stopping" ||
+														isSessionSwitching ||
+														sessionVersioningPending
+													}
+													restoreError={checkpointErrors[message.id]}
+													restorePending={
+														checkpointActions[message.id] === "undoing"
+													}
+													wasCopied={copiedMessageId === message.id}
+													onForkSession={
+														onForkSession ? handleForkSession : undefined
+													}
+													forkDisabled={
+														status === "starting" ||
+														status === "running" ||
+														status === "stopping" ||
+														isSessionSwitching ||
+														sessionVersioningPending
+													}
+													forkPending={forkingMessageId === message.id}
+													forkError={forkErrors[message.id]}
+													onFixCredentials={onFixCredentials}
+													{...getReasoningProps(reasoningMessages)}
 												/>
 											);
-										};
-										if (item.type === "tools") {
-											return renderWorkingRow(item);
-										}
-										if (item.type === "run") {
-											return (
-												<div
-													className="flex flex-col gap-1"
-													key={`run_${item.id}`}
-												>
-													{item.items.map(renderWorkingRow)}
-												</div>
-											);
-										}
-										if (item.type === "work") {
-											return (
-												<WorkBlock
-													durationMilliseconds={item.durationMilliseconds}
-													key={`work_${item.id}`}
-													toolCallCount={item.toolCallCount}
-												>
-													{item.items.map(renderWorkingRow)}
-												</WorkBlock>
-											);
-										}
-										const { agentRole, message, reasoningMessages } = item;
-										// An answer directly under its run's working rows belongs
-										// to them — pull it closer than the full transcript gap.
-										const previousItem = renderItems[itemIndex - 1];
-										const followsWorkingRows =
-											message.role === "assistant" &&
-											previousItem !== undefined &&
-											previousItem.type !== "message";
-										return (
-											<MessageBubble
-												agentRole={agentRole}
-												followsWorkingRows={followsWorkingRows}
-												isLastAssistantMessage={
-													message.role === "assistant" &&
-													lastConversationMessage === message
+										})
+										.map((row, index) => (
+											<TranscriptRow
+												key={row?.key ?? index}
+												deferred={
+													renderItems.length > 80 &&
+													index < renderItems.length - 12
 												}
-												isStreaming={streamingMessageId === message.id}
-												key={message.id}
-												message={message}
-												runCount={userRunCountByMessage.get(message)}
-												onExpandImage={handleExpandImage}
-												onCopyMessage={handleCopyMessage}
-												onEditMessage={
-													onEditMessage ? requestEditMessage : undefined
-												}
-												editDisabled={
-													!onEditMessage ||
-													status === "starting" ||
-													status === "running" ||
-													status === "stopping" ||
-													isSessionSwitching ||
-													sessionVersioningPending
-												}
-												editError={editErrors[message.id]}
-												editPending={editingMessageId === message.id}
-												onRestoreCheckpoint={
-													onRestoreCheckpoint
-														? requestRestoreCheckpoint
-														: undefined
-												}
-												restoreDisabled={
-													!onRestoreCheckpoint ||
-													status === "starting" ||
-													status === "running" ||
-													status === "stopping" ||
-													isSessionSwitching ||
-													sessionVersioningPending
-												}
-												restoreError={checkpointErrors[message.id]}
-												restorePending={
-													checkpointActions[message.id] === "undoing"
-												}
-												wasCopied={copiedMessageId === message.id}
-												onForkSession={
-													onForkSession ? handleForkSession : undefined
-												}
-												forkDisabled={
-													status === "starting" ||
-													status === "running" ||
-													status === "stopping" ||
-													isSessionSwitching ||
-													sessionVersioningPending
-												}
-												forkPending={forkingMessageId === message.id}
-												forkError={forkErrors[message.id]}
-												onFixCredentials={onFixCredentials}
-												{...getReasoningProps(reasoningMessages)}
-											/>
-										);
-									})
-									.map((row, index) => (
-										<TranscriptRow
-											key={row?.key ?? index}
-											deferred={
-												renderItems.length > 80 &&
-												index < renderItems.length - 12
-											}
-										>
-											{row}
-										</TranscriptRow>
-									))}
-								{/* Lives inside the transcript column and mirrors a
+											>
+												{row}
+											</TranscriptRow>
+										))}
+									{/* Lives inside the transcript column and mirrors a
 								    reasoning/tool trigger's geometry exactly (icon slot,
 								    min-height, padding), so the first real row replaces it
 								    in place with no jump. */}
-								{(status === "starting" || isAwaitingFirstOutput) &&
-								!isSessionSwitching ? (
-									<div
-										className={cn(
-											"flex min-h-7 items-center gap-2 py-1 text-sm font-medium text-muted-foreground",
-											indicatorFollowsWorkingRows && "-mt-3",
-										)}
-									>
-										<Loader2 className="size-4 animate-spin" />
-										<span className={STREAMING_TITLE_CLASS}>
-											{startingLabel ?? activityLabel ?? "Thinking..."}
-										</span>
-									</div>
-								) : null}
-								{pendingToolApprovals.length > 0 ? (
-									<ToolApprovalPanel
-										items={pendingToolApprovals}
-										onApprove={(requestId) =>
-											handleToolApprovalDecision(
-												requestId,
-												"approving",
-												onApproveToolApproval,
-											)
-										}
-										onReject={(requestId) =>
-											handleToolApprovalDecision(
-												requestId,
-												"rejecting",
-												onRejectToolApproval,
-											)
-										}
-										pendingActions={toolApprovalActions}
-										requestErrors={toolApprovalErrors}
-									/>
-								) : null}
-								{askQuestionItems.length > 0 ? (
-									<AgentAskQuestion
-										errors={askQuestionErrors}
-										items={askQuestionItems}
-										onAnswer={handleAskQuestionAnswer}
-										pendingAnswers={askQuestionActions}
-									/>
-								) : null}
-								{isTerminal && messages.length > 0 ? (
-									<SessionCompletionCard
-										artifactPaths={artifactPaths}
-										cwd={cwd}
-										environmentId={environmentId}
-										fileDiffs={fileDiffs}
-										onOpenDiff={onOpenDiff}
-										report={taskReport}
-										status={status}
-										tools={runMetrics.tools}
-										turns={runMetrics.turns}
-									/>
-								) : null}
-							</div>
-						)}
-						{editingMessageId ? (
-							<div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-[1px]">
-								<div className="flex items-center gap-1.5">
-									<Loader2 className="h-3.5 w-3.5 animate-spin" />
-									Restoring conversation...
+									{(status === "starting" || isAwaitingFirstOutput) &&
+									!isSessionSwitching ? (
+										<div
+											className={cn(
+												"flex min-h-7 items-center gap-2 py-1 text-sm font-medium text-muted-foreground",
+												indicatorFollowsWorkingRows && "-mt-3",
+											)}
+										>
+											<Loader2 className="size-4 animate-spin" />
+											<span className={STREAMING_TITLE_CLASS}>
+												{startingLabel ?? activityLabel ?? "Thinking..."}
+											</span>
+										</div>
+									) : null}
+									{pendingToolApprovals.length > 0 ? (
+										<ToolApprovalPanel
+											items={pendingToolApprovals}
+											onApprove={(requestId) =>
+												handleToolApprovalDecision(
+													requestId,
+													"approving",
+													onApproveToolApproval,
+												)
+											}
+											onReject={(requestId) =>
+												handleToolApprovalDecision(
+													requestId,
+													"rejecting",
+													onRejectToolApproval,
+												)
+											}
+											pendingActions={toolApprovalActions}
+											requestErrors={toolApprovalErrors}
+										/>
+									) : null}
+									{askQuestionItems.length > 0 ? (
+										<AgentAskQuestion
+											errors={askQuestionErrors}
+											items={askQuestionItems}
+											onAnswer={handleAskQuestionAnswer}
+											pendingAnswers={askQuestionActions}
+										/>
+									) : null}
+									{isTerminal && messages.length > 0 ? (
+										<SessionCompletionCard
+											artifactPaths={artifactPaths}
+											cwd={cwd}
+											environmentId={environmentId}
+											fileDiffs={fileDiffs}
+											onOpenDiff={onOpenDiff}
+											report={taskReport}
+											status={status}
+											tools={runMetrics.tools}
+											turns={runMetrics.turns}
+										/>
+									) : null}
 								</div>
-							</div>
-						) : null}
-						{showSwitchTransition ? (
-							hasMessages ? (
+							)}
+							{editingMessageId ? (
 								<div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-[1px]">
 									<div className="flex items-center gap-1.5">
 										<Loader2 className="h-3.5 w-3.5 animate-spin" />
-										Switching session...
+										Restoring conversation...
 									</div>
 								</div>
-							) : (
-								<div className="rounded-xl border border-border/70 bg-card p-4">
-									<div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-										<Loader2 className="h-4 w-4 animate-spin" />
-										Loading session...
+							) : null}
+							{showSwitchTransition ? (
+								hasMessages ? (
+									<div className="pointer-events-none absolute right-6 top-6 z-20 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-[1px]">
+										<div className="flex items-center gap-1.5">
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+											Switching session...
+										</div>
 									</div>
-									<div className="space-y-3">
-										<div className="h-4 w-2/5 animate-pulse rounded bg-muted/70" />
-										<div className="h-4 w-4/5 animate-pulse rounded bg-muted/70" />
-										<div className="h-4 w-3/5 animate-pulse rounded bg-muted/70" />
+								) : (
+									<div className="rounded-xl border border-border/70 bg-card p-4">
+										<div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+											<Loader2 className="h-4 w-4 animate-spin" />
+											Loading session...
+										</div>
+										<div className="space-y-3">
+											<div className="h-4 w-2/5 animate-pulse rounded bg-muted/70" />
+											<div className="h-4 w-4/5 animate-pulse rounded bg-muted/70" />
+											<div className="h-4 w-3/5 animate-pulse rounded bg-muted/70" />
+										</div>
 									</div>
+								)
+							) : null}
+							{chatTransportState !== "connected" && !shouldShowErrorBanner ? (
+								<div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+									{chatTransportState === "reconnecting"
+										? "Reconnecting chat..."
+										: chatTransportState === "unavailable"
+											? "Chat backend unavailable"
+											: "Connecting chat..."}
 								</div>
-							)
-						) : null}
-						{chatTransportState !== "connected" && !shouldShowErrorBanner ? (
-							<div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-								<Loader2 className="h-3.5 w-3.5 animate-spin" />
-								{chatTransportState === "reconnecting"
-									? "Reconnecting chat..."
-									: chatTransportState === "unavailable"
-										? "Chat backend unavailable"
-										: "Connecting chat..."}
-							</div>
-						) : null}
-						{shouldShowErrorBanner ? (
-							<div className="cline-chat-selectable mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-								{lastErrorMessage?.content !== error ? <p>{error}</p> : null}
-								{errorAction ? (
-									<Button
-										className="mt-2"
-										onClick={() => void errorAction.onClick()}
-										size="sm"
-										variant="outline"
-									>
-										{errorAction.label}
-									</Button>
-								) : null}
-							</div>
-						) : null}
-					</SessionContent>
-				</ConversationContent>
-			</ConversationViewport>
-			<ConversationScrollButton />
-			<AutoScrollOnSend messages={messages} />
-			{visibleExpandedImage ? (
-				<ChatImageLightbox
-					image={visibleExpandedImage}
-					onClose={() => setExpandedImage(null)}
-				/>
-			) : null}
-			<AlertDialog
-				open={checkpointConfirmation !== null}
-				onOpenChange={(open) => {
-					if (!open) {
-						setCheckpointConfirmation(null);
-					}
-				}}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Revert to this checkpoint?</AlertDialogTitle>
-						<AlertDialogDescription>
-							Workspace files and conversation history after this point will be
-							discarded. This cannot be undone.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-							onClick={() => {
-								const confirmation = checkpointConfirmation;
-								setCheckpointConfirmation(null);
-								if (confirmation) {
-									void handleRestoreCheckpoint(
-										confirmation.messageId,
-										confirmation.runCount,
-									);
-								}
-							}}
-						>
-							Revert
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-			<AlertDialog
-				open={editConfirmation !== null}
-				onOpenChange={(open) => {
-					if (!open) {
-						setEditConfirmation(null);
-					}
-				}}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Edit and restart from here?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This creates a new session and restores the workspace to its
-							checkpoint before placing this message in the composer. Workspace
-							and conversation changes after this point will be discarded.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-							onClick={() => {
-								const confirmation = editConfirmation;
-								setEditConfirmation(null);
-								if (confirmation) {
-									void handleEditMessage(
-										confirmation.messageId,
-										confirmation.content,
-										confirmation.runCount,
-									);
-								}
-							}}
-						>
-							Continue
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-		</Conversation>
-        </div>
+							) : null}
+							{shouldShowErrorBanner ? (
+								<div className="cline-chat-selectable mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+									{lastErrorMessage?.content !== error ? <p>{error}</p> : null}
+									{errorAction ? (
+										<Button
+											className="mt-2"
+											onClick={() => void errorAction.onClick()}
+											size="sm"
+											variant="outline"
+										>
+											{errorAction.label}
+										</Button>
+									) : null}
+								</div>
+							) : null}
+						</SessionContent>
+					</ConversationContent>
+				</ConversationViewport>
+				<ConversationScrollButton />
+				<AutoScrollOnSend messages={messages} />
+				{visibleExpandedImage ? (
+					<ChatImageLightbox
+						image={visibleExpandedImage}
+						onClose={() => setExpandedImage(null)}
+					/>
+				) : null}
+				<AlertDialog
+					open={checkpointConfirmation !== null}
+					onOpenChange={(open) => {
+						if (!open) {
+							setCheckpointConfirmation(null);
+						}
+					}}
+				>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Revert to this checkpoint?</AlertDialogTitle>
+							<AlertDialogDescription>
+								Workspace files and conversation history after this point will
+								be discarded. This cannot be undone.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction
+								className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+								onClick={() => {
+									const confirmation = checkpointConfirmation;
+									setCheckpointConfirmation(null);
+									if (confirmation) {
+										void handleRestoreCheckpoint(
+											confirmation.messageId,
+											confirmation.runCount,
+										);
+									}
+								}}
+							>
+								Revert
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+				<AlertDialog
+					open={editConfirmation !== null}
+					onOpenChange={(open) => {
+						if (!open) {
+							setEditConfirmation(null);
+						}
+					}}
+				>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Edit and restart from here?</AlertDialogTitle>
+							<AlertDialogDescription>
+								This creates a new session and restores the workspace to its
+								checkpoint before placing this message in the composer.
+								Workspace and conversation changes after this point will be
+								discarded.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction
+								className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+								onClick={() => {
+									const confirmation = editConfirmation;
+									setEditConfirmation(null);
+									if (confirmation) {
+										void handleEditMessage(
+											confirmation.messageId,
+											confirmation.content,
+											confirmation.runCount,
+										);
+									}
+								}}
+							>
+								Continue
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			</Conversation>
+		</div>
 	);
 }
 
@@ -1119,7 +1201,9 @@ export const ChatMessages = memo(function ChatMessages(
 			cwd={props.cwd}
 			environmentId={props.environmentId ?? "local"}
 		>
-			<ChatMessagesImpl {...props} />
+			<ActivityPresentationProvider>
+				<ChatMessagesImpl {...props} />
+			</ActivityPresentationProvider>
 		</ArtifactWorkspaceProvider>
 	);
 });

@@ -16,7 +16,7 @@ import {
 	Sparkles,
 	Wrench,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ChatSessionStatus } from "@/lib/chat-schema";
 import {
 	formatTaskReportText,
@@ -80,7 +80,10 @@ function reportState(report: SessionTaskReport, status?: ChatSessionStatus) {
 		report.steps.length > 0 &&
 		report.completedCount === report.steps.length
 	) {
-		return { label: "Plan finished · outcome unverified", tone: "warning" as const };
+		return {
+			label: "Plan finished · outcome unverified",
+			tone: "warning" as const,
+		};
 	}
 	if (
 		status === "running" ||
@@ -128,21 +131,24 @@ function stepStatusLabel(status: TaskReportStepStatus) {
 export function TaskReportPanel({
 	report,
 	status,
+	onReviewChanges,
+	onOpenReport,
+	onOpenActivity,
 }: {
 	report: SessionTaskReport;
 	status?: ChatSessionStatus;
+	onReviewChanges?: () => void;
+	onOpenReport?: () => void;
+	onOpenActivity?: () => void;
 }) {
 	const complete =
 		report.mode === "plan" &&
 		report.steps.length > 0 &&
 		report.completedCount === report.steps.length;
-	const [expanded, setExpanded] = useState(!complete);
+	const [expanded, setExpanded] = useState(false);
 	const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
 		"idle",
 	);
-	useEffect(() => {
-		setExpanded(!complete);
-	}, [complete]);
 
 	const activeStep = useMemo(
 		() =>
@@ -150,8 +156,10 @@ export function TaskReportPanel({
 			report.steps.find((step) => step.status === "in_progress"),
 		[report.activeStepId, report.steps],
 	);
-	const view = taskReportView(report,status);
-    const state = !isTaskActive(status) ? {label:`${view.execution} · ${view.outcome}`,tone:"muted" as const} : reportState(report, status);
+	const view = taskReportView(report, status);
+	const state = !isTaskActive(status)
+		? { label: `${view.execution} · ${view.outcome}`, tone: "muted" as const }
+		: reportState(report, status);
 	const latestActivity =
 		report.evidence.find((item) => item.status === "running") ??
 		report.evidence[0];
@@ -172,7 +180,9 @@ export function TaskReportPanel({
 	const headline =
 		activeStep?.label ??
 		latestActivity?.label ??
-		(complete ? "All plan steps marked complete — review verification" : report.explanation);
+		(complete
+			? "All plan steps marked complete — review verification"
+			: report.explanation);
 	const copyReport = async () => {
 		if (!navigator.clipboard?.writeText) {
 			setCopyState("failed");
@@ -199,7 +209,7 @@ export function TaskReportPanel({
 		<section
 			aria-label="AI task report"
 			className={cn(
-				"sticky top-11 z-20 overflow-hidden rounded-xl border bg-background/95 shadow-sm backdrop-blur-xl",
+				"relative z-20 overflow-hidden rounded-xl border bg-background/95 shadow-sm backdrop-blur-xl",
 				state.tone === "active" && "border-blue-500/30",
 				state.tone === "warning" && "border-amber-500/35",
 				state.tone === "destructive" && "border-destructive/40",
@@ -232,13 +242,16 @@ export function TaskReportPanel({
 					)}
 				</div>
 				<div className="min-w-0 flex-1">
-					<div className="flex min-w-0 items-center gap-2">
-						<span className="truncate text-sm font-semibold tracking-tight">
-							{report.mode === "plan" ? "AI task report" : "Live task activity"}
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<span className="line-clamp-2 text-sm font-semibold tracking-tight">
+							{report.goal ||
+								(report.mode === "plan"
+									? "AI task report"
+									: "Live task activity")}
 						</span>
 						<span
 							className={cn(
-								"shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+								"max-w-full rounded-md border px-2 py-0.5 text-sm font-semibold uppercase tracking-wide",
 								state.tone === "active" &&
 									"border-blue-500/25 bg-blue-500/10 text-blue-600 dark:text-blue-400",
 								state.tone === "warning" &&
@@ -253,7 +266,7 @@ export function TaskReportPanel({
 						</span>
 					</div>
 					{headline ? (
-						<p className="mt-0.5 truncate text-xs text-muted-foreground">
+						<p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
 							{headline}
 						</p>
 					) : null}
@@ -272,7 +285,7 @@ export function TaskReportPanel({
 									style={{ width: `${report.progressPercent}%` }}
 								/>
 							</div>
-							<span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+							<span className="shrink-0 text-sm tabular-nums text-muted-foreground">
 								{report.completedCount} of {report.steps.length}
 							</span>
 						</div>
@@ -285,14 +298,57 @@ export function TaskReportPanel({
 					)}
 				/>
 			</button>
+			<div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-3.5 py-2 text-sm">
+				<span>
+					Outcome: <strong className="font-medium">{view.outcome}</strong>
+				</span>
+				<span className="text-muted-foreground">
+					{report.evidence.length} available receipts · history total unknown
+				</span>
+				{onOpenActivity && (
+					<button
+						type="button"
+						onClick={onOpenActivity}
+						className="min-h-11 rounded px-2 text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+					>
+						Activity
+					</button>
+				)}
+				{onReviewChanges && (
+					<button
+						type="button"
+						onClick={onReviewChanges}
+						className="min-h-11 rounded px-2 text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+					>
+						Review changes
+					</button>
+				)}
+				{onOpenReport && (
+					<button
+						type="button"
+						onClick={onOpenReport}
+						className="min-h-11 rounded px-2 text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+					>
+						Open report
+					</button>
+				)}
+			</div>
 
+			{!expanded && repairLabel && (
+				<output className="block px-4 pb-3 text-sm">
+					{repairLabel}
+					{report.repair?.failedStepLabel
+						? ` · ${report.repair.failedStepLabel}`
+						: ""}
+				</output>
+			)}
 			{expanded ? (
 				<div className="border-border/60 border-t">
 					<div className="max-h-[min(56vh,32rem)] overflow-y-auto px-3.5 py-3.5">
 						<div className="mb-2 flex justify-end">
 							<button
 								className={cn(
-									"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+									"inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
 									copyState === "failed" && "text-destructive",
 								)}
 								onClick={() => void copyReport()}
@@ -310,8 +366,12 @@ export function TaskReportPanel({
 										: "Copy report"}
 							</button>
 						</div>
-                        <p className="mb-3 text-xs text-muted-foreground">Execution: {view.execution}. Outcome: {view.outcome}. Step counts are plan progress, not analysis coverage or verified outcomes. Full bounded evidence is available in Reports.</p>
-                        {activeStep && isTaskActive(status) ? (
+						<p className="mb-3 text-sm text-muted-foreground">
+							Execution: {view.execution}. Outcome: {view.outcome}. Step counts
+							are plan progress, not analysis coverage or verified outcomes.
+							Full bounded evidence is available in Reports.
+						</p>
+						{activeStep && isTaskActive(status) ? (
 							<div className="mb-3 rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-transparent px-3 py-2.5">
 								<div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-400">
 									<span className="relative flex size-2">
@@ -324,7 +384,7 @@ export function TaskReportPanel({
 									{activeStep.label}
 								</p>
 								{latestActivity?.detail ? (
-									<p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+									<p className="mt-1 truncate font-mono text-sm text-muted-foreground">
 										{latestActivity.detail}
 									</p>
 								) : null}
@@ -340,7 +400,7 @@ export function TaskReportPanel({
 										: "border-amber-500/30 bg-amber-500/10",
 								)}
 							>
-								<div className="flex items-center gap-2 text-xs font-semibold">
+								<div className="flex items-center gap-2 text-sm font-semibold">
 									{report.repair.state === "repairing" ||
 									report.repair.state === "verifying" ? (
 										<Loader2 className="size-3.5 animate-spin" />
@@ -349,14 +409,14 @@ export function TaskReportPanel({
 									)}
 									{repairLabel}
 								</div>
-								<p className="mt-1 text-xs text-muted-foreground">
+								<p className="mt-1 text-sm text-muted-foreground">
 									Failed step: {report.repair.failedStepLabel}
 								</p>
 							</div>
 						) : null}
 
 						{report.explanation ? (
-							<p className="mb-3 text-xs leading-5 text-muted-foreground">
+							<p className="mb-3 text-sm leading-5 text-muted-foreground">
 								{report.explanation}
 							</p>
 						) : null}
@@ -452,10 +512,15 @@ export function TaskReportPanel({
 												{evidenceIcon(item.status)}
 											</span>
 											<div className="min-w-0 flex-1">
-												<p className="truncate text-xs font-medium">
+												<p className="truncate text-sm font-medium">
 													{item.label}
 												</p>
-												<p className="text-xs text-muted-foreground">{item.status === "completed" ? "Tool finished" : item.status} · {item.outcome ?? "unverified"}</p>
+												<p className="text-sm text-muted-foreground">
+													{item.status === "completed"
+														? "Tool finished"
+														: item.status}{" "}
+													· {item.outcome ?? "unverified"}
+												</p>
 												{item.detail ? (
 													<p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
 														{item.detail}

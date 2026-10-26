@@ -197,3 +197,38 @@ it("never clears unassigned or different-scope failures with an unrelated succes
 		expect(taskReportView(r, "completed").outcome).toContain("Failed");
 	}
 });
+
+describe("complete available evidence exports", () => {
+	it("retains old unresolved failures outside the summary window and discloses export coverage", () => {
+		const r = report();
+		r.evidence = Array.from({ length: 225 }, (_, i) => ({
+			id: `e${i}`,
+			label: "Read",
+			status: "completed",
+			toolName: "read_files",
+			createdAt: 1000 - i,
+		}));
+		r.evidence[224] = {
+			...r.evidence[224],
+			status: "failed",
+			outcome: "failed",
+		};
+		const summary = taskReportView(r, "completed");
+		expect(summary.outcome).toContain("Failed");
+		expect(summary.evidenceDetails).toHaveLength(200);
+		expect(summary.evidenceCoverage).toEqual({
+			included: 200,
+			available: 225,
+			upstreamTotal: null,
+			source: "available-transcript",
+		});
+		const full = taskReportView(r, "completed", { allAvailableEvidence: true });
+		expect(full.evidenceDetails).toHaveLength(225);
+		expect(full.evidenceCoverage.included).toBe(225);
+		expect(full.exportScope).toBe("all-available-evidence");
+		expect(formatFinalReport(full)).toContain("upstream history total unknown");
+		expect(
+			JSON.parse(exportReport(full, "json").content).evidenceDetails.at(-1).id,
+		).toBe("e224");
+	});
+});
