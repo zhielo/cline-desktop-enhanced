@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
 	EmulationOptionsSchema,
+	EmulationRuntimeSchema,
 	EMULATION_PROFILE_SHA256,
 } from "../emulation-schema";
 import { InvestigationSchemas } from "../investigation";
@@ -136,4 +137,39 @@ it("fails closed on malformed ELF admission and preserves existing Unicorn profi
 		modify(b);
 		expect(() => inspectEmulationElf(b, "qiling", "x86_64")).toThrow();
 	}
+});
+
+it("accepts real opaque desktop session IDs without granting execution authority", () => {
+	const request = {
+		...options,
+		operation: "emulate_profile",
+		target: "/owned.elf",
+		analysis_mode: "runtime",
+	};
+	for (const owner_session_id of [
+		"installer-owned-triage",
+		"session_1793083714059_ahgxt",
+		"11111111-1111-4111-8111-111111111111",
+	])
+		expect(
+			EmulationRuntimeSchema.parse({ ...request, owner_session_id })
+				.owner_session_id,
+		).toBe(owner_session_id);
+	for (const owner_session_id of [
+		"",
+		"x".repeat(129),
+		"owner\nother",
+		"owner other",
+		"../owner",
+	])
+		expect(() =>
+			EmulationRuntimeSchema.parse({ ...request, owner_session_id }),
+		).toThrow();
+	expect(() =>
+		EmulationRuntimeSchema.parse({
+			...request,
+			owner_session_id: "owner",
+			approved: true,
+		}),
+	).toThrow();
 });

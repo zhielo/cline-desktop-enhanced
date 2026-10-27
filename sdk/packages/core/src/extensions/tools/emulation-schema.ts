@@ -68,7 +68,14 @@ export const EmulationRuntimeSchema = z
 		target: z.string().min(1).max(4096),
 		...EmulationOptionsShape,
 		timeout_ms: z.number().int().min(1000).max(120000).default(60000),
-		owner_session_id: z.string().uuid(),
+		// Match bounded opaque desktop session identifiers, not just UUIDs.
+		// This is identity syntax only; the trusted host still checks the exact
+		// attached owner, workspace, permission profile and current mode.
+		owner_session_id: z
+			.string()
+			.min(1)
+			.max(128)
+			.regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
 		analysis_mode: z.enum(["runtime", "hybrid"]),
 		hybrid: HybridContextSchema.optional(),
 		worker_endpoint: z.string().url().optional(),

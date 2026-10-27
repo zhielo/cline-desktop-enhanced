@@ -17,7 +17,7 @@ import {
 import type { SidecarContext } from "./types";
 it("enforces owning Full Access modes, exact artifact approvals, Hybrid basis and cancellation for additive engines", async () => {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-owner-"))),
-		id = randomUUID(),
+		id = `session_${randomUUID()}`,
 		target = join(root, "owned.elf"),
 		bytes = Buffer.alloc(128);
 	writeFileSync(target, bytes);
