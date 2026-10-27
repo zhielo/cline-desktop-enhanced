@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/scripts/android-investigation-worker.test.py",markers:["class FixtureTimingResult", "ANDROID_FIXTURE_CASE", "resultclass=FixtureTimingResult"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",markers:["finished.map", "18_000"]},
  {path:"apps/examples/desktop-app/sidecar/release-gate-verifier.ts",markers:["Repeated checks require complete authoritative workflow provenance", "Repeated check lacks exact job/workflow binding", "Distinct required detection workflows missing"]},
  {path:"apps/examples/desktop-app/sidecar/ghidra-fixtures.ts",markers:["GHIDRA_ACCEPTANCE_ARCHITECTURES", "ARM:LE:32:", "AARCH64:LE:64:"]},
  {path:"apps/examples/desktop-app/sidecar/setup-center.ts",markers:["testAllGhidraIntegrations", "getGhidraReadiness", "profileIdentity", "languageId", "ghidra-receipt-${architecture}.json"]},
