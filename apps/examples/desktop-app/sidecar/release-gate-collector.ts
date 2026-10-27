@@ -251,6 +251,7 @@ export async function collectReleaseGate(
 	const result = verifyReleaseGateEvidence(pullNumber, expectedHead, {
 		pull,
 		checks,
+		workflowRuns: runs,
 		run,
 		jobs,
 		artifacts,
@@ -277,6 +278,7 @@ export async function collectReleaseGate(
 	verifyReleaseGateEvidence(pullNumber, expectedHead, {
 		pull: finalPull,
 		checks: finalChecks,
+		workflowRuns: runs,
 		run: finalRun,
 		jobs,
 		artifacts,

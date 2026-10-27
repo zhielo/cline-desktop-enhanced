@@ -1015,3 +1015,5 @@ Version 2 per-architecture receipts bind fixture bytes, launcher/configuration a
 Real local Ghidra 12.1.4 / Temurin 21 owned tests passed for all three profiles. CI must repeat Linux/Windows real-engine tests and the installed Windows UI journey before merge. The installed journey verifies selection persistence, all three receipts and saves ghidra-profile-readiness.json. The release policy adds one stage (71 total), preserves all previous stages and repins changed validation recipes.
 
 This change does not implement the separate Emulation Framework Pack. Managed Qiling, unidbg, rnidbg and Speakeasy Install / Repair / Test / Remove remains outstanding; no HTTPS-worker provisioning or WSL containment has been replaced by this patch.
+
+The release verifier also admits complete successful ready-for-review E2E repetitions only when every check has exact GitHub job/run binding to the expected same-head successful workflow. Both distinct detection workflows remain required. Failed/pending repeats, unknown workflows, missing provenance and absent required gates still block merge. No duplicate evidence is discarded.

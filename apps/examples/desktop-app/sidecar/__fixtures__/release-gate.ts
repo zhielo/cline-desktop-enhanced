@@ -111,3 +111,54 @@ export function fixture(): ReleaseGateEvidence {
 		),
 	};
 }
+
+export function repeatedE2EEvidence() {
+	const e = fixture(),
+		repo = "zhielo/cline-desktop-enhanced";
+	const makeRun = (id: number, path: string) => ({
+		id,
+		path,
+		event: "pull_request",
+		head_sha: head,
+		status: "completed",
+		conclusion: "success",
+		repository: { full_name: repo },
+	});
+	e.workflowRuns = {
+		total_count: 3,
+		workflow_runs: [
+			makeRun(801, ".github/workflows/ext-vscode-test-e2e.yml"),
+			makeRun(802, ".github/workflows/ext-vscode-test-e2e.yml"),
+			makeRun(803, ".github/workflows/ext-vscode-test.yml"),
+		],
+	};
+	let detect = 0;
+	for (const c of e.checks.check_runs) {
+		if (
+			c.name.startsWith("e2e (") ||
+			c.name === "matrix_prep" ||
+			c.name === "Detect Changes"
+		)
+			Object.assign(c, {
+				details_url: `https://github.com/${repo}/actions/runs/${c.name === "Detect Changes" && detect++ === 0 ? 803 : 801}/job/${c.id}`,
+			});
+	}
+	for (const name of [
+		"e2e (windows)",
+		"e2e (macos)",
+		"e2e (ubuntu)",
+		"matrix_prep",
+		"Detect Changes",
+	]) {
+		const c = {
+			...e.checks.check_runs.find((c) => c.name === name)!,
+			id: 1000 + e.checks.check_runs.length,
+		};
+		Object.assign(c, {
+			details_url: `https://github.com/${repo}/actions/runs/802/job/${c.id}`,
+		});
+		e.checks.check_runs.push(c);
+	}
+	e.checks.total_count = e.checks.check_runs.length;
+	return e;
+}
