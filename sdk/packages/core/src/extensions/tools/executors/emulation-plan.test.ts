@@ -7,26 +7,43 @@ import {
 	EmulationOptionsSchema,
 	EmulationRuntimeSchema,
 	EMULATION_PROFILE_SHA256,
+	EMULATION_PROFILE_ARCHITECTURES,
 } from "../emulation-schema";
 import { InvestigationSchemas } from "../investigation";
 import { ReverseEngineeringInputSchema } from "../schemas";
 import { planEmulation, inspectEmulationElf } from "./emulation-plan";
 import { createReverseEngineeringExecutor } from "./reverse-engineering";
 const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
-function elf() {
+function elf(architecture = "x86_64") {
 	const b = Buffer.alloc(128);
-	Buffer.from("7f454c46020101", "hex").copy(b);
+	const bits = architecture === "arm32" ? 32 : 64;
+	Buffer.from(bits === 32 ? "7f454c46010101" : "7f454c46020101", "hex").copy(b);
 	b.writeUInt16LE(2, 16);
-	b.writeUInt16LE(62, 18);
-	b.writeBigUInt64LE(0x1000n, 24);
-	b.writeBigUInt64LE(64n, 32);
-	b.writeUInt16LE(56, 54);
-	b.writeUInt16LE(1, 56);
-	b.writeUInt32LE(1, 64);
-	b.writeUInt32LE(5, 68);
-	b.writeBigUInt64LE(0x1000n, 80);
-	b.writeBigUInt64LE(128n, 96);
-	b.writeBigUInt64LE(128n, 104);
+	b.writeUInt16LE(
+		architecture === "arm32" ? 40 : architecture === "arm64" ? 183 : 62,
+		18,
+	);
+	if (bits === 64) {
+		b.writeBigUInt64LE(0x1000n, 24);
+		b.writeBigUInt64LE(64n, 32);
+		b.writeUInt16LE(56, 54);
+		b.writeUInt16LE(1, 56);
+		b.writeUInt32LE(1, 64);
+		b.writeUInt32LE(5, 68);
+		b.writeBigUInt64LE(0x1000n, 80);
+		b.writeBigUInt64LE(128n, 96);
+		b.writeBigUInt64LE(128n, 104);
+	} else {
+		b.writeUInt32LE(0x1000, 24);
+		b.writeUInt32LE(52, 28);
+		b.writeUInt16LE(32, 42);
+		b.writeUInt16LE(1, 44);
+		b.writeUInt32LE(1, 52);
+		b.writeUInt32LE(0x1000, 60);
+		b.writeUInt32LE(128, 68);
+		b.writeUInt32LE(128, 72);
+		b.writeUInt32LE(5, 76);
+	}
 	return b;
 }
 const options = {
@@ -172,4 +189,72 @@ it("accepts real opaque desktop session IDs without granting execution authority
 			approved: true,
 		}),
 	).toThrow();
+});
+
+it("keeps desktop architecture contracts byte-bound to worker profiles", async () => {
+	const profiles = JSON.parse(
+		await readFile(
+			new URL(
+				"../../../../../../../workers/emulation/profiles.json",
+				import.meta.url,
+			),
+			"utf8",
+		),
+	).profiles;
+	for (const engine of ["qiling", "unidbg", "rnidbg"] as const)
+		expect(EMULATION_PROFILE_ARCHITECTURES[engine]).toEqual(
+			profiles[engine].architectures,
+		);
+	for (const architecture of ["x86_64", "arm32", "arm64"]) {
+		expect(
+			EmulationOptionsSchema.parse({ ...options, architecture }).architecture,
+		).toBe(architecture);
+		expect(
+			inspectEmulationElf(elf(architecture), "qiling", architecture),
+		).toMatchObject({ mappedBytes: 128 });
+		for (const wrong of ["x86_64", "arm32", "arm64"].filter(
+			(a) => a !== architecture,
+		))
+			expect(() =>
+				inspectEmulationElf(elf(architecture), "qiling", wrong),
+			).toThrow();
+	}
+	for (const [engine, architecture] of [
+		["qiling", "mips"],
+		["unknown", "x86_64"],
+		["unidbg", "x86_64"],
+		["rnidbg", "arm32"],
+	])
+		expect(() => inspectEmulationElf(elf(), engine, architecture)).toThrow(
+			"no fallback",
+		);
+});
+
+it.each([
+	"arm32",
+	"arm64",
+])("plans %s Qiling through the real tool without worker execution", async (architecture) => {
+	const root = await mkdtemp(join(tmpdir(), "qiling-arm-plan-")),
+		target = join(root, "owned.elf"),
+		bytes = elf(architecture);
+	try {
+		await writeFile(target, bytes);
+		const input = ReverseEngineeringInputSchema.parse({
+			operation: "plan_emulation",
+			target,
+			emulation_plan: { ...options, architecture, expected_sha256: sha(bytes) },
+		});
+		const result = JSON.parse(
+			await createReverseEngineeringExecutor()(input, {} as never),
+		);
+		expect(result).toMatchObject({
+			effect: "plan-only",
+			observedExecution: false,
+			workerConnected: false,
+			nextRequest: { engine: "qiling", architecture },
+		});
+		expect(await readFile(target)).toEqual(bytes);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
 });

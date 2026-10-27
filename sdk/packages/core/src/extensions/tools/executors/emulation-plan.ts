@@ -1,6 +1,7 @@
 import { canonical } from "../../../analysis/contracts";
 import {
 	EmulationPlanSchema,
+	supportsEmulationArchitecture,
 	EMULATION_PROFILE_SHA256,
 } from "../emulation-schema";
 import type { ReverseEngineeringInput } from "../schemas";
@@ -11,6 +12,8 @@ export function inspectEmulationElf(
 	engine: string,
 	architecture: string,
 ) {
+	if (!supportsEmulationArchitecture(engine, architecture))
+		throw new Error("Unsupported engine/architecture; no fallback");
 	const b = Buffer.from(data);
 	if (
 		b.length < 64 ||
@@ -176,7 +179,7 @@ export async function planEmulation(
 		workerConnected: false,
 		limitations: [
 			"Optional operator-provisioned offline disposable Linux worker; missing runtime stays blocked. No engine download or automatic fallback.",
-			"Qiling: static x86-64 ELF entry, write to stdout/stderr and exit only. Android: no-dependency ARM JNI initialize or exact static (I)I export, no APK/custom stubs or complete Android.",
+			"Qiling: static x86-64/ARM32/ARM64 ELF entry, write to stdout/stderr and exit only. Android: no-dependency ARM JNI initialize or exact static (I)I export, no APK/custom stubs or complete Android.",
 			"rnidbg is experimental with pinned reviewed upstream compatibility patches; not a mature replacement for unidbg.",
 			"A matching scenario assertion never certifies application behavior, target safety or native execution. Unicorn and Speakeasy routes are unchanged.",
 		],

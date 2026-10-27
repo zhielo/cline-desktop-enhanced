@@ -237,6 +237,18 @@ export function assertInstalledActionSequence(sequence: number) {
 		throw new Error("Installed action evidence budget reached")
 }
 
+/** Endpoint discovery is part of one recorded RPC operation, not a second action.
+ * Resolve afresh on every call (including after restarts), record failures, and never
+ * retry submitted commands. The existing 95s action deadline and 768-action cap apply. */
+export async function recordInstalledRpc<T>(
+	command: string,
+	record: <R>(phase: string, operation: () => Promise<R>) => Promise<R>,
+	discover: () => Promise<string>,
+	send: (endpoint: string) => Promise<T>,
+): Promise<T> {
+	return record(`rpc-${command}`, async () => send(await discover()))
+}
+
 /** Newly produced receipts must match the shipped parser, not a stale test literal.
  * Persisted historical receipts remain governed by their own immutable profile. */
 export function verifyInstalledAnalysisProfile(profile: string) {
@@ -923,24 +935,17 @@ ConvertTo-Json -InputObject @($rows) -Compress
 	}
 
 	async function rpc<T>(page: Page, command: string, args: Record<string, unknown> = {}): Promise<T> {
-		const endpoint = await acceptanceAction(
-			"backend-endpoint-discovery",
-			() =>
-				waitForInstalledBackendEndpoint(() =>
-					page.evaluate(async () => {
-						const native = (
-							window as unknown as {
-								__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> }
-							}
-						).__TAURI_INTERNALS__
-						return await native.invoke("get_desktop_backend_endpoint")
-					}),
-				),
-			95_000,
+		return recordInstalledRpc<T>(command, acceptanceAction,
+			() => waitForInstalledBackendEndpoint(() =>
+				page.evaluate(async () => {
+					const native = (window as unknown as {
+						__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> }
+					}).__TAURI_INTERNALS__
+					return await native.invoke("get_desktop_backend_endpoint")
+				}),
+			),
+			async (endpoint) => (await page.evaluate(installedBrowserRpc, { command, args, endpoint })) as T,
 		)
-		return (await acceptanceAction(`rpc-${command}`, () =>
-			page.evaluate(installedBrowserRpc, { command, args, endpoint }),
-		)) as T
 	}
 	async function settings(page: Page, section: string) {
 		await page.getByRole("button", { name: "Settings", exact: true }).first().click()
@@ -3495,16 +3500,18 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			stages.push("installed-runtime-plan-owned-identity-no-attach-no-execute-passed")
    // New engines stay optional: installed product proves planning and fail-closed
    // unavailable workers. Real modeled execution is a separate Linux engine CI gate.
-   for(const engine of ["qiling","unidbg","rnidbg"]){
-    const target=join(workspace,`owned-${engine}-admission.elf`),bytes=Buffer.alloc(128);
-    Buffer.from("7f454c46020101","hex").copy(bytes);bytes.writeUInt16LE(engine==="qiling"?2:3,16);bytes.writeUInt16LE(engine==="qiling"?62:183,18);
-    bytes.writeBigUInt64LE(0x1000n,24);bytes.writeBigUInt64LE(64n,32);bytes.writeUInt16LE(56,54);bytes.writeUInt16LE(1,56);bytes.writeUInt32LE(1,64);bytes.writeUInt32LE(5,68);bytes.writeBigUInt64LE(0x1000n,80);bytes.writeBigUInt64LE(128n,96);bytes.writeBigUInt64LE(128n,104);await writeFile(target,bytes);
+   for(const [engine,architecture] of [["qiling","x86_64"],["qiling","arm32"],["qiling","arm64"],["unidbg","arm32"],["unidbg","arm64"],["rnidbg","arm64"]]){
+    const target=join(workspace,`owned-${engine}-${architecture}-admission.elf`),bytes=Buffer.alloc(128),bits=architecture==="arm32"?32:64;
+    Buffer.from(bits===32?"7f454c46010101":"7f454c46020101","hex").copy(bytes);bytes.writeUInt16LE(engine==="qiling"?2:3,16);bytes.writeUInt16LE(architecture==="x86_64"?62:architecture==="arm32"?40:183,18);
+    if(bits===64){bytes.writeBigUInt64LE(0x1000n,24);bytes.writeBigUInt64LE(64n,32);bytes.writeUInt16LE(56,54);bytes.writeUInt16LE(1,56);bytes.writeUInt32LE(1,64);bytes.writeUInt32LE(5,68);bytes.writeBigUInt64LE(0x1000n,80);bytes.writeBigUInt64LE(128n,96);bytes.writeBigUInt64LE(128n,104);}
+    else{bytes.writeUInt32LE(0x1000,24);bytes.writeUInt32LE(52,28);bytes.writeUInt16LE(32,42);bytes.writeUInt16LE(1,44);bytes.writeUInt32LE(1,52);bytes.writeUInt32LE(0x1000,60);bytes.writeUInt32LE(128,68);bytes.writeUInt32LE(128,72);bytes.writeUInt32LE(5,76);}
+    await writeFile(target,bytes);
     const handle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target}});
-    const options={engine,architecture:engine==="qiling"?"x86_64":"arm64",scenario:{kind:engine==="qiling"?"entry":"initialize"},instruction_limit:10000};
+    const options={engine,architecture,scenario:{kind:engine==="qiling"?"entry":"initialize"},instruction_limit:10000};
     const draft=await rpc<{id:string;requestHash:string;requirements:string[]}>(page,"plan_emulation",{...triageScope,input:{artifactId:handle.id,options,phase:"prepare"}});
     const consent=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:draft.id,requestHash:draft.requestHash,requirements:draft.requirements});
     const planned=await rpc<{result:{effect:string;compatibility:string;workerConnected:boolean;observedExecution:boolean;approval:{granted:boolean};nextRequest:Record<string,unknown>}}>(page,"plan_emulation",{...triageScope,input:{artifactId:handle.id,options,phase:"run",planId:draft.id,executionToken:consent.executionToken}});
-    if(planned.result.effect!=="plan-only"||planned.result.compatibility!=="admission-only"||planned.result.workerConnected!==false||planned.result.observedExecution!==false||planned.result.approval.granted!==false||(await readFile(target)).compare(bytes)!==0)throw new Error("Installed emulation planner widened authority or changed source");
+    if(planned.result.nextRequest.engine!==engine||planned.result.nextRequest.architecture!==architecture||planned.result.effect!=="plan-only"||planned.result.compatibility!=="admission-only"||planned.result.workerConnected!==false||planned.result.observedExecution!==false||planned.result.approval.granted!==false||(await readFile(target)).compare(bytes)!==0)throw new Error("Installed emulation planner widened authority or changed source");
     let denied=false;try{await rpc(page,"prepare_analysis_task",{...triageScope,cwd:workspace,kind:"dynamic",request:planned.result.nextRequest});}catch(e){if(!String(e).includes("Runtime/Hybrid"))throw e;denied=true;}
     if(!denied)throw new Error("Static enabled optional engine execution");
     await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});

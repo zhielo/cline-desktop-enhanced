@@ -112,7 +112,7 @@ export function setupCapabilityCatalog() {
 			...["qiling","unidbg","rnidbg"].map(id=>({
     id,availability:"optional-isolated-profile",tool:"reverse_engineer",operation:"plan_emulation",
     prepareCommand:"prepare_analysis_task",runCommand:"run_dynamic_analysis",
-    scope:id==="qiling"?"Static Linux x86-64 ELF entry; empty rootfs, stdout/exit only":id==="unidbg"?"Android ARM32/64 no-dependency JNI initialize or static (I)I":"Experimental Android ARM64 no-dependency JNI; reviewed pinned upstream compatibility patches",
+    scope:id==="qiling"?"Static Linux x86-64/ARM32/ARM64 ELF entry; empty rootfs, stdout/exit only":id==="unidbg"?"Android ARM32/64 no-dependency JNI initialize or static (I)I":"Experimental Android ARM64 no-dependency JNI; reviewed pinned upstream compatibility patches",
     requirement:"Independent optional HTTPS worker, pinned key/profile/runtime, owned startup fixture, attached local Full Access Runtime/Hybrid session, exact artifact and one-use upload/execution approval; Hybrid requires static evidence. No native fallback or engine auto-install.",
    })),
 		],

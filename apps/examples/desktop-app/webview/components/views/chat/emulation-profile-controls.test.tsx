@@ -10,12 +10,10 @@ it("presents honest optional profiles, changes architecture explicitly, and prep
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 	const root = createRoot(container),
 		prepare = vi.fn(async () => {}),
-		rpc = vi
-			.spyOn(desktopClient, "invoke")
-			.mockResolvedValue({
-				ready: false,
-				error: "No independent worker configured",
-			});
+		rpc = vi.spyOn(desktopClient, "invoke").mockResolvedValue({
+			ready: false,
+			error: "No independent worker configured",
+		});
 	const select = async (label: string, value: string) => {
 		const e = container.querySelector(
 			`select[aria-label="${label}"]`,
@@ -49,6 +47,17 @@ it("presents honest optional profiles, changes architecture explicitly, and prep
 		await click("Check engine readiness");
 		expect(container.textContent).toContain("No independent worker");
 		expect(prepare).not.toHaveBeenCalled();
+		for (const architecture of ["arm32", "arm64"]) {
+			await select("Emulation architecture", architecture);
+			await click("Prepare emulation task");
+			expect(prepare).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					engine: "qiling",
+					architecture,
+					scenario: { kind: "entry" },
+				}),
+			);
+		}
 		await select("Emulation engine", "rnidbg");
 		expect(container.textContent).toContain("experimental");
 		expect(

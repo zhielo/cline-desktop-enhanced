@@ -4,6 +4,26 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["export async function recordInstalledRpc<T>","recordInstalledRpc<T>(command, acceptanceAction","return record(`rpc-${command}`, async () => send(await discover()))"]},
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:['["qiling","x86_64"],["qiling","arm32"],["qiling","arm64"],["unidbg","arm32"],["unidbg","arm64"],["rnidbg","arm64"]',"planned.result.nextRequest.architecture!==architecture"]},
+	{path:"workers/emulation/profiles.json",markers:['"qiling-linux-static-v2"','"architectures":["x86_64","arm32","arm64"]']},
+	{path:"workers/emulation/qiling_runner.py",markers:["'arm32':{'write':4,'exit':1,'exit_group':248}","'arm64':{'write':64,'exit':93,'exit_group':94}","Qiling architecture differs from admitted ELF","if number not in calls.values()"]},
+	{path:"workers/emulation/server.py",markers:["Owned startup fixtures must cover every advertised architecture","Startup fixture is not sealed","Owned startup stdout check failed"]},
+	{path:"workers/emulation/runtime_inventory.py",markers:["for arch in PROFILES[engine]['architectures']","Every advertised architecture requires its owned startup fixture"]},
+	{path:"sdk/packages/core/src/extensions/tools/emulation-schema.ts",markers:["EMULATION_PROFILE_ARCHITECTURES","supportsEmulationArchitecture"]},
+	{path:"apps/examples/desktop-app/sidecar/emulation-client.ts",markers:["expectedArchitectures.some","new Set(m.architectures).size"]},
+	{path:"workers/emulation/build-fixtures.sh",markers:["owned-linux-$arch","denied-linux-$arch","--target=\"$target\""]},
+
+	{ path: "scripts/test-setup-ghidra.ts", markers: ["testGhidraIntegration()", "currentGhidraAcceptance(receipt, home)", "outside OS temp", "ghidra-receipt.json"] },
+	{ path: ".github/workflows/build-custom-windows-installer.yml", markers: ["bun scripts/test-setup-ghidra.ts"] },
+	{ path: "apps/examples/desktop-app/sidecar/setup-fixture-directory.ts", markers: ["createSetupFixtureDirectory", "realpath(tmpdir())", "cline-owned-${engine}-", "Setup fixture escaped"] },
+	{ path: "apps/examples/desktop-app/sidecar/setup-center.ts", markers: ['createSetupFixtureDirectory("ida")', 'createSetupFixtureDirectory("ghidra")', "optionalFrameworks:", 'readiness: "not-established"'] },
+	{ path: "apps/examples/desktop-app/sidecar/setup-fixture-directory.test.ts", markers: ["uses the real executor output policy", 'expect(result.outputScope).toBe("managed")'] },
+	{ path: "apps/examples/desktop-app/sidecar/emulation-client.ts", markers: ["emulationConfigurationStatus", "Never project endpoint, key, token", 'return "configured-not-tested"'] },
+	{ path: "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts", markers: ["analysisSandboxConfigurationStatus", "Does not contact or certify a Speakeasy worker"] },
+	{ path: "apps/examples/desktop-app/webview/components/views/settings/setup-capability-directory.tsx", markers: ["Registered routes are not proof", "App-managed Install → Test → Use", "implemented in this build", "Readiness not established"] },
+	{ path: "scripts/validate-advanced-build.mjs", markers: ["setup-fixture-directory.test.ts", "framework-configuration.test.ts", "setup-capability-directory.test.tsx"] },
+
  { path: "sdk/packages/core/src/services/session-artifacts.ts", markers: ["isOwnedArtifactPath", "removeSessionMessages", "no junction aliases"] },
 	{
 		path: "apps/examples/desktop-app/sidecar/session-cleanup.ts",

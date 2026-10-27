@@ -6,14 +6,38 @@ from server import Worker,transport
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 def elf(arch='arm64',engine='unidbg'):
- b=bytearray(128);b[:7]=b'\x7fELF\x02\x01\x01';struct.pack_into('<HH',b,16,2 if engine=='qiling' else 3,183 if arch=='arm64' else 62);struct.pack_into('<QQ',b,24,0x1000,64);struct.pack_into('<HH',b,54,56,1);struct.pack_into('<IIQQQQQQ',b,64,1,5,0,0x1000,0,128,128,4096);return bytes(b)
+ b=bytearray(128);bits=32 if arch=='arm32' else 64;b[:7]=b'\x7fELF'+bytes([1 if bits==32 else 2,1,1]);struct.pack_into('<HH',b,16,2 if engine=='qiling' else 3,{'x86_64':62,'arm32':40,'arm64':183}[arch])
+ if bits==64:
+  struct.pack_into('<QQ',b,24,0x1000,64);struct.pack_into('<HH',b,54,56,1);struct.pack_into('<IIQQQQQQ',b,64,1,5,0,0x1000,0,128,128,4096)
+ else:
+  struct.pack_into('<II',b,24,0x1000,52);struct.pack_into('<HH',b,42,32,1);struct.pack_into('<IIIIIIII',b,52,1,0,0x1000,0,128,128,5,4096)
+ return bytes(b)
 class Contracts(unittest.TestCase):
  def test_admission_and_strict_typed_scenarios(self):
   self.assertEqual(validate_elf(elf(),'unidbg','arm64')['mappedBytes'],128)
-  for e,a in [('rnidbg','arm32'),('unidbg','x86_64'),('qiling','arm64')]:
+  for e,a in [('rnidbg','arm32'),('unidbg','x86_64'),('qiling','riscv64')]:
    with self.assertRaises(ValueError):validate_elf(elf(),e,a)
   for value in [{'kind':'jni-int32','className':'com/a','methodName':'m','argument':True},{'kind':'initialize','rootfs':'/'},{'kind':'entry','script':'x'}]:
    with self.assertRaises(ValueError):scenario(value,'qiling' if value['kind']=='entry' else 'unidbg')
+ def test_qiling_all_fixed_architectures_and_exact_elf_identity(self):
+  for arch in ['x86_64','arm32','arm64']:
+   self.assertEqual(validate_elf(elf(arch,'qiling'),'qiling',arch)['architecture'],arch)
+   for other in set(['x86_64','arm32','arm64'])-{arch}:
+    with self.assertRaises(ValueError):validate_elf(elf(arch,'qiling'),'qiling',other)
+   with self.assertRaises(ValueError):validate_elf(elf(arch,'unidbg'),'qiling',arch)
+ def test_startup_does_not_advertise_untested_or_unsealed_architectures(self):
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as d:
+   w=Worker(d,Ed25519PrivateKey.generate(),'x'*32,'owned','qiling','unused',execute=lambda *_:{},runtime='f'*64)
+   for fixtures in [{},{'x86_64':'absent'},{'x86_64':'absent','arm32':'absent'},{'arm32':'absent','arm64':'absent'},{'x86_64':'absent','arm32':'absent','arm64':'absent','riscv64':'absent'}]:
+    with patch('server.identity',return_value=('f'*64,{'fixtures':fixtures,'files':{}})):
+     with self.assertRaisesRegex(ValueError,'cover every advertised architecture'):w.self_test()
+   files={}
+   fixtures={}
+   for arch in PROFILES['qiling']['architectures']:
+    path=Path(d)/(arch+'.elf');path.write_bytes(elf(arch,'qiling'));fixtures[arch]=str(path)
+   with patch('server.identity',return_value=('f'*64,{'fixtures':fixtures,'files':files})):
+    with self.assertRaisesRegex(ValueError,'not sealed'):w.self_test()
  def test_missing_and_external_dependencies_rejected(self):
   for mutate in [lambda b:b.__setitem__(5,2),lambda b:struct.pack_into('<I',b,64,3),lambda b:struct.pack_into('<Q',b,104,67108865),lambda b:struct.pack_into('<Q',b,96,129)]:
    b=bytearray(elf());mutate(b)

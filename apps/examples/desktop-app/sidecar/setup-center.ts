@@ -1,3 +1,5 @@
+import { emulationConfigurationStatus } from "./emulation-client";
+import { createSetupFixtureDirectory } from "./setup-fixture-directory";
 import { getSetupJob } from "./setup-jobs";
 import { createReadStream } from "node:fs";
 import { execFile } from "node:child_process";
@@ -6,7 +8,6 @@ import {
 	lstat,
 	realpath,
 	mkdir,
-	mkdtemp,
 	readFile,
 	rename,
 	writeFile,
@@ -28,7 +29,10 @@ import { z } from "zod";
 import { version as desktopVersion } from "../package.json";
 import ownedArm64Elf from "../../../../scripts/fixtures/owned-arm64-elf.json";
 import ownedElf from "../../../../scripts/fixtures/owned-native-elf.json";
-import { probeAnalysisSandbox } from "./analysis-sandbox-client";
+import {
+	analysisSandboxConfigurationStatus,
+	probeAnalysisSandbox,
+} from "./analysis-sandbox-client";
 import {
 	activateBundledCapabilityPack,
 	installedCapabilityPackRoot,
@@ -495,7 +499,7 @@ export async function testLicensedIda(
 		throw new Error("Choose your authorized IDA installation first");
 	applyPreferences(preferences);
 	await mkdir(directory(), { recursive: true, mode: 0o700 });
-	const root = await mkdtemp(join(directory(), "owned-ida-"));
+	const root = await createSetupFixtureDirectory("ida");
 	const bytes = Buffer.from(fixture.base64, "base64");
 	if (createHash("sha256").update(bytes).digest("hex") !== fixture.sha256)
 		throw new Error("Owned ELF identity mismatch");
@@ -623,7 +627,7 @@ export async function testGhidraIntegration() {
 	const identity = await ghidraIdentity(preferences.ghidraHome);
 	const configIdentity = await ghidraIdentity(preferences.ghidraHome, false);
 	await mkdir(directory(), { recursive: true, mode: 0o700 });
-	const root = await mkdtemp(join(directory(), "owned-ghidra-"));
+	const root = await createSetupFixtureDirectory("ghidra");
 	const bytes = Buffer.from(ownedElf.base64, "base64");
 	if (createHash("sha256").update(bytes).digest("hex") !== ownedElf.sha256)
 		throw new Error("Owned Ghidra fixture identity mismatch");
@@ -851,6 +855,19 @@ export async function getSetupCenterStatus() {
 	return {
 		preferences,
 		aiCapabilities: setupCapabilityCatalog(),
+		optionalFrameworks: ["qiling", "unidbg", "rnidbg", "speakeasy"].map(
+			(id) => ({
+				id,
+				configuration:
+					id === "speakeasy"
+						? analysisSandboxConfigurationStatus()
+						: emulationConfigurationStatus(
+								id as "qiling" | "unidbg" | "rnidbg",
+							),
+				installation: "not-bundled-or-managed" as const,
+				readiness: "not-established" as const,
+			}),
+		),
 		specialistProfiles: await specialistProfileHistory(),
 		setupJob: getSetupJob(),
 		runtime,
@@ -908,7 +925,7 @@ export async function getSetupCenterStatus() {
 		updates: privateUpdateReadiness(),
 		limitations: [
 			"The Python pack test does not test Ghidra, IDA, devices or workers; use their separate explicit tests.",
-			"Install all means the tested local engine packs. It cannot supply commercial licenses or device authorization.",
+			"Install all covers bundled local engine packs only; it does not install Qiling, unidbg, rnidbg or Speakeasy workers. Device authorization remains separate.",
 			"Unicorn emulates bounded bytes; angr performs static VEX lifting. QBDI target tracing still requires an approved signed isolated worker.",
 			"Pack activation and rollback preserve old runtime files and project data; existing shared Hub processes require a separate backend restart.",
 		],

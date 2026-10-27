@@ -38,6 +38,7 @@ function worker(engine = "qiling") {
 	}) as string;
 	process.env[`${prefix}_TOKEN`] = "t".repeat(40);
 	let patch: Record<string, unknown> = {};
+	let manifestPatch: Record<string, unknown> = {};
 	const signed = (name: string, value: unknown) =>
 		new Response(
 			JSON.stringify({
@@ -64,9 +65,15 @@ function worker(engine = "qiling") {
 				operations: ["emulate-profile-" + engine],
 				engine,
 				profileSha256: EMULATION_PROFILE_SHA256,
-				architectures: engine === "qiling" ? ["x86_64"] : ["arm64"],
+				architectures:
+					engine === "qiling"
+						? ["x86_64", "arm32", "arm64"]
+						: engine === "unidbg"
+							? ["arm32", "arm64"]
+							: ["arm64"],
 				runtimeSha256: runtime,
 				isolationClaim: "operator-provisioned-not-hardware-attested",
+				...manifestPatch,
 			});
 		const b = JSON.parse(String(init.body));
 		return signed("receipt", {
@@ -91,6 +98,9 @@ function worker(engine = "qiling") {
 	return {
 		fetcher: fetcher as unknown as typeof fetch,
 		mock: fetcher,
+		manifestPatch: (v: Record<string, unknown>) => {
+			manifestPatch = v;
+		},
 		patch: (v: Record<string, unknown>) => {
 			patch = v;
 		},
@@ -204,4 +214,31 @@ it("requests process-group cancellation on aborted transport, without retry", as
 	).rejects.toThrow("aborted");
 	expect(methods.filter((m) => m === "POST")).toHaveLength(1);
 	expect(methods).toContain("DELETE");
+});
+
+it("requires full signed profile architecture coverage and binds ARM plans without fallback", async () => {
+	const w = worker();
+	for (const architecture of ["x86_64", "arm32", "arm64"]) {
+		expect(
+			await bindEmulationRequest({ ...request, architecture }, w.fetcher),
+		).toMatchObject({ engine: "qiling", architecture });
+	}
+	for (const architectures of [
+		[],
+		["x86_64"],
+		["arm32", "arm64"],
+		["arm64", "arm64", "x86_64"],
+	]) {
+		w.manifestPatch({ architectures });
+		await expect(probeEmulation("qiling", w.fetcher)).rejects.toThrow(
+			"incompatible",
+		);
+	}
+	w.manifestPatch({
+		profileSha256:
+			"b8bb3b0fe985f4e8d74b9809c50e1da59d83f6bb3756b4b76997084473df3c71",
+	});
+	await expect(probeEmulation("qiling", w.fetcher)).rejects.toThrow(
+		"incompatible",
+	);
 });

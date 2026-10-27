@@ -58,6 +58,8 @@ jobs:
         run: bun scripts/test-ghidra-integration.ts
       - name: Test actual bounded native arguments, returns and cross-function dependencies
         run: bun scripts/test-owned-ghidra.ts
+      - name: Test real Setup Center with durable data outside temporary output roots
+        run: bun scripts/test-setup-ghidra.ts
 
   android-toolchain-preflight:
     name: Windows Android toolchain owned fixtures
