@@ -543,11 +543,11 @@ export async function handleFirstPartyCommand(
 			throw new Error(
 				"Change Analysis mode only while the chat session is idle",
 			);
-		return db.setMode(
-			session.id,
-			session.workspace,
-			AnalysisModeSchema.parse(args.mode),
-		);
+  const next=AnalysisModeSchema.parse(args.mode);
+  if(db.session(session.id)?.mode!==next){
+   desktopAnalysisTaskOrchestrator.cancelEmulationForSession(session.id,session.workspace);
+  }
+  return db.setMode(session.id,session.workspace,next);
 	}
 	if (command === "first_party_analysis_recover") {
 		if (session.busy || args.confirmed !== true)

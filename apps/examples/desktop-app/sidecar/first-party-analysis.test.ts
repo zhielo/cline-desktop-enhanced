@@ -64,6 +64,7 @@ vi.mock("./source-evidence-selection", () => ({
 }));
 vi.mock("./analysis-task-orchestrator", () => ({
 	desktopAnalysisTaskOrchestrator: {
+  cancelEmulationForSession: vi.fn(),
 		consume,
 		complete,
 		fail,

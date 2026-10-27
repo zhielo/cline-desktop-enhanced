@@ -1,3 +1,4 @@
+import { planEmulation } from "./emulation-plan";
 import { setupCapabilityCatalog } from "../setup-capability-catalog";
 import { createHash } from "node:crypto";
 import { createReadStream, type Dirent } from "node:fs";
@@ -2684,6 +2685,8 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 			throw new Error(
 				"runtime_observation_plan is only accepted by plan_runtime_observation",
 			);
+		if(input.emulation_plan && input.operation!=="plan_emulation")throw new Error("emulation_plan is only accepted by plan_emulation");
+		if(input.operation==="plan_emulation")return JSON.stringify(await planEmulation(input,context.signal));
 		if (input.operation === "plan_runtime_observation")
 			return JSON.stringify(
 				await planRuntimeObservation(input, context.signal),

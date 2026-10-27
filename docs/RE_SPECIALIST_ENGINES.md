@@ -10,9 +10,9 @@ These are optional, narrow additions to the existing analysis tools. They do not
 | Joern | `reverse_engineer` → `advanced_analysis` → `joern_query` | One UTF-8 JavaScript or Java source file, up to 1 MiB; fixed call-site, identifier-reference and source/sink candidate queries | No model-supplied Scala, arbitrary queries, project imports, native target launch or complete data-flow claims |
 | Speakeasy | Approved **direct runtime workbench**, `emulate_windows` | x86/x64 user-mode PE default entry, up to 16 MiB; signed bounded API-model evidence | Not a model-callable static operation; no arbitrary exports, scripts, drivers, shellcode, network mode or host mounts |
 | Frida | Existing isolated Android capture | Read-only client/device protocol handshake before install/launch; failures remain explicit | Handshake does not attest the server version, root state, device ownership or complete app coverage |
-| Qiling | Catalog entry only: **deferred** | Evaluation decision, not an executable feature | Rootfs provenance, redistribution permissions, isolation and benefit over existing routes must be reviewed before implementation |
+| Qiling / unidbg / rnidbg | Read-only plan_emulation and separately approved optional isolated worker | Fixed ELF/JNI profiles; see [ADDITIVE_EMULATION.md](ADDITIVE_EMULATION.md) | No bundled OS rootfs, APK, custom JNI stubs or native fallback |
 
-Qiling's approved evaluation concludes **defer**: do not bundle an operating-system rootfs or advertise a route that has not been implemented and tested. This is not Qiling integration completion.
+The earlier blanket Qiling deferral is superseded only by the narrow optional profiles in [ADDITIVE_EMULATION.md](ADDITIVE_EMULATION.md). This is not general Qiling/rootfs or Android parity.
 
 ## Setup and readiness
 

@@ -336,7 +336,7 @@ export function SetupCenter() {
 					<p className="text-sm text-muted-foreground">
 						Speakeasy: prepare an emulate_windows task in Runtime Analysis;
 						signed worker and upload/execution approval required. Qiling:
-						evaluation deferred, no execution route.
+						optional static ELF profile. unidbg: optional ARM32/64 JNI. rnidbg: experimental ARM64 JNI. Each needs its own isolated worker; use Runtime workbench readiness. Nothing is auto-installed.
 					</p>
 				</section>
 				<BinaryTriageReadiness />
