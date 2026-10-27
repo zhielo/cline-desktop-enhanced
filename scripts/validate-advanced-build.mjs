@@ -206,6 +206,7 @@ async function main() {
       "apps/examples/desktop-app/sidecar/framework-configuration.test.ts",
       "apps/examples/desktop-app/webview/components/views/settings/setup-capability-directory.test.tsx",
       "apps/examples/desktop-app/sidecar/setup-jobs.test.ts",
+      "apps/examples/desktop-app/sidecar/setup-boot-identity.test.ts",
       "apps/examples/desktop-app/sidecar/trusted-update.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-environment.test.ts",
       "apps/examples/desktop-app/sidecar/analysis-sandbox-client.test.ts",

@@ -26,9 +26,9 @@ Qiling v2 adds little-endian static Linux x86-64, ARM32 and ARM64 ELF entry. Arc
 
 SDK admission, profile identity, signed manifest coverage, architecture-specific syscall numbers, owned success/forbidden-syscall fixtures, startup capability tests and UI now agree. Existing Unicorn, unidbg, rnidbg and Speakeasy routes remain. Dynamic ELF/rootfs/library/TLS and additional architectures remain explicitly unsupported. Run the existing real-engine CI matrix before merging; startup fixtures must cover every advertised architecture.
 
-## 3. Interrupted setup recovery — NOT IMPLEMENTED
+## 3. Interrupted setup recovery — REBOOT-ONLY IMPLEMENTED, ACCEPTANCE PENDING
 
-Current admission locks deliberately remain held if termination is unconfirmed. A parent PID disappearing is not proof that its children exited. Add an explicit trusted recovery flow backed by exact process birth identities, supervised tree termination receipts or a verified OS boot-identity change. Never clear the lease merely because a request timed out. Reject PID reuse and concurrent recovery. Test crash/restart and orphaned-child cases on Windows.
+New admission records support explicit trusted reboot-only closure after the same OS host identity and a different kernel boot identity are verified. Job/lease identities must match; durable closure precedes lease removal, and a separate recovery lock excludes competing setup. Nothing is replayed or marked ready. Normal status reads do not probe the OS. Same-boot, legacy, foreign-host and inconsistent evidence remains blocked. Unknown recovery-lock termination remains fail-closed. Real Windows OS-query and installed acceptance are still required before claiming delivery; a mocked boot change is not an actual reboot test. Same-boot supervised process-tree recovery and full crash/restart/orphan acceptance remain outstanding.
 
 ## 4. Model exposure inventory — PARTIAL
 

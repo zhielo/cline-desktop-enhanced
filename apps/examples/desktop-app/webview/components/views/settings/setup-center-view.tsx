@@ -91,6 +91,12 @@ export function SetupCenter() {
 		[attentionOnly, setAttentionOnly] = useState(false);
 	const [notice, setNotice] = useState("");
 	const [setupJob, setSetupJob] = useState<SetupJob | null>(null);
+	const [recovery, setRecovery] = useState<{
+		canRecover: boolean;
+		jobId?: string;
+		reason: string;
+	} | null>(null);
+	const [checkingRecovery, setCheckingRecovery] = useState(false);
 	const [awaitingReceipt, setAwaitingReceipt] = useState(false);
 	const [ghidraArchitecture, setGhidraArchitecture] = useState<
 		"x86_64" | "arm32" | "arm64"
@@ -130,6 +136,9 @@ export function SetupCenter() {
 			) {
 				setBusy(true);
 				setOperationStarted(Date.parse(reply.setupJob.startedAt));
+			} else {
+				setBusy(false);
+				setOperationStarted(null);
 			}
 		}
 	}, []);
@@ -270,6 +279,63 @@ export function SetupCenter() {
 			}
 		} finally {
 			if (!accepted) setBusy(false);
+		}
+	}
+	async function inspectRecovery() {
+		setCheckingRecovery(true);
+		setRecovery(null);
+		setError("");
+		try {
+			setRecovery(
+				await desktopClient.invoke(
+					"setup_center_recovery_status",
+					{ environmentId: "local", confirmed: true },
+					{ timeoutMs: 15000 },
+				),
+			);
+			await refresh();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Recovery inspection failed");
+		} finally {
+			setCheckingRecovery(false);
+		}
+	}
+	async function recoverAfterReboot() {
+		if (
+			!recovery?.canRecover ||
+			!recovery.jobId ||
+			!window.confirm(
+				"Close only this interrupted setup after a verified OS reboot? No installation is replayed and no component is marked ready.",
+			)
+		)
+			return;
+		setCheckingRecovery(true);
+		setError("");
+		try {
+			const reply = await desktopClient.invoke<{ job: SetupJob }>(
+				"setup_center_recover_after_reboot",
+				{ environmentId: "local", confirmed: true, jobId: recovery.jobId },
+				{ timeoutMs: 15000 },
+			);
+			setSetupJob(reply.job);
+			setBusy(false);
+			setAwaitingReceipt(false);
+			setOperationStarted(null);
+			localStorage.removeItem("cline.setup.pending-admission");
+			setRecovery(null);
+			setMessage(
+				"Interrupted setup closed after verified reboot. Nothing was replayed; inspect and test components before an explicit retry.",
+			);
+			await refresh();
+		} catch (e) {
+			setRecovery(null);
+			setError(
+				e instanceof Error
+					? e.message
+					: "Recovery failed; inspect again before retrying",
+			);
+		} finally {
+			setCheckingRecovery(false);
 		}
 	}
 	async function detect() {
@@ -522,7 +588,7 @@ export function SetupCenter() {
 							Job {setupJob.id}: {setupJob.status} — {setupJob.phase}.
 						</span>
 					)}
-					{busy && (
+					{busy && setupJob?.status !== "interrupted" && (
 						<span className="block">
 							Setup operation running — {elapsedSeconds}s elapsed. Elapsed time
 							is not engine progress. Request timeouts do not stop background
@@ -535,6 +601,33 @@ export function SetupCenter() {
 						</span>
 					)}
 				</output>
+				{setupJob?.status === "interrupted" && (
+					<section
+						aria-label="Interrupted setup recovery"
+						className="space-y-2 border p-3"
+					>
+						<p>
+							Previous setup termination is unconfirmed. App restart or a
+							missing PID does not release admission. Same-boot and legacy
+							records remain blocked.
+						</p>
+						<Button
+							disabled={checkingRecovery}
+							onClick={() => void inspectRecovery()}
+						>
+							Check reboot recovery
+						</Button>
+						{recovery && <output aria-live="polite">{recovery.reason}</output>}
+						{recovery?.canRecover && (
+							<Button
+								disabled={checkingRecovery}
+								onClick={() => void recoverAfterReboot()}
+							>
+								Close interrupted setup after reboot
+							</Button>
+						)}
+					</section>
+				)}
 				{error && <p role="alert">{error}</p>}
 				<Button
 					disabled={busy}

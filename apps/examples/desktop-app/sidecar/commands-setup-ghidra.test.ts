@@ -4,6 +4,8 @@ const owned = vi.hoisted(() => ({
 	test: vi.fn(),
 	all: vi.fn(),
 	start: vi.fn(),
+	recovery: vi.fn(),
+	inspect: vi.fn(),
 }));
 vi.mock("./setup-center", async () => ({
 	...(await vi.importActual<typeof import("./setup-center")>("./setup-center")),
@@ -13,6 +15,8 @@ vi.mock("./setup-center", async () => ({
 vi.mock("./setup-jobs", async () => ({
 	...(await vi.importActual<typeof import("./setup-jobs")>("./setup-jobs")),
 	startSetupJob: owned.start,
+	inspectSetupRecovery: owned.inspect,
+	recoverSetupAfterReboot: owned.recovery,
 }));
 function context(): SidecarContext {
 	return {
@@ -93,4 +97,48 @@ it("runs the all-profile route once only after explicit trusted confirmation", a
 	);
 	expect(owned.all).toHaveBeenCalledTimes(1);
 	expect(owned.test).not.toHaveBeenCalled();
+});
+
+it("keeps reboot recovery local, trusted, explicitly confirmed and exact-job bound", async () => {
+	const { handleCommand } = await import("./commands");
+	owned.recovery.mockReset();
+	owned.inspect.mockReset();
+	for (const command of [
+		"setup_center_recovery_status",
+		"setup_center_recover_after_reboot",
+	]) {
+		await expect(
+			handleCommand(
+				context(),
+				command,
+				{ environmentId: "local", confirmed: true, jobId: "owned" },
+				{ connection: connection(false) },
+			),
+		).rejects.toThrow("trusted desktop");
+		await expect(
+			handleCommand(
+				context(),
+				command,
+				{ environmentId: "local", jobId: "owned" },
+				{ connection: connection(true) },
+			),
+		).rejects.toThrow("confirmation");
+	}
+	expect(owned.inspect).not.toHaveBeenCalled();
+	expect(owned.recovery).not.toHaveBeenCalled();
+	await expect(
+		handleCommand(
+			context(),
+			"setup_center_recover_after_reboot",
+			{ environmentId: "local", confirmed: true },
+			{ connection: connection(true) },
+		),
+	).rejects.toThrow("Exact setup job");
+	await handleCommand(
+		context(),
+		"setup_center_recover_after_reboot",
+		{ environmentId: "local", confirmed: true, jobId: "exact-job" },
+		{ connection: connection(true) },
+	);
+	expect(owned.recovery).toHaveBeenCalledWith("exact-job");
 });

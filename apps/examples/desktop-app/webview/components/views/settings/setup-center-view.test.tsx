@@ -418,3 +418,104 @@ it("keeps Ghidra/Java testing separate and requires explicit confirmation", asyn
 		localStorage.clear();
 	}
 });
+
+it("checks interrupted recovery explicitly and never replays setup or treats an app restart as recovery", async () => {
+	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	calls.mockReset();
+	const interrupted = {
+		id: "12345678-1234-1234-1234-123456789abc",
+		command: "setup_center_test_full",
+		status: "interrupted",
+		phase: "termination unknown",
+		startedAt: new Date().toISOString(),
+	};
+	const status = {
+		preferences: {
+			schemaVersion: 1,
+			idaHome: "",
+			adbPath: "",
+			deviceSerial: "",
+			deviceKind: "physical",
+			workerEndpoint: "",
+			workerPublicKey: "",
+			acceptedPlatformToolsLicense: false,
+		},
+		features: [],
+		packs: [],
+		limitations: [],
+		fullStatus: "Setup needed",
+		setupJob: interrupted,
+	};
+	let mayRecover = false,
+		recovered = false;
+	calls.mockImplementation(async (command: string) => {
+		if (command === "setup_center_status")
+			return {
+				...status,
+				setupJob: recovered
+					? { ...interrupted, status: "failed" }
+					: interrupted,
+			};
+		if (command === "setup_center_job_status") return { job: interrupted };
+		if (command === "setup_center_recovery_status")
+			return {
+				canRecover: mayRecover,
+				jobId: interrupted.id,
+				reason: mayRecover
+					? "Different OS boot verified"
+					: "Same OS boot; termination unknown",
+			};
+		if (command === "setup_center_recover_after_reboot") {
+			recovered = true;
+			return { job: { ...interrupted, status: "failed" } };
+		}
+		return {};
+	});
+	const element = document.createElement("div");
+	document.body.append(element);
+	const root = createRoot(element);
+	const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+	const button = (name: string) =>
+		[...element.querySelectorAll("button")].find(
+			(b) => b.textContent === name,
+		)!;
+	try {
+		await act(async () => root.render(<SetupCenter />));
+		expect(
+			calls.mock.calls.some(([c]) => c === "setup_center_recovery_status"),
+		).toBe(false);
+		expect(element.textContent).not.toContain("Setup operation running —");
+		await act(async () => button("Check reboot recovery").click());
+		expect(element.textContent).toContain("Same OS boot");
+		expect(button("Close interrupted setup after reboot")).toBeUndefined();
+		mayRecover = true;
+		await act(async () => button("Check reboot recovery").click());
+		await act(async () =>
+			button("Close interrupted setup after reboot").click(),
+		);
+		expect(recovered).toBe(false);
+		confirm.mockReturnValue(true);
+		await act(async () =>
+			button("Close interrupted setup after reboot").click(),
+		);
+		expect(calls).toHaveBeenCalledWith(
+			"setup_center_recover_after_reboot",
+			{ environmentId: "local", confirmed: true, jobId: interrupted.id },
+			{ timeoutMs: 15000 },
+		);
+		expect(recovered).toBe(true);
+		expect(element.textContent).toContain("Nothing was replayed");
+		expect(
+			calls.mock.calls.some(
+				([c]) =>
+					c === "setup_center_install_full" || c === "setup_center_test_full",
+			),
+		).toBe(false);
+	} finally {
+		confirm.mockRestore();
+		await act(async () => root.unmount());
+		element.remove();
+		calls.mockReset();
+		localStorage.clear();
+	}
+});

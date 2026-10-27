@@ -4,6 +4,15 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed", "actualRebootTested:false", "Same-boot inspection changed admission"]},
+
+
+
+ {path:"apps/examples/desktop-app/sidecar/setup-boot-identity.ts",markers:["NtQuerySystemInformation(90", "readSetupBootIdentity", "No client arguments", "boot_id"]},
+ {path:"apps/examples/desktop-app/sidecar/setup-jobs.ts",markers:["recoverSetupAfterReboot", "Same OS boot", "Setup boot records disagree", "persist(job); // Keep the lease", "setup-recovery.json"]},
+ {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["setup_center_recovery_status", "setup_center_recover_after_reboot"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",markers:["Check reboot recovery", "Close interrupted setup after reboot", "No installation is replayed"]},
+ {path:"scripts/validate-advanced-build.mjs",markers:["setup-boot-identity.test.ts"]},
  {path:"sdk/packages/core/scripts/android-investigation-worker.test.py",markers:["class FixtureTimingResult", "ANDROID_FIXTURE_CASE", "resultclass=FixtureTimingResult"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",markers:["finished.map", "18_000"]},
  {path:"apps/examples/desktop-app/sidecar/release-gate-verifier.ts",markers:["Repeated checks require complete authoritative workflow provenance", "Repeated check lacks exact job/workflow binding", "Distinct required detection workflows missing"]},
