@@ -200,6 +200,8 @@ async function main() {
       "apps/examples/desktop-app/webview/components/views/settings/optimization-panel.test.tsx",
       "apps/examples/desktop-app/sidecar/bundled-analysis-runtime.test.ts",
       "apps/examples/desktop-app/sidecar/setup-center.test.ts",
+      "apps/examples/desktop-app/sidecar/commands-setup-ghidra.test.ts",
+      "apps/examples/desktop-app/sidecar/ghidra-fixtures.test.ts",
       "apps/examples/desktop-app/sidecar/setup-fixture-directory.test.ts",
       "apps/examples/desktop-app/sidecar/framework-configuration.test.ts",
       "apps/examples/desktop-app/webview/components/views/settings/setup-capability-directory.test.tsx",

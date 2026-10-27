@@ -12,10 +12,11 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 70);
+	assert.equal(r.installedStages, 71);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
+ ["missing installed Ghidra architecture proof",e=>{e.installed.stages=e.installed.stages.filter((s: string)=>s!=="installed-ghidra-three-owned-architectures-java-no-target-execution-passed");}],
 	[
 		"missing installed AI binary triage proof",
 		(e) => {

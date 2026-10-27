@@ -1,3 +1,8 @@
+import {
+	GHIDRA_ACCEPTANCE_ARCHITECTURES,
+	ghidraAcceptanceFixture,
+	type GhidraAcceptanceArchitecture,
+} from "./ghidra-fixtures";
 import { emulationConfigurationStatus } from "./emulation-client";
 import { createSetupFixtureDirectory } from "./setup-fixture-directory";
 import { getSetupJob } from "./setup-jobs";
@@ -9,6 +14,7 @@ import {
 	realpath,
 	mkdir,
 	readFile,
+	readdir,
 	rename,
 	writeFile,
 } from "node:fs/promises";
@@ -591,16 +597,92 @@ async function ghidraIdentity(home: string, includeEnvironment = true) {
 	}
 	return hash.digest("hex");
 }
+/** Binds acceptance to the installed processor definitions and native decompiler.
+ * This is not a seal of the complete Ghidra/JDK/OS distribution. No process launch. */
+async function ghidraProfileIdentity(
+	home: string,
+	architecture: GhidraAcceptanceArchitecture,
+) {
+	const processor = { x86_64: "x86", arm32: "ARM", arm64: "AARCH64" }[
+		architecture
+	];
+	const hash = createHash("sha256");
+	let files = 0,
+		total = 0,
+		directories = 0;
+	async function add(file: string, label: string) {
+		const info = await lstat(file);
+		if (
+			!info.isFile() ||
+			info.isSymbolicLink() ||
+			++files > 512 ||
+			(total += info.size) > 128 * 1024 * 1024
+		)
+			throw new Error("Ghidra profile identity budget/link");
+		hash.update(JSON.stringify([label, info.size]));
+		for await (const block of createReadStream(file)) hash.update(block);
+	}
+	async function walk(directory: string, prefix = "", depth = 0) {
+		if (++directories > 512 || depth > 16)
+			throw new Error("Ghidra processor directory budget");
+		const info = await lstat(directory);
+		if (!info.isDirectory() || info.isSymbolicLink())
+			throw new Error("Linked Ghidra processor directory forbidden");
+		const names = (await readdir(directory)).sort();
+		if (names.length > 512)
+			throw new Error("Ghidra processor inventory budget");
+		for (const name of names) {
+			const file = join(directory, name),
+				stat = await lstat(file);
+			if (stat.isSymbolicLink())
+				throw new Error("Linked Ghidra processor member forbidden");
+			if (stat.isDirectory()) await walk(file, prefix + name + "/", depth + 1);
+			else await add(file, prefix + name);
+		}
+	}
+	await walk(
+		join(home, "Ghidra", "Processors", processor, "data", "languages"),
+	);
+	if (!files) throw new Error("Ghidra processor definitions missing");
+	const os =
+		process.platform === "win32"
+			? "win"
+			: process.platform === "darwin"
+				? "mac"
+				: "linux";
+	const cpu = process.arch === "arm64" ? "arm_64" : "x86_64";
+	await add(
+		join(
+			home,
+			"Ghidra",
+			"Features",
+			"Decompiler",
+			"os",
+			`${os}_${cpu}`,
+			process.platform === "win32" ? "decompile.exe" : "decompile",
+		),
+		"native-decompiler",
+	);
+	return hash.digest("hex");
+}
 export async function currentGhidraAcceptance(
 	receipt: Record<string, unknown> | null,
 	home: string,
+	expectedArchitecture?: GhidraAcceptanceArchitecture,
 ) {
 	try {
+		const fixture = ghidraAcceptanceFixture(
+			expectedArchitecture ?? String(receipt?.architecture ?? ""),
+		);
 		if (
 			!home ||
-			receipt?.status !== "passed" ||
+			receipt?.schemaVersion !== 2 ||
+			receipt.architecture !== fixture.architecture ||
+			typeof receipt.languageId !== "string" ||
+			!receipt.languageId.startsWith(fixture.languagePrefix) ||
+			receipt.status !== "passed" ||
 			receipt.ghidraHome !== home ||
-			receipt.fixtureSha256 !== ownedElf.sha256 ||
+			receipt.fixtureSha256 !== fixture.sha256 ||
 			typeof receipt.javaHome !== "string" ||
 			!isAbsolute(receipt.javaHome)
 		)
@@ -612,6 +694,11 @@ export async function currentGhidraAcceptance(
 		);
 		return (
 			receipt.identity === (await ghidraIdentity(home)) &&
+			receipt.profileIdentity ===
+				(await ghidraProfileIdentity(
+					home,
+					fixture.architecture as GhidraAcceptanceArchitecture,
+				)) &&
 			receipt.javaSha256 ===
 				(await hashSetupExecutable(java, receipt.javaHome, "Ghidra Java"))
 		);
@@ -619,28 +706,37 @@ export async function currentGhidraAcceptance(
 		return false;
 	}
 }
-export async function testGhidraIntegration() {
+export async function testGhidraIntegration(
+	architecture: GhidraAcceptanceArchitecture = "x86_64",
+) {
+	const fixture = ghidraAcceptanceFixture(architecture);
 	const preferences = await readSetupPreferences();
 	if (!preferences.ghidraHome)
 		throw new Error("Select your Ghidra installation first");
 	applyPreferences(preferences);
 	const identity = await ghidraIdentity(preferences.ghidraHome);
 	const configIdentity = await ghidraIdentity(preferences.ghidraHome, false);
+	const profileIdentity = await ghidraProfileIdentity(
+		preferences.ghidraHome,
+		architecture,
+	);
 	await mkdir(directory(), { recursive: true, mode: 0o700 });
 	const root = await createSetupFixtureDirectory("ghidra");
-	const bytes = Buffer.from(ownedElf.base64, "base64");
-	if (createHash("sha256").update(bytes).digest("hex") !== ownedElf.sha256)
+	const bytes = Buffer.from(fixture.base64, "base64");
+	if (createHash("sha256").update(bytes).digest("hex") !== fixture.sha256)
 		throw new Error("Owned Ghidra fixture identity mismatch");
 	const target = join(root, "owned.so");
 	await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
 	let receipt: Record<string, unknown> = {
+		schemaVersion: 2,
+		architecture,
+		profileIdentity,
 		status: "failed",
 		ghidraHome: preferences.ghidraHome,
 		identity,
-		fixtureSha256: ownedElf.sha256,
+		fixtureSha256: fixture.sha256,
 		checkedAt: new Date().toISOString(),
-		scope:
-			"Owned x86-64 selected function and compatible Java only; no target execution",
+		scope: `Owned ${architecture} selected function and compatible Java only; no target execution`,
 	};
 	try {
 		const result = JSON.parse(
@@ -649,7 +745,7 @@ export async function testGhidraIntegration() {
 					engine: "ghidra",
 					operation: "decompile",
 					target,
-					function_selector: { address: ownedElf.functionAddress },
+					function_selector: { address: fixture.functionAddress },
 					output_directory: join(root, "analysis"),
 					timeout_ms: 120000,
 					max_cpu: 2,
@@ -661,7 +757,7 @@ export async function testGhidraIntegration() {
 			!result.succeeded ||
 			!result.artifactVerified ||
 			!result.databaseVerified ||
-			result.sha256 !== ownedElf.sha256
+			result.sha256 !== fixture.sha256
 		)
 			throw new Error(
 				String(
@@ -684,7 +780,9 @@ export async function testGhidraIntegration() {
 		if (
 			typeof actual.javaHome !== "string" ||
 			!isAbsolute(actual.javaHome) ||
-			typeof actual.javaVersion !== "string"
+			typeof actual.javaVersion !== "string" ||
+			typeof actual.languageId !== "string" ||
+			!actual.languageId.startsWith(fixture.languagePrefix)
 		)
 			throw new Error("Ghidra Java runtime identity missing");
 		const java = join(
@@ -695,10 +793,14 @@ export async function testGhidraIntegration() {
 		receipt = {
 			...receipt,
 			status:
-				configIdentity === (await ghidraIdentity(preferences.ghidraHome, false))
+				configIdentity ===
+					(await ghidraIdentity(preferences.ghidraHome, false)) &&
+				profileIdentity ===
+					(await ghidraProfileIdentity(preferences.ghidraHome, architecture))
 					? "passed"
 					: "failed",
 			identity: await ghidraIdentity(preferences.ghidraHome),
+			languageId: actual.languageId,
 			javaHome: actual.javaHome,
 			javaVersion: actual.javaVersion,
 			javaSha256: await hashSetupExecutable(
@@ -715,12 +817,106 @@ export async function testGhidraIntegration() {
 				error instanceof Error ? error.message : "Ghidra acceptance failed",
 		};
 	}
-	await saveOwnedJson("ghidra-receipt.json", receipt);
+	await saveOwnedJson(`ghidra-receipt-${architecture}.json`, receipt);
+	if (architecture === "x86_64")
+		await saveOwnedJson("ghidra-receipt.json", receipt);
 	if (receipt.status !== "passed")
 		throw new Error(
 			String(receipt.error ?? "Ghidra installation changed during acceptance"),
 		);
 	return receipt;
+}
+export async function testAllGhidraIntegrations(
+	phase: (value: string) => void = () => {},
+) {
+	const failures: string[] = [];
+	const receipts: Record<string, unknown>[] = [];
+	for (const architecture of GHIDRA_ACCEPTANCE_ARCHITECTURES) {
+		phase(
+			`Testing Ghidra ${architecture} owned selected function and Java; no target execution`,
+		);
+		try {
+			receipts.push(await testGhidraIntegration(architecture));
+		} catch {
+			failures.push(architecture);
+		}
+	}
+	if (failures.length)
+		throw new Error(
+			`Ghidra owned tests failed for ${failures.join(", ")}; inspect per-architecture results. Successful siblings are retained.`,
+		);
+	return {
+		status: "passed",
+		scope: "Owned selected functions only; not arbitrary target compatibility",
+		receipts,
+	};
+}
+/** Read-only receipt projection. Does not launch Java, Ghidra, fixtures or providers. */
+export async function getGhidraReadiness() {
+	const preferences = await readSetupPreferences();
+	const profiles = await Promise.all(
+		GHIDRA_ACCEPTANCE_ARCHITECTURES.map(async (architecture) => {
+			const receipt = (await readOwnedJson(
+				`ghidra-receipt-${architecture}.json`,
+			).catch(() =>
+				architecture === "x86_64"
+					? readOwnedJson("ghidra-receipt.json").catch(() => null)
+					: null,
+			)) as Record<string, unknown> | null;
+			const passed = await currentGhidraAcceptance(
+				receipt,
+				preferences.ghidraHome,
+				architecture,
+			);
+			const sameHome = Boolean(
+				receipt && receipt.ghidraHome === preferences.ghidraHome,
+			);
+			return {
+				architecture,
+				status: passed
+					? "passed"
+					: sameHome && receipt?.status === "failed"
+						? "failed"
+						: receipt
+							? "stale"
+							: "not-tested",
+				checkedAt:
+					typeof receipt?.checkedAt === "string"
+						? receipt.checkedAt
+						: undefined,
+				javaVersion: passed ? String(receipt?.javaVersion) : undefined,
+				reason: passed
+					? "Owned selected-function decompilation passed; arbitrary target compatibility remains separate"
+					: sameHome && typeof receipt?.error === "string"
+						? receipt.error
+						: "Run this architecture's explicit owned test",
+			};
+		}),
+	);
+	const passed = profiles.filter((p) => p.status === "passed");
+	return {
+		status:
+			passed.length === profiles.length
+				? "Ready for tested profiles"
+				: passed.length
+					? "Partially tested"
+					: profiles.some((p) => p.status === "failed")
+						? "Test failed"
+						: preferences.ghidraHome
+							? "Not tested or stale"
+							: "Setup needed",
+		javaStatus: passed.length
+			? "Verified by current owned analysis"
+			: "Not verified by a current owned analysis",
+		javaVersion: passed[0]?.javaVersion,
+		reason: passed.length
+			? `Owned profiles passed: ${passed.map((p) => p.architecture).join(", ")}. Other profiles and arbitrary targets are not certified.`
+			: (profiles.find((p) => p.status === "failed")?.reason ??
+				"Select Ghidra and run explicit owned profile tests; a compatible JDK is required."),
+		profiles,
+		scope:
+			"Owned selected functions only; not a gate for direct analysis or permission to execute targets",
+	};
 }
 export async function testSetupWorker() {
 	const value = await readSetupPreferences();
@@ -747,13 +943,7 @@ export async function getSetupCenterStatus() {
 				"ida-receipt-arm64.json",
 			].map((name) => readOwnedJson(name).catch(() => null)),
 		)) as Array<Record<string, unknown> | null>;
-	const ghidraReceipt = (await readOwnedJson("ghidra-receipt.json").catch(
-		() => null,
-	)) as Record<string, unknown> | null;
-	const ghidraCurrent = await currentGhidraAcceptance(
-		ghidraReceipt,
-		preferences.ghidraHome,
-	);
+	const ghidraReadiness = await getGhidraReadiness();
 	const licensedArchitectures = [];
 	if (await currentIdaAcceptance(idaReceipt, preferences.idaHome, "x86_64"))
 		licensedArchitectures.push("x86_64");
@@ -884,30 +1074,14 @@ export async function getSetupCenterStatus() {
 		desktopBuild: {
 			version: desktopVersion,
 			sourceCommit: process.env.CLINE_DESKTOP_BUILD_COMMIT ?? "development",
-			capabilitySchema: "setup-center/processor-acceptance-v2",
+			capabilitySchema: "setup-center/processor-acceptance-v3",
 		},
 		selectedRuntime: {
 			runtimeId: runtime.runtimeId,
 			source: runtime.source,
 			integrity: runtime.integrity,
 		},
-		ghidra: {
-			status: ghidraCurrent
-				? "Ready"
-				: ghidraReceipt?.ghidraHome === preferences.ghidraHome &&
-						ghidraReceipt?.status === "failed"
-					? "Test failed"
-					: preferences.ghidraHome
-						? "Not tested or stale"
-						: "Setup needed",
-			javaVersion: ghidraCurrent ? ghidraReceipt?.javaVersion : undefined,
-			reason: ghidraCurrent
-				? "Owned x86-64 selected-function decompilation and Java passed; target compatibility remains separate"
-				: ghidraReceipt?.ghidraHome === preferences.ghidraHome &&
-						typeof ghidraReceipt?.error === "string"
-					? ghidraReceipt.error
-					: "Select Ghidra and run its separate owned test. A compatible JDK is required by the Ghidra launcher.",
-		},
+		ghidra: ghidraReadiness,
 		licensedArchitectures,
 		licensedStatus: licensedArchitectures.length
 			? `Owned IDA acceptance passed for ${licensedArchitectures.join(", ")}; other processors and target compatibility remain untested`

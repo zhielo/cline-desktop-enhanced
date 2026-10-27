@@ -56,6 +56,13 @@ async function executable(directory: string, name: string, body: string) {
 }
 
 describe("reverse-engineering discovery", () => {
+ it("projects current host-owned architecture acceptance on every discovery, including cache hits",async()=>{
+  const status={status:"Partially tested",profiles:[{architecture:"arm64",status:"passed"}]};
+  const read=vi.fn(async()=>status),execute=createReverseEngineeringExecutor({readGhidraAcceptance:read});
+  for(let i=0;i<2;i++){const result=JSON.parse(await execute({engine:"auto",operation:"discover"},{} as never));expect(result.ghidraOwnedAcceptance).toEqual(status);}
+  expect(read).toHaveBeenCalledTimes(2);
+ });
+
 	it("does not require a target path", async () => {
 		const execute = createReverseEngineeringExecutor();
 		const result = JSON.parse(
