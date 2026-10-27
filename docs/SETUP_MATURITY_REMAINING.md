@@ -39,3 +39,7 @@ The directory shows registered routes, not the current model's actual tool set. 
 The actual Ghidra Setup Center function is now wired into pinned Linux/Windows real-engine CI; require its successful receipt. Add installed UI/command coverage and an actual optional IDA owned-test run, not only direct scripts/mocks. An unavailable optional engine stays untested, not passed; vendor-license preflight/self-attestation must not become an extra gate. Report actual launch/plugin errors.
 
 For the four managed emulators, collect exact-source installed Windows end-to-end evidence before claiming Install → Test → Use. Measure cold start, peak memory, setup duration, UI responsiveness, failure recovery and cancellation against a recorded baseline before claiming optimization. Do not weaken existing release gates or infer arbitrary target compatibility from owned fixture tests.
+
+## Ghidra acceptance matrix follow-through
+
+Implemented: independent owned x86-64 / ARM32 / ARM64 selected-function receipts; actual imported language checks; selected/all controls with retained selection; bounded processor/decompiler identity invalidation; shared read-only desktop discovery/status. All three real local Ghidra 12.1.4 / Temurin 21 tests passed. Existing receipt schema is intentionally stale until retested. Linux/Windows CI and a new installed Windows UI stage are required before merge; installed validation is not yet claimed here. This narrows the Ghidra part of item 5; optional real IDA testing and managed-emulator installation/performance remain outstanding.

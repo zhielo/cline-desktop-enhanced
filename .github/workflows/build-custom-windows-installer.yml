@@ -122,6 +122,15 @@ jobs:
       - name: Fast verification preflight
         run: bun run validate:quick
 
+      - name: Setup Java for installed Ghidra owned acceptance
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install checksum-pinned Ghidra for installed UI acceptance
+        run: node scripts/install-test-ghidra.mjs
+
       - name: Restore locked Bun download cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:

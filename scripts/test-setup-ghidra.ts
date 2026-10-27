@@ -9,6 +9,7 @@ import {
 	currentGhidraAcceptance,
 	saveSetupPreferences,
 	testGhidraIntegration,
+ getGhidraReadiness,
 } from "../apps/examples/desktop-app/sidecar/setup-center";
 
 const home = process.env.GHIDRA_HOME;
@@ -44,20 +45,21 @@ const previous = new Map(envNames.map((name) => [name, process.env[name]]));
 try {
 	process.env.CLINE_DATA_DIR = canonicalData;
 	await saveSetupPreferences({ schemaVersion: 1, ghidraHome: home });
-	const receipt = await testGhidraIntegration();
+	for (const architecture of ["x86_64", "arm32", "arm64"] as const) {
+ const receipt = await testGhidraIntegration(architecture);
 	assert.equal(
 		receipt.status,
 		"passed",
 		`Real Setup Center Ghidra test failed: ${String(receipt.error ?? "missing receipt")}`,
 	);
 	assert.equal(
-		await currentGhidraAcceptance(receipt, home),
+		await currentGhidraAcceptance(receipt, home, architecture),
 		true,
 		"Actual Setup Center receipt is not current",
 	);
 	const saved = JSON.parse(
 		await readFile(
-			join(canonicalData, "setup-center", "ghidra-receipt.json"),
+			join(canonicalData, "setup-center", `ghidra-receipt-${architecture}.json`),
 			"utf8",
 		),
 	);
@@ -65,8 +67,10 @@ try {
 	assert.equal(saved.javaSha256, receipt.javaSha256);
 	assert.equal(saved.fixtureSha256, receipt.fixtureSha256);
 	console.log(
-		"Real Setup Center Ghidra owned-function acceptance passed; durable non-temp receipt, temporary engine project, Java identity verified; target not executed",
+		`Real Setup Center Ghidra ${architecture} owned-function acceptance passed; durable non-temp receipt, temporary engine project, Java identity verified; target not executed`,
 	);
+ }
+ assert.equal((await getGhidraReadiness()).status,"Ready for tested profiles");
 } finally {
 	for (const [name, value] of previous) {
 		if (value === undefined) delete process.env[name];

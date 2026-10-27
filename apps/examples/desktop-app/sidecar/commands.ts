@@ -290,6 +290,8 @@ import { searchWorkspaceFiles } from "./session-data/search";
 import {
 	detectInstalledTools,
 	getSetupCenterStatus,
+	getGhidraReadiness,
+	testAllGhidraIntegrations,
 	installFullCapabilityPack,
 	listSetupDevices,
 	platformToolsNotices,
@@ -2669,7 +2671,7 @@ const desktopEngineeringControlPlane = new EngineeringControlPlane(
 const desktopEngineeringWorktreeManager = new EngineeringWorktreeManager(
 	join(resolveClineDir(), "engineering-worktrees"),
 );
-const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor();
+const desktopReverseEngineeringExecutor = createReverseEngineeringExecutor({ readGhidraAcceptance: getGhidraReadiness });
 const desktopLiveDebuggerExecutor = createLiveDebuggerExecutor();
 const desktopAndroidDeviceExecutor = createAndroidDeviceExecutor();
 let desktopIncidentService: ApkIncidentService | undefined;
@@ -4618,16 +4620,19 @@ export async function handleCommand(
 				phase("Testing exact selected device connectivity");
 				return await testSetupDevice();
 			});
-		if (command === "setup_center_test_ghidra")
+		if (command === "setup_center_test_ghidra") {
+			const architecture = args.architecture ?? "x86_64";
+			if (typeof architecture !== "string" || !["x86_64", "arm32", "arm64", "all"].includes(architecture))
+				throw new Error("Unsupported Ghidra acceptance architecture");
 			return await tracked(async (phase) => {
-				phase("Testing real Ghidra headless, Java and owned selected-function decompilation");
+				phase(`Testing real Ghidra ${architecture}, Java and owned selected-function decompilation`);
 				if (typeof args.ghidraHome === "string")
-					await saveSetupPreferences({
-						...(await readSetupPreferences()),
-						ghidraHome: args.ghidraHome,
-					});
-				return await testGhidraIntegration();
+					await saveSetupPreferences({ ...(await readSetupPreferences()), ghidraHome: args.ghidraHome });
+				return architecture === "all"
+					? await testAllGhidraIntegrations(phase)
+					: await testGhidraIntegration(architecture as "x86_64" | "arm32" | "arm64");
 			});
+		}
 		if (command === "setup_center_test_ida") {
 			// Trusted local confirmation above authorizes this owned test.
 			// Invoke IDA instead of inferring or self-attesting a vendor license.
