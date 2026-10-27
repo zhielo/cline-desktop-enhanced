@@ -2077,6 +2077,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
   const fixtureJob={id:recoveryId,command:"setup_center_test_ghidra",identity:"owned-installed-recovery-fixture",hostPid:1,status:"running",phase:"Owned same-boot retained lease fixture",startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),bootIdentity:actualBoot,recoveryScope:"native-host-only/v1"};
   const fixtureAdmission=JSON.stringify({id:recoveryId,hostPid:1,bootIdentity:actualBoot,recoveryScope:"native-host-only/v1"});
   let wroteRecoveryRecord=false,wroteRecoveryLease=false,wroteRecoveryLatest=false;
+  let recoveryFixtureFailure: unknown;
   try {
    await writeFile(recoveryRecord,JSON.stringify(fixtureJob),{flag:"wx"});wroteRecoveryRecord=true;
    await writeFile(recoveryAdmission,fixtureAdmission,{flag:"wx"});wroteRecoveryLease=true;
@@ -2090,11 +2091,15 @@ ConvertTo-Json -InputObject @($rows) -Compress
    if(JSON.parse(await readFile(latestRecord,"utf8")).status!=="running")throw new Error("Read-only recovery inspection mutated the retained job");
    await writeFile(join(evidence,"setup-recovery-refusal.json"),JSON.stringify({case:"same-boot-native-job",status:"blocked",osIdentity:"actual-Windows-query",actualRebootTested:false,admissionUnchanged:true,operationReplayed:false},null,2));
    stages.push("installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed");
-  } finally {
+  } catch(error) { recoveryFixtureFailure=error; }
+  try {
    if(wroteRecoveryLease){if(await readFile(recoveryAdmission,"utf8")!==fixtureAdmission)throw new Error("Owned recovery fixture lease changed; do not remove another operation");await unlink(recoveryAdmission);}
    if(wroteRecoveryLatest)await writeFile(latestRecord,previousLatest);
    if(wroteRecoveryRecord)await unlink(recoveryRecord);
+  } catch(cleanupError) {
+   throw new AggregateError(recoveryFixtureFailure?[recoveryFixtureFailure,cleanupError]:[cleanupError],"Owned recovery fixture cleanup failed");
   }
+  if(recoveryFixtureFailure)throw recoveryFixtureFailure;
   await settings(page,"Analysis environment");await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
 
 

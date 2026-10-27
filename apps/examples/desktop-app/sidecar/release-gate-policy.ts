@@ -178,7 +178,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"570280a60ad0f10f18530d3b387e6eef5b9a7c31c9f4416aded0d879454275b1",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"16ef5675e538266098dadb52e88596a74c9eff8b41fc1dbc543f4f19f20490f4",
+			"c34b57e95fb6d2bec69db22a9d68177213f898f32755e686f656994e28db078e",
 		"scripts/validate-advanced-build.mjs":
 			"5f3d97723d232c413e1c5ec46899d8ae920a9a667a71682100bb3507d273db6f",
 	},
