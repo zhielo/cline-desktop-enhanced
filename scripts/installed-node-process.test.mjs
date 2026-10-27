@@ -12,6 +12,7 @@ import {
  installedBrowserRpc,
  INSTALLED_ACTION_LIMIT,
  assertInstalledActionSequence,
+ recordInstalledRpc,
 	ownedDescendantMetadata,
 	startAcceptanceProcess,
 	stopOwnedApplication,
@@ -307,7 +308,7 @@ test("Windows browser creation is async and acceptance writes bounded action evi
  assert.ok(driver.includes('assertInstalledActionSequence(sequence)'));
  assert.ok(driver.includes('sequence > INSTALLED_ACTION_LIMIT'));
  assert.ok(driver.includes('installed-owned-ui/processor-setup-core-full-core-120-row-v12'));
- assert.match(driver, /acceptanceAction\(`rpc-\$\{command\}`/);
+ assert.match(driver, /record\(`rpc-\$\{command\}`/);
  assert.match(driver, /acceptanceAction\(\s*`native-\$\{name\}`/);
  assert.ok(driver.includes('installed-ai-batch-preview-approved-dag-checkpoint-no-replay-passed'));
  assert.ok(driver.includes('Installed completed batch was replayed'));
@@ -596,4 +597,34 @@ test("AI triage stages only a manifest-bound structured PE, never the legacy MZ 
   assert.deepEqual(await readFile(join(workspace,OWNED_TRIAGE_TARGET)),fixture);
   await assert.rejects(stageOwnedTriagePe(pack,workspace),/EEXIST/);
  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+
+test("installed RPC records discovery and submission once without caching or dropping actions", async () => {
+ let sequence=0, discovery=0, submissions=0;
+ const records=[];
+ const record=async(phase,operation)=>{
+  assertInstalledActionSequence(++sequence);
+  records.push({phase,status:"running"});
+  try {const result=await operation();records.push({phase,status:"completed"});return result;}
+  catch(error){records.push({phase,status:"failed"});throw error;}
+ };
+ for(let i=0;i<400;i++) {
+  const value=await recordInstalledRpc("get_desktop_settings",record,
+   async()=>`ws://127.0.0.1:${20000+(++discovery)}`,
+   async(endpoint)=>{submissions++;return endpoint;});
+  assert.equal(value,`ws://127.0.0.1:${20000+discovery}`);
+ }
+ assert.equal(sequence,400);assert.equal(discovery,400);assert.equal(submissions,400);
+ assert.equal(records.length,800);assert.ok(records.every(r=>r.phase==="rpc-get_desktop_settings"));
+ await assert.rejects(recordInstalledRpc("not-ready",record,async()=>{throw new Error("not ready")},async()=>{submissions++}),/not ready/);
+ assert.equal(submissions,400);assert.equal(records.at(-1).status,"failed");
+ let attempts=0;
+ await assert.rejects(recordInstalledRpc("failed-command",record,async()=>"ws://localhost:20000",async()=>{attempts++;throw new Error("send failed")}),/send failed/);
+ assert.equal(attempts,1);assert.equal(records.at(-1).status,"failed");
+ const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
+ const rpc=driver.slice(driver.indexOf("async function rpc<T>"),driver.indexOf("async function settings("));
+ assert.ok(rpc.includes("recordInstalledRpc<T>(command, acceptanceAction"));
+ assert.ok(rpc.includes("waitForInstalledBackendEndpoint"));
+ assert.ok(!rpc.includes('"backend-endpoint-discovery"'));
 });

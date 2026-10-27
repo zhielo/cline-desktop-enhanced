@@ -2,6 +2,10 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Installed RPC evidence bookkeeping
+
+- Every acceptance RPC records endpoint discovery and command submission as one bounded operation rather than counting native endpoint lookup as an additional action. Discovery still occurs on every call, including restarts; discovery/submission failures remain recorded, and submitted commands are never retried. The 768-action cap, 95-second per-action deadline, all 70 installed stages and cleanup requirements remain unchanged. Regression coverage exercises 400 calls, fresh endpoint lookup and both failure paths. The exact installed recipe fingerprint follows this change; no gate is bypassed.
+
 ## Qiling static multi-architecture profile v2
 
 - Extend the fixed Linux static ELF profile to little-endian ARM32 and ARM64 while retaining x86-64, Unicorn and all existing Android/Speakeasy routes. SDK/schema/plan/catalog/UI and worker profiles are bound to the same reviewed architecture map and exact updated profile digest. Unsupported engines/architectures, dynamic ELF, dependencies and external rootfs remain blocked; no engine fallback.

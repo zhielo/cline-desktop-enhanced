@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["export async function recordInstalledRpc<T>","recordInstalledRpc<T>(command, acceptanceAction","return record(`rpc-${command}`, async () => send(await discover()))"]},
 	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:['["qiling","x86_64"],["qiling","arm32"],["qiling","arm64"],["unidbg","arm32"],["unidbg","arm64"],["rnidbg","arm64"]',"planned.result.nextRequest.architecture!==architecture"]},
 	{path:"workers/emulation/profiles.json",markers:['"qiling-linux-static-v2"','"architectures":["x86_64","arm32","arm64"]']},
 	{path:"workers/emulation/qiling_runner.py",markers:["'arm32':{'write':4,'exit':1,'exit_group':248}","'arm64':{'write':64,'exit':93,'exit_group':94}","Qiling architecture differs from admitted ELF","if number not in calls.values()"]},

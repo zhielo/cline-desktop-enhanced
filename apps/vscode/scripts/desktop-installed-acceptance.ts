@@ -237,6 +237,18 @@ export function assertInstalledActionSequence(sequence: number) {
 		throw new Error("Installed action evidence budget reached")
 }
 
+/** Endpoint discovery is part of one recorded RPC operation, not a second action.
+ * Resolve afresh on every call (including after restarts), record failures, and never
+ * retry submitted commands. The existing 95s action deadline and 768-action cap apply. */
+export async function recordInstalledRpc<T>(
+	command: string,
+	record: <R>(phase: string, operation: () => Promise<R>) => Promise<R>,
+	discover: () => Promise<string>,
+	send: (endpoint: string) => Promise<T>,
+): Promise<T> {
+	return record(`rpc-${command}`, async () => send(await discover()))
+}
+
 /** Newly produced receipts must match the shipped parser, not a stale test literal.
  * Persisted historical receipts remain governed by their own immutable profile. */
 export function verifyInstalledAnalysisProfile(profile: string) {
@@ -923,24 +935,17 @@ ConvertTo-Json -InputObject @($rows) -Compress
 	}
 
 	async function rpc<T>(page: Page, command: string, args: Record<string, unknown> = {}): Promise<T> {
-		const endpoint = await acceptanceAction(
-			"backend-endpoint-discovery",
-			() =>
-				waitForInstalledBackendEndpoint(() =>
-					page.evaluate(async () => {
-						const native = (
-							window as unknown as {
-								__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> }
-							}
-						).__TAURI_INTERNALS__
-						return await native.invoke("get_desktop_backend_endpoint")
-					}),
-				),
-			95_000,
+		return recordInstalledRpc<T>(command, acceptanceAction,
+			() => waitForInstalledBackendEndpoint(() =>
+				page.evaluate(async () => {
+					const native = (window as unknown as {
+						__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> }
+					}).__TAURI_INTERNALS__
+					return await native.invoke("get_desktop_backend_endpoint")
+				}),
+			),
+			async (endpoint) => (await page.evaluate(installedBrowserRpc, { command, args, endpoint })) as T,
 		)
-		return (await acceptanceAction(`rpc-${command}`, () =>
-			page.evaluate(installedBrowserRpc, { command, args, endpoint }),
-		)) as T
 	}
 	async function settings(page: Page, section: string) {
 		await page.getByRole("button", { name: "Settings", exact: true }).first().click()
