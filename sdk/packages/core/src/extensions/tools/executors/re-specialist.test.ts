@@ -61,9 +61,17 @@ describe("specialist analysis contracts", () => {
 	it("preserves the full-pack gate and excludes emulator execution from static tools", () => {
 		const c = setupCapabilityCatalog();
 		expect(c.engineRoutes).toHaveLength(11);
-		expect(c.specialistRoutes.find((x) => x.id === "qiling")).toMatchObject({
-			availability: "evaluation-deferred",
-		});
+		for (const id of ["qiling", "unidbg", "rnidbg"]) {
+			expect(c.specialistRoutes.find((x) => x.id === id)).toMatchObject({
+				availability: "optional-isolated-profile",
+				tool: "reverse_engineer",
+				operation: "plan_emulation",
+				prepareCommand: "prepare_analysis_task",
+				runCommand: "run_dynamic_analysis",
+			});
+		}
+		expect(c.targetExecuted).toBe(false);
+		expect(c.providerCalls).toBe(0);
 		expect(
 			ReverseEngineeringInputSchema.safeParse({
 				operation: "advanced_analysis",
