@@ -330,6 +330,7 @@ export function analysisCommandCatalog() {
 								"preview_batch",
 								"preview_android_candidate",
 								"plan_runtime_observation",
+ "plan_emulation",
 							].includes(command)
 						? "plan-only"
 						: "read",
@@ -337,7 +338,7 @@ export function analysisCommandCatalog() {
 				limitations:
 					command === "identify_artifact"
 						? "Content-based bounded ZIP/gzip/zlib traversal and standard DEX carving, hashes/origins, conflicting signatures and unknowns. PE/JVM/Mach-O/Wasm remain signature candidates; no execution, extraction, universal format detection or full validation. Requires the managed Python interpreter."
-						: command === "plan_runtime_observation"
+						: command === "plan_emulation" ? "Plan-only compatibility for fixed additive emulation profiles. No worker, network, download, upload or target execution; requires fresh owning Runtime/Hybrid execution approval." : command === "plan_runtime_observation"
 							? "Plan only: exact live local Node Inspector PID/birth/listener and hash-bound source, no socket connection or target execution. Fresh Runtime/Hybrid Debug approval and identity recheck remain mandatory. No persistent session or other runtime commands."
 							: command === "validate_candidate"
 								? "Explicit hash-bound JS/TS syntax (1 MiB), standard DEX integrity/extents or APK structure/signature (16 MiB). No execution, full bytecode/type/device/build verification; unavailable checks never pass."

@@ -1,3 +1,4 @@
+import { EmulationPlanSchema } from "./emulation-schema";
 import {
 	BundleRecoveryRequestSchema,
 	BundleExportRequestSchema,
@@ -369,6 +370,7 @@ export const ReverseEngineeringInputSchema = z
 		evidence_query: EvidenceQuerySchema.optional(),
 		bundle_export: BundleExportRequestSchema.optional(),
 		runtime_observation_plan: RuntimeObservationPlanSchema.optional(),
+ emulation_plan: EmulationPlanSchema.optional(),
 		candidate_validation: CandidateValidationSchema.optional(),
 		candidate_review: CandidateReviewSchema.optional(),
 		workflow_query: WorkflowQuerySchema.optional(),

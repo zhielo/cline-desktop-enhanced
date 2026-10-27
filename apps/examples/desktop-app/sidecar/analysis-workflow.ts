@@ -37,6 +37,7 @@ export const WORKFLOW_COMMANDS = [
 	"capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",
+ "plan_emulation",
 	"validate_candidate",
 	"review_candidate_changes",
 	"open_binary",
@@ -556,6 +557,15 @@ export async function handleAnalysisWorkflow(
 			},
 		});
 	}
+ if(command==="plan_emulation") {
+  const req=z.object({artifactId:Id,options:z.unknown(),phase:z.enum(["prepare","run"]).default("prepare"),planId:Id.optional(),executionToken:z.string().max(512).optional()}).strict().parse(input);
+  const params=InvestigationSchemas.plan_emulation.parse({artifactId:req.artifactId,options:req.options});
+  const artifact=await store.verify(scope,req.artifactId);
+  const request={operation:command,target:artifact.path,timeout_ms:20000,emulation_plan:{...params.options,expected_sha256:artifact.sha256}};
+  if(req.phase==="prepare")return ports.invoke("prepare_analysis_task",{kind:"static",request});
+  if(!req.planId||!req.executionToken)throw new Error("Separately approved one-use static plan required");
+  return ports.invoke("run_static_analysis",{input:request,planId:req.planId,executionToken:req.executionToken});
+ }
 	if (command === "plan_runtime_observation") {
 		const req = z
 			.object({

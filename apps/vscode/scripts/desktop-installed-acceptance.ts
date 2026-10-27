@@ -3493,6 +3493,27 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			}
 			if (!crossScopeDenied) throw new Error("Runtime plan artifact handle crossed sessions")
 			stages.push("installed-runtime-plan-owned-identity-no-attach-no-execute-passed")
+   // New engines stay optional: installed product proves planning and fail-closed
+   // unavailable workers. Real modeled execution is a separate Linux engine CI gate.
+   for(const engine of ["qiling","unidbg","rnidbg"]){
+    const target=join(workspace,`owned-${engine}-admission.elf`),bytes=Buffer.alloc(128);
+    Buffer.from("7f454c46020101","hex").copy(bytes);bytes.writeUInt16LE(engine==="qiling"?2:3,16);bytes.writeUInt16LE(engine==="qiling"?62:183,18);
+    bytes.writeBigUInt64LE(0x1000n,24);bytes.writeBigUInt64LE(64n,32);bytes.writeUInt16LE(56,54);bytes.writeUInt16LE(1,56);bytes.writeUInt32LE(1,64);bytes.writeUInt32LE(5,68);bytes.writeBigUInt64LE(0x1000n,80);bytes.writeBigUInt64LE(128n,96);bytes.writeBigUInt64LE(128n,104);await writeFile(target,bytes);
+    const handle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target}});
+    const options={engine,architecture:engine==="qiling"?"x86_64":"arm64",scenario:{kind:engine==="qiling"?"entry":"initialize"},instruction_limit:10000};
+    const draft=await rpc<{id:string;requestHash:string;requirements:string[]}>(page,"plan_emulation",{...triageScope,input:{artifactId:handle.id,options,phase:"prepare"}});
+    const consent=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:draft.id,requestHash:draft.requestHash,requirements:draft.requirements});
+    const planned=await rpc<{result:{effect:string;compatibility:string;workerConnected:boolean;observedExecution:boolean;approval:{granted:boolean};nextRequest:Record<string,unknown>}}>(page,"plan_emulation",{...triageScope,input:{artifactId:handle.id,options,phase:"run",planId:draft.id,executionToken:consent.executionToken}});
+    if(planned.result.effect!=="plan-only"||planned.result.compatibility!=="admission-only"||planned.result.workerConnected!==false||planned.result.observedExecution!==false||planned.result.approval.granted!==false||(await readFile(target)).compare(bytes)!==0)throw new Error("Installed emulation planner widened authority or changed source");
+    let denied=false;try{await rpc(page,"prepare_analysis_task",{...triageScope,cwd:workspace,kind:"dynamic",request:planned.result.nextRequest});}catch(e){if(!String(e).includes("Runtime/Hybrid"))throw e;denied=true;}
+    if(!denied)throw new Error("Static enabled optional engine execution");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
+    let unavailable=false;try{await rpc(page,"prepare_analysis_task",{...triageScope,cwd:workspace,kind:"dynamic",request:planned.result.nextRequest});}catch(e){if(!String(e).includes("independent HTTPS"))throw e;unavailable=true;}
+    if(!unavailable)throw new Error("Unconfigured optional worker did not remain blocked");
+    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
+   }
+   stages.push("installed-additive-emulation-read-only-planning-static-and-unconfigured-worker-denial-passed")
+
 			let staticCaptureDenied = false
 			try {
 				await rpc(page, "capture_process_tree", {

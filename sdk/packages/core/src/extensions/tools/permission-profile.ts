@@ -88,6 +88,7 @@ const EXTERNAL_TOOLS = new Set([
 	"capture_process_tree",
 	"capture_file_activity",
 	"plan_runtime_observation",
+	"plan_emulation",
 	"validate_candidate",
 	"review_candidate_changes",
 	"open_binary",

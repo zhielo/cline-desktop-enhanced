@@ -18,16 +18,18 @@ def duplicate_safe(pairs):
         result[k]=v
     return result
 
-def validate(value):
+def validate(value,operation="emulate_windows",artifact_validator=None):
     allowed={'protocol','nonce','requestHash','artifactSha256','network','operation','timeoutMs','maxOutputBytes','artifactBase64'}
     if not isinstance(value,dict) or set(value)!=allowed:raise ValueError('Invalid job fields')
-    if value['protocol']!='cline-analysis-job/v1' or value['operation']!='emulate_windows' or value['network']!='disabled':raise ValueError('Unsupported execution')
+    if value['protocol']!='cline-analysis-job/v1' or value['operation']!=operation or value['network']!='disabled':raise ValueError('Unsupported execution')
     for name,size in [('nonce',32),('requestHash',64),('artifactSha256',64)]:
         if not isinstance(value[name],str) or not re.fullmatch('[a-f0-9]{'+str(size)+'}',value[name]):raise ValueError('Invalid binding')
     if type(value['timeoutMs']) is not int or not 1000<=value['timeoutMs']<=120000 or value['maxOutputBytes']!=MAX_RESULT:raise ValueError('Invalid limits')
     if not isinstance(value['artifactBase64'],str) or len(value['artifactBase64'])>4*((MAX_INPUT+2)//3):raise ValueError('Input budget')
     data=base64.b64decode(value['artifactBase64'],validate=True)
-    if not 64<=len(data)<=MAX_INPUT or data[:2]!=b'MZ' or hashlib.sha256(data).hexdigest()!=value['artifactSha256']:raise ValueError('Invalid PE identity')
+    if not 64<=len(data)<=MAX_INPUT or hashlib.sha256(data).hexdigest()!=value['artifactSha256']:raise ValueError('Invalid artifact identity')
+    if artifact_validator:artifact_validator(data)
+    elif data[:2]!=b'MZ':raise ValueError('Invalid PE identity')
     return data
 
 def runtime_identity():
@@ -49,7 +51,7 @@ class Worker:
         self.root=Path(root).resolve();self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         if not isinstance(key,Ed25519PrivateKey) or not isinstance(token,str) or len(token)<32 or not re.fullmatch('[A-Za-z0-9_.-]{1,128}',worker_id):raise ValueError('Invalid identity')
         self.key,self.token,self.worker_id=key,token,worker_id
-        self.verify_runtime=execute is None;self.execute=execute or self.collect;self.runtime=runtime or runtime_identity();self.upload_lock=threading.Lock();self.lock=threading.Lock();self.processes={};self.state_lock=threading.Lock();self.cancelled=set()
+        self.verify_runtime=execute is None;self.execute=execute or self.collect;self.runtime=runtime or self.runtime_identity();self.upload_lock=threading.Lock();self.lock=threading.Lock();self.processes={};self.state_lock=threading.Lock();self.cancelled=set()
         with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS jobs(nonce TEXT PRIMARY KEY,identity TEXT,status TEXT,result BLOB,created REAL)')
             db.execute("UPDATE jobs SET status='interrupted' WHERE status='running'")
@@ -80,7 +82,7 @@ class Worker:
                     except ProcessLookupError:pass
         return 200,self.signed({'protocol':'cline-analysis-cancel/v1','workerId':self.worker_id,'nonce':nonce,'status':'cancellation-requested' if row[0]=='running' else row[0],'replay':'blocked'})
     def job(self,value):
-        data=validate(value);nonce=value['nonce'];identity=hashlib.sha256(encoded(value)).hexdigest()
+        data=self.validate(value);nonce=value['nonce'];identity=hashlib.sha256(encoded(value)).hexdigest()
         if not self.lock.acquire(False):return 409,{'error':'Busy; no new execution'}
         try:
             with self.db() as db:
@@ -92,29 +94,38 @@ class Worker:
                 if db.execute('SELECT COUNT(*) FROM jobs').fetchone()[0]>=4096 or db.execute('SELECT COALESCE(SUM(length(result)),0) FROM jobs').fetchone()[0]>32*MAX_RESULT:return 429,{'error':'Retention budget reached; explicit operator maintenance required'}
                 db.execute('INSERT INTO jobs VALUES(?,?,?,?,?)',(nonce,identity,'running',None,time.time()))
             try:
-                if self.verify_runtime and runtime_identity()!=self.runtime:raise ValueError('Runtime identity changed')
+                if self.verify_runtime and self.runtime_identity()!=self.runtime:raise ValueError('Runtime identity changed')
                 observations=self.execute(value,data)
-                if not isinstance(observations,dict) or observations.get('status') not in ['partial','failed']:raise ValueError('Invalid collector status')
-                rows=observations.get('apiCalls',[]);limits=observations.get('limitations',[])
-                if not isinstance(rows,list) or len(rows)>200 or any(not isinstance(r,dict) or set(r)!={'api','arguments','return'} or any(not isinstance(v,str) or len(v)>1000 for v in r.values()) for r in rows):raise ValueError('Invalid API rows')
-                if not isinstance(limits,list) or len(limits)>50 or any(not isinstance(s,str) or len(s)>1000 for s in limits):raise ValueError('Invalid limitations')
-                if observations['status']=='partial' and (observations.get('engineVersion')!='1.5.11' or observations.get('memoryBoundary',{}).get('hard') is not True):raise ValueError('Missing runtime evidence')
+                self.validate_observations(observations)
             except Exception:
                 observations={'status':'failed','limitations':['Worker collector failed or was interrupted; no successful execution claim.']}
             with self.state_lock:
                 cancelled=nonce in self.cancelled;self.cancelled.discard(nonce)
             if cancelled:observations={'status':'failed','limitations':['Cancelled; partial output discarded. No automatic replay.']}
-            receipt={'protocol':'cline-analysis-job/v1','workerId':self.worker_id,'nonce':nonce,'requestHash':value['requestHash'],'artifactSha256':value['artifactSha256'],'network':'disabled','status':observations['status'],'engine':'speakeasy','runtimeSha256':self.runtime,'evidence':observations,'limitations':observations.get('limitations',[])}
+            receipt={'protocol':'cline-analysis-job/v1','workerId':self.worker_id,'nonce':nonce,'requestHash':value['requestHash'],'artifactSha256':value['artifactSha256'],'network':'disabled','status':observations['status'],'engine':self.engine,'runtimeSha256':self.runtime,**self.receipt_extra(value),'evidence':observations,'limitations':observations.get('limitations',[])}
             result=self.signed(receipt)
             if len(encoded(result))>MAX_RESULT:raise ValueError('Receipt budget exceeded')
             with self.db() as db:db.execute('UPDATE jobs SET status=?,result=? WHERE nonce=?',(observations['status'],encoded(result),nonce))
             return 200,result
         finally:self.lock.release()
+    engine='speakeasy'
+    def validate(self,value):return validate(value)
+    def runtime_identity(self):return runtime_identity()
+    def collector_path(self):return Path(__file__).with_name('collector.py')
+    def collector_request(self,value,artifact):return {'artifact':str(artifact),'artifactSha256':value['artifactSha256']}
+    def collector_environment(self):return {}
+    def receipt_extra(self,value):return {}
+    def validate_observations(self,observations):
+        if not isinstance(observations,dict) or observations.get('status') not in ['partial','failed']:raise ValueError('Invalid collector status')
+        rows=observations.get('apiCalls',[]);limits=observations.get('limitations',[])
+        if not isinstance(rows,list) or len(rows)>200 or any(not isinstance(r,dict) or set(r)!={'api','arguments','return'} or any(not isinstance(v,str) or len(v)>1000 for v in r.values()) for r in rows):raise ValueError('Invalid API rows')
+        if not isinstance(limits,list) or len(limits)>50 or any(not isinstance(s,str) or len(s)>1000 for s in limits):raise ValueError('Invalid limitations')
+        if observations['status']=='partial' and (observations.get('engineVersion')!='1.5.11' or observations.get('memoryBoundary',{}).get('hard') is not True):raise ValueError('Missing runtime evidence')
     def collect(self,value,data):
         with tempfile.TemporaryDirectory(prefix='cline-emulation-') as tmp:
             artifact=Path(tmp)/'approved.bin';artifact.write_bytes(data)
-            env={k:v for k,v in os.environ.items() if k in ['PATH','LANG','LC_ALL']};env.update(CLINE_RE_ISOLATED_WORKER='disposable-network-disabled',HOME=tmp)
-            process=subprocess.Popen([sys.executable,'-I','-B',str(Path(__file__).with_name('collector.py'))],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,cwd=tmp,env=env,start_new_session=True)
+            env={k:v for k,v in os.environ.items() if k in ['PATH','LANG','LC_ALL']};env.update(CLINE_RE_ISOLATED_WORKER='disposable-network-disabled',HOME=tmp);env.update(self.collector_environment())
+            process=subprocess.Popen([sys.executable,'-I','-B',str(self.collector_path())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,cwd=tmp,env=env,start_new_session=True)
             with self.state_lock:
                 self.processes[value['nonce']]=process
                 if value['nonce'] in self.cancelled:os.killpg(process.pid,signal.SIGKILL)
@@ -128,7 +139,7 @@ class Worker:
                     output.extend(chunk)
             reader=threading.Thread(target=drain,daemon=True);reader.start()
             try:
-                process.stdin.write(encoded({'artifact':str(artifact),'artifactSha256':value['artifactSha256']}));process.stdin.close()
+                process.stdin.write(encoded(self.collector_request(value,artifact)));process.stdin.close()
                 process.wait(timeout=value['timeoutMs']/1000)
                 reader.join(2)
                 if process.returncode or overflow.is_set() or reader.is_alive():raise ValueError('Collector exited or output exceeded limits')
