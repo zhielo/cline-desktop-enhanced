@@ -2,6 +2,7 @@
 import argparse,hashlib,importlib.metadata,json,os,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent
+from contracts import PROFILES
 
 def digest(path):
  h=hashlib.sha256()
@@ -51,8 +52,11 @@ def seal(engine,python,java_home=None,unidbg_build=None,rnidbg_binary=None,fixtu
  else:raise ValueError('Unknown engine')
  # Startup self-test binaries are operator-generated from owned checked-in fixtures.
  result['fixtures']={}
- for arch in (['x86_64'] if engine=='qiling' else ['arm32','arm64'] if engine=='unidbg' else ['arm64']):
-  p=Path(fixtures)/('owned-x64' if arch=='x86_64' else 'owned-'+arch+'.so');add(p);result['fixtures'][arch]=str(p.resolve())
+ for arch in PROFILES[engine]['architectures']:
+  name=('owned-x64' if arch=='x86_64' else 'owned-linux-'+arch) if engine=='qiling' else 'owned-'+arch+'.so'
+  p=Path(fixtures)/name
+  if not p.is_file():raise ValueError('Every advertised architecture requires its owned startup fixture')
+  add(p);result['fixtures'][arch]=str(p.resolve())
  return result
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('engine',choices=['qiling','unidbg','rnidbg']);p.add_argument('output');p.add_argument('--java-home');p.add_argument('--unidbg-build');p.add_argument('--rnidbg-binary');p.add_argument('--fixtures',required=True);a=p.parse_args()

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { createHash, randomBytes, verify } from "node:crypto";
-import { EmulationRuntimeSchema, EMULATION_PROFILE_SHA256 } from "@cline/core";
+import {
+	EmulationRuntimeSchema,
+	EMULATION_PROFILE_SHA256,
+	EMULATION_PROFILE_ARCHITECTURES,
+} from "@cline/core";
 import { boundedWorkerJson, workerPublicKey } from "./analysis-sandbox-client";
 const Hash = z.string().regex(/^[a-f0-9]{64}$/),
 	Id = z.string().min(1).max(128);
@@ -126,8 +130,14 @@ export async function probeEmulation(
 			),
 		);
 	const now = Date.now();
+	const expectedArchitectures = EMULATION_PROFILE_ARCHITECTURES[m.engine];
 	if (
 		m.engine !== engine ||
+		new Set(m.architectures).size !== m.architectures.length ||
+		m.architectures.length !== expectedArchitectures.length ||
+		expectedArchitectures.some(
+			(architecture) => !m.architectures.includes(architecture),
+		) ||
 		m.profileSha256 !== EMULATION_PROFILE_SHA256 ||
 		!m.operations.includes(`emulate-profile-${engine}`) ||
 		!(

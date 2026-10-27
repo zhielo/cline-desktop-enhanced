@@ -22,6 +22,7 @@ vi.mock("@cline/core", async () => {
 		SETUP_ENGINE_ROUTES: actual.SETUP_ENGINE_ROUTES,
 		EmulationRuntimeSchema: actual.EmulationRuntimeSchema,
 		EMULATION_PROFILE_SHA256: actual.EMULATION_PROFILE_SHA256,
+		EMULATION_PROFILE_ARCHITECTURES: actual.EMULATION_PROFILE_ARCHITECTURES,
 		setupCapabilityCatalog: actual.setupCapabilityCatalog,
 		ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
 		RE_SPECIALIST_WORKER: actual.RE_SPECIALIST_WORKER,

@@ -13,7 +13,7 @@ def run(value,inventory):
  result={'status':'partial','engine':engine,'architecture':value['architecture'],'limitations':LIMITATIONS,'memoryBoundary':{'hard':True,'processAddressSpaceBytes':8*1024**3},'outcome':'unverified'}
  if engine=='qiling':
   from qiling_runner import run as qrun
-  evidence=qrun(artifact,value['instructionLimit']);result.update(evidence)
+  evidence=qrun(artifact,value['instructionLimit'],value['architecture']);result.update(evidence)
   if evidence['stopReason']=='exit' and 'expectedExit' in s:result['scenarioCheck']='passed' if evidence['exitCode']==s['expectedExit'] else 'failed'
  else:
   with tempfile.TemporaryDirectory(prefix='cline-jni-empty-') as root:

@@ -41,9 +41,13 @@ class Worker(transport.Worker):
   if not isinstance(limits,list) or len(limits)>50 or any(not isinstance(s,str) or len(s)>1000 for s in limits):raise ValueError('Invalid limitations')
  def self_test(self):
   _,m=identity(self.inventory,self.engine)
+  if not isinstance(m.get('fixtures'),dict) or set(m['fixtures'])!=set(PROFILES[self.engine]['architectures']):raise ValueError('Owned startup fixtures must cover every advertised architecture')
   for architecture,artifact in m['fixtures'].items():
-   data=Path(artifact).read_bytes();value={'engine':self.engine,'architecture':architecture,'artifactSha256':hashlib.sha256(data).hexdigest(),'scenario':{'kind':'entry','expectedExit':7} if self.engine=='qiling' else {'kind':'jni-int32','className':'com/cline/Owned','methodName':'transform','argument':42,'expectedReturn':134},'instructionLimit':10000,'timeoutMs':15000,'nonce':'0'*32}
+   data=Path(artifact).read_bytes()
+   if m['files'].get(str(Path(artifact).resolve()))!=hashlib.sha256(data).hexdigest():raise ValueError('Startup fixture is not sealed')
+   value={'engine':self.engine,'architecture':architecture,'artifactSha256':hashlib.sha256(data).hexdigest(),'scenario':{'kind':'entry','expectedExit':7} if self.engine=='qiling' else {'kind':'jni-int32','className':'com/cline/Owned','methodName':'transform','argument':42,'expectedReturn':134},'instructionLimit':10000,'timeoutMs':15000,'nonce':'0'*32}
    validate_elf(data,self.engine,architecture);evidence=self.collect(value,data);self.validate_observations(evidence)
+   if self.engine=='qiling' and (evidence.get('capturedBytes')!=12 or evidence.get('capturedSha256')!=hashlib.sha256(b'cline-owned\n').hexdigest()):raise ValueError('Owned startup stdout check failed')
    if evidence.get('status')!='partial' or evidence.get('scenarioCheck')!='passed':raise ValueError('Owned startup self-test failed; worker must stay unavailable')
 
 if __name__=='__main__':

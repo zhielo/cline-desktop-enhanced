@@ -1235,4 +1235,4 @@ export { BinaryTriageCallSchema, BinaryTriageOptionsSchema, BINARY_TRIAGE_OPERAT
 
 export { windowsJobInvocation, WINDOWS_JOB_SOURCE } from "./runtime/windows-job-launcher";
 
-export { EmulationRuntimeSchema, EMULATION_ENGINES, EMULATION_PROFILE_SHA256, EmulationOptionsSchema, EmulationOptionsShape, EmulationPlanSchema, validateEmulationProfile } from "./extensions/tools/emulation-schema";
+export { EmulationRuntimeSchema, EMULATION_PROFILE_ARCHITECTURES, supportsEmulationArchitecture, EMULATION_ENGINES, EMULATION_PROFILE_SHA256, EmulationOptionsSchema, EmulationOptionsShape, EmulationPlanSchema, validateEmulationProfile } from "./extensions/tools/emulation-schema";

@@ -95,7 +95,7 @@ it("enforces owning Full Access modes, exact artifact approvals, Hybrid basis an
 					operations: ["emulate-profile-qiling"],
 					engine: "qiling",
 					profileSha256: EMULATION_PROFILE_SHA256,
-					architectures: ["x86_64"],
+					architectures: ["x86_64", "arm32", "arm64"],
 					runtimeSha256: "a".repeat(64),
 					isolationClaim: "operator-provisioned-not-hardware-attested",
 				});

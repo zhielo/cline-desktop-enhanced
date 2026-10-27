@@ -2,8 +2,27 @@ import { HybridContextSchema } from "../../analysis/hybrid";
 import { z } from "zod";
 /** Fixed additive profiles; never a download, user hook or execution approval. */
 export const EMULATION_PROFILE_SHA256 =
-	"b8bb3b0fe985f4e8d74b9809c50e1da59d83f6bb3756b4b76997084473df3c71";
+	"4734e7c6711344a030f139f2a097cdb7dade30c7acec95dc0044c93d7435bec9";
 export const EMULATION_ENGINES = ["qiling", "unidbg", "rnidbg"] as const;
+export const EMULATION_PROFILE_ARCHITECTURES = {
+	qiling: ["x86_64", "arm32", "arm64"],
+	unidbg: ["arm32", "arm64"],
+	rnidbg: ["arm64"],
+} as const;
+export function supportsEmulationArchitecture(
+	engine: string,
+	architecture: string,
+) {
+	return (
+		Object.hasOwn(EMULATION_PROFILE_ARCHITECTURES, engine) &&
+		(
+			EMULATION_PROFILE_ARCHITECTURES[
+				engine as keyof typeof EMULATION_PROFILE_ARCHITECTURES
+			] as readonly string[]
+		).includes(architecture)
+	);
+}
+
 const Int32 = z.number().int().min(-2147483648).max(2147483647);
 export const EmulationScenarioSchema = z.discriminatedUnion("kind", [
 	z
@@ -37,8 +56,8 @@ export function validateEmulationProfile(
 	c: z.RefinementCtx,
 ) {
 	if (
-		(v.engine === "qiling" &&
-			(v.architecture !== "x86_64" || v.scenario.kind !== "entry")) ||
+		!supportsEmulationArchitecture(v.engine, v.architecture) ||
+		(v.engine === "qiling" && v.scenario.kind !== "entry") ||
 		(v.engine !== "qiling" &&
 			(v.scenario.kind === "entry" ||
 				!["arm32", "arm64"].includes(v.architecture))) ||

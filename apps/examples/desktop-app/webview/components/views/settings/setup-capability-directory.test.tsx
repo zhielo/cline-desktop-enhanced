@@ -42,7 +42,9 @@ it("shows every registered route and the four real framework scopes without gran
 			expect(element.textContent).toContain(row.id);
 		expect(element.textContent).toContain("Configured, not tested");
 		expect(element.textContent).toContain("Readiness not established");
-		expect(element.textContent).toContain("Static Linux x86-64 ELF entry");
+		expect(element.textContent).toContain(
+			"Static Linux x86-64/ARM32/ARM64 ELF entry",
+		);
 		expect(element.textContent).toContain("Android ARM32/64");
 		expect(element.textContent).toContain(
 			"App-managed Install → Test → Use is not implemented",
@@ -67,7 +69,9 @@ it("does not invent readiness or architecture support when the catalog is unavai
 		await act(async () => root.render(<SetupCapabilityDirectoryView />));
 		expect(element.textContent).toContain("Backend catalog unavailable");
 		expect(element.textContent).toContain("Configuration status unavailable");
-		expect(element.textContent).not.toContain("Static Linux x86-64 ELF entry");
+		expect(element.textContent).not.toContain(
+			"Static Linux x86-64/ARM32/ARM64 ELF entry",
+		);
 	} finally {
 		await act(async () => root.unmount());
 	}

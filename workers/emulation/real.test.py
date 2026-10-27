@@ -18,8 +18,10 @@ class RealAcceptance(unittest.TestCase):
      nonlocal index
      index+=1;return {'protocol':'cline-analysis-job/v1','operation':'emulate_profile','nonce':f'{index:032x}','requestHash':'b'*64,'artifactSha256':hashlib.sha256(data).hexdigest(),'network':'disabled','timeoutMs':15000,'maxOutputBytes':1048576,'artifactBase64':base64.b64encode(data).decode(),'engine':ENGINE,'architecture':arch,'scenario':scenario,'instructionLimit':limit,'profileSha256':PROFILE_SHA256,'runtimeSha256':w.runtime}
     positive=job();status,body=w.job(positive);self.assertEqual(status,200);r=body['receipt'];self.assertEqual(r['status'],'partial',r);self.assertEqual(r['evidence']['scenarioCheck'],'passed',r);self.assertEqual(r['evidence']['outcome'],'unverified');key.public_key().verify(base64.b64decode(body['signature']),transport.encoded(r));self.assertEqual(w.job(positive)[1],body)
+    if ENGINE=='qiling':
+     self.assertEqual(r['evidence']['capturedBytes'],len(b'cline-owned\n'),r);self.assertEqual(r['evidence']['capturedSha256'],hashlib.sha256(b'cline-owned\n').hexdigest(),r)
     original=data
-    denied=Path(file).with_name('denied-x64' if arch=='x86_64' else 'denied-'+arch+'.so')
+    denied=Path(file).with_name(('denied-x64' if arch=='x86_64' else 'denied-linux-'+arch) if ENGINE=='qiling' else 'denied-'+arch+'.so')
     data=denied.read_bytes();r=w.job(job())[1]['receipt'];self.assertEqual(r['evidence'].get('stopReason'),'unsupported-syscall',r);self.assertNotEqual(r['evidence'].get('scenarioCheck'),'passed',r);data=original
     wrong=dict(s,**({'expectedExit':8} if ENGINE=='qiling' else {'expectedReturn':135}));r=w.job(job(wrong))[1]['receipt'];self.assertEqual(r['evidence']['scenarioCheck'],'failed',r)
     r=w.job(job(limit=1))[1]['receipt'];self.assertNotEqual(r['evidence'].get('scenarioCheck'),'passed',r)

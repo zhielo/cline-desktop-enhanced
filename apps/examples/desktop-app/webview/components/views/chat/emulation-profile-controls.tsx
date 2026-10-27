@@ -110,7 +110,9 @@ export function EmulationProfileControls({
 					value={engine}
 					onChange={(e) => choose(e.target.value)}
 				>
-					<option value="qiling">Qiling · static Linux ELF x86-64</option>
+					<option value="qiling">
+						Qiling · static Linux ELF x86-64 / ARM32 / ARM64
+					</option>
 					<option value="unidbg">unidbg · Android JNI ARM32 / ARM64</option>
 					<option value="rnidbg">
 						rnidbg · experimental Android JNI ARM64
@@ -126,7 +128,11 @@ export function EmulationProfileControls({
 					onChange={(e) => setArchitecture(e.target.value)}
 				>
 					{engine === "qiling" ? (
-						<option value="x86_64">x86-64</option>
+						<>
+							<option value="x86_64">x86-64</option>
+							<option value="arm32">ARM32</option>
+							<option value="arm64">ARM64</option>
+						</>
 					) : (
 						<>
 							<option value="arm64">ARM64</option>

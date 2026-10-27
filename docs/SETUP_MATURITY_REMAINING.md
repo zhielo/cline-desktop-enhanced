@@ -20,11 +20,11 @@ Before declaring installation ready:
 4. Execute real owned fixtures using the same installed app route the user will click. Test cancellation, interrupted download/activation, offline operation, corrupt artifact rejection, cleanup and restart. UI must show missing prerequisites and progress honestly.
 5. Preserve existing request/artifact hashes, one-use approval, bounded execution and signed transport requirements for remote workers. Local managed execution needs its own truthful identity/containment contract, not a forged remote-vm claim.
 
-## 2. Qiling architecture coverage — NOT IMPLEMENTED
+## 2. Qiling static architecture coverage — IMPLEMENTED, FINAL CI REQUIRED
 
-The app supports static Linux x86-64 ELF entry only. Upstream Qiling supports more; changing the dropdown alone does not enable them.
+Qiling v2 adds little-endian static Linux x86-64, ARM32 and ARM64 ELF entry. Architecture-specific dispatch and sealed fixtures are implemented; local pinned-engine owned tests passed. Exact-current-revision Clang-built CI acceptance remains required. This is not general upstream Qiling parity.
 
-Add ARM32 and ARM64 static ELF profiles first. Update loader/schema/profile identity, architecture-specific syscall numbers, owned success and forbidden-syscall fixtures, startup capability tests and UI together. Prove time/instruction/output limits, denied syscalls, cancellation and no native fallback on each architecture. Keep dynamic ELF/rootfs/library/TLS cases explicitly unsupported until separately implemented and accepted. Preserve existing Unicorn, unidbg, rnidbg and Speakeasy routes.
+SDK admission, profile identity, signed manifest coverage, architecture-specific syscall numbers, owned success/forbidden-syscall fixtures, startup capability tests and UI now agree. Existing Unicorn, unidbg, rnidbg and Speakeasy routes remain. Dynamic ELF/rootfs/library/TLS and additional architectures remain explicitly unsupported. Run the existing real-engine CI matrix before merging; startup fixtures must cover every advertised architecture.
 
 ## 3. Interrupted setup recovery — NOT IMPLEMENTED
 
