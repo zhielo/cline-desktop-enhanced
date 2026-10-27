@@ -51,6 +51,22 @@ function configuration() {
 	}
 }
 
+/** Configuration-only status. Does not contact or certify a Speakeasy worker. */
+export function analysisSandboxConfigurationStatus() {
+	const cfg = configuration();
+	const token = process.env.CLINE_ANALYSIS_SANDBOX_TOKEN;
+	if (!cfg.endpoint && !cfg.publicKey && !token)
+		return "not-configured" as const;
+	if (!cfg.valid || !cfg.publicKey || !token)
+		return "invalid-configuration" as const;
+	try {
+		workerPublicKey(cfg.publicKey);
+		return "configured-not-tested" as const;
+	} catch {
+		return "invalid-configuration" as const;
+	}
+}
+
 function validManifest(value: unknown): value is AnalysisSandboxManifest {
 	if (!value || typeof value !== "object") return false;
 	const manifest = value as AnalysisSandboxManifest;

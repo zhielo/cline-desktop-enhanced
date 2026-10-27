@@ -2,7 +2,7 @@ import arm64Fixture from "../../../../scripts/fixtures/owned-arm64-elf.json";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +20,8 @@ vi.mock("@cline/core", async () => {
 		await vi.importActual<typeof import("@cline/core")>("@cline/core");
 	return {
 		SETUP_ENGINE_ROUTES: actual.SETUP_ENGINE_ROUTES,
+		EmulationRuntimeSchema: actual.EmulationRuntimeSchema,
+		EMULATION_PROFILE_SHA256: actual.EMULATION_PROFILE_SHA256,
 		setupCapabilityCatalog: actual.setupCapabilityCatalog,
 		ADVANCED_ANALYSIS_WORKER: "owned fixture worker",
 		RE_SPECIALIST_WORKER: actual.RE_SPECIALIST_WORKER,
@@ -52,6 +54,15 @@ import {
 const roots: string[] = [];
 afterEach(async () => {
 	vi.unstubAllEnvs();
+	// Engine fixture projects are separate from durable setup receipts.
+	for (const [input] of mocks.executor.mock.calls) {
+		if (
+			typeof input?.target === "string" &&
+			/cline-owned-(ida|ghidra)-/.test(input.target)
+		)
+			roots.push(dirname(input.target));
+	}
+	mocks.executor.mockReset();
 	mocks.run.mockReset();
 	await Promise.all(
 		roots.splice(0).map((p) => rm(p, { recursive: true, force: true })),
@@ -245,7 +256,11 @@ it("ARM64 acceptance uses a fixed owned fixture and invalidates replacement of t
 	expect(mocks.executor.mock.calls.at(-1)?.[0].function_selector.address).toBe(
 		"0x1000",
 	);
-	const target = mocks.executor.mock.calls.at(-1)?.[0].target;
+	const input = mocks.executor.mock.calls.at(-1)?.[0];
+	expect(input.output_directory).toContain("cline-owned-ida-");
+	expect(input.output_directory).not.toContain(join(root, "setup-center"));
+	expect(input.acknowledge_external_output).toBeUndefined();
+	const target = input.target;
 	const bytes = await import("node:fs/promises").then((fs) =>
 		fs.readFile(target),
 	);
@@ -329,6 +344,9 @@ it("Ghidra readiness requires explicit decompilation and invalidates changed Jav
 		"../../../../scripts/fixtures/owned-native-elf.json"
 	);
 	mocks.executor.mockImplementation(async (input) => {
+		expect(input.output_directory).toContain("cline-owned-ghidra-");
+		expect(input.output_directory).not.toContain("setup-center");
+		expect(input.acknowledge_external_output).toBeUndefined();
 		await mkdir(input.output_directory, { recursive: true });
 		await writeFile(
 			join(input.output_directory, "ghidra-analysis-receipt.json"),

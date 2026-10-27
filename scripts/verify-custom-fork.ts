@@ -4,6 +4,16 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+	{ path: "scripts/test-setup-ghidra.ts", markers: ["testGhidraIntegration()", "currentGhidraAcceptance(receipt, home)", "outside OS temp", "ghidra-receipt.json"] },
+	{ path: ".github/workflows/build-custom-windows-installer.yml", markers: ["bun scripts/test-setup-ghidra.ts"] },
+	{ path: "apps/examples/desktop-app/sidecar/setup-fixture-directory.ts", markers: ["createSetupFixtureDirectory", "realpath(tmpdir())", "cline-owned-${engine}-", "Setup fixture escaped"] },
+	{ path: "apps/examples/desktop-app/sidecar/setup-center.ts", markers: ['createSetupFixtureDirectory("ida")', 'createSetupFixtureDirectory("ghidra")', "optionalFrameworks:", 'readiness: "not-established"'] },
+	{ path: "apps/examples/desktop-app/sidecar/setup-fixture-directory.test.ts", markers: ["uses the real executor output policy", 'expect(result.outputScope).toBe("managed")'] },
+	{ path: "apps/examples/desktop-app/sidecar/emulation-client.ts", markers: ["emulationConfigurationStatus", "Never project endpoint, key, token", 'return "configured-not-tested"'] },
+	{ path: "apps/examples/desktop-app/sidecar/analysis-sandbox-client.ts", markers: ["analysisSandboxConfigurationStatus", "Does not contact or certify a Speakeasy worker"] },
+	{ path: "apps/examples/desktop-app/webview/components/views/settings/setup-capability-directory.tsx", markers: ["Registered routes are not proof", "App-managed Install → Test → Use", "implemented in this build", "Readiness not established"] },
+	{ path: "scripts/validate-advanced-build.mjs", markers: ["setup-fixture-directory.test.ts", "framework-configuration.test.ts", "setup-capability-directory.test.tsx"] },
+
  { path: "sdk/packages/core/src/services/session-artifacts.ts", markers: ["isOwnedArtifactPath", "removeSessionMessages", "no junction aliases"] },
 	{
 		path: "apps/examples/desktop-app/sidecar/session-cleanup.ts",

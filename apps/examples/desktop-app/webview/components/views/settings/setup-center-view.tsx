@@ -1,4 +1,9 @@
 "use client";
+import {
+	SetupCapabilityDirectoryView,
+	type SetupCapabilityDirectory,
+	type OptionalFramework,
+} from "./setup-capability-directory";
 import { BinaryTriageReadiness } from "./binary-triage-readiness";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +31,8 @@ type SetupJob = {
 	error?: string;
 };
 type Status = {
+	aiCapabilities?: SetupCapabilityDirectory;
+	optionalFrameworks?: OptionalFramework[];
 	specialistProfiles?: {
 		id: string;
 		status: string;
@@ -336,9 +343,15 @@ export function SetupCenter() {
 					<p className="text-sm text-muted-foreground">
 						Speakeasy: prepare an emulate_windows task in Runtime Analysis;
 						signed worker and upload/execution approval required. Qiling:
-						optional static ELF profile. unidbg: optional ARM32/64 JNI. rnidbg: experimental ARM64 JNI. Each needs its own isolated worker; use Runtime workbench readiness. Nothing is auto-installed.
+						optional static ELF profile. unidbg: optional ARM32/64 JNI. rnidbg:
+						experimental ARM64 JNI. Each needs its own isolated worker; use
+						Runtime workbench readiness. Nothing is auto-installed.
 					</p>
 				</section>
+				<SetupCapabilityDirectoryView
+					catalog={status?.aiCapabilities}
+					frameworks={status?.optionalFrameworks}
+				/>
 				<BinaryTriageReadiness />
 				<p className="text-xs">
 					Installed does not mean verified. Ready requires an owned-fixture

@@ -41,6 +41,25 @@ function config(engine: string) {
 		headers: { authorization: `Bearer ${token}` },
 	};
 }
+/** Read-only configuration presence, never a worker probe or readiness proof. */
+export function emulationConfigurationStatus(
+	engine: "qiling" | "unidbg" | "rnidbg",
+) {
+	if (!["qiling", "unidbg", "rnidbg"].includes(engine))
+		throw new Error("Unknown engine");
+	const prefix = `CLINE_EMULATION_${engine.toUpperCase()}`;
+	const present = ["ENDPOINT", "PUBLIC_KEY", "TOKEN"].some((suffix) =>
+		Boolean(process.env[`${prefix}_${suffix}`]),
+	);
+	if (!present) return "not-configured" as const;
+	try {
+		config(engine);
+		return "configured-not-tested" as const;
+	} catch {
+		// Never project endpoint, key, token or raw parser errors to status/UI.
+		return "invalid-configuration" as const;
+	}
+}
 const Manifest = z
 	.object({
 		workerId: Id,
