@@ -1234,3 +1234,5 @@ export { RE_SPECIALIST_WORKER } from "./extensions/tools/executors/re-specialist
 export { BinaryTriageCallSchema, BinaryTriageOptionsSchema, BINARY_TRIAGE_OPERATIONS, type BinaryTriageCall } from "./extensions/tools/binary-triage-schema";
 
 export { windowsJobInvocation, WINDOWS_JOB_SOURCE } from "./runtime/windows-job-launcher";
+
+export { EmulationRuntimeSchema, EMULATION_ENGINES, EMULATION_PROFILE_SHA256, EmulationOptionsSchema, EmulationOptionsShape, EmulationPlanSchema, validateEmulationProfile } from "./extensions/tools/emulation-schema";

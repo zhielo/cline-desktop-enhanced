@@ -1,4 +1,5 @@
 "use client";
+import { EmulationProfileControls } from "./emulation-profile-controls";
 import { resolveAnalysisTimeoutMs } from "../../../../shared/analysis-budgets";
 import { AndroidCandidateLifecycleCard } from "./android-candidate-lifecycle";
 import type { AndroidCandidateLifecycle } from "../../../../shared/android-candidate-lifecycle";
@@ -697,6 +698,7 @@ function AnalysisWorkbenchContent({
 									<option value="trace_native_region">
 										Existing QBDI native trace
 									</option>
+									<option value="emulate_profile">Qiling / unidbg / rnidbg fixed profiles</option>
 									<option value="emulate_windows">
 										Speakeasy Windows PE emulation (isolated worker)
 									</option>
@@ -705,6 +707,7 @@ function AnalysisWorkbenchContent({
 									</option>
 								</select>
 							</label>
+							{runtimeOperation === "emulate_profile" && <EmulationProfileControls target={target} common={common} onDraftChange={()=>{if(pendingPlan?.request.operation==="emulate_profile"){setPendingPlan(null);setUploadConfirmed(false);setRuntimeConfirmed(false);}}} onPrepare={(request)=>prepare("dynamic",request)} />}
 							{runtimeOperation === "android_capture" && (
 								<>
 									<label htmlFor="android-package">
@@ -816,7 +819,7 @@ function AnalysisWorkbenchContent({
 								to approval. Upload and authorized execution require separate
 								acknowledgments. Worker egress stays disabled.
 							</p>
-							{formButton(
+							{runtimeOperation !== "emulate_profile" && formButton(
 								"Prepare isolated-runtime task",
 								() =>
 									void prepare("dynamic", {
@@ -846,6 +849,7 @@ function AnalysisWorkbenchContent({
 					{mode === "analyze" && (
 						<div className="space-y-4">
 							<div>
+								<Button variant="outline" onClick={()=>{setRuntimeOperation("emulate_profile");setMode("runtime");}}>Investigate modeled native behavior…</Button>
 								<h3 className="text-sm font-semibold">
 									Static reverse engineering
 								</h3>

@@ -1,3 +1,5 @@
+import { EmulationRuntimeSchema, bindEmulationRequest, submitEmulation, probeEmulation } from "./emulation-client";
+import { bindHybridObservation, recheckHybridObservation } from "./hybrid-analysis";
 import { listWorkspaceFiles } from "./workspace-file-search";
 import { assertSessionCleanupId, removeOwnedSessionArtifacts } from "./session-cleanup";
 import { InvestigationSchemas } from "@cline/core";
@@ -5868,6 +5870,7 @@ export async function handleCommand(
 	if (
 		command === "analysis_command_catalog" ||
   command === "prepare_candidate_verification" ||
+  command === "get_emulation_readiness" ||
   command === "prepare_analysis_task" ||
 		command === "approve_analysis_task" ||
 		command === "cancel_analysis_task" ||
@@ -5971,7 +5974,28 @@ export async function handleCommand(
 			return prepared;
 		}
 
-		if (command === "prepare_analysis_task") {
+  const emulationScope = async (raw?: Record<string,unknown>) => {
+   if(!options?.connection?.data?.canApproveTools)throw new Error("Emulation requires the trusted desktop connection; model plans are read-only");
+   const id=typeof args?.sessionId==="string"?args.sessionId:"";
+   if(!id)throw new Error("Owning emulation session required");
+   const binding=await getCommandSessionBinding(ctx,id,{sessionId:id});
+   if(!binding||binding.kind!=="local")throw new Error("Emulation requires an owning local session");
+   const saved=await binding.sessionManager.get(id),live=ctx.liveSessions.get(id);
+   const root=String(saved?.workspaceRoot||saved?.cwd||"");
+   const profile=live?.config.permissionProfile??live?.config.permission_profile??readGlobalSettings().permissionProfile??"full-access";
+   const active=firstPartyStore().session(id);
+   if(!root||!live||live.transitioningProvider||profile!=="full-access"||realpathSync(root)!==realpathSync(baseDir)||!active||active.workspace!==realpathSync(baseDir)||!["runtime","hybrid"].includes(active.mode))throw new Error("Attached Full Access owning Runtime/Hybrid session required; Static never executes targets");
+   if(raw&&(raw.owner_session_id!==id||raw.analysis_mode!==active.mode))throw new Error("Owning session or Analysis mode changed; prepare a new plan");
+   const scope={sessionId:id,workspace:realpathSync(baseDir)};
+   const ports={receipt:(key:string)=>firstPartyStore().get(id,key),task:(key:string)=>sessionTaskSnapshots(id,baseDir).find(t=>t.taskId===key)};
+   return {id,mode:active.mode as "runtime"|"hybrid",scope,ports,live};
+  };
+		if(command==="get_emulation_readiness"){
+   await emulationScope();
+   try{const {manifest}=await probeEmulation(String(args?.engine??""));return {ready:true,engine:manifest.engine,profileSha256:manifest.profileSha256,runtimeSha256:manifest.runtimeSha256,architectures:manifest.architectures};}
+   catch(e){return {ready:false,error:e instanceof Error?e.message:String(e)};}
+  }
+  if (command === "prepare_analysis_task") {
 			const kind = String(args?.kind ?? "") as AnalysisTaskKind;
 			if (!["static", "debugger", "gui", "dynamic"].includes(kind)) {
 				throw new Error("kind must be static, debugger, gui, or dynamic");
@@ -6003,7 +6027,14 @@ export async function handleCommand(
 					request.pid_start_token = identity.token;
 				}
 			} else if (kind === "dynamic") {
-				request =
+				if(suppliedRequest.operation==="emulate_profile") {
+     const owner=await emulationScope();const {hybridProposal,...raw}=suppliedRequest;
+     if(owner.mode!=="hybrid"&&(hybridProposal||raw.hybrid))throw new Error("Hybrid context requires Hybrid mode");
+     const target=typeof raw.target==="string"?resolve(baseDir,raw.target):undefined;
+     const hybrid=owner.mode==="hybrid"?await bindHybridObservation(hybridProposal,owner.scope,owner.ports,target):undefined;
+     request=await bindEmulationRequest({...raw,target,owner_session_id:owner.id,analysis_mode:owner.mode,...(hybrid?{hybrid}:{})});
+     const current=await emulationScope();if(current.live!==owner.live||current.mode!==owner.mode)throw new Error("Owning session changed during planning");
+    }else request =
 					suppliedRequest.operation === "android_capture"
 						? await bindAndroidCapture(suppliedRequest)
 						: await bindRuntimeAnalysisRequest(
@@ -6139,12 +6170,17 @@ export async function handleCommand(
 					"Explicit authorized execution and artifact upload confirmation required",
 				);
 			const input =
+     (args?.input as {operation?:string})?.operation==="emulate_profile"?EmulationRuntimeSchema.parse(args?.input):
 					(args?.input as { operation?: string })?.operation ===
 					"android_capture"
 						? AndroidCaptureInput.parse(args?.input)
 						: RuntimeAnalysisInputSchema.parse(args?.input),
 				planId = String(args?.planId ?? ""),
 				executionToken = String(args?.executionToken ?? "");
+   if(input.operation==="emulate_profile"){
+    const owner=await emulationScope(input);
+    if(input.hybrid)await recheckHybridObservation(input.hybrid,owner.scope,owner.ports,input.target);
+   }
 			const plan = await desktopAnalysisTaskOrchestrator.consume({
 				planId,
 				executionToken,
@@ -6184,6 +6220,14 @@ export async function handleCommand(
 				)
 					throw new Error("Artifact changed since approval");
 				const result =
+     input.operation==="emulate_profile"?await (async()=>{
+      const owner=await emulationScope(input);
+      if(input.hybrid)await recheckHybridObservation(input.hybrid,owner.scope,owner.ports,input.target);
+      return submitEmulation(input,artifact,plan.requestHash,desktopAnalysisTaskOrchestrator.signal(planId),undefined,async()=>{
+       const current=await emulationScope(input);if(current.live!==owner.live)throw new Error("Owning session changed before upload");
+       if(input.hybrid)await recheckHybridObservation(input.hybrid,current.scope,current.ports,input.target);
+      });
+     })():
 					input.operation === "android_capture"
 						? await runAndroidCapture(
 								input,
@@ -6204,7 +6248,7 @@ export async function handleCommand(
 						: desktopAnalysisTaskOrchestrator.complete(
 								planId,
 								result,
-								input.operation === "android_capture"
+								input.operation === "emulate_profile" ? `isolated-${input.engine}-worker` : input.operation === "android_capture"
 									? "isolated-android-worker"
 									: input.operation === "emulate_windows" ? "isolated-speakeasy-worker" : "isolated-qbdi-worker",
 								input.operation === "android_capture"

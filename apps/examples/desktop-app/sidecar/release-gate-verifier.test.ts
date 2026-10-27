@@ -12,7 +12,7 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 69);
+	assert.equal(r.installedStages, 70);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [

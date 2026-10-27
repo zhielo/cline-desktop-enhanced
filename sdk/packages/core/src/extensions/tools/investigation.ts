@@ -1,3 +1,4 @@
+import { EmulationOptionsSchema } from "./emulation-schema";
 import { ArtifactReaderKindSchema } from "../../analysis/artifact-readers/contracts";
 import { NativeFlowQuerySchema } from "../../analysis/native-value-flow";
 import { BatchStaticRequestSchema } from "./batch-analysis-schema";
@@ -182,6 +183,7 @@ export const InvestigationSchemas = {
 			hybridProposal: HybridProposalSchema.optional(),
 		})
 		.strict(),
+	plan_emulation: z.object({artifactId:Id, options:EmulationOptionsSchema}).strict(),
 	plan_runtime_observation: z
 		.object({ artifactId: Id, observation: RuntimeObservationOptionsSchema })
 		.strict(),
@@ -283,6 +285,7 @@ const descriptions: Record<InvestigationToolName, string> = {
 		"Request a fresh independently approved Runtime/Hybrid snapshot of one exact OS PID/birth identity and bounded descendants. Linux /proc or Windows CIM only; no command lines, environment, memory, process launch or execution control. Artifact is the immutable evidence basis, NOT proof it runs in that process. Host binds PID birth identity at prepare and rechecks before/after capture. Hybrid requires a real static basis. Non-atomic metadata, not an execution trace.",
 	capture_file_activity:
 		"Request fresh independently approved Runtime/Hybrid fs.watch metadata on exactly one immutable opened workspace file for 200–5000 ms, maximum 128 events. No contents, filenames from sibling files, recursive directory watch or process attribution. OS notifications may be coalesced/missed; zero events never proves no access. Rename/replacement ends observation as partial. Hybrid requires a real static basis. Existing task cancellation closes the watcher.",
+	plan_emulation: "Read-only compatibility plan for fixed Qiling/unidbg/rnidbg profiles. No worker connection, upload or target execution. Separate owning Runtime/Hybrid approval required.",
 	plan_runtime_observation:
 		"Prepare an independently approved read-only plan for an immutable source and an exact live local Node Inspector PID/birth identity/listener. No socket connection, attachment or target execution. Plan is NOT runtime consent: use the existing Runtime/Hybrid workbench with fresh human Debug approval and, in Hybrid, static evidence. Linux/Windows only; not a persistent debugger or trace command.",
 	validate_candidate:

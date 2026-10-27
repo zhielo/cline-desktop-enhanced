@@ -1,9 +1,12 @@
 /** Host-owned finite release policy. Changes require explicit review and full CI. */
 export const RELEASE_GATE_POLICY = {
-	version: "cline-desktop-release-gate/v2",
+	version: "cline-desktop-release-gate/v3",
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
+  "Owned additive emulation (qiling)",
+  "Owned additive emulation (unidbg)",
+  "Owned additive emulation (rnidbg)",
 		"Pinned general recovery (ubuntu-latest)",
 		"Pinned general recovery (windows-latest)",
 		"Owned angr fixture (ubuntu-latest)",
@@ -129,6 +132,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-candidate-validation-review-hash-scope-preservation-passed",
 		"installed-candidate-outcomes-failed-retention-explicit-export-no-replay-passed",
 		"installed-runtime-plan-owned-identity-no-attach-no-execute-passed",
+  "installed-additive-emulation-read-only-planning-static-and-unconfigured-worker-denial-passed",
 		"installed-runtime-process-file-capture-approval-no-attach-passed",
 		"installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed",
 		"installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed",
@@ -159,6 +163,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+  ".github/workflows/additive-emulation-validation.yml":"06e4e9be98d1a406f371fe0c9bd74906d79603a1d347b44344b225c09f47639d",
 		".github/workflows/general-recovery-validation.yml":
 			"1660014462a0546eca828c1f246169789f1c776734a82a9efb1e607c102dab5d",
 		"apps/vscode/scripts/owned-triage-model.ts":
@@ -170,8 +175,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"4d5ca3ba5bbd1d4bda2391421449ecb027cdaabfcfd68bbe4288c16a91592c36",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"30b7e4afdae503538813639bcd04ce4f74104652da8a18b1f78c6bc77c92a454",
+			"50820799be50db450ae2b1cb65c5eaa7c311e97bcdd82a861967bf6b4c01dba6",
 		"scripts/validate-advanced-build.mjs":
-			"c48eb8c926c4ba0691baa967339812977a08563d9c4b9b6543440eb67aafddeb",
+			"0af701ab0d6ae93421e16745a16a84efc90e32eefaef8bee2a897676e8f1a2b9",
 	},
 } as const;

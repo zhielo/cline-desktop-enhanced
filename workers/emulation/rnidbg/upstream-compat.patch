@@ -1,0 +1,78 @@
+diff --git a/emulator/Cargo.toml b/emulator/Cargo.toml
+index 4f70635..a0d2955 100644
+--- a/emulator/Cargo.toml
++++ b/emulator/Cargo.toml
+@@ -14,7 +14,7 @@ dynarmic_backend = ["dynarmic"]
+ big_address = []
+ 
+ [dependencies]
+-unicorn-engine = { path = "../unicorn", version = "2.0.2", features = ["arch_aarch64"], optional = true, default-features = true }
++unicorn-engine = { path = "../unicorn", version = "2.0.2", features = ["arch_arm", "arch_aarch64"], optional = true, default-features = false }
+ dynarmic = { path = "../dynarmic", version = "0.1.0", optional = true }
+ sparse_list = { path = "../sparse_list", version = "0.1.0" }
+ capstone = "0.12.0"
+diff --git a/emulator/src/lib.rs b/emulator/src/lib.rs
+index 47a1694..fa1496a 100644
+--- a/emulator/src/lib.rs
++++ b/emulator/src/lib.rs
+@@ -8,4 +8,7 @@ pub(crate) mod tool;
+ pub(crate) mod elf;
+ mod backend;
+ 
+-pub use emulator::AndroidEmulator;
+\ No newline at end of file
++pub use emulator::AndroidEmulator;
++pub use tool::UnicornArg;
++
++pub use backend::Backend;
+diff --git a/emulator/src/emulator/syscall_handler.rs b/emulator/src/emulator/syscall_handler.rs
+index 8308b00..a26de64 100644
+--- a/emulator/src/emulator/syscall_handler.rs
++++ b/emulator/src/emulator/syscall_handler.rs
+@@ -51,11 +51,11 @@ fn arm64_syscall_handler_unicorn<T: Clone>(unicorn: &unicorn_engine::Unicorn<T>,
+         let svc = svc_memory.get_svc(swi as u32);
+         if let Some(svc) = svc {
+             match svc.handle(&emulator) {
+-                Ok(Some(ret)) => {
++                SvcCallResult::RET(ret) => {
+                     unicorn.reg_write_i64(unicorn_engine::RegisterARM64::X0, ret).unwrap();
+                 }
+-                Ok(None) => {}
+-                Err(e) => {
++                SvcCallResult::VOID => {}
++                SvcCallResult::FUCK(e) => {
+                     error!("svc handle failed: {:?}", e);
+                     unicorn.emu_stop()
+                         .expect("failed to stop emulator");
+diff --git a/emulator/src/emulator/thread/base_task.rs b/emulator/src/emulator/thread/base_task.rs
+index 943e6cf..56b120f 100644
+--- a/emulator/src/emulator/thread/base_task.rs
++++ b/emulator/src/emulator/thread/base_task.rs
+@@ -103,8 +103,8 @@ impl<'a, T: Clone> RunnableTask<'a, T> for BaseTask<'a, T> {
+ 
+     fn save_context(&mut self, emulator: &AndroidEmulator<'a, T>) {
+         let backend = emulator.backend.clone();
+-        let mut context = if let Some(context) = &self.context {
+-            context.clone()
++        let mut context = if let Some(context) = self.context.take() {
++            context
+         } else {
+             let context = backend.context_alloc()
+                 .expect("failed to save context");
+diff --git a/emulator/src/emulator/mod.rs b/emulator/src/emulator/mod.rs
+index d8c65eb..bc5bb6d 100644
+--- a/emulator/src/emulator/mod.rs
++++ b/emulator/src/emulator/mod.rs
+@@ -278,6 +278,12 @@ impl <'a, T: Clone> AndroidEmulator<'a, T> {
+             .expect("failed to start emulator");
+         self.inner_mut().running.store(false, Ordering::SeqCst);
+ 
++        // Unicorn returns normally at `until`; Dynarmic supplies its own stop callback.
++        #[cfg(feature = "unicorn_backend")]
++        if self.backend.reg_read(RegisterARM64::PC).ok() == Some(until) {
++            self.set_task_status(TaskStatus::X).expect("mark exact return boundary");
++        }
++
+         if self.get_task_status() != TaskStatus::X {
+             return None;
+         }

@@ -116,7 +116,25 @@ jobs:
 
             - name: Run Tests
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os != 'windows-latest' }}
-              run: bun run test
+              shell: bash
+              run: |
+                  # Each package has its own worker pool. Starting all pools at
+                  # once can OOM-kill a runner and surface only exit 130/SIGINT.
+                  # Run the identical complete package corpus, retaining every
+                  # package failure and the original command exit status.
+                  set -euo pipefail
+                  mkdir -p .sdk-test-evidence
+                  bun --sequential --no-exit-on-error -F './sdk/packages/**' -F @cline/cli -F @cline/cline-hub -F @cline/vscode test 2>&1 | tee .sdk-test-evidence/ubuntu-sdk-tests.log
+
+            - name: Upload Ubuntu SDK test evidence
+              if: ${{ always() && matrix.os == 'ubuntu-latest' }}
+              uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+              with:
+                  name: sdk-ubuntu-tests-${{ github.run_id }}-${{ github.run_attempt }}
+                  path: .sdk-test-evidence/ubuntu-sdk-tests.log
+                  include-hidden-files: true
+                  if-no-files-found: warn
+                  retention-days: 14
 
             - name: Test CI Python identity validation (Windows)
               if: ${{ !cancelled() && steps.build_sdk_step.outcome == 'success' && steps.build_cli_step.outcome == 'success' && matrix.os == 'windows-latest' }}

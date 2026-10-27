@@ -1,3 +1,4 @@
+import { bindEmulationRequest } from "./emulation-client";
 import { resolveAnalysisTimeoutMs } from "../shared/analysis-budgets";
 import { summarizeAndroidCandidateLifecycle } from "./android-candidate-lifecycle";
 import type { AndroidCandidateLifecycle } from "../shared/android-candidate-lifecycle";
@@ -542,7 +543,12 @@ export class AnalysisTaskOrchestrator {
 				"Target resolves outside the workspace. Review it and explicitly allow an external target.",
 			);
 		}
-		if (input.kind === "dynamic") await assertAnalysisSandboxReady();
+		if (input.kind === "dynamic") {
+   if(operation==="emulate_profile"){
+    const current=await bindEmulationRequest(request);
+    if(canonicalJson(current)!==canonicalJson(request))throw new Error("Engine binding changed before planning");
+   }else await assertAnalysisSandboxReady();
+  }
 		const permission = permissionFor(input.kind, operation);
 		const identity = target ? await targetIdentity(target) : undefined;
 		const plan: StoredPlan = {
@@ -786,6 +792,10 @@ export class AnalysisTaskOrchestrator {
 		return publicPlan(plan);
 	}
 
+ cancelEmulationForSession(sessionId:string,workspaceRoot:string) {
+  const root=canonicalWorkspaceRoot(workspaceRoot);
+  for(const plan of this.plans.values())if(plan.kind==="dynamic"&&plan.operation==="emulate_profile"&&plan.workspaceRoot===root&&plan.request.owner_session_id===sessionId&&["awaiting-approval","approved","running"].includes(plan.status))this.cancel(plan.id);
+ }
 	list(workspaceRoot: string): AnalysisTaskPlan[] {
 		this.expireStale();
 		const root = canonicalWorkspaceRoot(workspaceRoot);

@@ -99,6 +99,7 @@ export async function runModelInvestigation(
 			"capture_process_tree",
 			"capture_file_activity",
 			"plan_runtime_observation",
+ "plan_emulation",
 			"validate_candidate",
 			"review_candidate_changes",
 			"run_batch",

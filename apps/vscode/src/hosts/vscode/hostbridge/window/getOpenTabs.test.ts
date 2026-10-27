@@ -15,17 +15,19 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 		// Create an untitled document with a custom name
 		const uri = vscode.Uri.parse(`untitled:test-file-${name}.js`)
 
-		const doc = await vscode.workspace.openTextDocument(uri)
+		// Open directly in the requested group. Opening an untitled document
+		// first can create a tab in the active group before showTextDocument
+		// opens it in another group, leaving duplicate tabs behind.
+		await vscode.window.showTextDocument(uri, {
+			viewColumn: column,
+			preview: false,
+		})
 
 		// Set the content
 		const edit = new vscode.WorkspaceEdit()
 		edit.insert(uri, new vscode.Position(0, 0), content)
 		await vscode.workspace.applyEdit(edit)
 
-		await vscode.window.showTextDocument(doc, {
-			viewColumn: column,
-			preview: false,
-		})
 	}
 
 	async function waitForAllTabsClosed(): Promise<void> {

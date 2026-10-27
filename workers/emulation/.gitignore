@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+unidbg/target/
+rnidbg/target/
+rnidbg/vendor/
+fixtures/build/
+*.inventory.json

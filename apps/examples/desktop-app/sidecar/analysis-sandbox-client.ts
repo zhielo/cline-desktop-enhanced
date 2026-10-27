@@ -228,7 +228,7 @@ const SpeakeasyReceipt = QbdiReceipt.extend({
 	runtimeSha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 const Receipt = z.discriminatedUnion("engine", [QbdiReceipt, SpeakeasyReceipt]);
-async function boundedWorkerJson(
+export async function boundedWorkerJson(
 	response: Response,
 	limit: number,
 ): Promise<unknown> {
@@ -426,7 +426,7 @@ export async function submitAnalysisSandbox(
 	}
 }
 
-function workerPublicKey(pem: string) {
+export function workerPublicKey(pem: string) {
 	const key = createPublicKey(pem);
 	if (key.asymmetricKeyType !== "ed25519")
 		throw new Error("Worker requires an Ed25519 key");

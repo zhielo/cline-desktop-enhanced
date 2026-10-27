@@ -62,6 +62,7 @@ const TOOL_NAME_TO_FLAG: Record<
 	capture_process_tree: "enableReverseEngineering",
 	capture_file_activity: "enableReverseEngineering",
 	plan_runtime_observation: "enableReverseEngineering",
+ plan_emulation: "enableReverseEngineering",
 	validate_candidate: "enableReverseEngineering",
 	review_candidate_changes: "enableReverseEngineering",
 	open_binary: "enableReverseEngineering",
