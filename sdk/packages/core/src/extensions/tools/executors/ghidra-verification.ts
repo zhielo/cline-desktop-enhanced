@@ -15,6 +15,7 @@ public class ClineVerifyAnalysis extends HeadlessScript {
   if(hash==null || !hash.equalsIgnoreCase(args[2])) throw new IllegalStateException("Imported program fingerprint mismatch");
   JsonObject receipt=new JsonObject(); receipt.addProperty("schemaVersion",1);
   receipt.addProperty("attempt",args[1]);receipt.addProperty("inputSha256",hash.toLowerCase());
+  receipt.addProperty("languageId",currentProgram.getLanguageID().toString());
   receipt.addProperty("javaVersion",System.getProperty("java.version"));receipt.addProperty("javaHome",System.getProperty("java.home"));
   receipt.addProperty("programName",currentProgram.getName());receipt.addProperty("analysisCompleted",true);
   try(PrintWriter out=new PrintWriter(args[0],"UTF-8")){out.println(receipt.toString());}

@@ -4,6 +4,14 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"sdk/packages/core/scripts/android-investigation-worker.test.py",markers:["class FixtureTimingResult", "ANDROID_FIXTURE_CASE", "resultclass=FixtureTimingResult"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/android-investigation.test.ts",markers:["finished.map", "18_000"]},
+ {path:"apps/examples/desktop-app/sidecar/release-gate-verifier.ts",markers:["Repeated checks require complete authoritative workflow provenance", "Repeated check lacks exact job/workflow binding", "Distinct required detection workflows missing"]},
+ {path:"apps/examples/desktop-app/sidecar/ghidra-fixtures.ts",markers:["GHIDRA_ACCEPTANCE_ARCHITECTURES", "ARM:LE:32:", "AARCH64:LE:64:"]},
+ {path:"apps/examples/desktop-app/sidecar/setup-center.ts",markers:["testAllGhidraIntegrations", "getGhidraReadiness", "profileIdentity", "languageId", "ghidra-receipt-${architecture}.json"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",markers:["Ghidra acceptance architecture", "Test all Ghidra profiles", "cline.setup.ghidra-processor"]},
+ {path:"sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",markers:["readGhidraAcceptance", "ghidraOwnedAcceptance"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-ghidra-three-owned-architectures-java-no-target-execution-passed", "ghidra-profile-readiness.json"]},
 	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["export async function recordInstalledRpc<T>","recordInstalledRpc<T>(command, acceptanceAction","return record(`rpc-${command}`, async () => send(await discover()))"]},
 	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:['["qiling","x86_64"],["qiling","arm32"],["qiling","arm64"],["unidbg","arm32"],["unidbg","arm64"],["rnidbg","arm64"]',"planned.result.nextRequest.architecture!==architecture"]},
 	{path:"workers/emulation/profiles.json",markers:['"qiling-linux-static-v2"','"architectures":["x86_64","arm32","arm64"]']},
@@ -14,7 +22,7 @@ const requiredMarkers: Array<{
 	{path:"apps/examples/desktop-app/sidecar/emulation-client.ts",markers:["expectedArchitectures.some","new Set(m.architectures).size"]},
 	{path:"workers/emulation/build-fixtures.sh",markers:["owned-linux-$arch","denied-linux-$arch","--target=\"$target\""]},
 
-	{ path: "scripts/test-setup-ghidra.ts", markers: ["testGhidraIntegration()", "currentGhidraAcceptance(receipt, home)", "outside OS temp", "ghidra-receipt.json"] },
+	{ path: "scripts/test-setup-ghidra.ts", markers: ["testGhidraIntegration(architecture)", "currentGhidraAcceptance(receipt, home, architecture)", "outside OS temp", "ghidra-receipt-${architecture}.json"] },
 	{ path: ".github/workflows/build-custom-windows-installer.yml", markers: ["bun scripts/test-setup-ghidra.ts"] },
 	{ path: "apps/examples/desktop-app/sidecar/setup-fixture-directory.ts", markers: ["createSetupFixtureDirectory", "realpath(tmpdir())", "cline-owned-${engine}-", "Setup fixture escaped"] },
 	{ path: "apps/examples/desktop-app/sidecar/setup-center.ts", markers: ['createSetupFixtureDirectory("ida")', 'createSetupFixtureDirectory("ghidra")', "optionalFrameworks:", 'readiness: "not-established"'] },

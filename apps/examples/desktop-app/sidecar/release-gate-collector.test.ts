@@ -2,12 +2,13 @@ import { it as test } from "vitest";
 import { strict as assert } from "node:assert";
 import { collectReleaseGate } from "./release-gate-collector";
 import { sha256 } from "./release-gate-verifier";
-import { fixture } from "./__fixtures__/release-gate";
+import { fixture, repeatedE2EEvidence } from "./__fixtures__/release-gate";
 import { zip } from "./__fixtures__/incident";
 const head = "a".repeat(40);
 function network(
 	options: {
 		badDigest?: boolean;
+		repeatedE2E?: boolean;
 		unsafeZip?: boolean;
 		missingCore?: boolean;
 		movedHead?: boolean;
@@ -19,7 +20,7 @@ function network(
 		overflow?: boolean;
 	} = {},
 ) {
-	const e = fixture(),
+	const e = options.repeatedE2E ? repeatedE2EEvidence() : fixture(),
 		urls: string[] = [];
 	let pulls = 0;
 	let core = zip([
@@ -84,11 +85,12 @@ function network(
 		if (path.endsWith("/check-runs")) return response(e.checks);
 		if (path === "actions/runs")
 			return response({
-				total_count: 1,
+				total_count: 1 + (e.workflowRuns?.workflow_runs.length ?? 0),
 				workflow_runs: [
 					options.pending
 						? { ...e.run, status: "in_progress", conclusion: null }
 						: e.run,
+					...(e.workflowRuns?.workflow_runs ?? []),
 				],
 			});
 		if (path.endsWith("/jobs")) return response(e.jobs);
@@ -187,4 +189,10 @@ test("rejects a base advance during final collection with an unchanged head", as
 			}),
 		/base.*changed/,
 	);
+});
+
+test("collector retains authoritative workflow provenance for every successful repeated E2E suite", async () => {
+	const n = network({ repeatedE2E: true });
+	const r = await collectReleaseGate(133, head, { fetch: n.fetcher });
+	assert.equal(r.status, "passed");
 });

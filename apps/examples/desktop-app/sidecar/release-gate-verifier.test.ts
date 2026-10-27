@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { it as test } from "vitest";
-import { fixture, head } from "./__fixtures__/release-gate";
+import {
+	fixture,
+	head,
+	repeatedE2EEvidence,
+} from "./__fixtures__/release-gate";
 import { RELEASE_GATE_POLICY as p } from "./release-gate-policy";
 import {
 	type ReleaseGateEvidence,
@@ -12,10 +16,20 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 70);
+	assert.equal(r.installedStages, 71);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
+	[
+		"missing installed Ghidra architecture proof",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(s: string) =>
+					s !==
+					"installed-ghidra-three-owned-architectures-java-no-target-execution-passed",
+			);
+		},
+	],
 	[
 		"missing installed AI binary triage proof",
 		(e) => {
@@ -337,3 +351,69 @@ test("rejects a superseded synthetic merge identity", () => {
 		/current base\/head/,
 	);
 });
+
+test("verifies every successful repeated ready-for-review E2E check with exact workflow provenance", () => {
+	assert.equal(
+		verifyReleaseGateEvidence(133, head, repeatedE2EEvidence()).status,
+		"passed",
+	);
+});
+for (const [label, change] of [
+	[
+		"failed repeat",
+		(e: ReleaseGateEvidence) => {
+			e.checks.check_runs.at(-1)!.conclusion = "failure";
+		},
+	],
+	[
+		"pending repeat",
+		(e: ReleaseGateEvidence) => {
+			e.checks.check_runs.at(-1)!.status = "queued";
+		},
+	],
+	[
+		"missing provenance",
+		(e: ReleaseGateEvidence) => {
+			delete e.workflowRuns;
+		},
+	],
+	[
+		"foreign workflow",
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[1].path = ".github/workflows/other.yml";
+		},
+	],
+	[
+		"wrong head",
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[1].head_sha = "f".repeat(40);
+		},
+	],
+	[
+		"wrong job",
+		(e: ReleaseGateEvidence) => {
+			e.checks.check_runs.at(-1)!.details_url =
+				"https://github.com/zhielo/cline-desktop-enhanced/actions/runs/802/job/999";
+		},
+	],
+	[
+		"failed workflow",
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[1].conclusion = "failure";
+		},
+	],
+	[
+		"missing required check",
+		(e: ReleaseGateEvidence) => {
+			e.checks.check_runs = e.checks.check_runs.filter(
+				(c) => c.name !== "Owned additive emulation (qiling)",
+			);
+			e.checks.total_count = e.checks.check_runs.length;
+		},
+	],
+] as const)
+	test(`rejects repeated E2E evidence: ${label}`, () => {
+		const e = repeatedE2EEvidence();
+		change(e);
+		assert.throws(() => verifyReleaseGateEvidence(133, head, e));
+	});

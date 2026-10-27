@@ -366,7 +366,7 @@ it("keeps Ghidra/Java testing separate and requires explicit confirmation", asyn
 		expect(element.textContent).toContain("Test Python pack engines");
 		expect(element.textContent).toContain("Ghidra: Not tested or stale");
 		const button = [...element.querySelectorAll("button")].find(
-			(b) => b.textContent === "Test Ghidra and Java",
+			(b) => b.textContent === "Test selected Ghidra profile",
 		)!;
 		await act(async () => button.click());
 		expect(
@@ -383,9 +383,33 @@ it("keeps Ghidra/Java testing separate and requires explicit confirmation", asyn
 				confirmed: true,
 				background: true,
 				ghidraHome: status.preferences.ghidraHome,
+				architecture: "x86_64",
 			}),
 			{ timeoutMs: 15000 },
 		);
+		const select = element.querySelector(
+			'[aria-label="Ghidra acceptance architecture"]',
+		) as HTMLSelectElement;
+		await act(async () => {
+			select.value = "arm64";
+			select.dispatchEvent(new Event("change", { bubbles: true }));
+		});
+		await act(async () => button.click());
+		expect(calls).toHaveBeenCalledWith(
+			"setup_center_test_ghidra",
+			expect.objectContaining({ architecture: "arm64" }),
+			{ timeoutMs: 15000 },
+		);
+		const all = [...element.querySelectorAll("button")].find(
+			(b) => b.textContent === "Test all Ghidra profiles",
+		)!;
+		await act(async () => all.click());
+		expect(calls).toHaveBeenCalledWith(
+			"setup_center_test_ghidra",
+			expect.objectContaining({ architecture: "all" }),
+			{ timeoutMs: 15000 },
+		);
+		expect(element.textContent).toContain("arm32: not-tested");
 	} finally {
 		confirm.mockRestore();
 		await act(async () => root.unmount());

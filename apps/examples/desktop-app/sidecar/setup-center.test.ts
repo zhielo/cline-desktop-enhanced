@@ -1,6 +1,7 @@
 import arm64Fixture from "../../../../scripts/fixtures/owned-arm64-elf.json";
-import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { ghidraAcceptanceFixture } from "./ghidra-fixtures";
+import { createHash, generateKeyPairSync } from "node:crypto";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -41,6 +42,8 @@ import {
 	FULL_ENGINE_IDS,
 	testSpecialistProfile,
 	testGhidraIntegration,
+	testAllGhidraIntegrations,
+	getGhidraReadiness,
 	currentGhidraAcceptance,
 	testLicensedIda,
 	saveSetupPreferences,
@@ -334,6 +337,24 @@ async function ownedGhidraSetup() {
 		join(home, "support", "LaunchSupport.jar"),
 		"owned launch support",
 	);
+	for (const name of ["x86", "ARM", "AARCH64"]) {
+		const dir = join(home, "Ghidra", "Processors", name, "data", "languages");
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "owned.sla"), "owned processor");
+	}
+	const native = join(
+		home,
+		"Ghidra",
+		"Features",
+		"Decompiler",
+		"os",
+		`${process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux"}_${process.arch === "arm64" ? "arm_64" : "x86_64"}`,
+	);
+	await mkdir(native, { recursive: true });
+	await writeFile(
+		join(native, process.platform === "win32" ? "decompile.exe" : "decompile"),
+		"owned decompiler",
+	);
 	await saveSetupPreferences({ ...base, ghidraHome: home });
 	return { home, javaHome, java };
 }
@@ -351,7 +372,11 @@ it("Ghidra readiness requires explicit decompilation and invalidates changed Jav
 		await mkdir(input.output_directory, { recursive: true });
 		await writeFile(
 			join(input.output_directory, "ghidra-analysis-receipt.json"),
-			JSON.stringify({ javaHome, javaVersion: "21-owned" }),
+			JSON.stringify({
+				javaHome,
+				javaVersion: "21-owned",
+				languageId: "x86:LE:64:default",
+			}),
 		);
 		return JSON.stringify({
 			succeeded: true,
@@ -364,7 +389,7 @@ it("Ghidra readiness requires explicit decompilation and invalidates changed Jav
 	const receipt = await testGhidraIntegration();
 	expect(receipt.status).toBe("passed");
 	expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
-	expect((await getSetupCenterStatus()).ghidra.status).toBe("Ready");
+	expect((await getSetupCenterStatus()).ghidra.status).toBe("Partially tested");
 	for (const [file, original] of [
 		[
 			join(
@@ -396,6 +421,19 @@ it("Ghidra readiness requires explicit decompilation and invalidates changed Jav
 		else process.env[name] = original;
 		expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
 	}
+	const processor = join(
+		home,
+		"Ghidra",
+		"Processors",
+		"x86",
+		"data",
+		"languages",
+		"owned.sla",
+	);
+	await writeFile(processor, "changed processor");
+	expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
+	await writeFile(processor, "owned processor");
+	expect(await currentGhidraAcceptance(receipt, home)).toBe(true);
 	await writeFile(java, "changed java");
 	expect(await currentGhidraAcceptance(receipt, home)).toBe(false);
 	await writeFile(java, "owned java");
@@ -455,4 +493,144 @@ it("never treats an inventory-only optional result as a passed fixture", async (
 		evidence: { available: true },
 	});
 	expect((await testSpecialistProfile("joern")).status).toBe("failed");
+});
+
+it("keeps all Ghidra architecture receipts independent and checks actual imported language", async () => {
+	const { home, javaHome } = await ownedGhidraSetup();
+	mocks.executor.mockImplementation(async (input) => {
+		const hash = createHash("sha256")
+			.update(await readFile(input.target))
+			.digest("hex");
+		const profile = ["x86_64", "arm32", "arm64"]
+			.map(ghidraAcceptanceFixture)
+			.find((f) => f.sha256 === hash)!;
+		await mkdir(input.output_directory, { recursive: true });
+		await writeFile(
+			join(input.output_directory, "ghidra-analysis-receipt.json"),
+			JSON.stringify({
+				javaHome,
+				javaVersion: "21-owned",
+				languageId: profile.languagePrefix + "owned",
+			}),
+		);
+		return JSON.stringify({
+			succeeded: true,
+			artifactVerified: true,
+			databaseVerified: true,
+			sha256: hash,
+			engineVersion: "12.1.4",
+		});
+	});
+	const result = await testAllGhidraIntegrations();
+	expect(result.receipts).toHaveLength(3);
+	const status = await getGhidraReadiness();
+	expect(status.status).toBe("Ready for tested profiles");
+	expect(status.profiles.map((p) => p.status)).toEqual([
+		"passed",
+		"passed",
+		"passed",
+	]);
+	for (const receipt of result.receipts) {
+		const arch = receipt.architecture as "x86_64" | "arm32" | "arm64";
+		expect(await currentGhidraAcceptance(receipt, home, arch)).toBe(true);
+		expect(
+			await currentGhidraAcceptance(
+				receipt,
+				home,
+				arch === "arm32" ? "arm64" : "arm32",
+			),
+		).toBe(false);
+		expect(
+			await currentGhidraAcceptance(
+				{ ...receipt, languageId: "wrong:LE:64:default" },
+				home,
+				arch,
+			),
+		).toBe(false);
+	}
+	const calls = mocks.executor.mock.calls.length;
+	await getGhidraReadiness();
+	expect(mocks.executor).toHaveBeenCalledTimes(calls);
+	mocks.executor.mockResolvedValue(
+		JSON.stringify({ succeeded: false, stdout: "owned ARM failure" }),
+	);
+	await expect(testGhidraIntegration("arm32")).rejects.toThrow(
+		"owned ARM failure",
+	);
+	expect((await getGhidraReadiness()).profiles.map((p) => p.status)).toEqual([
+		"passed",
+		"failed",
+		"passed",
+	]);
+	await expect(testGhidraIntegration("mips" as never)).rejects.toThrow(
+		"Unsupported Ghidra",
+	);
+});
+it("all Ghidra tests continue after failures and retain successful siblings", async () => {
+	const { javaHome } = await ownedGhidraSetup();
+	mocks.executor.mockImplementation(async (input) => {
+		const hash = createHash("sha256")
+			.update(await readFile(input.target))
+			.digest("hex");
+		const profile = ["x86_64", "arm32", "arm64"]
+			.map(ghidraAcceptanceFixture)
+			.find((f) => f.sha256 === hash)!;
+		if (profile.architecture === "arm32")
+			return JSON.stringify({ succeeded: false, stdout: "owned failure" });
+		await mkdir(input.output_directory, { recursive: true });
+		await writeFile(
+			join(input.output_directory, "ghidra-analysis-receipt.json"),
+			JSON.stringify({
+				javaHome,
+				javaVersion: "21-owned",
+				languageId: profile.languagePrefix + "owned",
+			}),
+		);
+		return JSON.stringify({
+			succeeded: true,
+			artifactVerified: true,
+			databaseVerified: true,
+			sha256: hash,
+		});
+	});
+	await expect(testAllGhidraIntegrations()).rejects.toThrow("arm32");
+	expect(mocks.executor).toHaveBeenCalledTimes(3);
+	expect((await getGhidraReadiness()).profiles.map((p) => p.status)).toEqual([
+		"passed",
+		"failed",
+		"passed",
+	]);
+});
+it("Ghidra refuses mismatched actual language and legacy unscoped receipts", async () => {
+	const { home, javaHome } = await ownedGhidraSetup();
+	mocks.executor.mockImplementation(async (input) => {
+		await mkdir(input.output_directory, { recursive: true });
+		await writeFile(
+			join(input.output_directory, "ghidra-analysis-receipt.json"),
+			JSON.stringify({
+				javaHome,
+				javaVersion: "owned",
+				languageId: "x86:LE:64:default",
+			}),
+		);
+		return JSON.stringify({
+			succeeded: true,
+			artifactVerified: true,
+			databaseVerified: true,
+			sha256: ghidraAcceptanceFixture("arm64").sha256,
+		});
+	});
+	await expect(testGhidraIntegration("arm64")).rejects.toThrow(
+		"runtime identity missing",
+	);
+	expect(
+		await currentGhidraAcceptance(
+			{
+				status: "passed",
+				ghidraHome: home,
+				fixtureSha256: ghidraAcceptanceFixture("x86_64").sha256,
+			},
+			home,
+		),
+	).toBe(false);
 });

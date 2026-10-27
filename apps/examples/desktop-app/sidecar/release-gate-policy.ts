@@ -91,6 +91,7 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
+  "installed-ghidra-three-owned-architectures-java-no-target-execution-passed",
 		"installed-source-acquisition-hash-bound-saved-off-no-execution-passed",
 		"installed-application-graph-electron-saved-trace-no-execution-passed",
 		"installed-electron-fuses-explicit-read-only-hash-bound-saved-off-passed",
@@ -173,10 +174,10 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/semantic-source-validation.yml":
 			"9bf4c84a47e3e302ba4c35eaa67d9cb650896c2d1caba1e6b49e884aca27b972",
 		".github/workflows/build-custom-windows-installer.yml":
-			"2b20be299e38d8c1aaac334c6f402011be15b6f64dd6cd241f0064800e45e888",
+			"570280a60ad0f10f18530d3b387e6eef5b9a7c31c9f4416aded0d879454275b1",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"b9365a5524b3ca7cf238625ffbb2b8256cea05610a2c4005319a68e17cae6afb",
+			"eec089dfcd2b5b67e60400befa7f681c038439c0ec610a93caaf1b56898db2c0",
 		"scripts/validate-advanced-build.mjs":
-			"bb0324f28a08b904b23a6f8a49624cbf0e44dcc343db89dead07efd566fdf150",
+			"01995f2f7937f7de23772658761048a0d56e8549eea795d142b4b98b45ce4309",
 	},
 } as const;

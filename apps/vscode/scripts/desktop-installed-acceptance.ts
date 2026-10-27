@@ -2030,7 +2030,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		stages.push("installed-interpreter-owned-fixtures-passed")
 		if (
 			ready.setupCenter.desktopBuild.sourceCommit !== process.env.GITHUB_SHA ||
-			ready.setupCenter.desktopBuild.capabilitySchema !== "setup-center/processor-acceptance-v2"
+			ready.setupCenter.desktopBuild.capabilitySchema !== "setup-center/processor-acceptance-v3"
 		)
 			throw new Error("Installed setup UI build identity mismatch")
 		await page.screenshot({ path: join(evidence, "readiness.png") })
@@ -2046,6 +2046,22 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		if (!(await page.getByRole("button", { name: "Test IDA integration (optional)", exact: true }).isVisible()))
 			throw new Error("Installed IDA test is not clearly optional")
 		stages.push("installed-setup-processor-remount-and-optional-test-passed")
+  const ghidraHome=process.env.GHIDRA_HOME;
+  if(!ghidraHome)throw new Error("Installed Ghidra acceptance requires checksum-pinned fixture installation");
+  await page.getByLabel("Ghidra acceptance architecture",{exact:true}).selectOption("arm64");
+  await settings(page,"Analysis environment");
+  await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
+  if(await page.getByLabel("Ghidra acceptance architecture",{exact:true}).inputValue()!=="arm64")throw new Error("Installed Ghidra profile selection was not retained");
+  await page.getByLabel("Ghidra installation folder",{exact:true}).fill(ghidraHome);
+  page.once("dialog",async dialog=>{if(dialog.message().includes("test all three owned profiles sequentially"))await dialog.accept();else await dialog.dismiss();});
+  await page.getByRole("button",{name:"Test all Ghidra profiles",exact:true}).click();
+  const ghidraResults=page.getByRole("list",{name:"Ghidra owned profile results",exact:true});
+  for(const architecture of ["x86_64","arm32","arm64"])await ghidraResults.getByText(`${architecture}: passed`,{exact:true}).waitFor({timeout:300000});
+  const ghidraSetup=await rpc<{ghidra:{status:string;profiles:Array<{architecture:string;status:string}>}}>(page,"setup_center_status",{environmentId:"local"});
+  if(ghidraSetup.ghidra.status!=="Ready for tested profiles"||ghidraSetup.ghidra.profiles.length!==3||!["x86_64","arm32","arm64"].every(a=>ghidraSetup.ghidra.profiles.filter(p=>p.architecture===a&&p.status==="passed").length===1))throw new Error("Installed Ghidra did not verify each owned architecture");
+  await writeFile(join(evidence,"ghidra-profile-readiness.json"),JSON.stringify(ghidraSetup.ghidra,null,2));
+  stages.push("installed-ghidra-three-owned-architectures-java-no-target-execution-passed");
+
 		const triagePanel = page.getByRole("region", { name: "Binary Triage Pack readiness", exact: true })
 		await triagePanel.waitFor({ timeout: 30000 })
 		const triageBefore = await rpc<{ capabilities: Array<{ id: string; state: string }> }>(page, "binary_triage_status", {

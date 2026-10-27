@@ -729,6 +729,23 @@ class NativeCallTraversalTests(unittest.TestCase):
         self.assertEqual(len(graph['nodes']),1);self.assertEqual(graph['edges'][0]['resolution'],'indirect-not-followed')
 
 
+class FixtureTimingResult(unittest.TextTestResult):
+    """Bounded case diagnostics; no retries, timeout changes or passing inference."""
+    def startTest(self, test):
+        import time
+        self.case_started = time.monotonic()
+        sys.stderr.write('ANDROID_FIXTURE_CASE ' + json.dumps({'event':'start', 'caseId':test.id()}) + '\n')
+        sys.stderr.flush()
+        super().startTest(test)
+
+    def stopTest(self, test):
+        import time
+        elapsed = max(0, (time.monotonic() - self.case_started) * 1000)
+        super().stopTest(test)
+        sys.stderr.write('ANDROID_FIXTURE_CASE ' + json.dumps({'event':'finish', 'caseId':test.id(), 'elapsedMs':round(elapsed,3)}) + '\n')
+        sys.stderr.flush()
+
+
 def fixture_shard(index, count):
     # Discover with unittest, not a second hard-coded inventory. Future cases
     # automatically belong to exactly one shard, including inherited tests.
@@ -747,7 +764,7 @@ def fixture_shard(index, count):
     print(json.dumps({'protocol':'android-fixture-shard/v1', 'index':index, 'count':count,
                       'allCaseIds':[case.id() for case in cases],
                       'caseIds':[case.id() for case in selected]}), flush=True)
-    result = unittest.TextTestRunner().run(unittest.TestSuite(selected))
+    result = unittest.TextTestRunner(resultclass=FixtureTimingResult).run(unittest.TestSuite(selected))
     return 0 if result.wasSuccessful() and result.testsRun == len(selected) else 1
 
 

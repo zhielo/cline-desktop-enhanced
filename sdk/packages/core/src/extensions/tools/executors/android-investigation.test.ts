@@ -41,6 +41,14 @@ describe("fixed Android investigation worker", () => {
 		expect(new Set(receipt.allCaseIds).size).toBe(receipt.allCaseIds.length);
 		expect(receipt.caseIds).toEqual(receipt.allCaseIds.filter((_, position) => position % count === index));
 		expect(receipt.caseIds.length).toBeGreaterThan(0);
+        const caseEvents = stderr.split(/\r?\n/).flatMap((line) => {
+            const marker = line.indexOf("ANDROID_FIXTURE_CASE ");
+            return marker < 0 ? [] : [JSON.parse(line.slice(marker + "ANDROID_FIXTURE_CASE ".length)) as {event:string;caseId:string;elapsedMs?:number}];
+        });
+        expect(caseEvents.filter(e => e.event === "start").map(e => e.caseId)).toEqual(receipt.caseIds);
+        const finished = caseEvents.filter(e => e.event === "finish");
+        expect(finished.map(e => e.caseId)).toEqual(receipt.caseIds);
+        expect(finished.every(e => typeof e.elapsedMs === "number" && Number.isFinite(e.elapsedMs) && e.elapsedMs >= 0)).toBe(true);
 		expect(stderr).toContain(`Ran ${receipt.caseIds.length} tests`);
 		expect(stderr).toContain("OK");
 	});

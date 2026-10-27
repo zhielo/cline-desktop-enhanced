@@ -2543,7 +2543,7 @@ async function validateDexOutput(file: string) {
 	validateDexBytes(bytes);
 }
 
-export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
+export function createReverseEngineeringExecutor(options: { readGhidraAcceptance?: () => Promise<unknown> } = {}): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		if (
 			input.advanced_action === "binary_triage" ||
@@ -3270,6 +3270,7 @@ export function createReverseEngineeringExecutor(): ReverseEngineeringExecutor {
 				{
 					...discovered,
 					setupCapabilities: setupCapabilityCatalog(),
+     ...(options.readGhidraAcceptance ? {ghidraOwnedAcceptance: await options.readGhidraAcceptance()} : {}),
 					pathRefreshed,
 					recommendations: {
 						ida: "Use the selected IDA executable directly. IDAPython/Hex-Rays are checked by the actual request; no plugin filename, license-file scan or optional Setup Center receipt blocks an attempt. idalib activation is not required by this adapter.",

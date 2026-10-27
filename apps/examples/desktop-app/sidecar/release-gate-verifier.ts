@@ -8,6 +8,7 @@ const requireProof: (condition: unknown, message: string) => asserts condition =
 		if (!condition) throw new Error(message);
 	};
 type Check = {
+	details_url?: string;
 	name: string;
 	head_sha: string;
 	status: string;
@@ -16,6 +17,18 @@ type Check = {
 	id: number;
 };
 export type ReleaseGateEvidence = {
+	workflowRuns?: {
+		total_count: number;
+		workflow_runs: Array<{
+			id: number;
+			path: string;
+			event: string;
+			head_sha: string;
+			status: string;
+			conclusion: string | null;
+			repository: { full_name: string };
+		}>;
+	};
 	pull: {
 		number: number;
 		merge_commit_sha: string | null;
@@ -99,6 +112,67 @@ export function verifyReleaseGateEvidence(
 		...(conditionalTriggered ? policy.conditionalChecks : []),
 	];
 	const requiredCheckCount = remaining.length;
+	// ready_for_review can legitimately create another complete E2E suite on the
+	// same head. Retain and verify every check; never discard a failed duplicate.
+	const repeated = new Set<string>();
+	for (const name of new Set(remaining)) {
+		const group = e.checks.check_runs.filter((c) => c.name === name);
+		if (group.length <= remaining.filter((n) => n === name).length) continue;
+		requireProof(
+			[
+				"e2e (windows)",
+				"e2e (macos)",
+				"e2e (ubuntu)",
+				"matrix_prep",
+				"Detect Changes",
+			].includes(name),
+			`Unexpected repeated check: ${name}`,
+		);
+		const runs = e.workflowRuns;
+		requireProof(
+			!!runs &&
+				runs.total_count === runs.workflow_runs.length &&
+				runs.total_count <= 100,
+			"Repeated checks require complete authoritative workflow provenance",
+		);
+		const paths: string[] = [];
+		for (const c of group) {
+			const matched = runs.workflow_runs.filter(
+				(r) =>
+					c.details_url ===
+					`https://github.com/${repo}/actions/runs/${r.id}/job/${c.id}`,
+			);
+			requireProof(
+				matched.length === 1,
+				"Repeated check lacks exact job/workflow binding",
+			);
+			const r = matched[0];
+			requireProof(
+				r.event === "pull_request" &&
+					r.head_sha === expectedHead &&
+					r.repository.full_name === repo &&
+					r.status === "completed" &&
+					r.conclusion === "success",
+				"Repeated check workflow is not successful on this head",
+			);
+			requireProof(
+				r.path === ".github/workflows/ext-vscode-test-e2e.yml" ||
+					(name === "Detect Changes" &&
+						r.path === ".github/workflows/ext-vscode-test.yml"),
+				"Repeated check came from an unexpected workflow",
+			);
+			paths.push(r.path);
+		}
+		if (name === "Detect Changes")
+			requireProof(
+				paths.filter((p) => p === ".github/workflows/ext-vscode-test.yml")
+					.length === 1 &&
+					paths.includes(".github/workflows/ext-vscode-test-e2e.yml"),
+				"Distinct required detection workflows missing",
+			);
+		repeated.add(name);
+	}
+
 	const ids = new Set<number>();
 	for (const c of e.checks.check_runs) {
 		requireProof(!ids.has(c.id), "Duplicate check identity");
@@ -116,6 +190,11 @@ export function verifyReleaseGateEvidence(
 				`Required check not successful: ${c.name}`,
 			);
 			remaining.splice(at, 1);
+		} else if (repeated.has(c.name)) {
+			requireProof(
+				c.conclusion === "success",
+				`Repeated required check not successful: ${c.name}`,
+			);
 		} else
 			requireProof(
 				policy.allowedSkipped.includes(c.name as never) &&

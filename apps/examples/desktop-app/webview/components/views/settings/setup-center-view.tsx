@@ -39,7 +39,18 @@ type Status = {
 		checkedAt?: string;
 		scope: string;
 	}[];
-	ghidra?: { status: string; javaVersion?: string; reason: string };
+	ghidra?: {
+		status: string;
+		javaVersion?: string;
+		javaStatus?: string;
+		reason: string;
+		profiles?: {
+			architecture: string;
+			status: string;
+			reason: string;
+			checkedAt?: string;
+		}[];
+	};
 	firstPartyAnalysis?: {
 		installed: boolean;
 		parser: string;
@@ -81,6 +92,9 @@ export function SetupCenter() {
 	const [notice, setNotice] = useState("");
 	const [setupJob, setSetupJob] = useState<SetupJob | null>(null);
 	const [awaitingReceipt, setAwaitingReceipt] = useState(false);
+	const [ghidraArchitecture, setGhidraArchitecture] = useState<
+		"x86_64" | "arm32" | "arm64"
+	>("x86_64");
 	const [idaArchitecture, setIdaArchitecture] = useState<"x86_64" | "arm64">(
 		"x86_64",
 	);
@@ -120,6 +134,13 @@ export function SetupCenter() {
 		}
 	}, []);
 	useEffect(() => {
+		const ghidraSaved = localStorage.getItem("cline.setup.ghidra-processor");
+		if (
+			ghidraSaved === "x86_64" ||
+			ghidraSaved === "arm32" ||
+			ghidraSaved === "arm64"
+		)
+			setGhidraArchitecture(ghidraSaved);
 		const saved = localStorage.getItem("cline.setup.ida-processor");
 		if (saved === "arm64" || saved === "x86_64") setIdaArchitecture(saved);
 		if (localStorage.getItem("cline.setup.pending-admission")) {
@@ -605,6 +626,47 @@ export function SetupCenter() {
 							{status?.ghidra?.reason ??
 								"Ghidra has a separate explicit owned-fixture test; Python pack readiness does not cover it."}
 						</p>
+						<p>
+							Java / launcher:{" "}
+							{status?.ghidra?.javaStatus ??
+								"Not verified by current owned analysis"}
+						</p>
+						<label className="block">
+							Ghidra acceptance architecture
+							<select
+								aria-label="Ghidra acceptance architecture"
+								disabled={busy}
+								value={ghidraArchitecture}
+								onChange={(e) => {
+									const value = e.target.value as "x86_64" | "arm32" | "arm64";
+									setGhidraArchitecture(value);
+									localStorage.setItem("cline.setup.ghidra-processor", value);
+								}}
+							>
+								<option value="x86_64">x86-64</option>
+								<option value="arm32">ARM32</option>
+								<option value="arm64">ARM64 / AArch64</option>
+							</select>
+						</label>
+						<ul aria-label="Ghidra owned profile results">
+							{(
+								status?.ghidra?.profiles ??
+								["x86_64", "arm32", "arm64"].map((architecture) => ({
+									architecture,
+									status: "not-tested",
+									reason: "Run this architecture's owned test",
+									checkedAt: undefined,
+								}))
+							).map((profile) => (
+								<li key={profile.architecture}>
+									<strong>
+										{profile.architecture}: {profile.status}
+									</strong>{" "}
+									— {profile.reason}
+									{profile.checkedAt ? ` Last test: ${profile.checkedAt}` : ""}
+								</li>
+							))}
+						</ul>
 						<label className="block">
 							Ghidra installation folder
 							<input
@@ -646,12 +708,27 @@ export function SetupCenter() {
 								onClick={() =>
 									void action(
 										"setup_center_test_ghidra",
-										"Save this Ghidra folder and run bounded headless analysis and selected decompilation on one owned x86-64 ELF? This launches Java and Ghidra, not target code. No packages are installed.",
-										{ ghidraHome: form.ghidraHome ?? "" },
+										`Save this Ghidra folder and test the owned ${ghidraArchitecture} selected function? This launches Java and Ghidra, never the target. No packages are installed.`,
+										{
+											ghidraHome: form.ghidraHome ?? "",
+											architecture: ghidraArchitecture,
+										},
 									)
 								}
 							>
-								Test Ghidra and Java
+								Test selected Ghidra profile
+							</Button>
+							<Button
+								disabled={busy}
+								onClick={() =>
+									void action(
+										"setup_center_test_ghidra",
+										"Save this Ghidra folder and test all three owned profiles sequentially: x86-64, ARM32 and ARM64? Java/Ghidra run; target code never executes. Failed profiles stay visible and successful siblings are retained.",
+										{ ghidraHome: form.ghidraHome ?? "", architecture: "all" },
+									)
+								}
+							>
+								Test all Ghidra profiles
 							</Button>
 						</div>
 						<p>
