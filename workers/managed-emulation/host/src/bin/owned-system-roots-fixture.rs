@@ -57,7 +57,9 @@ fn owned() -> Result<(), i32> {
     let mut store = opened_job
         .open_store(identity.clone(), *key)
         .map_err(|_| 28)?;
-    if store.journal().phase() != cline_managed_inert_probe::lifecycle::Phase::Created {
+    if store.journal().phase() != cline_managed_inert_probe::lifecycle::Phase::Created
+        || !store.journal().recovery_required()
+    {
         return Err(29);
     }
     {
@@ -75,24 +77,31 @@ fn owned() -> Result<(), i32> {
         }
         let _revert = Revert;
         if store
-            .advance(cline_managed_inert_probe::lifecycle::Event::StopRequested {})
-            .is_ok()
+            .advance(cline_managed_inert_probe::lifecycle::Event::RecoveryRequested {})
+            .err()
+            != Some("Impersonated protected storage access forbidden")
         {
             return Err(31);
         }
     }
     // Failed identity validation fences even after the thread stops impersonating.
     if store
-        .advance(cline_managed_inert_probe::lifecycle::Event::StopRequested {})
-        .is_ok()
+        .advance(cline_managed_inert_probe::lifecycle::Event::RecoveryRequested {})
+        .err()
+        != Some("Protected store fenced; reopen and inspect")
     {
         return Err(32);
     }
     drop(store);
     let mut store = opened_job.open_store(identity, *key).map_err(|_| 33)?;
     store
-        .advance(cline_managed_inert_probe::lifecycle::Event::StopRequested {})
+        .advance(cline_managed_inert_probe::lifecycle::Event::RecoveryRequested {})
         .map_err(|_| 34)?;
+    if store.journal().phase() != cline_managed_inert_probe::lifecycle::Phase::StopRequired
+        || store.journal().recovery_required()
+    {
+        return Err(43);
+    }
     drop(store);
     let material = job.write_boot_media().map_err(|_| 35)?;
     if job.write_boot_media().is_ok() {

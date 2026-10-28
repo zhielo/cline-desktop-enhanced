@@ -2931,7 +2931,7 @@ requiredMarkers.push(
 	},
 	{
 		path: "workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",
-		markers: ["roots.create_job()", "opened_job.open_store", "ImpersonateSelf(SecurityImpersonation)", "job.write_boot_media()", "MEDIA_BYTES as u64", 'std::fs::remove_file(path.join("recovery.sqlite"))'],
+		markers: ["roots.create_job()", "opened_job.open_store", "Event::RecoveryRequested", "store.journal().recovery_required()", "ImpersonateSelf(SecurityImpersonation)", "job.write_boot_media()", "MEDIA_BYTES as u64", 'std::fs::remove_file(path.join("recovery.sqlite"))'],
 	},
 );
 
