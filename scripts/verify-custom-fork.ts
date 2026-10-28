@@ -2901,6 +2901,7 @@ requiredMarkers.push(
 			"FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT",
 			"pub fn open_existing()",
 			"real_owned_junctions_are_refused_as_roots_and_ancestors",
+			"READ_CONTROL | FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY",
 		],
 	},
 	{

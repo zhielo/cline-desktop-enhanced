@@ -284,3 +284,5 @@ lifetime. Successful fixture cleanup removes only its newly created empty
 directories; no recursive cleanup, user-PC installation or VM execution occurs.
 The executable is not built by default, included in an installer, or exposed to
 models. This scope is not Windows 10 installed Hyper-V acceptance.
+
+Windows root handles request directory-list read access, not attributes alone: attribute-only opens do not enforce delete-sharing denial. Native acceptance retains an actual rename-refusal assertion to verify the pinning behavior rather than inferring it from flags.

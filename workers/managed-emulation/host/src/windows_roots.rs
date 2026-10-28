@@ -27,8 +27,8 @@ use windows_sys::Win32::{
     Storage::FileSystem::{
         CreateDirectoryW, CreateFileW, GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
         FILE_ALL_ACCESS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
-        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
-        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, READ_CONTROL,
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY,
+        FILE_READ_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, READ_CONTROL,
     },
     System::{
         Com::CoTaskMemFree,
@@ -173,7 +173,9 @@ fn directory_handle(path: &Path) -> Result<OwnedHandle> {
     let handle = unsafe {
         CreateFileW(
             path.as_ptr(),
-            READ_CONTROL | FILE_READ_ATTRIBUTES,
+            // Attribute-only opens do not participate in Windows share checks.
+            // Directory read access is required for denial of delete sharing.
+            READ_CONTROL | FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             null(),
             OPEN_EXISTING,
