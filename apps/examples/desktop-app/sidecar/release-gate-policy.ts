@@ -1,12 +1,12 @@
 /** Host-owned finite release policy. Changes require explicit review and full CI. */
 export const RELEASE_GATE_POLICY = {
-	version: "cline-desktop-release-gate/v3",
+	version: "cline-desktop-release-gate/v4",
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
-  "Owned additive emulation (qiling)",
-  "Owned additive emulation (unidbg)",
-  "Owned additive emulation (rnidbg)",
+		"Owned additive emulation (qiling)",
+		"Owned additive emulation (unidbg)",
+		"Owned additive emulation (rnidbg)",
 		"Pinned general recovery (ubuntu-latest)",
 		"Pinned general recovery (windows-latest)",
 		"Owned angr fixture (ubuntu-latest)",
@@ -91,10 +91,10 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
-  "installed-session-tool-inventory-exact-provider-names-no-extra-request-passed",
-  "installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed",
+		"installed-session-tool-inventory-exact-provider-names-no-extra-request-passed",
+		"installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed",
 
-  "installed-ghidra-three-owned-architectures-java-no-target-execution-passed",
+		"installed-ghidra-three-owned-architectures-java-no-target-execution-passed",
 		"installed-source-acquisition-hash-bound-saved-off-no-execution-passed",
 		"installed-application-graph-electron-saved-trace-no-execution-passed",
 		"installed-electron-fuses-explicit-read-only-hash-bound-saved-off-passed",
@@ -136,7 +136,7 @@ export const RELEASE_GATE_POLICY = {
 		"installed-candidate-validation-review-hash-scope-preservation-passed",
 		"installed-candidate-outcomes-failed-retention-explicit-export-no-replay-passed",
 		"installed-runtime-plan-owned-identity-no-attach-no-execute-passed",
-  "installed-additive-emulation-read-only-planning-static-and-unconfigured-worker-denial-passed",
+		"installed-additive-emulation-read-only-planning-static-and-unconfigured-worker-denial-passed",
 		"installed-runtime-process-file-capture-approval-no-attach-passed",
 		"installed-managed-node-approval-breakpoint-sampling-stop-cleanup-passed",
 		"installed-saved-static-runtime-correlation-owner-hash-no-rerun-passed",
@@ -167,7 +167,8 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
-  ".github/workflows/additive-emulation-validation.yml":"06e4e9be98d1a406f371fe0c9bd74906d79603a1d347b44344b225c09f47639d",
+		".github/workflows/additive-emulation-validation.yml":
+			"06e4e9be98d1a406f371fe0c9bd74906d79603a1d347b44344b225c09f47639d",
 		".github/workflows/general-recovery-validation.yml":
 			"1660014462a0546eca828c1f246169789f1c776734a82a9efb1e607c102dab5d",
 		"apps/vscode/scripts/owned-triage-model.ts":
@@ -177,7 +178,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/semantic-source-validation.yml":
 			"9bf4c84a47e3e302ba4c35eaa67d9cb650896c2d1caba1e6b49e884aca27b972",
 		".github/workflows/build-custom-windows-installer.yml":
-			"570280a60ad0f10f18530d3b387e6eef5b9a7c31c9f4416aded0d879454275b1",
+			"592ec2ed9bc19cdec890b6d54f6a6c15fce27847d73606f74d94249b2ef56526",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"fc6c8909e007d4c3f9714553554d3c30638e1e412e6c75d238b8f6eab13c7171",
 		"scripts/validate-advanced-build.mjs":

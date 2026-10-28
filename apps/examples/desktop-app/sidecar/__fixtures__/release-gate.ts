@@ -78,7 +78,7 @@ export function fixture(): ReleaseGateEvidence {
 		artifacts: {
 			total_count: 3,
 			artifacts: [
-				`consolidated-validation-${runId}`,
+				`consolidated-validation-${runId}-1`,
 				`installed-ui-evidence-${runId}-1`,
 				`cline-enhanced-windows-x64-unsigned-0.3.0-${runId}-1`,
 			].map((name, i) => ({

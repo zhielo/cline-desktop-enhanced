@@ -20,12 +20,38 @@ test("owned complete evidence passes without claiming behavior verification", ()
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
- ["missing installed session inventory proof", (e) => {
-  e.installed.stages=e.installed.stages.filter((stage:string)=>stage!=="installed-session-tool-inventory-exact-provider-names-no-extra-request-passed");
- }],
- ["missing installed same-boot recovery refusal proof", (e) => {
-  e.installed.stages=e.installed.stages.filter((stage:string)=>stage!=="installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed");
- }],
+	[
+		"consolidated artifact from another attempt",
+		(e) => {
+			e.artifacts.artifacts[0].name = `consolidated-validation-${e.run.id}-0`;
+		},
+	],
+	[
+		"legacy ambiguous consolidated artifact",
+		(e) => {
+			e.artifacts.artifacts[0].name = `consolidated-validation-${e.run.id}`;
+		},
+	],
+	[
+		"missing installed session inventory proof",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(stage: string) =>
+					stage !==
+					"installed-session-tool-inventory-exact-provider-names-no-extra-request-passed",
+			);
+		},
+	],
+	[
+		"missing installed same-boot recovery refusal proof",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(stage: string) =>
+					stage !==
+					"installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed",
+			);
+		},
+	],
 	[
 		"missing installed Ghidra architecture proof",
 		(e) => {

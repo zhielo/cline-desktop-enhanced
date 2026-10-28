@@ -18,6 +18,8 @@ function network(
 		pending?: boolean;
 		missingDigest?: boolean;
 		overflow?: boolean;
+		staleCoreAttempt?: boolean;
+		retainedCoreAttempt?: boolean;
 	} = {},
 ) {
 	const e = options.repeatedE2E ? repeatedE2EEvidence() : fixture(),
@@ -50,6 +52,16 @@ function network(
 	});
 	if (options.badDigest) core[0] ^= 1;
 	if (options.missingDigest) e.artifacts.artifacts[0].digest = "";
+	if (options.staleCoreAttempt)
+		e.artifacts.artifacts[0].name = `consolidated-validation-${e.run.id}-0`;
+	if (options.retainedCoreAttempt) {
+		e.artifacts.artifacts.push({
+			...e.artifacts.artifacts[0],
+			id: 9,
+			name: `consolidated-validation-${e.run.id}-0`,
+		});
+		e.artifacts.total_count++;
+	}
 	const response = (data: unknown) => new Response(JSON.stringify(data));
 	const fetcher = (async (url: any, init: any) => {
 		const u = new URL(String(url));
@@ -130,6 +142,11 @@ for (const [name, opts, pattern] of [
 	["unsafe artifact entries", { unsafeZip: true }, /Unsafe/],
 	["missing core receipt", { missingCore: true }, /exactly core/],
 	["missing digest", { missingDigest: true }, /digest/],
+	[
+		"consolidated artifact from another attempt",
+		{ staleCoreAttempt: true },
+		/Missing or ambiguous evidence artifact/,
+	],
 	["head changed during collection", { movedHead: true }, /changed during/],
 	[
 		"run attempt changed during collection",
@@ -195,4 +212,12 @@ test("collector retains authoritative workflow provenance for every successful r
 	const n = network({ repeatedE2E: true });
 	const r = await collectReleaseGate(133, head, { fetch: n.fetcher });
 	assert.equal(r.status, "passed");
+});
+
+test("collector selects the exact current attempt without downloading or deleting retained older evidence", async () => {
+	const n = network({ retainedCoreAttempt: true });
+	const r = await collectReleaseGate(133, head, { fetch: n.fetcher });
+	assert.equal(r.status, "passed");
+	assert.ok(!n.urls.some((u) => u.includes("/9.zip")));
+	assert.ok(r.artifacts[0].name.endsWith(`-${r.runAttempt}`));
 });

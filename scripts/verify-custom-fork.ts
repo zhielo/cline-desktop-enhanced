@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/release-gate-collector.ts",markers:["`consolidated-validation-${run.id}-${run.run_attempt}`"]},
+ {path:"apps/examples/desktop-app/sidecar/release-gate-verifier.ts",markers:["`consolidated-validation-${r.id}-${r.run_attempt}`"]},
  {path:"apps/vscode/scripts/owned-triage-model.ts",markers:["const declaredTools = request.tools ?? []", "lastToolNames = declaredTools.map"]},
  {path:"sdk/packages/agents/src/agent-runtime.ts",markers:["getModelToolExposure", "modelToolExposure: this.getModelToolExposure()", "toolCount: request.tools.length"]},
  {path:"sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.ts",markers:["lastToolExposure", "exposureRevision++", "activeExposureConfig"]},
