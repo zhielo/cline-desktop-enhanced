@@ -1,9 +1,10 @@
 "use client";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { desktopClient } from "@/lib/desktop-client";
 import type { SessionToolInventory } from "../../../../sidecar/session-tool-inventory";
 /** Explicit local Hub reads only. Never initializes an agent or probes an engine. */
 export function SessionToolInventoryPanel() {
+	const sessionSelectId = useId();
 	const [sessions, setSessions] = useState<
 		Array<{ sessionId: string; local: boolean }>
 	>([]);
@@ -77,9 +78,12 @@ export function SessionToolInventoryPanel() {
 			>
 				Refresh attached sessions
 			</button>
-			<label className="block text-sm">
-				Owning session
+			<div className="text-sm">
+				<label htmlFor={sessionSelectId} className="block">
+					Owning session
+				</label>
 				<select
+					id={sessionSelectId}
 					value={selected}
 					onChange={(event) => {
 						++requestVersion.current;
@@ -98,7 +102,7 @@ export function SessionToolInventoryPanel() {
 						</option>
 					))}
 				</select>
-			</label>
+			</div>
 			<button
 				type="button"
 				disabled={busy || !selected}

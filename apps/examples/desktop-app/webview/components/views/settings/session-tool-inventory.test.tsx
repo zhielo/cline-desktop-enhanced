@@ -20,6 +20,11 @@ it("does no automatic inspection, requires explicit selection, and shows unavail
 		});
 		await act(async () => button("Refresh attached sessions").click());
 		expect(button("Inspect last request").disabled).toBe(true);
+		const owningSelect = el.querySelector("select")!;
+		expect(owningSelect.labels).toHaveLength(1);
+		expect(owningSelect.labels![0].textContent?.trim()).toBe("Owning session");
+		expect(owningSelect.labels![0].htmlFor).toBe(owningSelect.id);
+		expect(owningSelect.labels![0].contains(owningSelect)).toBe(false);
 		await act(async () => {
 			const select = el.querySelector("select")!;
 			select.value = "owner";

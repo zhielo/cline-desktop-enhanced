@@ -8,7 +8,7 @@ const requiredMarkers: Array<{
  {path:"sdk/packages/agents/src/agent-runtime.ts",markers:["getModelToolExposure", "modelToolExposure: this.getModelToolExposure()", "toolCount: request.tools.length"]},
  {path:"sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.ts",markers:["lastToolExposure", "exposureRevision++", "activeExposureConfig"]},
  {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["session_tool_inventory_sessions", "Owning session changed; inspect again", "includeToolExposure: true"]},
- {path:"apps/examples/desktop-app/webview/components/views/settings/session-tool-inventory.tsx",markers:["Refresh attached sessions", "Inspect last request", "Stale", "inventory.authorization"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/session-tool-inventory.tsx",markers:["Refresh attached sessions", "Inspect last request", "Stale", "inventory.authorization", "htmlFor={sessionSelectId}", "id={sessionSelectId}"]},
  {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-session-tool-inventory-exact-provider-names-no-extra-request-passed", "triageModel.providerRequests !== requestsBeforeInventory"]},
 
  {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed", "actualRebootTested: false", "Same-boot inspection changed admission"]},
