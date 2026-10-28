@@ -131,8 +131,35 @@ fn run() -> Result<()> {
 }
 
 fn main() {
-    if run().is_err() {
-        eprintln!("Managed inert probe failed; no readiness established.");
+    // Independent whole-process bound: stdin EOF and stdout delivery are not
+    // covered by socket timeouts. This kills ONLY this probe, never the VM.
+    let (done, waiting) = std::sync::mpsc::channel();
+    let watchdog = std::thread::Builder::new()
+        .name("managed-inert-deadline".into())
+        .spawn(move || {
+            if matches!(
+                waiting.recv_timeout(std::time::Duration::from_secs(15)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            ) {
+                // Do not write to a possibly blocked diagnostic pipe on timeout.
+                // No readiness, cleanup or VM-termination receipt is produced.
+                std::process::exit(124);
+            }
+        });
+    let Ok(watchdog) = watchdog else {
+        std::process::exit(1);
+    };
+    let result = run();
+    if result.is_err() {
+        // Error delivery is inside the whole-process budget too.
+        use std::io::Write;
+        let _ = writeln!(
+            std::io::stderr(),
+            "Managed inert probe failed; no readiness established."
+        );
+    }
+    let _ = done.send(());
+    if watchdog.join().is_err() || result.is_err() {
         std::process::exit(1);
     }
 }

@@ -44,3 +44,34 @@ fn credentials_and_commands_are_never_accepted_from_argv() {
         "Managed inert probe failed; no readiness established."
     );
 }
+
+#[test]
+fn missing_stdin_eof_is_bounded_by_the_real_whole_process_watchdog() {
+    use std::time::{Duration, Instant};
+    let start = Instant::now();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cline-managed-inert-probe"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Intentionally keep the private pipe open. Even empty input must not hang.
+    let private_pipe = child.stdin.take().unwrap();
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if start.elapsed() > Duration::from_secs(25) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("Whole-process watchdog failed to terminate the owned probe");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+    drop(private_pipe);
+    assert_eq!(status.code(), Some(124));
+    assert!(start.elapsed() >= Duration::from_secs(14));
+    let output = child.wait_with_output().unwrap();
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+}

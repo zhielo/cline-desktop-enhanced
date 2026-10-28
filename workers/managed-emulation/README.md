@@ -23,9 +23,14 @@ There are intentionally no user setup instructions here.
   4096. Both peers reject extra/duplicate fields, altered identities and MACs.
 - The host reads a bounded closed private stdin pipe, never argv/environment
   credentials. It rejects wildcard/parent/loopback VM addresses and uses one
-  ten-second connection/I/O budget. Its parent **must** supervise the entire
-  process, including stdin delivery. Private input/key buffers are cleared
-  best-effort; this is not a memory-forensics guarantee.
+  ten-second connection/I/O budget. A separate 15-second whole-process watchdog
+  bounds blocked private stdin EOF and stdout delivery; timeout exits 124 without
+  touching a possibly blocked diagnostic pipe. This terminates **only the probe**,
+  not the VM; its parent **must** still supervise the VM and record unresolved
+  termination/recovery rather than treating helper exit as success.
+  Private input/key buffers are cleared
+  best-effort on ordinary return; watchdog termination bypasses destructors.
+  This is not a memory-forensics guarantee.
 - The guest accepts one connection from host CID 2 and exits after one probe.
   Accept plus I/O has an absolute 30-second maximum, further bounded by the
   boot credential's expiry. It requires a root-owned, mode-0600, non-linked
