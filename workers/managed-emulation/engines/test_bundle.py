@@ -14,6 +14,7 @@ import prepare
 import selftest
 sys.path.insert(0,str(HERE.parent/'image'))
 from smoke_boot import validate_engine_log
+from build_image import Node, owned_bundle
 
 
 class BundleTests(unittest.TestCase):
@@ -55,7 +56,7 @@ class BundleTests(unittest.TestCase):
                 self.assertEqual(validate_engine_log(data(value),engine),value)
                 self.assertEqual(validate_engine_log(data(value),engine,'a'*64),value)
                 with self.assertRaises(ValueError):validate_engine_log(data(value),engine,'b'*64)
-                for change in [{'checks':counts[engine]-1},{'architectures':[]},{'engineReadiness':'ready'},{'vmIsolation':'attested'},{'bundleSha256':'x'*64},{'extra':True}]:
+                for change in [{'schema':True},{'checks':float(counts[engine])},{'checks':counts[engine]-1},{'architectures':[]},{'engineReadiness':'ready'},{'vmIsolation':'attested'},{'bundleSha256':'x'*64},{'extra':True}]:
                     with self.assertRaises(ValueError):validate_engine_log(data({**value,**change}),engine)
                 with self.assertRaises(ValueError):validate_engine_log(data(value)+data(value),engine)
                 with self.assertRaises(ValueError):validate_engine_log(data(value)+b'CLINE_MANAGED_ENGINE_FAILED_V1\n',engine)
@@ -69,6 +70,22 @@ class BundleTests(unittest.TestCase):
             value=self.fixture(root);value['files']['../outside']={'kind':'file','size':0,'sha256':'0'*64}
             (root/'bundle.json').write_text(json.dumps(value))
             with patch.object(selftest,'ROOT',root),self.assertRaises(ValueError):selftest.verify_bundle()
+
+    def test_export_cannot_replace_the_fixed_owned_acceptance_source(self):
+        engine='qiling';prefix='opt/cline-engine/'
+        source=(HERE/'selftest.py').read_bytes()
+        runner=(HERE.parents[1]/'emulation/qiling_runner.py').read_bytes()
+        value={'schema':1,'engine':engine,'scope':'development-owned-guest-tests-only','files':{
+            'selftest.py':{'kind':'file','size':len(source),'sha256':hashlib.sha256(source).hexdigest()},
+            'qiling_runner.py':{'kind':'file','size':len(runner),'sha256':hashlib.sha256(runner).hexdigest()}}}
+        original={prefix+'bundle.json':Node('file',0o644,json.dumps(value).encode()),prefix+'engine':Node('file',0o644,b'qiling\n'),
+            prefix+'selftest.py':Node('file',0o644,source),prefix+'qiling_runner.py':Node('file',0o644,runner),prefix+'env/bin/python':Node('symlink',0o777,b'/usr/local/bin/python3.13')}
+        self.assertEqual(set(owned_bundle(original,engine)),set(original))
+        changed={**original,prefix+'selftest.py':Node('file',0o644,b'print("fake success")')}
+        value['files']['selftest.py']['sha256']=hashlib.sha256(b'print("fake success")').hexdigest()
+        changed[prefix+'bundle.json']=Node('file',0o644,json.dumps(value).encode())
+        with self.assertRaises(ValueError):owned_bundle(changed,engine)
+
 
 
 if __name__ == '__main__':

@@ -4,7 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"workers/managed-emulation/engines/selftest.py",markers:["verify_bundle()", "CLINE_MANAGED_ENGINE_OWNED_V1", "Owned runtime changed", "unsupported-syscall", "GetTickCount"]},
+ {path:"workers/managed-emulation/image/build_image.py",markers:["Owned acceptance source replaced", "Duplicate engine manifest field", "generatedInitSha256"]},
+ {path:"workers/managed-emulation/engines/selftest.py",markers:["verify_bundle()", "CLINE_MANAGED_ENGINE_OWNED_V1", "Owned runtime changed", "unsupported-syscall", "GetTickCount", "-Djna.tmpdir="]},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["Exact JNI dependency closure required", "Engine runtime byte budget", "--compress=2", "strip", "development-owned-guest-tests-only"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["engine: [qiling, unidbg, rnidbg, speakeasy]", "Actual offline UEFI guest owned engine execution and refusal cases", "never execute fixture in builder"]},
  {path:"workers/managed-emulation/host/src/boot_media.rs",markers:["getrandom::fill", "create_new(true)", "file.sync_all()", "Zeroizing", "BOOT.JSON;1", "Boot material expired or clock changed"]},

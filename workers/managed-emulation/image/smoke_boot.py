@@ -66,7 +66,7 @@ def validate_engine_log(data, engine, expected_bundle=None):
     value = json.loads(lines[0][len(marker):], object_pairs_hook=unique)
     arches = {"qiling":["x86_64","arm32","arm64"],"unidbg":["arm32","arm64"],"rnidbg":["arm64"],"speakeasy":["x86_64"]}
     expected = {"schema":1,"engine":engine,"architectures":arches[engine],"checks":{"qiling":12,"unidbg":10,"rnidbg":5,"speakeasy":4}[engine],"ownedFixtures":"passed","engineReadiness":"not-tested","vmIsolation":"not-attested"}
-    if set(value) != set(expected) | {"bundleSha256"} or any(value[k] != v for k,v in expected.items()) or not re.fullmatch("[0-9a-f]{64}",value["bundleSha256"]):
+    if not isinstance(value,dict) or type(value.get("schema")) is not int or type(value.get("checks")) is not int or not isinstance(value.get("bundleSha256"),str) or set(value) != set(expected) | {"bundleSha256"} or any(value[k] != v for k,v in expected.items()) or not re.fullmatch("[0-9a-f]{64}",value["bundleSha256"]):
         raise ValueError("Owned engine evidence scope mismatch")
     if expected_bundle is not None and value["bundleSha256"] != expected_bundle:
         raise ValueError("Owned engine bundle/image binding mismatch")
@@ -146,7 +146,10 @@ def run(image, output, uefi=False, credential_case="absent", native_generator=No
             manifest = json.loads(manifest_bytes)
             if manifest.get("ownedEngine") != owned_engine or manifest.get("artifacts",{}).get("inert-guest.iso",{}).get("sha256") != hashlib.sha256(image.read_bytes()).hexdigest():
                 raise ValueError("Owned engine image identity mismatch")
-            engine_evidence = validate_engine_log(data, owned_engine, manifest.get("ownedEngineBundleSha256"))
+            bundle = manifest.get("ownedEngineBundleSha256")
+            if not isinstance(bundle,str) or not re.fullmatch("[0-9a-f]{64}",bundle):
+                raise ValueError("Owned engine bundle identity absent")
+            engine_evidence = validate_engine_log(data, owned_engine, bundle)
 
         return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "ownedEngine": owned_engine, "ownedEngineEvidence": engine_evidence, "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved", "native": "native-private-media-provisioned-exchange-unresolved"}[credential_case], **receipt}
 

@@ -31,9 +31,9 @@ def verify_bundle():
     if not 1 <= len(raw) <= 4*1024**2:
         raise ValueError('Bundle manifest budget')
     value = json.loads(raw, object_pairs_hook=unique)
-    if set(value) != {'schema','engine','scope','files'} or value['schema'] != 1 or value['scope'] != 'development-owned-guest-tests-only' or value['engine'] not in ARCHES:
+    if not isinstance(value,dict) or set(value) != {'schema','engine','scope','files'} or type(value['schema']) is not int or value['schema'] != 1 or value['scope'] != 'development-owned-guest-tests-only' or value['engine'] not in ARCHES:
         raise ValueError('Owned bundle identity')
-    if (ROOT/'engine').read_text() != value['engine']+'\n' or not 1 <= len(value['files']) <= 20_000:
+    if not isinstance(value['files'],dict) or (ROOT/'engine').read_text() != value['engine']+'\n' or not 1 <= len(value['files']) <= 20_000:
         raise ValueError('Owned bundle identity/count')
     observed = {p.relative_to(ROOT).as_posix() for p in ROOT.rglob('*') if p.is_symlink() or p.is_file()}
     if observed != set(value['files']) | {'bundle.json'}:
@@ -98,7 +98,7 @@ def jni_check(engine):
                 if engine == 'unidbg':
                     args.append(arch)
                 args += ['jni-int32','com/cline/Owned','missing' if case == 'missing' else 'transform','42',str(root/'result.json'),'1' if case == 'budget' else '10000']
-                command = ([str(ROOT/'jre/bin/java'),'--enable-native-access=ALL-UNNAMED','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
+                command = ([str(ROOT/'jre/bin/java'),'--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
                 result = invoke(command)
                 if case in ('denied','budget','missing'):
                     if result.returncode == 0 or (root/'result.json').exists() or (case == 'denied' and result.returncode != 76) or (case == 'budget' and result.returncode != 75):

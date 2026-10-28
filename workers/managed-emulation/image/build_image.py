@@ -224,6 +224,42 @@ def modules(kernel, release):
         return result
 
 
+def owned_bundle(original, engine):
+    prefix = "opt/cline-engine/"
+    selected = {path: node for path,node in original.items() if path.startswith(prefix)}
+    required = {prefix+"bundle.json", prefix+"engine", prefix+"selftest.py", prefix+"env/bin/python"}
+    if not required <= selected.keys() or selected[prefix+"engine"].data != (engine+"\n").encode():
+        raise ValueError("Owned engine bundle absent or mismatched")
+    raw = selected[prefix+"bundle.json"].data
+    if not 1 <= len(raw) <= 4*1024*1024:
+        raise ValueError("Owned bundle manifest budget")
+    def unique(pairs):
+        value = {}
+        for key,item in pairs:
+            if key in value:
+                raise ValueError("Duplicate engine manifest field")
+            value[key] = item
+        return value
+    manifest = json.loads(raw, object_pairs_hook=unique)
+    if not isinstance(manifest,dict) or set(manifest) != {"schema","engine","scope","files"} or type(manifest["schema"]) is not int or manifest["schema"] != 1 or manifest["engine"] != engine or manifest["scope"] != "development-owned-guest-tests-only" or not isinstance(manifest["files"],dict):
+        raise ValueError("Owned engine manifest mismatch")
+    # Build dependencies cannot replace the trusted fixed acceptance program or
+    # repository collectors and then certify themselves with a generated hash.
+    repository = HERE.parents[2]
+    sources = {"selftest.py": HERE.parent/"engines/selftest.py"}
+    if engine == "qiling":
+        sources["qiling_runner.py"] = repository/"workers/emulation/qiling_runner.py"
+    elif engine == "speakeasy":
+        sources.update({"collector.py": repository/"workers/re-analysis/collector.py", "owned_pe.py": repository/"workers/re-analysis/collector.test.py"})
+    for label, source in sources.items():
+        node = selected.get(prefix+label)
+        expected = source.read_bytes()
+        entry = manifest["files"].get(label,{})
+        if node is None or node.kind != "file" or node.data != expected or entry.get("sha256") != hashlib.sha256(expected).hexdigest():
+            raise ValueError("Owned acceptance source replaced")
+    return selected
+
+
 def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None):
     if not re.fullmatch("[0-9a-f]{40}", revision) or output.exists() or output.is_symlink():
         raise ValueError("New output and exact source revision required")
@@ -244,15 +280,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None
                 raise ValueError("Duplicate canonical runtime path")
             tree[resolved] = node
     if owned_engine:
-        prefix = "opt/cline-engine/"
-        selected = {path: node for path,node in original.items() if path.startswith(prefix)}
-        required = {prefix+"bundle.json", prefix+"engine", prefix+"selftest.py", prefix+"env/bin/python"}
-        if not required <= selected.keys() or selected[prefix+"engine"].data != (owned_engine+"\n").encode():
-            raise ValueError("Owned engine bundle absent or mismatched")
-        manifest = json.loads(selected[prefix+"bundle.json"].data)
-        if manifest.get("engine") != owned_engine or manifest.get("scope") != "development-owned-guest-tests-only":
-            raise ValueError("Owned engine manifest mismatch")
-        tree.update(selected)
+        tree.update(owned_bundle(original, owned_engine))
     tree.update({"lib": Node("symlink", 0o777, b"usr/lib"), "lib64": Node("symlink", 0o777, b"usr/lib64")})
     if "usr/local/bin/python3.13" not in tree or "usr/local/lib/libpython3.13.so.1.0" not in tree:
         raise ValueError("Pinned Python runtime absent")

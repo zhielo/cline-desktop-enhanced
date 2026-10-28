@@ -1135,3 +1135,11 @@ runtime integrity remain mandatory. Compilers/pip/build caches are not exported;
 no runtime image is published. These tests cannot promote application readiness,
 attest Hyper-V containment, change external worker configuration, install tools
 through Setup Center or satisfy unfinished privileged lifecycle/installed gates.
+
+Engine-image construction additionally compares the fixed guest acceptance script
+and applicable Python adapters with the exact repository source, rejecting a build
+dependency that replaces acceptance code and rehashes its own manifest. Guest
+receipts must bind the exact bundle digest to the actual ISO manifest. JNI JVM
+home/native extraction/temp paths are fresh per invocation; no global Java/JNA
+cache is used as fresh-state evidence. These integrity checks are not compiler or
+supply-chain attestation and do not certify arbitrary-target safety.
