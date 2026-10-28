@@ -139,6 +139,7 @@ fn owned() -> Result<(), i32> {
         std::fs::remove_dir(path).map_err(|_| 42)?;
     }
     installation_acceptance(&roots)?;
+    reservation_acceptance(&roots)?;
     let parent = paths[0].parent().ok_or(17)?.to_path_buf();
     drop(reopened);
     drop(roots);
@@ -263,6 +264,94 @@ fn installation_acceptance(
     }
     for path in &paths {
         std::fs::remove_dir(path).map_err(|_| 70)?;
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn reservation_acceptance(
+    roots: &cline_managed_inert_probe::windows_roots::SystemRoots,
+) -> Result<(), i32> {
+    use cline_managed_inert_probe::{
+        lifecycle::{Event, Phase},
+        windows_identity::{SystemIdentity, INSTALLATION_FILE, OWNERSHIP_FILE},
+    };
+    let owner = SystemIdentity::create(roots).map_err(|_| 80)?;
+    let job = roots.create_job().map_err(|_| 81)?;
+    let id = job.id().to_owned();
+    if owner.open_vm(&job).is_ok() {
+        return Err(82);
+    }
+    let record = owner
+        .reserve_vm(&job, &"35".repeat(32), &"57".repeat(16))
+        .map_err(|_| 83)?;
+    let expected = record.identity().clone();
+    if expected.installation != owner.installation()
+        || expected.job != id
+        || expected.vm_id.as_bytes()[14] != b'4'
+        || !b"89ab".contains(&expected.vm_id.as_bytes()[19])
+        || expected.image_sha256 != "35".repeat(32)
+        || expected.host_boot != "57".repeat(16)
+        || owner
+            .reserve_vm(&job, &"35".repeat(32), &"57".repeat(16))
+            .is_ok()
+        || owner.open_vm(&job).is_ok()
+    {
+        return Err(84);
+    }
+    record.revalidate().map_err(|_| 85)?;
+    let mut store = record.create_store().map_err(|_| 86)?;
+    store.advance(Event::VmCreated {}).map_err(|_| 87)?;
+    drop(store);
+    drop(record);
+    drop(owner);
+    let owner = SystemIdentity::open(roots).map_err(|_| 88)?;
+    let record = owner.open_vm(&job).map_err(|_| 89)?;
+    if record.identity() != &expected {
+        return Err(90);
+    }
+    let mut store = record.open_store().map_err(|_| 91)?;
+    if store.journal().phase() != Phase::Created || !store.journal().recovery_required() {
+        return Err(92);
+    }
+    store.advance(Event::RecoveryRequested {}).map_err(|_| 93)?;
+    if store.journal().phase() != Phase::StopRequired {
+        return Err(94);
+    }
+    drop(store);
+    drop(record);
+    let record_path = roots.job_parent().join(&id).join(OWNERSHIP_FILE);
+    let original = std::fs::read(&record_path).map_err(|_| 95)?;
+    let mut value: serde_json::Value = serde_json::from_slice(&original).map_err(|_| 96)?;
+    value["mac"] = "00".repeat(32).into();
+    // Fixture-only mutation of this exact closed owned file; production has no repair API.
+    std::fs::write(&record_path, serde_json::to_vec(&value).map_err(|_| 97)?).map_err(|_| 98)?;
+    if owner.open_vm(&job).err() != Some("VM reservation authentication failed") {
+        return Err(99);
+    }
+    std::fs::write(&record_path, &original).map_err(|_| 100)?;
+    let record = owner.open_vm(&job).map_err(|_| 101)?;
+    record.revalidate().map_err(|_| 102)?;
+    drop(record);
+    drop(owner);
+    let installation = roots
+        .anchor_parent()
+        .parent()
+        .ok_or(103)?
+        .join(INSTALLATION_FILE);
+    let paths = [
+        roots.journal_parent().join(&id),
+        roots.anchor_parent().join(&id),
+        roots.job_parent().join(&id),
+    ];
+    drop(job);
+    std::fs::remove_file(record_path).map_err(|_| 104)?;
+    std::fs::remove_file(installation).map_err(|_| 105)?;
+    for path in &paths[..2] {
+        std::fs::remove_file(path.join("recovery.sqlite")).map_err(|_| 106)?;
+    }
+    for path in &paths {
+        std::fs::remove_dir(path).map_err(|_| 107)?;
     }
     Ok(())
 }

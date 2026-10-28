@@ -331,3 +331,22 @@ This protects ordinary-user access, not rollback by trusted administrators or
 SYSTEM. It is not caller authentication, a service, actual VM ownership/image
 records, installed Hyper-V acceptance or the promised Setup Center pack. Existing
 Unicorn and external worker behavior are unchanged.
+
+### Protected VM reservation intent (development only)
+
+`SystemIdentity::reserve_vm` generates the VM UUIDv4 using OS entropy and stores
+one immutable, strict versioned `ownership.json` under the protected job leaf.
+A separate HMAC domain binds every installation/job/VM/image/original-boot claim.
+`open_vm` reads only that fixed file, validates bounded schema and authentication,
+and never accepts an external VM identifier, path or automatic repair request.
+The borrowing record pins exclusive protected storage; its derived recovery store
+also checks the retained record bytes before transitions. Native SYSTEM acceptance
+covers handle teardown/reopen, persisted identity, explicit recovery and tamper
+refusal, with only exact owned fixture cleanup.
+
+This record is **reservation intent, not actual VM ownership**. Image and boot
+inputs are claims that future trusted observers must establish; no VM is created,
+queried, stopped or authorized here. Live Hyper-V factory/configuration checks,
+authenticated service, reviewed distributable pack and Setup Center integration
+remain unimplemented. Ordinary-user protection is not administrator rollback
+resistance or readiness attestation.

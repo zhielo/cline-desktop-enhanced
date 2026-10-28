@@ -445,41 +445,15 @@ impl SystemRoots {
         SystemJob::access(self, job.into(), false)
     }
     pub(crate) fn installation_file(&self, create: bool) -> Result<std::fs::File> {
-        use windows_sys::Win32::{
-            Foundation::{GENERIC_READ, GENERIC_WRITE},
-            Storage::FileSystem::{CREATE_NEW, FILE_FLAG_WRITE_THROUGH},
-        };
         self.revalidate()?;
         let path = self
             .anchor_parent()
             .parent()
             .ok_or("Fixed installation parent required")?
             .join(crate::windows_identity::INSTALLATION_FILE);
-        let path = wide(path.as_os_str())?;
-        let descriptor = Descriptor::new("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)")?;
-        let attributes = SECURITY_ATTRIBUTES {
-            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: descriptor.0 .0,
-            bInheritHandle: 0,
-        };
-        let raw = unsafe {
-            CreateFileW(
-                path.as_ptr(),
-                GENERIC_READ | READ_CONTROL | if create { GENERIC_WRITE } else { 0 },
-                0,
-                if create { &attributes } else { null() },
-                if create { CREATE_NEW } else { OPEN_EXISTING },
-                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH,
-                0,
-            )
-        };
-        if raw == INVALID_HANDLE_VALUE {
-            return Err("Exclusive protected installation record required; inspect retained state");
-        }
-        let file = unsafe { std::fs::File::from_raw_handle(raw as _) };
-        validate_system_file(&file, create)?;
-        Ok(file)
+        protected_regular_file(&path, create)
     }
+
     pub fn journal_parent(&self) -> &Path {
         &self.leaves[0].0
     }
@@ -492,6 +466,38 @@ impl SystemRoots {
     pub fn image_parent(&self) -> &Path {
         &self.leaves[3].0
     }
+}
+
+fn protected_regular_file(path: &Path, create: bool) -> Result<std::fs::File> {
+    use windows_sys::Win32::{
+        Foundation::{GENERIC_READ, GENERIC_WRITE},
+        Storage::FileSystem::{CREATE_NEW, FILE_FLAG_WRITE_THROUGH},
+    };
+    require_system()?;
+    let path = wide(path.as_os_str())?;
+    let descriptor = Descriptor::new("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)")?;
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0 .0,
+        bInheritHandle: 0,
+    };
+    let raw = unsafe {
+        CreateFileW(
+            path.as_ptr(),
+            GENERIC_READ | READ_CONTROL | if create { GENERIC_WRITE } else { 0 },
+            0,
+            if create { &attributes } else { null() },
+            if create { CREATE_NEW } else { OPEN_EXISTING },
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH,
+            0,
+        )
+    };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err("Exclusive protected installation record required; inspect retained state");
+    }
+    let file = unsafe { std::fs::File::from_raw_handle(raw as _) };
+    validate_system_file(&file, create)?;
+    Ok(file)
 }
 
 pub(crate) fn validate_system_file(file: &std::fs::File, allow_empty: bool) -> Result<u64> {
@@ -545,6 +551,15 @@ impl<'roots> SystemJob<'roots> {
             id,
             directories,
         })
+    }
+    pub(crate) fn vm_record_file(&self, create: bool) -> Result<std::fs::File> {
+        self.revalidate()?;
+        protected_regular_file(
+            &self.directories[2]
+                .0
+                .join(crate::windows_identity::OWNERSHIP_FILE),
+            create,
+        )
     }
     pub fn id(&self) -> &str {
         &self.id

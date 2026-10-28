@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/windows_identity.rs",markers:["pub const OWNERSHIP_FILE", "fn ownership_mac", "pub fn reserve_vm", "pub fn open_vm", "VM reservation authentication failed", "reservations_bind_all_claims_and_reject_ambiguous_schema", "record: Option<(&'installation File, [u8; 32])>"]},
+ {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["reservation_acceptance(&roots)?", "record.create_store()", "record.open_store()", "VM reservation authentication failed", ".reserve_vm(&job, &\"35\".repeat(32), &\"57\".repeat(16))"]},
+
  {path:"workers/managed-emulation/image/build_image.py",markers:["Owned acceptance source replaced", "Duplicate engine manifest field", "generatedInitSha256"]},
  {path:"workers/managed-emulation/engines/selftest.py",markers:["verify_bundle()", "CLINE_MANAGED_ENGINE_OWNED_V1", "Owned runtime changed", "unsupported-syscall", "GetTickCount", "-Djna.tmpdir="]},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["Exact JNI dependency closure required", "Engine runtime byte budget", "--compress=2", "strip", "development-owned-guest-tests-only"]},
