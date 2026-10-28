@@ -29,7 +29,7 @@ jobs:
       - name: Select pinned native compiler
         shell: bash
         run: rustup toolchain install 1.85.1 --profile minimal --component rustfmt,clippy
-      - name: Native locked protocol and process tests
+      - name: Native locked protocol, lifecycle and process tests
         run: cargo +1.85.1 test --locked --manifest-path workers/managed-emulation/host/Cargo.toml
       - name: Native formatting
         run: cargo +1.85.1 fmt --manifest-path workers/managed-emulation/host/Cargo.toml -- --check
@@ -39,9 +39,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         with:
           python-version: '3.13'
-      - name: Guest protocol and owned socketpair regressions
+      - name: Guest protocol, credential-path and owned socketpair regressions
         if: matrix.os == 'ubuntu-latest'
         run: python -B workers/managed-emulation/probe_protocol_test.py
       - name: Record scope
         shell: bash
-        run: echo 'Protocol/codec/process tests only. No VM lifecycle, Hyper-V connection, framework installation or containment acceptance.'
+        run: echo 'Protocol/process, lifecycle-reducer and credential-path tests only. No actual VM lifecycle, durable recovery, Hyper-V connection, framework installation or containment acceptance.'

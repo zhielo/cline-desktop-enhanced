@@ -30,10 +30,53 @@ There are intentionally no user setup instructions here.
   Accept plus I/O has an absolute 30-second maximum, further bounded by the
   boot credential's expiry. It requires a root-owned, mode-0600, non-linked
   regular boot record at the fixed private `/run/cline-managed-probe/boot.json`.
-  The image must protect that record's parent directories too.
+  The guest pins `/`, `/run` and its private directory using descriptor-relative
+  no-follow opens. All parents must be root-owned and not group/world-writable;
+  the private directory must be mode 0700. The record must have one hard link
+  and unchanged identity/ownership/mode/size/timestamps across its bounded read.
 - No target bytes, arbitrary paths, scripts, commands, engine imports, file
   transfers, subprocess launches or network access operations are implemented.
   Imports perform no probe. Errors never echo private input or raw OS errors.
+
+## Lifecycle recovery core (development only)
+
+`host/src/lifecycle.rs` now supplies a strict, bounded, authenticated lifecycle
+journal reducer. This is **not** the privileged broker, a persistence backend,
+a VM factory, or a certificate that an observation actually occurred.
+
+- Each entry binds the installation/job, exact VM ID, image digest and original
+  host-boot identity, sequence, previous MAC and typed event. HMAC uses a separate
+  lifecycle domain. Unknown/duplicate fields, unsupported versions, mutations,
+  reordering, foreign identities and invalid transitions fail closed.
+- Restore requires an **independently retained trusted checkpoint**. A valid
+  prefix plus its own earlier checkpoint is not proof of freshness. The future
+  broker must protect and transactionally retain the journal and checkpoint;
+  reading the checkpoint from the same untrusted bytes defeats rollback checks.
+- A returned candidate is immutable with respect to the previous journal. The
+  broker must durably commit it **before** the corresponding effect. No host
+  operation is implemented or authorized by appending an event.
+- Every nonterminal reopen requires explicit recovery, even if the last record
+  said stopped or removal requested. Recovery permits only a stop/inspect path,
+  not automatic creation, boot, target execution, approval or replay. Removal
+  requires a new exact-VM stop observation after a stop intent. A reboot, helper
+  exit or missing PID does not synthesize that observation.
+- The fixed inert result is revalidated against the active challenge. It cannot
+  promote isolation or engine readiness. Recording it does not independently
+  prove transport authentication: the actual trusted probe/broker must verify
+  the real exchange first, not construct the public fixture response.
+- The single-job state machine permits one boot only and retains public boot
+  session/challenge identifiers, never boot keys, target bytes or shell commands.
+  Cross-job freshness, entropy and key provisioning remain broker requirements.
+  The original boot identity is historical binding, not current boot attestation.
+- Limits are 128 entries and 64 KiB. Exhaustion/mismatch remains unresolved and
+  blocks further transitions; old events/checkpoints are never silently pruned
+  to make a job look complete. Durable repair/compaction is not implemented.
+
+The initial exact VM identity must come from a trusted VM factory/ownership
+record. This reducer does not implement crash-safe VM creation/discovery or
+establish ownership from a supplied GUID. Its event observations must come from
+fresh independently checked Hyper-V state, not client assertions. Nothing is
+connected to Setup Center or changes the installed application's readiness.
 
 ## Mandatory unfinished lifecycle integration
 
@@ -72,7 +115,10 @@ cargo +1.85.1 test --locked --manifest-path workers/managed-emulation/host/Cargo
 cargo +1.85.1 fmt --manifest-path workers/managed-emulation/host/Cargo.toml -- --check
 ```
 
-Public fixture vectors contain public test credentials only. Python socketpair
+Public fixture vectors contain public test credentials only. Python descriptor
+fixtures exercise real no-follow/FIFO/hard-link behavior with synthesized root
+ownership (unprivileged CI is not root/VM attestation). Journal tests establish
+state-machine/authentication behavior, not actual durable recovery. Python socketpair
 and native codec/process tests establish protocol behavior, **not** Hyper-V
 communication, Windows 10 compatibility, guest isolation or engine readiness.
 The dedicated CI workflow builds/tests the native helper on Linux and Windows;

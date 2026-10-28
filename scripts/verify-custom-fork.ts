@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/lifecycle.rs",markers:["cline-managed-lifecycle/v1", "Journal checkpoint mismatch", "Explicit recovery required; no automatic replay", "Reservation must be first", "MAX_EVENTS: usize = 128", "verify_response(response.as_bytes(), challenge)?"]},
+ {path:"workers/managed-emulation/host/tests/lifecycle.rs",markers:["reopened_work_is_fenced_even_when_previous_stop_was_recorded", "independent_checkpoint_detects_valid_prefix_rollback_and_tail_deletion", "every_event_rejects_unknown_fields_including_empty_struct_variants"]},
+ {path:"workers/managed-emulation/guest_probe.py",markers:["_open_private_boot_record", "dir_fd=descriptor", "Protected root-owned boot directory required", "info.st_nlink != 1", "Boot record changed"]},
  {path:"workers/managed-emulation/probe_protocol.py",markers:["cline-managed-inert-probe/v1", "hmac.compare_digest", "Only the inert owned probe is implemented", '"vmIsolation": "not-attested"']},
  {path:"workers/managed-emulation/guest_probe.py",markers:["socket.AF_VSOCK", "socket.VMADDR_CID_HOST", "serve_one(connection", "Private root-owned boot record required"]},
  {path:"workers/managed-emulation/host/src/lib.rs",markers:["verify_slice", "Concrete child VM identity required", "not-attested", "not-tested"]},

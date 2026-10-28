@@ -5,29 +5,48 @@ or AF_VSOCK support is a hard failure. The future image/lifecycle broker owns th
 private boot credential and must rotate it for every disposable guest.
 """
 import os
+from contextlib import ExitStack
 import socket
 import stat
 import sys
 import time
-from pathlib import Path
 
 from probe_protocol import ProbeRejected, exact_hex, parse_json, serve_one
 
 PORT = 35555
-CONFIG = Path("/run/cline-managed-probe/boot.json")
 
 
-def read_boot_config(path=CONFIG, now=None):
-    # Fixed production path. The argument exists for isolated owned unit fixtures.
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-    descriptor = os.open(path, flags)
+def _open_private_boot_record():
+    # Pin every parent by descriptor. O_NOFOLLOW on the leaf alone does not
+    # prevent a linked/writable parent from redirecting the boot credential.
+    if not all(hasattr(os, name) for name in ("O_DIRECTORY", "O_NOFOLLOW", "O_NONBLOCK")):
+        raise ProbeRejected("Safe credential path primitives required")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_NONBLOCK
+    with ExitStack() as owned:
+        descriptor = None
+        for component, private in (("/", False), ("run", False), ("cline-managed-probe", True)):
+            current = os.open(component, directory_flags, dir_fd=descriptor)
+            owned.callback(os.close, current)
+            info = os.fstat(current)
+            mode = stat.S_IMODE(info.st_mode)
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0
+                    or mode & 0o022 or (private and mode != 0o700)):
+                raise ProbeRejected("Protected root-owned boot directory required")
+            descriptor = current
+        return os.open("boot.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
+
+
+def read_boot_config(now=None):
+    # No caller-provided path, environment override, symlink traversal or fallback.
+    descriptor = _open_private_boot_record()
     try:
         info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600 or not 1 <= info.st_size <= 1024:
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1 or not 1 <= info.st_size <= 1024:
             raise ProbeRejected("Private root-owned boot record required")
         data = os.read(descriptor, 1025)
         after = os.fstat(descriptor)
-        if len(data) != info.st_size or (info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+        identity_fields = ("st_dev", "st_ino", "st_mode", "st_uid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if len(data) != info.st_size or any(getattr(info, field) != getattr(after, field) for field in identity_fields):
             raise ProbeRejected("Boot record changed")
     finally:
         os.close(descriptor)

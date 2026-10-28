@@ -195,3 +195,6 @@ pub fn fixture_response(challenge: &str) -> Value {
         "engineReadiness": "not-tested"
     })
 }
+
+/// Development lifecycle reducer; not a host operation or readiness certificate.
+pub mod lifecycle;
