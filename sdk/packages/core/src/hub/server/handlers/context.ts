@@ -204,6 +204,7 @@ export async function readHubSessionRecord(
 export async function readCoreSessionSnapshot(
 	ctx: HubTransportContext,
 	sessionId: string,
+	includeToolExposure = false,
 ): Promise<CoreSessionSnapshot | undefined> {
 	const session = await ctx.sessionHost.getSession(sessionId);
 	if (!session) {
@@ -212,6 +213,13 @@ export async function readCoreSessionSnapshot(
 	const usageSummary = await ctx.sessionHost.getAccumulatedUsage?.(sessionId);
 	return createCoreSessionSnapshot({
 		session,
+		...(includeToolExposure
+			? {
+					toolExposure: ctx.sessionHost.readSessionToolExposure?.(
+						sessionId,
+					) ?? { status: "unavailable" as const },
+				}
+			: {}),
 		usage: usageSummary?.usage,
 		aggregateUsage: usageSummary?.aggregateUsage,
 	});

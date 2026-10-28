@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CapabilitiesView } from "./capabilities-view";
 import { SETTINGS_SECTIONS } from "./sections";
 import { AGENDA_UI_ENABLED } from "@/lib/feature-flags";
 import { AGENDA_TODO_ENABLED } from "@cline/shared/browser";
+
+vi.mock("@/lib/desktop-client", () => ({ desktopClient: { invoke: vi.fn() } }));
 
 describe("capability inventory", () => {
 	it("keeps navigation and agent availability policy aligned", () => {

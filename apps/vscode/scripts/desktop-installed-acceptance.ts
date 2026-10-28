@@ -272,17 +272,23 @@ export async function openInstalledSavedSession(page: Pick<Page, "getByRole">, t
 /** Read the real owning UI's approval cards. A second authenticated RPC socket
  * is intentionally not allowed to read or answer another connection's reviews. */
 export async function visibleOwnedTriageApprovals(page: Pick<Page, "getByRole">) {
- const cards = page.getByRole("region", {name:"reverse_engineer", exact:true})
- const pending: Array<{requestId:string; toolName:string; input:Record<string,unknown>; approve:()=>Promise<void>}> = []
- for(let i=0;i<await cards.count();i++) {
-  const card=cards.nth(i)
-  const text=await card.textContent()
-  const requestId=text?.match(/Request ([a-f0-9-]{36})(?:\s|·)/i)?.[1]
-  if(!requestId)throw new Error("Visible triage approval lacks a request identity")
-  const input=JSON.parse(await card.locator("pre").innerText())
-  pending.push({requestId,toolName:"reverse_engineer",input,approve:()=>card.getByRole("button",{name:"Approve",exact:true}).click()})
- }
- return pending
+	const cards = page.getByRole("region", { name: "reverse_engineer", exact: true })
+	const pending: Array<{ requestId: string; toolName: string; input: Record<string, unknown>; approve: () => Promise<void> }> =
+		[]
+	for (let i = 0; i < (await cards.count()); i++) {
+		const card = cards.nth(i)
+		const text = await card.textContent()
+		const requestId = text?.match(/Request ([a-f0-9-]{36})(?:\s|·)/i)?.[1]
+		if (!requestId) throw new Error("Visible triage approval lacks a request identity")
+		const input = JSON.parse(await card.locator("pre").innerText())
+		pending.push({
+			requestId,
+			toolName: "reverse_engineer",
+			input,
+			approve: () => card.getByRole("button", { name: "Approve", exact: true }).click(),
+		})
+	}
+	return pending
 }
 
 /** Read-only restart check. Never reconstruct or inject a lost device reference. */
@@ -936,15 +942,20 @@ ConvertTo-Json -InputObject @($rows) -Compress
 	}
 
 	async function rpc<T>(page: Page, command: string, args: Record<string, unknown> = {}): Promise<T> {
-		return recordInstalledRpc<T>(command, acceptanceAction,
-			() => waitForInstalledBackendEndpoint(() =>
-				page.evaluate(async () => {
-					const native = (window as unknown as {
-						__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> }
-					}).__TAURI_INTERNALS__
-					return await native.invoke("get_desktop_backend_endpoint")
-				}),
-			),
+		return recordInstalledRpc<T>(
+			command,
+			acceptanceAction,
+			() =>
+				waitForInstalledBackendEndpoint(() =>
+					page.evaluate(async () => {
+						const native = (
+							window as unknown as {
+								__TAURI_INTERNALS__: { invoke: (name: string) => Promise<string> }
+							}
+						).__TAURI_INTERNALS__
+						return await native.invoke("get_desktop_backend_endpoint")
+					}),
+				),
 			async (endpoint) => (await page.evaluate(installedBrowserRpc, { command, args, endpoint })) as T,
 		)
 	}
@@ -2047,62 +2058,133 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		if (!(await page.getByRole("button", { name: "Test IDA integration (optional)", exact: true }).isVisible()))
 			throw new Error("Installed IDA test is not clearly optional")
 		stages.push("installed-setup-processor-remount-and-optional-test-passed")
-  const ghidraHome=process.env.GHIDRA_HOME;
-  if(!ghidraHome)throw new Error("Installed Ghidra acceptance requires checksum-pinned fixture installation");
-  await page.getByLabel("Ghidra acceptance architecture",{exact:true}).selectOption("arm64");
-  await settings(page,"Analysis environment");
-  await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
-  if(await page.getByLabel("Ghidra acceptance architecture",{exact:true}).inputValue()!=="arm64")throw new Error("Installed Ghidra profile selection was not retained");
-  await page.getByLabel("Ghidra installation folder",{exact:true}).fill(ghidraHome);
-  page.once("dialog",async dialog=>{if(dialog.message().includes("test all three owned profiles sequentially"))await dialog.accept();else await dialog.dismiss();});
-  await page.getByRole("button",{name:"Test all Ghidra profiles",exact:true}).click();
-  const ghidraResults=page.getByRole("list",{name:"Ghidra owned profile results",exact:true});
-  for(const architecture of ["x86_64","arm32","arm64"])await ghidraResults.getByText(`${architecture}: passed`,{exact:true}).waitFor({timeout:300000});
-  const ghidraSetup=await rpc<{ghidra:{status:string;profiles:Array<{architecture:string;status:string}>}}>(page,"setup_center_status",{environmentId:"local"});
-  if(ghidraSetup.ghidra.status!=="Ready for tested profiles"||ghidraSetup.ghidra.profiles.length!==3||!["x86_64","arm32","arm64"].every(a=>ghidraSetup.ghidra.profiles.filter(p=>p.architecture===a&&p.status==="passed").length===1))throw new Error("Installed Ghidra did not verify each owned architecture");
-  await writeFile(join(evidence,"ghidra-profile-readiness.json"),JSON.stringify(ghidraSetup.ghidra,null,2));
-  stages.push("installed-ghidra-three-owned-architectures-java-no-target-execution-passed");
+		const ghidraHome = process.env.GHIDRA_HOME
+		if (!ghidraHome) throw new Error("Installed Ghidra acceptance requires checksum-pinned fixture installation")
+		await page.getByLabel("Ghidra acceptance architecture", { exact: true }).selectOption("arm64")
+		await settings(page, "Analysis environment")
+		await page.getByRole("button", { name: "Open Setup Center", exact: true }).click()
+		if ((await page.getByLabel("Ghidra acceptance architecture", { exact: true }).inputValue()) !== "arm64")
+			throw new Error("Installed Ghidra profile selection was not retained")
+		await page.getByLabel("Ghidra installation folder", { exact: true }).fill(ghidraHome)
+		page.once("dialog", async (dialog) => {
+			if (dialog.message().includes("test all three owned profiles sequentially")) await dialog.accept()
+			else await dialog.dismiss()
+		})
+		await page.getByRole("button", { name: "Test all Ghidra profiles", exact: true }).click()
+		const ghidraResults = page.getByRole("list", { name: "Ghidra owned profile results", exact: true })
+		for (const architecture of ["x86_64", "arm32", "arm64"])
+			await ghidraResults.getByText(`${architecture}: passed`, { exact: true }).waitFor({ timeout: 300000 })
+		const ghidraSetup = await rpc<{ ghidra: { status: string; profiles: Array<{ architecture: string; status: string }> } }>(
+			page,
+			"setup_center_status",
+			{ environmentId: "local" },
+		)
+		if (
+			ghidraSetup.ghidra.status !== "Ready for tested profiles" ||
+			ghidraSetup.ghidra.profiles.length !== 3 ||
+			!["x86_64", "arm32", "arm64"].every(
+				(a) => ghidraSetup.ghidra.profiles.filter((p) => p.architecture === a && p.status === "passed").length === 1,
+			)
+		)
+			throw new Error("Installed Ghidra did not verify each owned architecture")
+		await writeFile(join(evidence, "ghidra-profile-readiness.json"), JSON.stringify(ghidraSetup.ghidra, null, 2))
+		stages.push("installed-ghidra-three-owned-architectures-java-no-target-execution-passed")
 
-  // Controlled retained native-job fixture: real current OS identity, not a real reboot.
-  // The installed UI MUST refuse recovery and leave every admission byte unchanged.
-  const recoveryRoot=join(root,"data","setup-center"), recoveryAdmission=join(recoveryRoot,"setup-admission.json");
-  const installedJob=await rpc<{job:{status:string}}>(page,"setup_center_job_status",{environmentId:"local"});
-  if(!["completed","failed"].includes(installedJob.job.status))throw new Error("Setup must be terminal before owned recovery refusal fixture");
-  try { await stat(recoveryAdmission); throw new Error("Existing setup admission must not be replaced by acceptance"); }
-  catch(error){ if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error; }
-  const actualBoot=await readSetupBootIdentity();
-  if(!actualBoot)throw new Error("Installed recovery acceptance needs actual Windows boot identity evidence");
-  const recoveryId=randomUUID(), recoveryRecord=join(recoveryRoot,`job-${recoveryId}.json`), latestRecord=join(recoveryRoot,"latest-job.json");
-  const previousLatest=await readFile(latestRecord);
-  const fixtureJob={id:recoveryId,command:"setup_center_test_ghidra",identity:"owned-installed-recovery-fixture",hostPid:1,status:"running",phase:"Owned same-boot retained lease fixture",startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),bootIdentity:actualBoot,recoveryScope:"native-host-only/v1"};
-  const fixtureAdmission=JSON.stringify({id:recoveryId,hostPid:1,bootIdentity:actualBoot,recoveryScope:"native-host-only/v1"});
-  let wroteRecoveryRecord=false,wroteRecoveryLease=false,wroteRecoveryLatest=false;
-  let recoveryFixtureFailure: unknown;
-  try {
-   await writeFile(recoveryRecord,JSON.stringify(fixtureJob),{flag:"wx"});wroteRecoveryRecord=true;
-   await writeFile(recoveryAdmission,fixtureAdmission,{flag:"wx"});wroteRecoveryLease=true;
-   await writeFile(latestRecord,JSON.stringify(fixtureJob));wroteRecoveryLatest=true;
-   await settings(page,"Analysis environment");await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
-   const recoveryPanel=page.getByRole("region",{name:"Interrupted setup recovery",exact:true});
-   await recoveryPanel.getByRole("button",{name:"Check reboot recovery",exact:true}).click();
-   await recoveryPanel.getByText("Same OS boot;",{exact:false}).waitFor({timeout:15000});
-   if(await recoveryPanel.getByRole("button",{name:"Close interrupted setup after reboot",exact:true}).count())throw new Error("Installed UI offered same-boot recovery");
-   if(await readFile(recoveryAdmission,"utf8")!==fixtureAdmission)throw new Error("Same-boot inspection changed admission");
-   if(JSON.parse(await readFile(latestRecord,"utf8")).status!=="running")throw new Error("Read-only recovery inspection mutated the retained job");
-   await writeFile(join(evidence,"setup-recovery-refusal.json"),JSON.stringify({case:"same-boot-native-job",status:"blocked",osIdentity:"actual-Windows-query",actualRebootTested:false,admissionUnchanged:true,operationReplayed:false},null,2));
-   stages.push("installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed");
-  } catch(error) { recoveryFixtureFailure=error; }
-  try {
-   if(wroteRecoveryLease){if(await readFile(recoveryAdmission,"utf8")!==fixtureAdmission)throw new Error("Owned recovery fixture lease changed; do not remove another operation");await unlink(recoveryAdmission);}
-   if(wroteRecoveryLatest)await writeFile(latestRecord,previousLatest);
-   if(wroteRecoveryRecord)await unlink(recoveryRecord);
-  } catch(cleanupError) {
-   throw new AggregateError(recoveryFixtureFailure?[recoveryFixtureFailure,cleanupError]:[cleanupError],"Owned recovery fixture cleanup failed");
-  }
-  if(recoveryFixtureFailure)throw recoveryFixtureFailure;
-  await settings(page,"Analysis environment");await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
-
-
+		// Controlled retained native-job fixture: real current OS identity, not a real reboot.
+		// The installed UI MUST refuse recovery and leave every admission byte unchanged.
+		const recoveryRoot = join(root, "data", "setup-center"),
+			recoveryAdmission = join(recoveryRoot, "setup-admission.json")
+		const installedJob = await rpc<{ job: { status: string } }>(page, "setup_center_job_status", { environmentId: "local" })
+		if (!["completed", "failed"].includes(installedJob.job.status))
+			throw new Error("Setup must be terminal before owned recovery refusal fixture")
+		try {
+			await stat(recoveryAdmission)
+			throw new Error("Existing setup admission must not be replaced by acceptance")
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+		}
+		const actualBoot = await readSetupBootIdentity()
+		if (!actualBoot) throw new Error("Installed recovery acceptance needs actual Windows boot identity evidence")
+		const recoveryId = randomUUID(),
+			recoveryRecord = join(recoveryRoot, `job-${recoveryId}.json`),
+			latestRecord = join(recoveryRoot, "latest-job.json")
+		const previousLatest = await readFile(latestRecord)
+		const fixtureJob = {
+			id: recoveryId,
+			command: "setup_center_test_ghidra",
+			identity: "owned-installed-recovery-fixture",
+			hostPid: 1,
+			status: "running",
+			phase: "Owned same-boot retained lease fixture",
+			startedAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+			bootIdentity: actualBoot,
+			recoveryScope: "native-host-only/v1",
+		}
+		const fixtureAdmission = JSON.stringify({
+			id: recoveryId,
+			hostPid: 1,
+			bootIdentity: actualBoot,
+			recoveryScope: "native-host-only/v1",
+		})
+		let wroteRecoveryRecord = false,
+			wroteRecoveryLease = false,
+			wroteRecoveryLatest = false
+		let recoveryFixtureFailure: unknown
+		try {
+			await writeFile(recoveryRecord, JSON.stringify(fixtureJob), { flag: "wx" })
+			wroteRecoveryRecord = true
+			await writeFile(recoveryAdmission, fixtureAdmission, { flag: "wx" })
+			wroteRecoveryLease = true
+			await writeFile(latestRecord, JSON.stringify(fixtureJob))
+			wroteRecoveryLatest = true
+			await settings(page, "Analysis environment")
+			await page.getByRole("button", { name: "Open Setup Center", exact: true }).click()
+			const recoveryPanel = page.getByRole("region", { name: "Interrupted setup recovery", exact: true })
+			await recoveryPanel.getByRole("button", { name: "Check reboot recovery", exact: true }).click()
+			await recoveryPanel.getByText("Same OS boot;", { exact: false }).waitFor({ timeout: 15000 })
+			if (await recoveryPanel.getByRole("button", { name: "Close interrupted setup after reboot", exact: true }).count())
+				throw new Error("Installed UI offered same-boot recovery")
+			if ((await readFile(recoveryAdmission, "utf8")) !== fixtureAdmission)
+				throw new Error("Same-boot inspection changed admission")
+			if (JSON.parse(await readFile(latestRecord, "utf8")).status !== "running")
+				throw new Error("Read-only recovery inspection mutated the retained job")
+			await writeFile(
+				join(evidence, "setup-recovery-refusal.json"),
+				JSON.stringify(
+					{
+						case: "same-boot-native-job",
+						status: "blocked",
+						osIdentity: "actual-Windows-query",
+						actualRebootTested: false,
+						admissionUnchanged: true,
+						operationReplayed: false,
+					},
+					null,
+					2,
+				),
+			)
+			stages.push("installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed")
+		} catch (error) {
+			recoveryFixtureFailure = error
+		}
+		try {
+			if (wroteRecoveryLease) {
+				if ((await readFile(recoveryAdmission, "utf8")) !== fixtureAdmission)
+					throw new Error("Owned recovery fixture lease changed; do not remove another operation")
+				await unlink(recoveryAdmission)
+			}
+			if (wroteRecoveryLatest) await writeFile(latestRecord, previousLatest)
+			if (wroteRecoveryRecord) await unlink(recoveryRecord)
+		} catch (cleanupError) {
+			throw new AggregateError(
+				recoveryFixtureFailure ? [recoveryFixtureFailure, cleanupError] : [cleanupError],
+				"Owned recovery fixture cleanup failed",
+			)
+		}
+		if (recoveryFixtureFailure) throw recoveryFixtureFailure
+		await settings(page, "Analysis environment")
+		await page.getByRole("button", { name: "Open Setup Center", exact: true }).click()
 
 		const triagePanel = page.getByRole("region", { name: "Binary Triage Pack readiness", exact: true })
 		await triagePanel.waitFor({ timeout: 30000 })
@@ -3556,28 +3638,122 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			}
 			if (!crossScopeDenied) throw new Error("Runtime plan artifact handle crossed sessions")
 			stages.push("installed-runtime-plan-owned-identity-no-attach-no-execute-passed")
-   // New engines stay optional: installed product proves planning and fail-closed
-   // unavailable workers. Real modeled execution is a separate Linux engine CI gate.
-   for(const [engine,architecture] of [["qiling","x86_64"],["qiling","arm32"],["qiling","arm64"],["unidbg","arm32"],["unidbg","arm64"],["rnidbg","arm64"]]){
-    const target=join(workspace,`owned-${engine}-${architecture}-admission.elf`),bytes=Buffer.alloc(128),bits=architecture==="arm32"?32:64;
-    Buffer.from(bits===32?"7f454c46010101":"7f454c46020101","hex").copy(bytes);bytes.writeUInt16LE(engine==="qiling"?2:3,16);bytes.writeUInt16LE(architecture==="x86_64"?62:architecture==="arm32"?40:183,18);
-    if(bits===64){bytes.writeBigUInt64LE(0x1000n,24);bytes.writeBigUInt64LE(64n,32);bytes.writeUInt16LE(56,54);bytes.writeUInt16LE(1,56);bytes.writeUInt32LE(1,64);bytes.writeUInt32LE(5,68);bytes.writeBigUInt64LE(0x1000n,80);bytes.writeBigUInt64LE(128n,96);bytes.writeBigUInt64LE(128n,104);}
-    else{bytes.writeUInt32LE(0x1000,24);bytes.writeUInt32LE(52,28);bytes.writeUInt16LE(32,42);bytes.writeUInt16LE(1,44);bytes.writeUInt32LE(1,52);bytes.writeUInt32LE(0x1000,60);bytes.writeUInt32LE(128,68);bytes.writeUInt32LE(128,72);bytes.writeUInt32LE(5,76);}
-    await writeFile(target,bytes);
-    const handle=await rpc<{id:string}>(page,"open_binary",{...triageScope,input:{target}});
-    const options={engine,architecture,scenario:{kind:engine==="qiling"?"entry":"initialize"},instruction_limit:10000};
-    const draft=await rpc<{id:string;requestHash:string;requirements:string[]}>(page,"plan_emulation",{...triageScope,input:{artifactId:handle.id,options,phase:"prepare"}});
-    const consent=await rpc<{executionToken:string}>(page,"approve_analysis_task",{...triageScope,cwd:workspace,planId:draft.id,requestHash:draft.requestHash,requirements:draft.requirements});
-    const planned=await rpc<{result:{effect:string;compatibility:string;workerConnected:boolean;observedExecution:boolean;approval:{granted:boolean};nextRequest:Record<string,unknown>}}>(page,"plan_emulation",{...triageScope,input:{artifactId:handle.id,options,phase:"run",planId:draft.id,executionToken:consent.executionToken}});
-    if(planned.result.nextRequest.engine!==engine||planned.result.nextRequest.architecture!==architecture||planned.result.effect!=="plan-only"||planned.result.compatibility!=="admission-only"||planned.result.workerConnected!==false||planned.result.observedExecution!==false||planned.result.approval.granted!==false||(await readFile(target)).compare(bytes)!==0)throw new Error("Installed emulation planner widened authority or changed source");
-    let denied=false;try{await rpc(page,"prepare_analysis_task",{...triageScope,cwd:workspace,kind:"dynamic",request:planned.result.nextRequest});}catch(e){if(!String(e).includes("Runtime/Hybrid"))throw e;denied=true;}
-    if(!denied)throw new Error("Static enabled optional engine execution");
-    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"runtime"});
-    let unavailable=false;try{await rpc(page,"prepare_analysis_task",{...triageScope,cwd:workspace,kind:"dynamic",request:planned.result.nextRequest});}catch(e){if(!String(e).includes("independent HTTPS"))throw e;unavailable=true;}
-    if(!unavailable)throw new Error("Unconfigured optional worker did not remain blocked");
-    await rpc(page,"first_party_analysis_mode",{...triageScope,mode:"static"});
-   }
-   stages.push("installed-additive-emulation-read-only-planning-static-and-unconfigured-worker-denial-passed")
+			// New engines stay optional: installed product proves planning and fail-closed
+			// unavailable workers. Real modeled execution is a separate Linux engine CI gate.
+			for (const [engine, architecture] of [
+				["qiling", "x86_64"],
+				["qiling", "arm32"],
+				["qiling", "arm64"],
+				["unidbg", "arm32"],
+				["unidbg", "arm64"],
+				["rnidbg", "arm64"],
+			]) {
+				const target = join(workspace, `owned-${engine}-${architecture}-admission.elf`),
+					bytes = Buffer.alloc(128),
+					bits = architecture === "arm32" ? 32 : 64
+				Buffer.from(bits === 32 ? "7f454c46010101" : "7f454c46020101", "hex").copy(bytes)
+				bytes.writeUInt16LE(engine === "qiling" ? 2 : 3, 16)
+				bytes.writeUInt16LE(architecture === "x86_64" ? 62 : architecture === "arm32" ? 40 : 183, 18)
+				if (bits === 64) {
+					bytes.writeBigUInt64LE(0x1000n, 24)
+					bytes.writeBigUInt64LE(64n, 32)
+					bytes.writeUInt16LE(56, 54)
+					bytes.writeUInt16LE(1, 56)
+					bytes.writeUInt32LE(1, 64)
+					bytes.writeUInt32LE(5, 68)
+					bytes.writeBigUInt64LE(0x1000n, 80)
+					bytes.writeBigUInt64LE(128n, 96)
+					bytes.writeBigUInt64LE(128n, 104)
+				} else {
+					bytes.writeUInt32LE(0x1000, 24)
+					bytes.writeUInt32LE(52, 28)
+					bytes.writeUInt16LE(32, 42)
+					bytes.writeUInt16LE(1, 44)
+					bytes.writeUInt32LE(1, 52)
+					bytes.writeUInt32LE(0x1000, 60)
+					bytes.writeUInt32LE(128, 68)
+					bytes.writeUInt32LE(128, 72)
+					bytes.writeUInt32LE(5, 76)
+				}
+				await writeFile(target, bytes)
+				const handle = await rpc<{ id: string }>(page, "open_binary", { ...triageScope, input: { target } })
+				const options = {
+					engine,
+					architecture,
+					scenario: { kind: engine === "qiling" ? "entry" : "initialize" },
+					instruction_limit: 10000,
+				}
+				const draft = await rpc<{ id: string; requestHash: string; requirements: string[] }>(page, "plan_emulation", {
+					...triageScope,
+					input: { artifactId: handle.id, options, phase: "prepare" },
+				})
+				const consent = await rpc<{ executionToken: string }>(page, "approve_analysis_task", {
+					...triageScope,
+					cwd: workspace,
+					planId: draft.id,
+					requestHash: draft.requestHash,
+					requirements: draft.requirements,
+				})
+				const planned = await rpc<{
+					result: {
+						effect: string
+						compatibility: string
+						workerConnected: boolean
+						observedExecution: boolean
+						approval: { granted: boolean }
+						nextRequest: Record<string, unknown>
+					}
+				}>(page, "plan_emulation", {
+					...triageScope,
+					input: {
+						artifactId: handle.id,
+						options,
+						phase: "run",
+						planId: draft.id,
+						executionToken: consent.executionToken,
+					},
+				})
+				if (
+					planned.result.nextRequest.engine !== engine ||
+					planned.result.nextRequest.architecture !== architecture ||
+					planned.result.effect !== "plan-only" ||
+					planned.result.compatibility !== "admission-only" ||
+					planned.result.workerConnected !== false ||
+					planned.result.observedExecution !== false ||
+					planned.result.approval.granted !== false ||
+					(await readFile(target)).compare(bytes) !== 0
+				)
+					throw new Error("Installed emulation planner widened authority or changed source")
+				let denied = false
+				try {
+					await rpc(page, "prepare_analysis_task", {
+						...triageScope,
+						cwd: workspace,
+						kind: "dynamic",
+						request: planned.result.nextRequest,
+					})
+				} catch (e) {
+					if (!String(e).includes("Runtime/Hybrid")) throw e
+					denied = true
+				}
+				if (!denied) throw new Error("Static enabled optional engine execution")
+				await rpc(page, "first_party_analysis_mode", { ...triageScope, mode: "runtime" })
+				let unavailable = false
+				try {
+					await rpc(page, "prepare_analysis_task", {
+						...triageScope,
+						cwd: workspace,
+						kind: "dynamic",
+						request: planned.result.nextRequest,
+					})
+				} catch (e) {
+					if (!String(e).includes("independent HTTPS")) throw e
+					unavailable = true
+				}
+				if (!unavailable) throw new Error("Unconfigured optional worker did not remain blocked")
+				await rpc(page, "first_party_analysis_mode", { ...triageScope, mode: "static" })
+			}
+			stages.push("installed-additive-emulation-read-only-planning-static-and-unconfigured-worker-denial-passed")
 
 			let staticCaptureDenied = false
 			try {
@@ -3851,59 +4027,144 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		await writeFile(join(evidence, "binary-triage-owned-report.json"), JSON.stringify(report, null, 2))
 		stages.push("installed-binary-triage-target-report-scope-and-replay-passed")
 
-        // A deterministic loopback provider emits real model tool calls. No production
-        // execution entry point or approval gate is replaced for this acceptance.
-        const modelFixture = await stageOwnedTriagePe(join(dirname(sidecar), "resources", "binary-triage"), workspace)
-        await writeFile(join(evidence, "binary-triage-ai-owned-fixture.json"), JSON.stringify(modelFixture, null, 2))
-        const triageModel = await startOwnedTriageModel()
-        let modelSessionId: string | undefined
-        try {
-            const modelSession = await rpc<{sessionId:string}>(page,"chat_session_command",{request:{action:"start",config:{
-                sessionId:"installer-owned-ai-triage",environmentId:"local",cwd:workspace,workspaceRoot:workspace,
-                provider:"openai-compatible",model:"gpt-4o",apiKey:"owned-offline-fixture",
-                baseUrl:triageModel.baseUrl,enableTools:true,permissionProfile:"full-access",autoApproveTools:false,
-                initialMessages:[{id:"owned-ai-triage-start",role:"user",content:"Owned offline AI triage acceptance"}],
-            }}})
-            modelSessionId=modelSession.sessionId
-            await rpc(page,"update_chat_session_title",{sessionId:modelSessionId,environmentId:"local",title:"Installer AI triage"})
-            await page.reload()
-            await openInstalledSavedSession(page,/Installer AI triage/)
-            await rpc(page,"first_party_analysis_mode",{sessionId:modelSessionId,environmentId:"local",mode:"static"})
-            await enqueueOwnedTriageTurn(request => rpc<{queued?: boolean}>(page,"chat_session_command",{request}), modelSessionId)
-            const visible = new Map<string,()=>Promise<void>>()
-            const acceptance=await waitOwnedTriageModel(triageModel,
-                async ()=>{
-                    const items=await visibleOwnedTriageApprovals(page)
-                    for(const item of items) visible.set(item.requestId,item.approve)
-                    return items
-                },
-                async requestId=>{
-                    const approve=visible.get(requestId)
-                    if(!approve)throw new Error("Owning visible approval disappeared; no RPC fallback")
-                    await acceptanceAction("ui-owned-triage-approve",approve)
-                    visible.delete(requestId)
-                })
-            for(const result of acceptance.results) {
-                if(result.targetSha256 !== modelFixture.sha256) throw new Error("Installed AI result is not bound to the staged owned PE")
-                const saved=await rpc<{receipt:Record<string,unknown>}>(page,"binary_triage_report",{sessionId:modelSessionId,environmentId:"local",id:result.receiptId})
-                if(saved.receipt === undefined) throw new Error("Installed AI result lacks a saved receipt")
-            }
-            let finalObserved=false
-            const finalDeadline=Date.now()+30_000
-            while(Date.now()<finalDeadline) {
-                const transcript=await rpc<unknown[]>(page,"read_session_messages",{sessionId:modelSessionId,maxMessages:100})
-                if(JSON.stringify(transcript).includes("Owned AI triage acceptance complete:")) {finalObserved=true;break}
-                await delay(1000)
-            }
-            if(!finalObserved)throw new Error("Installed AI triage final response was not retained in the transcript")
-            await writeFile(join(evidence,"binary-triage-ai-model-acceptance.json"),JSON.stringify(acceptance,null,2))
-            stages.push("installed-ai-binary-triage-seven-operations-approval-and-evidence-passed")
-        } finally {
-            if(modelSessionId) await rpc(page,"chat_session_command",{request:{action:"stop",sessionId:modelSessionId}}).catch(()=>{})
-            await triageModel.close()
-        }
-        await settings(page, "Setup Center")
-
+		// A deterministic loopback provider emits real model tool calls. No production
+		// execution entry point or approval gate is replaced for this acceptance.
+		const modelFixture = await stageOwnedTriagePe(join(dirname(sidecar), "resources", "binary-triage"), workspace)
+		await writeFile(join(evidence, "binary-triage-ai-owned-fixture.json"), JSON.stringify(modelFixture, null, 2))
+		const triageModel = await startOwnedTriageModel()
+		let modelSessionId: string | undefined
+		try {
+			const modelSession = await rpc<{ sessionId: string }>(page, "chat_session_command", {
+				request: {
+					action: "start",
+					config: {
+						sessionId: "installer-owned-ai-triage",
+						environmentId: "local",
+						cwd: workspace,
+						workspaceRoot: workspace,
+						provider: "openai-compatible",
+						model: "gpt-4o",
+						apiKey: "owned-offline-fixture",
+						baseUrl: triageModel.baseUrl,
+						enableTools: true,
+						permissionProfile: "full-access",
+						autoApproveTools: false,
+						initialMessages: [
+							{ id: "owned-ai-triage-start", role: "user", content: "Owned offline AI triage acceptance" },
+						],
+					},
+				},
+			})
+			modelSessionId = modelSession.sessionId
+			await rpc(page, "update_chat_session_title", {
+				sessionId: modelSessionId,
+				environmentId: "local",
+				title: "Installer AI triage",
+			})
+			await page.reload()
+			await openInstalledSavedSession(page, /Installer AI triage/)
+			await rpc(page, "first_party_analysis_mode", { sessionId: modelSessionId, environmentId: "local", mode: "static" })
+			await enqueueOwnedTriageTurn(
+				(request) => rpc<{ queued?: boolean }>(page, "chat_session_command", { request }),
+				modelSessionId,
+			)
+			const visible = new Map<string, () => Promise<void>>()
+			const acceptance = await waitOwnedTriageModel(
+				triageModel,
+				async () => {
+					const items = await visibleOwnedTriageApprovals(page)
+					for (const item of items) visible.set(item.requestId, item.approve)
+					return items
+				},
+				async (requestId) => {
+					const approve = visible.get(requestId)
+					if (!approve) throw new Error("Owning visible approval disappeared; no RPC fallback")
+					await acceptanceAction("ui-owned-triage-approve", approve)
+					visible.delete(requestId)
+				},
+			)
+			for (const result of acceptance.results) {
+				if (result.targetSha256 !== modelFixture.sha256)
+					throw new Error("Installed AI result is not bound to the staged owned PE")
+				const saved = await rpc<{ receipt: Record<string, unknown> }>(page, "binary_triage_report", {
+					sessionId: modelSessionId,
+					environmentId: "local",
+					id: result.receiptId,
+				})
+				if (saved.receipt === undefined) throw new Error("Installed AI result lacks a saved receipt")
+			}
+			let finalObserved = false
+			const finalDeadline = Date.now() + 30_000
+			while (Date.now() < finalDeadline) {
+				const transcript = await rpc<unknown[]>(page, "read_session_messages", {
+					sessionId: modelSessionId,
+					maxMessages: 100,
+				})
+				if (JSON.stringify(transcript).includes("Owned AI triage acceptance complete:")) {
+					finalObserved = true
+					break
+				}
+				await delay(1000)
+			}
+			if (!finalObserved) throw new Error("Installed AI triage final response was not retained in the transcript")
+			await writeFile(join(evidence, "binary-triage-ai-model-acceptance.json"), JSON.stringify(acceptance, null, 2))
+			stages.push("installed-ai-binary-triage-seven-operations-approval-and-evidence-passed")
+			// Compare real installed runtime evidence with the loopback HTTP definitions.
+			// Inspection must not trigger another provider request or tool execution.
+			const requestsBeforeInventory = triageModel.providerRequests
+			const inventory = await rpc<{
+				sessionId: string
+				status: string
+				evidence?: { toolNames: string[]; toolCount: number; truncated: boolean }
+			}>(page, "session_tool_inventory", { sessionId: modelSessionId })
+			if (
+				inventory.sessionId !== modelSessionId ||
+				inventory.status !== "last-request" ||
+				!inventory.evidence ||
+				inventory.evidence.truncated ||
+				inventory.evidence.toolCount !== triageModel.lastToolNames.length ||
+				JSON.stringify([...inventory.evidence.toolNames].sort()) !== JSON.stringify(triageModel.lastToolNames.sort())
+			)
+				throw new Error("Installed session inventory differs from actual owned provider definitions")
+			await settings(page, "Capabilities")
+			await page.getByRole("button", { name: "Refresh attached sessions", exact: true }).click()
+			await page.getByLabel("Owning session", { exact: true }).selectOption(modelSessionId)
+			await page.getByRole("button", { name: "Inspect last request", exact: true }).click()
+			const inventoryPanel = page.getByRole("region", { name: "Session model tool evidence", exact: true })
+			await inventoryPanel
+				.getByText("Last recorded request (historical, not live provider confirmation)", { exact: false })
+				.waitFor()
+			const visibleToolNames = await inventoryPanel
+				.getByRole("list", { name: "Local request tool names", exact: true })
+				.locator("code")
+				.allTextContents()
+			if (
+				JSON.stringify([...visibleToolNames].sort()) !== JSON.stringify(triageModel.lastToolNames.sort()) ||
+				triageModel.providerRequests !== requestsBeforeInventory
+			)
+				throw new Error("Installed inventory UI changed provider activity or omitted tool names")
+			await writeFile(
+				join(evidence, "session-tool-inventory.json"),
+				JSON.stringify(
+					{
+						inventory,
+						providerToolNames: triageModel.lastToolNames,
+						providerRequestsBefore: requestsBeforeInventory,
+						providerRequestsAfter: triageModel.providerRequests,
+					},
+					null,
+					2,
+				),
+			)
+			stages.push("installed-session-tool-inventory-exact-provider-names-no-extra-request-passed")
+		} finally {
+			if (modelSessionId)
+				await rpc(page, "chat_session_command", { request: { action: "stop", sessionId: modelSessionId } }).catch(
+					() => {},
+				)
+			await triageModel.close()
+		}
+		await settings(page, "Setup Center")
 
 		page.once("dialog", async (dialog) => {
 			if (dialog.message().includes("reviewed and accept")) await dialog.accept()

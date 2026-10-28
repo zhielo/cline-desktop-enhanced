@@ -3559,3 +3559,115 @@ describe("AgentRuntime sdk.error reporting", () => {
 		});
 	});
 });
+
+describe("model tool exposure evidence", () => {
+	it("records final post-hook definitions, not registered tools or secrets, and shares evidence with executors", async () => {
+		const observed: unknown[] = [];
+		const tool = {
+			...createEchoTool(),
+			async execute(
+				_input: unknown,
+				context: import("@cline/shared").AgentToolContext,
+			) {
+				observed.push(context.modelToolExposure);
+				return "ok";
+			},
+		};
+		const model = new ScriptedModel([
+			(request) => {
+				expect(request.tools.map((t) => t.name)).toEqual(["echo"]);
+				return [
+					{
+						type: "tool-call-delta",
+						toolCallId: "call1",
+						toolName: "echo",
+						inputText: JSON.stringify({ text: "hi" }),
+					},
+					{ type: "finish", reason: "tool-calls" },
+				];
+			},
+			() => [
+				{ type: "text-delta", text: "done" },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			tools: [tool, { ...createEchoTool(), name: "hidden" }],
+			hooks: {
+				beforeModel: () => ({
+					tools: [
+						{
+							name: "echo",
+							description: "PRIVATE DESCRIPTION",
+							inputSchema: { secret: "PRIVATE SCHEMA" },
+						},
+					],
+				}),
+			},
+		});
+		expect(runtime.getModelToolExposure()).toBeUndefined();
+		expect(model.requests).toHaveLength(0);
+		await runtime.run("hello");
+		const evidence = runtime.getModelToolExposure()!;
+		expect(evidence.toolNames).toEqual(["echo"]);
+		expect(evidence.toolCount).toBe(1);
+		expect(JSON.stringify(evidence)).not.toContain("PRIVATE");
+		expect(observed[0]).toMatchObject({ toolNames: ["echo"], iteration: 1 });
+		evidence.toolNames.push("forged");
+		expect(runtime.getModelToolExposure()!.toolNames).toEqual(["echo"]);
+		expect(model.requests).toHaveLength(2);
+	});
+	it("records empty/disabled request definitions and distinct provider tools without provider options", async () => {
+		const model = new ScriptedModel([
+			() => [{ type: "finish", reason: "stop" }],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			tools: [createEchoTool()],
+			modelTools: [{ name: "web_search", allowedDomains: ["private.example"] }],
+			hooks: { beforeModel: () => ({ tools: [] }) },
+		});
+		await runtime.run("hello");
+		expect(runtime.getModelToolExposure()).toMatchObject({
+			toolNames: [],
+			toolCount: 0,
+			modelToolNames: ["web_search"],
+			modelToolCount: 1,
+			truncated: false,
+		});
+		expect(JSON.stringify(runtime.getModelToolExposure())).not.toContain(
+			"private.example",
+		);
+	});
+	it("bounds retained names while preserving the total and does not claim a stopped preparation was sent", async () => {
+		const model = new ScriptedModel([
+			() => [{ type: "finish", reason: "stop" }],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			hooks: {
+				beforeModel: () => ({
+					tools: Array.from({ length: 300 }, (_, i) => ({
+						name: `tool_${i}`,
+						description: "",
+						inputSchema: {},
+					})),
+				}),
+			},
+		});
+		await runtime.run("hello");
+		expect(runtime.getModelToolExposure()).toMatchObject({
+			toolCount: 300,
+			truncated: true,
+		});
+		expect(runtime.getModelToolExposure()!.toolNames).toHaveLength(256);
+		const stopped = new AgentRuntime({
+			model,
+			hooks: { beforeModel: () => ({ stop: true }) },
+		});
+		await stopped.run("stop");
+		expect(stopped.getModelToolExposure()).toBeUndefined();
+		expect(model.requests).toHaveLength(1);
+	});
+});

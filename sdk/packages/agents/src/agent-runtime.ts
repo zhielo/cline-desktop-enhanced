@@ -14,6 +14,7 @@ import type {
 	AgentModelEvent,
 	AgentModelFinishReason,
 	AgentModelRequest,
+	AgentModelToolExposure,
 	AgentModelToolActivity,
 	AgentRunResult,
 	AgentRuntimeEvent,
@@ -517,6 +518,7 @@ export class AgentRuntime {
 	private readonly listeners = new Set<AgentEventListener>();
 	// biome-ignore lint/suspicious/noExplicitAny: tool input/output types vary per tool
 	private readonly tools = new Map<string, AgentTool<any, any>>();
+	private modelToolExposure?: AgentModelToolExposure;
 	private hooks: HookBag = {
 		beforeRun: [],
 		afterRun: [],
@@ -657,6 +659,13 @@ export class AgentRuntime {
 			...this.config,
 			initialMessages: cloneMessages(messages),
 		};
+	}
+
+	/** Reading evidence never prepares or sends a model request. */
+	getModelToolExposure(): AgentModelToolExposure | undefined {
+		return this.modelToolExposure
+			? structuredClone(this.modelToolExposure)
+			: undefined;
 	}
 
 	snapshot(): AgentRuntimeStateSnapshot {
@@ -1746,6 +1755,30 @@ export class AgentRuntime {
 		let stream: AsyncIterable<AgentModelEvent>;
 		let phase = "provider_request_started";
 		try {
+			// After all preparation/hooks and immediately before adapter invocation.
+			// Retain names only: descriptions/schemas/options can contain private data.
+			const names = (items: readonly { name: string }[]) =>
+				items
+					.slice(0, 256)
+					.filter(
+						(item) => typeof item.name === "string" && item.name.length <= 256,
+					)
+					.map((item) => item.name);
+			const toolNames = names(request.tools),
+				modelToolNames = names(request.modelTools ?? []);
+			this.modelToolExposure = {
+				version: 1,
+				capturedAt: new Date().toISOString(),
+				runId: this.state.runId,
+				iteration: this.state.iteration,
+				toolNames,
+				toolCount: request.tools.length,
+				modelToolNames,
+				modelToolCount: request.modelTools?.length ?? 0,
+				truncated:
+					toolNames.length !== request.tools.length ||
+					modelToolNames.length !== (request.modelTools?.length ?? 0),
+			};
 			stream = await this.config.model.stream(request);
 			this.throwIfAborted();
 			phase = "provider_stream_started";
@@ -2221,6 +2254,7 @@ export class AgentRuntime {
 					iteration: this.state.iteration,
 					toolCallId: prepared.toolCall.toolCallId,
 					signal: this.abortController?.signal,
+					modelToolExposure: this.getModelToolExposure(),
 					metadata: this.config.toolContextMetadata,
 					snapshot: this.snapshot(),
 					emitUpdate: (update: unknown) => {
