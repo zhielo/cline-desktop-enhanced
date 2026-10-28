@@ -54,6 +54,18 @@ jobs:
             --image "$RUNNER_TEMP/managed-inert-image/inert-guest.iso" \
             --log "$RUNNER_TEMP/managed-inert-image/uefi.log" \
             --receipt "$RUNNER_TEMP/managed-inert-image/uefi-receipt.json" --uefi
+      - name: Expired credential media is rejected inside the actual guest
+        run: |
+          python3 -B workers/managed-emulation/image/smoke_boot.py \
+            --image "$RUNNER_TEMP/managed-inert-image/inert-guest.iso" \
+            --log "$RUNNER_TEMP/managed-inert-image/expired.log" \
+            --receipt "$RUNNER_TEMP/managed-inert-image/expired-receipt.json" --uefi --credential-case expired
+      - name: Owned valid-format credential media provisions without readiness promotion
+        run: |
+          python3 -B workers/managed-emulation/image/smoke_boot.py \
+            --image "$RUNNER_TEMP/managed-inert-image/inert-guest.iso" \
+            --log "$RUNNER_TEMP/managed-inert-image/valid.log" \
+            --receipt "$RUNNER_TEMP/managed-inert-image/valid-receipt.json" --uefi --credential-case valid
       - name: Retain scoped build and cold-boot evidence only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

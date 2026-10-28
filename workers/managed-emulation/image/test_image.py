@@ -151,6 +151,14 @@ class ColdBootReceiptTests(unittest.TestCase):
                             (self.log(engineReadiness="ready"),0),(self.log(extra="unexpected"),0)]:
             with self.subTest(status=status,data=data),self.assertRaises(ValueError):smoke_boot.validate_boot_log(data,status)
 
+    def test_expired_and_valid_format_fixtures_require_different_exact_markers(self):
+        expired=self.log().replace(b"CLINE_MANAGED_CREDENTIAL_ABSENT_V1",b"CLINE_MANAGED_BOOT_REJECTED_V1")
+        valid=self.log().replace(b"CLINE_MANAGED_CREDENTIAL_ABSENT_V1",b"CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1\nCLINE_MANAGED_PROBE_UNRESOLVED_V1")
+        self.assertEqual(smoke_boot.validate_boot_log(expired,0,"expired")["engineReadiness"],"not-tested")
+        self.assertEqual(smoke_boot.validate_boot_log(valid,0,"valid")["hypervExchange"],"not-tested")
+        for data,case in [(valid,"expired"),(expired,"valid"),(valid+b"CLINE_MANAGED_PROBE_EXITED_V1","valid"),(valid+b"CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1","valid")]:
+            with self.subTest(case=case),self.assertRaises(ValueError):smoke_boot.validate_boot_log(data,0,case)
+
     def test_duplicate_json_receipt_fields_are_rejected(self):
         data=self.log().replace(b'{"fixtureSha256"',b'{"engineReadiness":"not-tested","fixtureSha256"')
         with self.assertRaises(ValueError):smoke_boot.validate_boot_log(data,0)

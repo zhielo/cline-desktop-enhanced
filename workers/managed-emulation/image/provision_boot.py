@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, "/opt/cline")
 from guest_probe import read_boot_config
 
-SOURCE = "/mnt/cline-boot/BOOT.JSON"
+SOURCE = "/mnt/cline-boot/boot.json"
 DESTINATION = "/run/cline-managed-probe/boot.json"
 
 

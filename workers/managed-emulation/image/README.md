@@ -34,7 +34,7 @@ engine readiness not tested and Hyper-V exchange not tested.
   explicitly does not certify Hyper-V communication or engine readiness.
 - Without the second per-job CD media, it records missing credentials and powers
   off. No IP, host-share, KVP, manual-shell or native-host fallback exists.
-- A future trusted broker/media writer may supply exactly `BOOT.JSON` on the
+- A future trusted broker/media writer may supply exactly `boot.json` as the mounted filesystem entry on the
   second read-only ISO9660 media. The guest copies at most 1024 bytes into an
   exclusive root-private file, checks stability, validates exact protocol/key/
   session/expiry and only then starts the one-shot agent. No such broker/media
@@ -49,6 +49,12 @@ actual exclusive private-copy behavior without executing downloaded programs.
 The dedicated CI workflow builds the real ISO and boots it twice with QEMU/TCG,
 no virtual NIC, no host shares and no hardware acceleration: BIOS and UEFI.
 It requires the actual guest-kernel/Python check and absent-credential denial.
+Additional real UEFI boots mount the second read-only media: expired credentials
+must reject before the listener, while a public valid-format fixture must copy
+and validate. With no host connection, that fixture must remain unresolved and
+power off; it must never report a successful exchange, containment or readiness.
+Storage enumeration has a fixed bounded wait. Public fixture keys are not
+production entropy/freshness or trusted broker provisioning evidence.
 QEMU is itself an emulator; these checks are **not** Hyper-V acceptance,
 isolation attestation, live authenticated host/guest exchange, real lifecycle
 recovery, or four-framework installation. No binary ISO is uploaded/published;

@@ -22,6 +22,11 @@ done
 # per-job media may provision it. No IP/KVP/host share/manual-shell fallback.
 $bb mkdir -p /mnt/cline-boot /run/cline-managed-probe || fail
 $bb chmod 0700 /run/cline-managed-probe || fail
+# Storage enumeration is asynchronous. Wait only a fixed bounded interval.
+for attempt in $($bb seq 1 30); do
+    [ -b /dev/sr1 ] && break
+    $bb sleep 0.1
+done
 if ! $bb mount -t iso9660 -o ro,nosuid,nodev,noexec /dev/sr1 /mnt/cline-boot; then
     echo 'CLINE_MANAGED_CREDENTIAL_ABSENT_V1'
     finish
@@ -30,6 +35,7 @@ fi
 # shell evaluation of guest media contents. The broker/media writer is pending.
 /usr/local/bin/python3.13 -B -E -s /opt/cline/provision_boot.py || fail
 $bb umount /mnt/cline-boot || fail
+echo 'CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1'
 $bb timeout -s KILL 45 /usr/local/bin/python3.13 -B -E -s /opt/cline/guest_probe.py
 code=$?
 if [ "$code" -eq 0 ]; then echo 'CLINE_MANAGED_PROBE_EXITED_V1'; else echo 'CLINE_MANAGED_PROBE_UNRESOLVED_V1'; fi

@@ -281,7 +281,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision):
             stream.seek(16 * 2048 + 1)
             if stream.read(5) != b"CD001":
                 raise ValueError("Boot ISO descriptor absent")
-        manifest = {"schema": 1, "scope": "development-inert-guest", "installable": False, "sourceRevision": revision, "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested", "inputs": lock, "rootfsExportSha256": hashlib.sha256(raw).hexdigest(), "guestSources": {path: hashlib.sha256(source.read_bytes()).hexdigest() for path, source in sources.items()}, "fileCount": len(tree), "artifacts": {"inert-guest.iso": {"sha256": hashlib.sha256(iso.read_bytes()).hexdigest(), "size": iso.stat().st_size}}}
+        manifest = {"schema": 1, "scope": "development-inert-guest", "installable": False, "sourceRevision": revision, "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested", "inputs": lock, "rootfsExportSha256": hashlib.sha256(raw).hexdigest(), "guestSources": {path: hashlib.sha256(source.read_bytes()).hexdigest() for path, source in sources.items()}, "explicitEntryCount": len(tree), "regularFileCount": sum(n.kind == "file" for n in tree.values()), "artifacts": {"inert-guest.iso": {"sha256": hashlib.sha256(iso.read_bytes()).hexdigest(), "size": iso.stat().st_size}}}
         (stage / "image-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         # No image bytes are considered published until the complete build succeeds.
         os.rename(stage, output)
