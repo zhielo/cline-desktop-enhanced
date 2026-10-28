@@ -275,7 +275,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision):
         (boot / "initramfs.gz").write_bytes(cpio(tree))
         grub = 'set timeout=0\nset default=0\nserial --unit=0 --speed=115200\nterminal_output serial\nmenuentry "Cline development inert guest" {\n linux /boot/vmlinuz console=ttyS0,115200 rdinit=/init panic=1 quiet\n initrd /boot/initramfs.gz\n}\n'
         (boot / "grub/grub.cfg").write_text(grub)
-        run_tool(["grub-mkrescue", "-o", str(stage / "inert-guest.iso"), str(iso_root), "--", "--modification-date=2024010100000000"], timeout=120, env={**os.environ, "SOURCE_DATE_EPOCH": "1704067200"})
+        run_tool(["grub-mkrescue", "-o", str(stage / "inert-guest.iso"), str(iso_root), "--modification-date=2024010100000000"], timeout=120, env={**os.environ, "SOURCE_DATE_EPOCH": "1704067200"})
         iso = stage / "inert-guest.iso"
         with iso.open("rb") as stream:
             stream.seek(16 * 2048 + 1)
