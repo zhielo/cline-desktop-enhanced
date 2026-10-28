@@ -53,6 +53,8 @@ class BundleTests(unittest.TestCase):
             def data(v):return ('CLINE_MANAGED_ENGINE_OWNED_V1 '+json.dumps(v)+'\n').encode()
             with self.subTest(engine=engine):
                 self.assertEqual(validate_engine_log(data(value),engine),value)
+                self.assertEqual(validate_engine_log(data(value),engine,'a'*64),value)
+                with self.assertRaises(ValueError):validate_engine_log(data(value),engine,'b'*64)
                 for change in [{'checks':counts[engine]-1},{'architectures':[]},{'engineReadiness':'ready'},{'vmIsolation':'attested'},{'bundleSha256':'x'*64},{'extra':True}]:
                     with self.assertRaises(ValueError):validate_engine_log(data({**value,**change}),engine)
                 with self.assertRaises(ValueError):validate_engine_log(data(value)+data(value),engine)

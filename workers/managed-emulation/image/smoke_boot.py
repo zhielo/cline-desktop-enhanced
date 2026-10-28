@@ -50,7 +50,7 @@ def validate_boot_log(data, status, credential_case="absent"):
     return receipt
 
 
-def validate_engine_log(data, engine):
+def validate_engine_log(data, engine, expected_bundle=None):
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", data.decode("utf-8", errors="replace"))
     marker = "CLINE_MANAGED_ENGINE_OWNED_V1 "
     lines = [line.strip() for line in text.splitlines() if line.startswith(marker)]
@@ -68,6 +68,8 @@ def validate_engine_log(data, engine):
     expected = {"schema":1,"engine":engine,"architectures":arches[engine],"checks":{"qiling":12,"unidbg":10,"rnidbg":5,"speakeasy":4}[engine],"ownedFixtures":"passed","engineReadiness":"not-tested","vmIsolation":"not-attested"}
     if set(value) != set(expected) | {"bundleSha256"} or any(value[k] != v for k,v in expected.items()) or not re.fullmatch("[0-9a-f]{64}",value["bundleSha256"]):
         raise ValueError("Owned engine evidence scope mismatch")
+    if expected_bundle is not None and value["bundleSha256"] != expected_bundle:
+        raise ValueError("Owned engine bundle/image binding mismatch")
     return value
 
 
@@ -136,10 +138,17 @@ def run(image, output, uefi=False, credential_case="absent", native_generator=No
             child.stdout.close()
             output.write_bytes(data)
         receipt = validate_boot_log(data, status, credential_case)
+        engine_evidence = None
         if owned_engine:
-            validate_engine_log(data, owned_engine)
+            manifest_bytes = (image.parent / "image-manifest.json").read_bytes()
+            if len(manifest_bytes) > 1024*1024:
+                raise ValueError("Owned image manifest budget")
+            manifest = json.loads(manifest_bytes)
+            if manifest.get("ownedEngine") != owned_engine or manifest.get("artifacts",{}).get("inert-guest.iso",{}).get("sha256") != hashlib.sha256(image.read_bytes()).hexdigest():
+                raise ValueError("Owned engine image identity mismatch")
+            engine_evidence = validate_engine_log(data, owned_engine, manifest.get("ownedEngineBundleSha256"))
 
-        return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "ownedEngine": owned_engine, "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved", "native": "native-private-media-provisioned-exchange-unresolved"}[credential_case], **receipt}
+        return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "ownedEngine": owned_engine, "ownedEngineEvidence": engine_evidence, "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved", "native": "native-private-media-provisioned-exchange-unresolved"}[credential_case], **receipt}
 
 
 if __name__ == "__main__":
