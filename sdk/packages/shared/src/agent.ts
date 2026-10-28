@@ -186,7 +186,23 @@ export interface AgentToolResult<TOutput = unknown> {
 	metadata?: Record<string, unknown>;
 }
 
+/** Bounded local evidence at the final core model-adapter handoff, not provider acceptance. */
+export interface AgentModelToolExposure {
+	version: 1;
+	capturedAt: string;
+	runId?: string;
+	iteration: number;
+	toolNames: string[];
+	toolCount: number;
+	modelToolNames: string[];
+	modelToolCount: number;
+	truncated: boolean;
+}
+
 export interface AgentToolContext {
+	/** Read-only evidence for the request that produced this tool call. No secrets or schemas. */
+	modelToolExposure?: AgentModelToolExposure;
+
 	sessionId?: string;
 	agentId: string;
 	conversationId?: string;

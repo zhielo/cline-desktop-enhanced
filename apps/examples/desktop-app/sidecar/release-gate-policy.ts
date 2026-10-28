@@ -91,6 +91,7 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
+  "installed-session-tool-inventory-exact-provider-names-no-extra-request-passed",
   "installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed",
 
   "installed-ghidra-three-owned-architectures-java-no-target-execution-passed",
@@ -170,7 +171,7 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/general-recovery-validation.yml":
 			"1660014462a0546eca828c1f246169789f1c776734a82a9efb1e607c102dab5d",
 		"apps/vscode/scripts/owned-triage-model.ts":
-			"49b6f1cc1c4477689e31eb47330fae0f9454630532efa46b347ed524d2daa0fd",
+			"ab1607e95342ffb833dfd515ac704ff1b88df206eeb3ad0ae4a42d2fa4b5fa71",
 		".github/workflows/specialist-engine-validation.yml":
 			"4545f2d4ebde2f4dfe4d005cd8fbe602ab9226875c0811ddf8d39101c6b93b3d",
 		".github/workflows/semantic-source-validation.yml":
@@ -178,8 +179,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"570280a60ad0f10f18530d3b387e6eef5b9a7c31c9f4416aded0d879454275b1",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"c34b57e95fb6d2bec69db22a9d68177213f898f32755e686f656994e28db078e",
+			"f92598ac5ddbacf0ccf0d5509a482ca43380bb793d5880a39aa4fd85c032f878",
 		"scripts/validate-advanced-build.mjs":
-			"5f3d97723d232c413e1c5ec46899d8ae920a9a667a71682100bb3507d273db6f",
+			"98762e3a1cee840ae8d4b928023180ba7a786f89fb05f5120f0878b603efcbc9",
 	},
 } as const;

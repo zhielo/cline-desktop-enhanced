@@ -1270,3 +1270,13 @@ it.each([
 	}
 	expect(spy).toHaveBeenCalledTimes(1);
 });
+
+it("pure catalog exposes request evidence separately from registered engine routes without discovery",async()=>{
+ const executor=createReverseEngineeringExecutor();
+ const evidence={version:1 as const,capturedAt:'2026-10-28T00:00:00.000Z',iteration:1,toolNames:['reverse_engineer'],toolCount:1,modelToolNames:[],modelToolCount:0,truncated:false};
+ const result=JSON.parse(await executor({operation:'analysis_command_catalog'},{agentId:'owned',iteration:1,modelToolExposure:evidence}));
+ expect(result.modelToolExposure).toEqual(evidence);
+ expect(result.modelToolExposureScope).toContain('Not provider receipt');
+ const unknown=JSON.parse(await executor({operation:'analysis_command_catalog'},{agentId:'owned',iteration:1}));
+ expect(unknown.modelToolExposure).toBeNull();
+});

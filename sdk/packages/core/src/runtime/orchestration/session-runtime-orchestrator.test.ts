@@ -3134,3 +3134,49 @@ describe("SessionRuntime auth retry", () => {
 		expect(result.finishReason).toBe("error");
 	});
 });
+
+it("retains name-only request evidence across idle turns and marks configuration changes stale", async () => {
+	const evidence = {
+		version: 1 as const,
+		capturedAt: "2026-10-28T00:00:00.000Z",
+		iteration: 1,
+		toolNames: ["reverse_engineer"],
+		toolCount: 1,
+		modelToolNames: [],
+		modelToolCount: 0,
+		truncated: false,
+	};
+	const { runtime } = makeFakeAgentRuntime();
+	Object.assign(runtime, {
+		getModelToolExposure: () => structuredClone(evidence),
+	});
+	const session = new SessionRuntime(makeAgentConfig(), {
+		createAgentRuntimeImpl: () => runtime,
+	});
+	expect(session.getModelToolExposure()).toEqual({ status: "unavailable" });
+	await session.run("owned fixture");
+	expect(session.getModelToolExposure()).toMatchObject({
+		status: "last-request",
+		evidence,
+		providerId: "anthropic",
+	});
+	const copy = session.getModelToolExposure();
+	if ("evidence" in copy) copy.evidence.toolNames.push("forged");
+	expect(session.getModelToolExposure()).toMatchObject({
+		evidence: { toolNames: ["reverse_engineer"] },
+	});
+	session.updateConnection({ modelId: "different-model" });
+	expect(session.getModelToolExposure()).toMatchObject({
+		status: "stale",
+		modelId: "claude-3-5-sonnet",
+	});
+	await session.run("new fixture");
+	expect(session.getModelToolExposure()).toMatchObject({
+		status: "last-request",
+		modelId: "different-model",
+	});
+	session.addTools([
+		{ name: "new_tool", description: "", inputSchema: {}, execute: () => "" },
+	]);
+	expect(session.getModelToolExposure().status).toBe("stale");
+});
