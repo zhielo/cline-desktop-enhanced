@@ -304,7 +304,7 @@ import {
 	testSetupDevice,
 	testSetupWorker,
 } from "./setup-center";
-import { assertSetupIdle, getSetupJob, startSetupJob } from "./setup-jobs";
+import { assertSetupIdle, getSetupJob, startSetupJob, inspectSetupRecovery, recoverSetupAfterReboot } from "./setup-jobs";
 import type {
 	ChatSessionCommandRequest,
 	JsonRecord,
@@ -4535,6 +4535,11 @@ export async function handleCommand(
 			throw new Error("Setup changes require a trusted desktop connection");
 		if (args?.confirmed !== true)
 			throw new Error("Explicit Setup Center confirmation required");
+		if (command === "setup_center_recovery_status") return inspectSetupRecovery();
+		if (command === "setup_center_recover_after_reboot") {
+			if (typeof args.jobId !== "string") throw new Error("Exact setup job identity required");
+			return recoverSetupAfterReboot(args.jobId);
+		}
 		if(command === "setup_center_android_test"){assertSetupIdle();return await testOwnedAndroidToolchain();}
 		if (command === "setup_center_apply_backend") {
 			assertSetupIdle();

@@ -91,6 +91,8 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
+  "installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed",
+
   "installed-ghidra-three-owned-architectures-java-no-target-execution-passed",
 		"installed-source-acquisition-hash-bound-saved-off-no-execution-passed",
 		"installed-application-graph-electron-saved-trace-no-execution-passed",
@@ -176,8 +178,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"570280a60ad0f10f18530d3b387e6eef5b9a7c31c9f4416aded0d879454275b1",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"eec089dfcd2b5b67e60400befa7f681c038439c0ec610a93caaf1b56898db2c0",
+			"c34b57e95fb6d2bec69db22a9d68177213f898f32755e686f656994e28db078e",
 		"scripts/validate-advanced-build.mjs":
-			"01995f2f7937f7de23772658761048a0d56e8549eea795d142b4b98b45ce4309",
+			"5f3d97723d232c413e1c5ec46899d8ae920a9a667a71682100bb3507d273db6f",
 	},
 } as const;

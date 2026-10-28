@@ -1,3 +1,4 @@
+import { readSetupBootIdentity } from "../../examples/desktop-app/sidecar/setup-boot-identity.ts"
 import { startOwnedTriageModel, waitOwnedTriageModel, enqueueOwnedTriageTurn, stageOwnedTriagePe } from "./owned-triage-model.ts"
 import { gunzipSync } from "node:zlib"
 /**
@@ -14,7 +15,7 @@ import {
 import { createHash, randomUUID } from "node:crypto"
 import { readFileSync, realpathSync } from "node:fs"
 import { spawn } from "node:child_process"
-import { appendFile, mkdir, mkdtemp, open, readFile, stat, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, mkdtemp, open, readFile, stat, unlink, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { basename, dirname, isAbsolute, join, resolve } from "node:path"
@@ -2061,6 +2062,47 @@ ConvertTo-Json -InputObject @($rows) -Compress
   if(ghidraSetup.ghidra.status!=="Ready for tested profiles"||ghidraSetup.ghidra.profiles.length!==3||!["x86_64","arm32","arm64"].every(a=>ghidraSetup.ghidra.profiles.filter(p=>p.architecture===a&&p.status==="passed").length===1))throw new Error("Installed Ghidra did not verify each owned architecture");
   await writeFile(join(evidence,"ghidra-profile-readiness.json"),JSON.stringify(ghidraSetup.ghidra,null,2));
   stages.push("installed-ghidra-three-owned-architectures-java-no-target-execution-passed");
+
+  // Controlled retained native-job fixture: real current OS identity, not a real reboot.
+  // The installed UI MUST refuse recovery and leave every admission byte unchanged.
+  const recoveryRoot=join(root,"data","setup-center"), recoveryAdmission=join(recoveryRoot,"setup-admission.json");
+  const installedJob=await rpc<{job:{status:string}}>(page,"setup_center_job_status",{environmentId:"local"});
+  if(!["completed","failed"].includes(installedJob.job.status))throw new Error("Setup must be terminal before owned recovery refusal fixture");
+  try { await stat(recoveryAdmission); throw new Error("Existing setup admission must not be replaced by acceptance"); }
+  catch(error){ if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error; }
+  const actualBoot=await readSetupBootIdentity();
+  if(!actualBoot)throw new Error("Installed recovery acceptance needs actual Windows boot identity evidence");
+  const recoveryId=randomUUID(), recoveryRecord=join(recoveryRoot,`job-${recoveryId}.json`), latestRecord=join(recoveryRoot,"latest-job.json");
+  const previousLatest=await readFile(latestRecord);
+  const fixtureJob={id:recoveryId,command:"setup_center_test_ghidra",identity:"owned-installed-recovery-fixture",hostPid:1,status:"running",phase:"Owned same-boot retained lease fixture",startedAt:new Date().toISOString(),updatedAt:new Date().toISOString(),bootIdentity:actualBoot,recoveryScope:"native-host-only/v1"};
+  const fixtureAdmission=JSON.stringify({id:recoveryId,hostPid:1,bootIdentity:actualBoot,recoveryScope:"native-host-only/v1"});
+  let wroteRecoveryRecord=false,wroteRecoveryLease=false,wroteRecoveryLatest=false;
+  let recoveryFixtureFailure: unknown;
+  try {
+   await writeFile(recoveryRecord,JSON.stringify(fixtureJob),{flag:"wx"});wroteRecoveryRecord=true;
+   await writeFile(recoveryAdmission,fixtureAdmission,{flag:"wx"});wroteRecoveryLease=true;
+   await writeFile(latestRecord,JSON.stringify(fixtureJob));wroteRecoveryLatest=true;
+   await settings(page,"Analysis environment");await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
+   const recoveryPanel=page.getByRole("region",{name:"Interrupted setup recovery",exact:true});
+   await recoveryPanel.getByRole("button",{name:"Check reboot recovery",exact:true}).click();
+   await recoveryPanel.getByText("Same OS boot;",{exact:false}).waitFor({timeout:15000});
+   if(await recoveryPanel.getByRole("button",{name:"Close interrupted setup after reboot",exact:true}).count())throw new Error("Installed UI offered same-boot recovery");
+   if(await readFile(recoveryAdmission,"utf8")!==fixtureAdmission)throw new Error("Same-boot inspection changed admission");
+   if(JSON.parse(await readFile(latestRecord,"utf8")).status!=="running")throw new Error("Read-only recovery inspection mutated the retained job");
+   await writeFile(join(evidence,"setup-recovery-refusal.json"),JSON.stringify({case:"same-boot-native-job",status:"blocked",osIdentity:"actual-Windows-query",actualRebootTested:false,admissionUnchanged:true,operationReplayed:false},null,2));
+   stages.push("installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed");
+  } catch(error) { recoveryFixtureFailure=error; }
+  try {
+   if(wroteRecoveryLease){if(await readFile(recoveryAdmission,"utf8")!==fixtureAdmission)throw new Error("Owned recovery fixture lease changed; do not remove another operation");await unlink(recoveryAdmission);}
+   if(wroteRecoveryLatest)await writeFile(latestRecord,previousLatest);
+   if(wroteRecoveryRecord)await unlink(recoveryRecord);
+  } catch(cleanupError) {
+   throw new AggregateError(recoveryFixtureFailure?[recoveryFixtureFailure,cleanupError]:[cleanupError],"Owned recovery fixture cleanup failed");
+  }
+  if(recoveryFixtureFailure)throw recoveryFixtureFailure;
+  await settings(page,"Analysis environment");await page.getByRole("button",{name:"Open Setup Center",exact:true}).click();
+
+
 
 		const triagePanel = page.getByRole("region", { name: "Binary Triage Pack readiness", exact: true })
 		await triagePanel.waitFor({ timeout: 30000 })
