@@ -4,8 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"workers/managed-emulation/host/src/main.rs",markers:["managed-inert-deadline", "Duration::from_secs(15)", "std::process::exit(124)", "No readiness, cleanup or VM-termination receipt"]},
- {path:"workers/managed-emulation/host/tests/process_boundary.rs",markers:["missing_stdin_eof_is_bounded_by_the_real_whole_process_watchdog", "Some(124)"]},
+ {path:"workers/managed-emulation/host/src/main.rs",markers:["managed-inert-deadline", "Duration::from_secs(15)", "terminate_probe_on_deadline", "_exit(124)", "TerminateProcess(GetCurrentProcess(), 124)", "No readiness, cleanup or VM-termination receipt"]},
+ {path:"workers/managed-emulation/host/tests/process_boundary.rs",markers:["missing_stdin_eof_is_bounded_by_the_real_whole_process_watchdog", "Some(124)", "blocked_diagnostic_delivery_cannot_defeat_the_watchdog"]},
  {path:"workers/managed-emulation/host/src/lifecycle.rs",markers:["cline-managed-lifecycle/v1", "Journal checkpoint mismatch", "Explicit recovery required; no automatic replay", "Reservation must be first", "MAX_EVENTS: usize = 128", "verify_response(response.as_bytes(), challenge)?"]},
  {path:"workers/managed-emulation/host/tests/lifecycle.rs",markers:["reopened_work_is_fenced_even_when_previous_stop_was_recorded", "independent_checkpoint_detects_valid_prefix_rollback_and_tail_deletion", "every_event_rejects_unknown_fields_including_empty_struct_variants"]},
  {path:"workers/managed-emulation/guest_probe.py",markers:["_open_private_boot_record", "dir_fd=descriptor", "Protected root-owned boot directory required", "info.st_nlink != 1", "Boot record changed"]},

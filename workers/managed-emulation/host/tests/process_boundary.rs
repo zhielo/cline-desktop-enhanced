@@ -75,3 +75,46 @@ fn missing_stdin_eof_is_bounded_by_the_real_whole_process_watchdog() {
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn blocked_diagnostic_delivery_cannot_defeat_the_watchdog() {
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::time::{Duration, Instant};
+    let (mut writer, reader) = UnixStream::pair().unwrap();
+    writer.set_nonblocking(true).unwrap();
+    loop {
+        match writer.write(&[b'x'; 4096]) {
+            Ok(0) => panic!("Owned socket unexpectedly closed"),
+            Ok(_) => (),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(error) => panic!("Owned pipe fixture failed: {error}"),
+        }
+    }
+    writer.set_nonblocking(false).unwrap();
+    let start = Instant::now();
+    let descriptor: OwnedFd = writer.into();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cline-managed-inert-probe"))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::from(descriptor))
+        .spawn()
+        .unwrap();
+    // No reader consumes the already-full stream. Generic failure delivery blocks.
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if start.elapsed() > Duration::from_secs(25) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("Diagnostic output escaped the whole-process deadline");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+    assert_eq!(status.code(), Some(124));
+    assert!(start.elapsed() >= Duration::from_secs(14));
+    drop(reader);
+    assert!(child.wait_with_output().unwrap().stdout.is_empty());
+}

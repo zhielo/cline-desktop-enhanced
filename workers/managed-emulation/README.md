@@ -24,8 +24,9 @@ There are intentionally no user setup instructions here.
 - The host reads a bounded closed private stdin pipe, never argv/environment
   credentials. It rejects wildcard/parent/loopback VM addresses and uses one
   ten-second connection/I/O budget. A separate 15-second whole-process watchdog
-  bounds blocked private stdin EOF and stdout delivery; timeout exits 124 without
-  touching a possibly blocked diagnostic pipe. This terminates **only the probe**,
+  bounds blocked private stdin EOF and output delivery; timeout hard-exits 124 without
+  touching a possibly blocked diagnostic pipe or running buffered-I/O cleanup
+  handlers (`_exit` on Unix, `TerminateProcess` on Windows). This terminates **only the probe**,
   not the VM; its parent **must** still supervise the VM and record unresolved
   termination/recovery rather than treating helper exit as success.
   Private input/key buffers are cleared

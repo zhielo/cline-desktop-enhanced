@@ -130,6 +130,35 @@ fn run() -> Result<()> {
     result
 }
 
+// A watchdog must not run buffered-I/O cleanup or exit handlers that could
+// wait on the very thread/pipe it needs to terminate. This targets only self.
+#[cfg(unix)]
+fn terminate_probe_on_deadline() -> ! {
+    extern "C" {
+        fn _exit(status: i32) -> !;
+    }
+    unsafe { _exit(124) }
+}
+
+#[cfg(windows)]
+fn terminate_probe_on_deadline() -> ! {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetCurrentProcess() -> *mut std::ffi::c_void;
+        fn TerminateProcess(process: *mut std::ffi::c_void, code: u32) -> i32;
+    }
+    unsafe {
+        TerminateProcess(GetCurrentProcess(), 124);
+    }
+    // Self-termination normally never returns; retain a non-success fallback.
+    std::process::exit(124)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn terminate_probe_on_deadline() -> ! {
+    std::process::exit(124)
+}
+
 fn main() {
     // Independent whole-process bound: stdin EOF and stdout delivery are not
     // covered by socket timeouts. This kills ONLY this probe, never the VM.
@@ -143,7 +172,7 @@ fn main() {
             ) {
                 // Do not write to a possibly blocked diagnostic pipe on timeout.
                 // No readiness, cleanup or VM-termination receipt is produced.
-                std::process::exit(124);
+                terminate_probe_on_deadline();
             }
         });
     let Ok(watchdog) = watchdog else {
