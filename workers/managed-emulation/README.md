@@ -207,3 +207,35 @@ it deliberately does not claim a VM or framework was installed.
 
 Reference:
 https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/make-integration-service
+## Separate owned-engine guest images (development only)
+
+`engines/` builds separate Qiling, unidbg, rnidbg and Speakeasy runtime bundles
+from the existing pinned worker requirements/adapters and checked-in owned
+fixtures. Qiling and Speakeasy never share their incompatible Unicorn Python
+environments; the existing desktop Unicorn and external-worker routes are unchanged.
+The immutable Python and Rust base images are digest pinned. Debian build-tool/JDK
+packages are not a fully pinned reproducible distribution: final runtime bytes,
+links and fixture content are sealed in each bundle manifest; redistribution and
+complete build-tool/source/license review remain required before publication.
+
+Builders install/compile dependencies inside disposable containers, never execute
+an emulator or fixture there, and export only a runtime image. Compilers, Maven,
+package caches and pip are excluded from the final bundle. Guest tests use an
+engine-specific venv, minimal Java 17 runtime for unidbg, the existing reviewed
+rnidbg compatibility patch, and fixed shared-library closure. No arbitrary target,
+script, hook, stub, APK, classpath, host share or HTTP worker is accepted.
+
+The dedicated four-way CI constructs actual diskless guest images and boots each
+under networkless QEMU/TCG with 2 GiB RAM. Before credentials are provisioned,
+fixed owned scenarios must execute: Qiling all three existing profiles with
+stdout/exit, fresh-state, syscall-refusal and instruction-budget checks; unidbg
+ARM32/64 and experimental rnidbg ARM64 JNI return/refusal/budget/missing-export/
+fresh-state checks; Speakeasy owned PE entry/GetTickCount/fresh-state and identity
+refusal. Runtime bundle integrity is verified both before and after execution.
+Counts, architectures and exact scope must match; imports alone never pass.
+
+These are developer acceptance images, NOT installed Setup Center packs. Even a
+passed owned scenario retains engineReadiness not-tested and VM isolation
+not-attested. No guest runtime ISO is published. Hyper-V ownership/transport,
+privileged lifecycle/recovery, reviewed distribution, per-request approval,
+transactional setup and installed Windows 10 acceptance remain mandatory.

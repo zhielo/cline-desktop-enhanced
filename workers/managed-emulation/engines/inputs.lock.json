@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "compilerImage": "docker.io/library/rust@sha256:bf7d87666c4da6eace19e06d21bc4859c6e2a5c97a21ac273b0e082112753cf0",
+  "compilerVersion": "1.85.1",
+  "platform": "linux/amd64",
+  "engines": [
+    "qiling",
+    "unidbg",
+    "rnidbg",
+    "speakeasy"
+  ],
+  "scope": "development-owned-guest-tests-only"
+}

@@ -1117,3 +1117,21 @@ private media. It must remain unresolved without a real host exchange and never
 promote readiness. The ISO/key are not uploaded. This does not create a VM, bind
 ownership, register services, install any engine or connect Setup Center; complete
 privileged lifecycle, engine packaging and installed acceptance remain mandatory.
+
+## Managed guest engine bundle acceptance
+
+Separate development guest bundles now package the four existing fixed engine
+profiles, preserving desktop Unicorn and keeping incompatible Python/Unicorn
+closures separate. Existing version-pinned requirements, exact unidbg dependency
+hashes and rnidbg source/compatibility locks remain unchanged. Immutable Python/
+Rust base digests bind CI inputs; final file/link manifests seal runtime bytes.
+Debian build-tool/JDK packages and corresponding-source/license distribution are
+not yet a fully pinned shippable policy.
+
+The new four-way workflow requires actual offline UEFI guest execution of owned
+fixtures, not import checks or host-side emulator success. Exact architecture/
+scenario counts, positive/fresh-state and refusal/budget evidence, and before/after
+runtime integrity remain mandatory. Compilers/pip/build caches are not exported;
+no runtime image is published. These tests cannot promote application readiness,
+attest Hyper-V containment, change external worker configuration, install tools
+through Setup Center or satisfy unfinished privileged lifecycle/installed gates.

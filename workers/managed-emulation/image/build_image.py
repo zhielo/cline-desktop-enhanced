@@ -224,9 +224,11 @@ def modules(kernel, release):
         return result
 
 
-def build(rootfs, kernel_path, busybox_path, output, revision):
+def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None):
     if not re.fullmatch("[0-9a-f]{40}", revision) or output.exists() or output.is_symlink():
         raise ValueError("New output and exact source revision required")
+    if owned_engine not in (None, "qiling", "unidbg", "rnidbg", "speakeasy"):
+        raise ValueError("Unknown owned engine")
     lock = json.loads((HERE / "inputs.lock.json").read_text())
     if rootfs.stat().st_size > MAX_INPUT:
         raise ValueError("Rootfs export budget")
@@ -241,6 +243,16 @@ def build(rootfs, kernel_path, busybox_path, output, revision):
             if resolved in tree:
                 raise ValueError("Duplicate canonical runtime path")
             tree[resolved] = node
+    if owned_engine:
+        prefix = "opt/cline-engine/"
+        selected = {path: node for path,node in original.items() if path.startswith(prefix)}
+        required = {prefix+"bundle.json", prefix+"engine", prefix+"selftest.py", prefix+"env/bin/python"}
+        if not required <= selected.keys() or selected[prefix+"engine"].data != (owned_engine+"\n").encode():
+            raise ValueError("Owned engine bundle absent or mismatched")
+        manifest = json.loads(selected[prefix+"bundle.json"].data)
+        if manifest.get("engine") != owned_engine or manifest.get("scope") != "development-owned-guest-tests-only":
+            raise ValueError("Owned engine manifest mismatch")
+        tree.update(selected)
     tree.update({"lib": Node("symlink", 0o777, b"usr/lib"), "lib64": Node("symlink", 0o777, b"usr/lib64")})
     if "usr/local/bin/python3.13" not in tree or "usr/local/lib/libpython3.13.so.1.0" not in tree:
         raise ValueError("Pinned Python runtime absent")
@@ -261,6 +273,15 @@ def build(rootfs, kernel_path, busybox_path, output, revision):
     sources = {"init": HERE / "init", "opt/cline/boot_selftest.py": HERE / "boot_selftest.py", "opt/cline/provision_boot.py": HERE / "provision_boot.py", "opt/cline/guest_probe.py": HERE.parent / "guest_probe.py", "opt/cline/probe_protocol.py": HERE.parent / "probe_protocol.py"}
     for path, source in sources.items():
         tree[path] = Node("file", 0o755 if path == "init" else 0o644, source.read_bytes())
+    if owned_engine:
+        fixed = tree["init"].data.decode()
+        fixed = fixed.replace("export LD_LIBRARY_PATH=/usr/local/lib", "export LD_LIBRARY_PATH=/opt/cline-engine/syslibs:/usr/local/lib")
+        marker = "/usr/local/bin/python3.13 -B -E -s /opt/cline/boot_selftest.py || fail"
+        if fixed.count(marker) != 1:
+            raise ValueError("Owned init insertion boundary changed")
+        fixed = fixed.replace(marker, "$bb timeout -s KILL 240 /opt/cline-engine/env/bin/python -B -I /opt/cline-engine/selftest.py || fail\n"+marker)
+        tree["init"] = Node("file", 0o755, fixed.encode())
+
     for source, label in [(busybox, "busybox-static"), (kernel, "linux")]:
         for path, node in source.items():
             if path.startswith("usr/share/doc/") and node.kind == "file" and (path.endswith("copyright") or "changelog" in path):
@@ -281,7 +302,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision):
             stream.seek(16 * 2048 + 1)
             if stream.read(5) != b"CD001":
                 raise ValueError("Boot ISO descriptor absent")
-        manifest = {"schema": 1, "scope": "development-inert-guest", "installable": False, "sourceRevision": revision, "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested", "inputs": lock, "rootfsExportSha256": hashlib.sha256(raw).hexdigest(), "guestSources": {path: hashlib.sha256(source.read_bytes()).hexdigest() for path, source in sources.items()}, "explicitEntryCount": len(tree), "regularFileCount": sum(n.kind == "file" for n in tree.values()), "artifacts": {"inert-guest.iso": {"sha256": hashlib.sha256(iso.read_bytes()).hexdigest(), "size": iso.stat().st_size}}}
+        manifest = {"schema": 1, "scope": "development-inert-guest", "installable": False, "sourceRevision": revision, "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested", "inputs": lock, "rootfsExportSha256": hashlib.sha256(raw).hexdigest(), "ownedEngine": owned_engine, "ownedEngineBundleSha256": hashlib.sha256(tree["opt/cline-engine/bundle.json"].data).hexdigest() if owned_engine else None, "guestSources": {path: hashlib.sha256(source.read_bytes()).hexdigest() for path, source in sources.items()}, "explicitEntryCount": len(tree), "regularFileCount": sum(n.kind == "file" for n in tree.values()), "artifacts": {"inert-guest.iso": {"sha256": hashlib.sha256(iso.read_bytes()).hexdigest(), "size": iso.stat().st_size}}}
         (stage / "image-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         # No image bytes are considered published until the complete build succeeds.
         os.rename(stage, output)
@@ -292,8 +313,9 @@ def main():
     for label in ("rootfs", "kernel", "busybox", "output"):
         parser.add_argument("--" + label, type=Path, required=True)
     parser.add_argument("--source-revision", required=True)
+    parser.add_argument("--owned-engine", choices=["qiling", "unidbg", "rnidbg", "speakeasy"])
     args = parser.parse_args()
-    build(args.rootfs, args.kernel, args.busybox, args.output, args.source_revision)
+    build(args.rootfs, args.kernel, args.busybox, args.output, args.source_revision, args.owned_engine)
 
 
 if __name__ == "__main__":

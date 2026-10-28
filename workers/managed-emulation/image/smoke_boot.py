@@ -50,9 +50,32 @@ def validate_boot_log(data, status, credential_case="absent"):
     return receipt
 
 
-def run(image, output, uefi=False, credential_case="absent", native_generator=None):
+def validate_engine_log(data, engine):
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", data.decode("utf-8", errors="replace"))
+    marker = "CLINE_MANAGED_ENGINE_OWNED_V1 "
+    lines = [line.strip() for line in text.splitlines() if line.startswith(marker)]
+    if len(lines) != 1 or "CLINE_MANAGED_ENGINE_FAILED_V1" in text:
+        raise ValueError("Actual owned engine receipt missing or failed")
+    def unique(pairs):
+        value = {}
+        for key,item in pairs:
+            if key in value:
+                raise ValueError("Duplicate owned engine evidence")
+            value[key] = item
+        return value
+    value = json.loads(lines[0][len(marker):], object_pairs_hook=unique)
+    arches = {"qiling":["x86_64","arm32","arm64"],"unidbg":["arm32","arm64"],"rnidbg":["arm64"],"speakeasy":["x86_64"]}
+    expected = {"schema":1,"engine":engine,"architectures":arches[engine],"checks":{"qiling":12,"unidbg":10,"rnidbg":5,"speakeasy":4}[engine],"ownedFixtures":"passed","engineReadiness":"not-tested","vmIsolation":"not-attested"}
+    if set(value) != set(expected) | {"bundleSha256"} or any(value[k] != v for k,v in expected.items()) or not re.fullmatch("[0-9a-f]{64}",value["bundleSha256"]):
+        raise ValueError("Owned engine evidence scope mismatch")
+    return value
+
+
+def run(image, output, uefi=False, credential_case="absent", native_generator=None, owned_engine=None):
+    if owned_engine not in (None, "qiling", "unidbg", "rnidbg", "speakeasy") or (owned_engine and credential_case != "absent"):
+        raise ValueError("Fixed owned engine boot required")
     image = image.resolve(strict=True)
-    command = ["qemu-system-x86_64", "-accel", "tcg", "-machine", "pc", "-m", "1024", "-smp", "1", "-nic", "none", "-nodefaults", "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot", "-cdrom", str(image), "-boot", "d"]
+    command = ["qemu-system-x86_64", "-accel", "tcg", "-machine", "pc", "-m", "2048" if owned_engine else "1024", "-smp", "1", "-nic", "none", "-nodefaults", "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot", "-cdrom", str(image), "-boot", "d"]
     with tempfile.TemporaryDirectory(prefix="cline-owned-boot-") as private:
         if credential_case not in {"absent", "expired", "valid", "native"}:
             raise ValueError("Unknown owned credential fixture")
@@ -90,7 +113,7 @@ def run(image, output, uefi=False, credential_case="absent", native_generator=No
             shutil.copyfile(variables, writable)
             command.extend(["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}", "-drive", f"if=pflash,format=raw,unit=1,file={writable}"])
         child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
-        data, deadline = bytearray(), time.monotonic() + 120
+        data, deadline = bytearray(), time.monotonic() + (300 if owned_engine else 120)
         try:
             with selectors.DefaultSelector() as selector:
                 selector.register(child.stdout, selectors.EVENT_READ)
@@ -113,7 +136,10 @@ def run(image, output, uefi=False, credential_case="absent", native_generator=No
             child.stdout.close()
             output.write_bytes(data)
         receipt = validate_boot_log(data, status, credential_case)
-        return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved", "native": "native-private-media-provisioned-exchange-unresolved"}[credential_case], **receipt}
+        if owned_engine:
+            validate_engine_log(data, owned_engine)
+
+        return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "ownedEngine": owned_engine, "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved", "native": "native-private-media-provisioned-exchange-unresolved"}[credential_case], **receipt}
 
 
 if __name__ == "__main__":
@@ -124,6 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--uefi", action="store_true")
     parser.add_argument("--credential-case", choices=["absent", "expired", "valid", "native"], default="absent")
     parser.add_argument("--native-media-generator", type=Path)
+    parser.add_argument("--owned-engine", choices=["qiling", "unidbg", "rnidbg", "speakeasy"])
     args = parser.parse_args()
-    result = run(args.image, args.log, args.uefi, args.credential_case, args.native_media_generator)
+    result = run(args.image, args.log, args.uefi, args.credential_case, args.native_media_generator, args.owned_engine)
     args.receipt.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")

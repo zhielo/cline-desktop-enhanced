@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/engines/selftest.py",markers:["verify_bundle()", "CLINE_MANAGED_ENGINE_OWNED_V1", "Owned runtime changed", "unsupported-syscall", "GetTickCount"]},
+ {path:"workers/managed-emulation/engines/prepare.py",markers:["Exact JNI dependency closure required", "Engine runtime byte budget", "--compress=2", "strip", "development-owned-guest-tests-only"]},
+ {path:".github/workflows/managed-emulation-engines.yml",markers:["engine: [qiling, unidbg, rnidbg, speakeasy]", "Actual offline UEFI guest owned engine execution and refusal cases", "never execute fixture in builder"]},
  {path:"workers/managed-emulation/host/src/boot_media.rs",markers:["getrandom::fill", "create_new(true)", "file.sync_all()", "Zeroizing", "BOOT.JSON;1", "Boot material expired or clock changed"]},
  {path:"workers/managed-emulation/host/tests/boot_media.rs",markers:["os_generated_media_and_private_probe_input_share_exact_boot_identity", "native_fixture_cli_writes_no_keys_or_raw_paths_and_never_overwrites"]},
  {path:".github/workflows/managed-emulation-image.yml",markers:["Native private boot media provisions inside the actual UEFI guest", "--credential-case native"]},
