@@ -1,17 +1,18 @@
 /** Regression for the exact provenance-line exception; never prints fixture tokens. */
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
-	mkdtempSync,
 	mkdirSync,
-	writeFileSync,
-	rmSync,
+	mkdtempSync,
 	readFileSync,
+	rmSync,
+	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve, join, dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = mkdtempSync(join(tmpdir(), "cline-secret-scan-"));
 const revision = JSON.parse(
@@ -102,10 +103,17 @@ try {
 	rmSync(join(root, "other.json"));
 	const historicalProse = "escaping links,\n  unresolved/cyclic hardlinks";
 	const currentDoc = readFileSync(join(repo, docPath), "utf8");
-	const generic = "api_key = \"" + createHash("sha256").update("owned scanner negative-control fixture").digest("hex") + "\"";
+	const generic =
+		'api_key = "' +
+		createHash("sha256")
+			.update("owned scanner negative-control fixture")
+			.digest("hex") +
+		'"';
 	const ignoredHistory = readFileSync(join(repo, ".gitleaksignore"), "utf8");
-	const proseFingerprint = "13ab96fa588bb8c7ee1f34b850f6a2b6ee9db166:" +
-		docPath + ":generic-api-key:18";
+	const proseFingerprint =
+		"13ab96fa588bb8c7ee1f34b850f6a2b6ee9db166:" +
+		docPath +
+		":generic-api-key:18";
 	assert.ok(ignoredHistory.split(/\r?\n/).includes(proseFingerprint));
 	for (const [label, contents, expected] of [
 		["current image documentation", currentDoc, 0],
@@ -115,16 +123,34 @@ try {
 	]) {
 		writeFileSync(doc, contents);
 		const report = join(root, "report.json");
-		const result = spawnSync(process.env.GITLEAKS_BIN || "gitleaks", [
-			"dir", ".", "--redact", "--no-banner", "--no-color",
-			"--config", join(repo, ".gitleaks.toml"),
-			"--gitleaks-ignore-path", join(repo, ".gitleaksignore"),
-			"--report-format", "json", "--report-path", report,
-		], { cwd: root, encoding: "utf8", timeout: 30_000 });
+		const result = spawnSync(
+			process.env.GITLEAKS_BIN || "gitleaks",
+			[
+				"dir",
+				".",
+				"--redact",
+				"--no-banner",
+				"--no-color",
+				"--config",
+				join(repo, ".gitleaks.toml"),
+				"--gitleaks-ignore-path",
+				join(repo, ".gitleaksignore"),
+				"--report-format",
+				"json",
+				"--report-path",
+				report,
+			],
+			{ cwd: root, encoding: "utf8", timeout: 30_000 },
+		);
 		assert.equal(result.error, undefined, "Scanner must be available");
 		assert.equal(result.status, expected, label);
-		if (expected) assert.ok(JSON.parse(readFileSync(report, "utf8"))
-			.some((finding) => finding.RuleID === "generic-api-key"), label);
+		if (expected)
+			assert.ok(
+				JSON.parse(readFileSync(report, "utf8")).some(
+					(finding) => finding.RuleID === "generic-api-key",
+				),
+				label,
+			);
 		rmSync(report, { force: true });
 	}
 	console.log(

@@ -243,6 +243,29 @@ def owned_bundle(original, engine):
     manifest = json.loads(raw, object_pairs_hook=unique)
     if not isinstance(manifest,dict) or set(manifest) != {"schema","engine","scope","files"} or type(manifest["schema"]) is not int or manifest["schema"] != 1 or manifest["engine"] != engine or manifest["scope"] != "development-owned-guest-tests-only" or not isinstance(manifest["files"],dict):
         raise ValueError("Owned engine manifest mismatch")
+    if not 1 <= len(manifest["files"]) <= 20_000:
+        raise ValueError("Owned engine manifest count budget")
+    observed = {path[len(prefix):] for path,node in selected.items() if node.kind != "directory"}
+    if observed != set(manifest["files"]) | {"bundle.json"}:
+        raise ValueError("Unsealed exported runtime file")
+    total = 0
+    for label, entry in manifest["files"].items():
+        if not isinstance(label,str) or not label or label.startswith("/") or any(part in ("", ".", "..") for part in label.split("/")) or "\\" in label or "\x00" in label or not isinstance(entry,dict):
+            raise ValueError("Unsafe exported runtime entry")
+        node = selected[prefix+label]
+        if entry.get("kind") == "file" and set(entry) == {"kind", "size", "sha256"}:
+            size, digest = entry["size"], entry["sha256"]
+            if type(size) is not int or not 0 <= size <= 64*1024**2 or not isinstance(digest,str) or not re.fullmatch("[0-9a-f]{64}", digest):
+                raise ValueError("Exported runtime file schema")
+            total += size
+            if total > 384*1024**2 or node.kind != "file" or len(node.data) != size or hashlib.sha256(node.data).hexdigest() != digest:
+                raise ValueError("Exported runtime file mismatch/budget")
+        elif entry.get("kind") == "symlink" and set(entry) == {"kind", "target"}:
+            target = entry["target"]
+            if not isinstance(target,str) or not target or len(target) > 1024 or "\x00" in target or node.kind != "symlink" or node.data != target.encode():
+                raise ValueError("Exported runtime link mismatch")
+        else:
+            raise ValueError("Exported runtime entry type")
     # Build dependencies cannot replace the trusted fixed acceptance program or
     # repository collectors and then certify themselves with a generated hash.
     repository = HERE.parents[2]

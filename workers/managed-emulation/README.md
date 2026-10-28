@@ -239,3 +239,14 @@ passed owned scenario retains engineReadiness not-tested and VM isolation
 not-attested. No guest runtime ISO is published. Hyper-V ownership/transport,
 privileged lifecycle/recovery, reviewed distribution, per-request approval,
 transactional setup and installed Windows 10 acceptance remain mandatory.
+
+### Bounded complete engine inventory verification
+
+The image builder checks every exported non-directory engine member against
+the sealed inventory, including exact file lengths/digests and symbolic-link
+targets. Extra files and malformed entry types fail before image construction.
+The guest reads bounded regular files through no-follow/nonblocking descriptors,
+checks allocation limits before reads and rejects changed metadata and special
+files. Aggregate bytes are refused before the next content read. These checks
+remain scoped to development-owned images; they do not implement installation,
+VM ownership, broker filesystem protection or arbitrary-target containment.

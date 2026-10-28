@@ -14,6 +14,7 @@ import sys
 import tempfile
 
 ROOT = Path('/opt/cline-engine')
+MAX_BUNDLE_BYTES = 384*1024**2
 ARCHES = {'qiling': ['x86_64','arm32','arm64'], 'unidbg':['arm32','arm64'], 'rnidbg':['arm64'], 'speakeasy':['x86_64']}
 
 
@@ -26,35 +27,69 @@ def unique(pairs):
     return result
 
 
+def regular_bytes(path, limit):
+    # Check type/size before allocation and pin the descriptor across the read.
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or not 0 <= before.st_size <= limit:
+            raise ValueError('Owned file type or byte budget')
+        with os.fdopen(descriptor, 'rb', closefd=False) as stream:
+            raw = stream.read(limit+1)
+        after = os.fstat(descriptor)
+        if len(raw) != before.st_size or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+            raise ValueError('Owned file changed while reading')
+        return raw
+    finally:
+        os.close(descriptor)
+
+
 def verify_bundle():
-    raw = (ROOT/'bundle.json').read_bytes()
-    if not 1 <= len(raw) <= 4*1024**2:
+    raw = regular_bytes(ROOT/'bundle.json', 4*1024**2)
+    if not raw:
         raise ValueError('Bundle manifest budget')
     value = json.loads(raw, object_pairs_hook=unique)
-    if not isinstance(value,dict) or set(value) != {'schema','engine','scope','files'} or type(value['schema']) is not int or value['schema'] != 1 or value['scope'] != 'development-owned-guest-tests-only' or value['engine'] not in ARCHES:
+    if not isinstance(value,dict) or set(value) != {'schema','engine','scope','files'} or type(value['schema']) is not int or value['schema'] != 1 or value['scope'] != 'development-owned-guest-tests-only' or not isinstance(value['engine'],str) or value['engine'] not in ARCHES:
         raise ValueError('Owned bundle identity')
-    if not isinstance(value['files'],dict) or (ROOT/'engine').read_text() != value['engine']+'\n' or not 1 <= len(value['files']) <= 20_000:
+    if not isinstance(value['files'],dict) or regular_bytes(ROOT/'engine',32) != (value['engine']+'\n').encode() or not 1 <= len(value['files']) <= 20_000:
         raise ValueError('Owned bundle identity/count')
-    observed = {p.relative_to(ROOT).as_posix() for p in ROOT.rglob('*') if p.is_symlink() or p.is_file()}
+    observed = set()
+    count = 0
+    for path in ROOT.rglob('*'):
+        count += 1
+        if count > 40_000:
+            raise ValueError('Runtime directory count budget')
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode) or stat.S_ISREG(mode):
+            observed.add(path.relative_to(ROOT).as_posix())
+        elif not stat.S_ISDIR(mode):
+            raise ValueError('Special runtime file')
     if observed != set(value['files']) | {'bundle.json'}:
         raise ValueError('Unsealed runtime file')
     total = 0
     for label, entry in value['files'].items():
-        if not isinstance(label,str) or not label or label.startswith('/') or any(p in ('','..','.') for p in label.split('/')) or '\\' in label:
+        if not isinstance(label,str) or not label or label.startswith('/') or any(p in ('','..','.') for p in label.split('/')) or '\\' in label or '\x00' in label:
             raise ValueError('Unsafe bundle path')
+        if not isinstance(entry,dict):
+            raise ValueError('Bundle entry type')
         path = ROOT/label
         info = path.lstat()
         if entry.get('kind') == 'symlink' and set(entry) == {'kind','target'}:
-            if not stat.S_ISLNK(info.st_mode) or os.readlink(path) != entry['target']:
+            target = entry['target']
+            if not isinstance(target,str) or not target or len(target) > 1024 or '\x00' in target or not stat.S_ISLNK(info.st_mode) or os.readlink(path) != target:
                 raise ValueError('Bundle link mismatch')
         elif entry.get('kind') == 'file' and set(entry) == {'kind','size','sha256'}:
-            total += info.st_size
-            if not stat.S_ISREG(info.st_mode) or info.st_size != entry['size'] or info.st_size > 64*1024**2 or hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+            length, digest = entry['size'], entry['sha256']
+            if type(length) is not int or not 0 <= length <= 64*1024**2 or not isinstance(digest,str) or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+                raise ValueError('Bundle file schema')
+            total += length
+            # Enforce aggregate limits BEFORE reading or hashing the next file.
+            if total > MAX_BUNDLE_BYTES:
+                raise ValueError('Bundle total budget')
+            if not stat.S_ISREG(info.st_mode) or info.st_size != length or hashlib.sha256(regular_bytes(path,length)).hexdigest() != digest:
                 raise ValueError('Bundle file mismatch')
         else:
             raise ValueError('Bundle entry type')
-    if total > 384*1024**2:
-        raise ValueError('Bundle total budget')
     return value['engine'], hashlib.sha256(raw).hexdigest()
 
 

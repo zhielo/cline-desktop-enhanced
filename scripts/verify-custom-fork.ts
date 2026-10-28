@@ -2867,6 +2867,26 @@ requiredMarkers.push(
 	},
 );
 
+requiredMarkers.push(
+	{
+		path: "workers/managed-emulation/engines/selftest.py",
+		markers: [
+			"def regular_bytes(",
+			"os.O_NOFOLLOW | os.O_NONBLOCK",
+			"total > MAX_BUNDLE_BYTES",
+			"Special runtime file",
+		],
+	},
+	{
+		path: "workers/managed-emulation/image/build_image.py",
+		markers: [
+			"Unsealed exported runtime file",
+			"Exported runtime file schema",
+			"Exported runtime link mismatch",
+		],
+	},
+);
+
 for (const forbiddenPath of forbiddenPaths) {
 	if (existsSync(forbiddenPath)) {
 		failures.push(`${forbiddenPath}: obsolete file must remain deleted`);

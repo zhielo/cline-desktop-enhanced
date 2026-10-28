@@ -1148,3 +1148,8 @@ supply-chain attestation and do not certify arbitrary-target safety.
 
 - The inert-image archive rejection documentation is reworded to avoid a multiline generic-key false positive. Only the independently reviewed original documentation finding is retained as an exact commit/path/rule/line fingerprint in `.gitleaksignore`; no directory, rule, token-pattern, history-scan or release gate is disabled.
 - Scanner regressions retain the existing nine provenance-scope cases and add current documentation, original prose in new content, and synthetic generic-key detections beside/replacing the documentation. The historical exception cannot suppress future findings at the same path. Full-history scanning remains mandatory.
+
+## Development guest bundle validation bounds
+
+- Image construction now validates every exported engine file/link against the exact sealed inventory before copying it into an image, not only the fixed acceptance sources. Unsealed entries, malformed entry schemas, boolean/float sizes, invalid hashes, mismatched links, per-file/count/aggregate overflow and replaced acceptance code are refused.
+- Guest validation opens manifest/identity/content files with no-follow nonblocking descriptors, checks regular-file type and allocation budgets before reading, rechecks descriptor metadata, rejects special files and bounds directory enumeration. Aggregate sealed bytes are checked before opening the next content file. These are development image integrity/resource checks, not a protected broker, Windows installation, external target support or containment attestation.
