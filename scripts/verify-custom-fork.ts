@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/probe_protocol.py",markers:["cline-managed-inert-probe/v1", "hmac.compare_digest", "Only the inert owned probe is implemented", '"vmIsolation": "not-attested"']},
+ {path:"workers/managed-emulation/guest_probe.py",markers:["socket.AF_VSOCK", "socket.VMADDR_CID_HOST", "serve_one(connection", "Private root-owned boot record required"]},
+ {path:"workers/managed-emulation/host/src/lib.rs",markers:["verify_slice", "Concrete child VM identity required", "not-attested", "not-tested"]},
+ {path:"workers/managed-emulation/host/src/main.rs",markers:["Domain::from(34)", "Duration::from_secs(10)", "bytes.zeroize()", "Arguments forbidden"]},
  {path:"apps/examples/desktop-app/sidecar/managed-emulation-preflight.ts",markers:["projectManagedEmulationPreflight", "Get-CimInstance -ClassName Win32_OperatingSystem", "managedInstallation: \"not-implemented\"", "engineReadiness: \"not-tested\"", "timeout: 15_000"]},
  {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["setup_center_emulation_host_preflight", "readManagedEmulationPreflight"]},
  {path:"apps/examples/desktop-app/webview/components/views/settings/managed-emulation-preflight.tsx",markers:["Check local emulation prerequisites", "No installation or readiness is inferred", "not reserved resources", "confirmed: true"]},

@@ -2,6 +2,11 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Draft managed-local inert transport foundation
+
+- `workers/managed-emulation` adds a separate development-only Rust AF_HYPERV host probe and one-shot Linux AF_VSOCK guest agent. A bounded HMAC/session/direction/challenge protocol accepts only a fixed inert owned fixture; there is no shell, target execution, file transfer, TCP/HTTP fallback or implicit probe. Public vectors and native process tests cover authentication, strict parsing, budgets and secret-safe failure.
+- This is not connected to Setup Center or model execution and does not change existing HTTPS workers, Unicorn, WSL, installation or readiness. No image, lifecycle broker, protected per-boot provisioning, Hyper-V registration or VM ownership/containment evidence is delivered. Native Linux/Windows CI establishes codec/process behavior only; actual Hyper-V execution remains outstanding. Keep the complete pack unavailable until the documented lifecycle, installation and recovery gates pass.
+
 ## Installed RPC evidence bookkeeping
 
 - Every acceptance RPC records endpoint discovery and command submission as one bounded operation rather than counting native endpoint lookup as an additional action. Discovery still occurs on every call, including restarts; discovery/submission failures remain recorded, and submitted commands are never retried. The 768-action cap, 95-second per-action deadline, all 70 installed stages and cleanup requirements remain unchanged. Regression coverage exercises 400 calls, fresh endpoint lookup and both failure paths. The exact installed recipe fingerprint follows this change; no gate is bypassed.
