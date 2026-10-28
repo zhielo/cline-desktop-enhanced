@@ -1,6 +1,6 @@
 """Copy one bounded credential from fixed read-only media into private tmpfs.
 
-No media writer/broker is implemented here. Never prints credential bytes/errors.
+Native media generation is separate; no VM broker is implemented here. Never prints credential bytes/errors.
 """
 import os
 import stat

@@ -156,6 +156,8 @@ class ColdBootReceiptTests(unittest.TestCase):
         valid=self.log().replace(b"CLINE_MANAGED_CREDENTIAL_ABSENT_V1",b"CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1\nCLINE_MANAGED_PROBE_UNRESOLVED_V1")
         self.assertEqual(smoke_boot.validate_boot_log(expired,0,"expired")["engineReadiness"],"not-tested")
         self.assertEqual(smoke_boot.validate_boot_log(valid,0,"valid")["hypervExchange"],"not-tested")
+        self.assertEqual(smoke_boot.validate_boot_log(valid,0,"native")["hypervExchange"],"not-tested")
+        with self.assertRaises(ValueError):smoke_boot.validate_boot_log(expired,0,"native")
         for data,case in [(valid,"expired"),(expired,"valid"),(valid+b"CLINE_MANAGED_PROBE_EXITED_V1","valid"),(valid+b"CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1","valid")]:
             with self.subTest(case=case),self.assertRaises(ValueError):smoke_boot.validate_boot_log(data,0,case)
 

@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/boot_media.rs",markers:["getrandom::fill", "create_new(true)", "file.sync_all()", "Zeroizing", "BOOT.JSON;1", "Boot material expired or clock changed"]},
+ {path:"workers/managed-emulation/host/tests/boot_media.rs",markers:["os_generated_media_and_private_probe_input_share_exact_boot_identity", "native_fixture_cli_writes_no_keys_or_raw_paths_and_never_overwrites"]},
+ {path:".github/workflows/managed-emulation-image.yml",markers:["Native private boot media provisions inside the actual UEFI guest", "--credential-case native"]},
  {path:"workers/managed-emulation/host/src/store.rs",markers:["SnapshotWrittenBeforeCommit", "Recovery anchor changed; stale writer fenced", "PRAGMA synchronous=FULL", "Recovery store fenced; reopen and inspect", "SQLITE_OPEN_NOFOLLOW"]},
  {path:"workers/managed-emulation/host/tests/store_crash.rs",markers:["child.kill()", "COMMIT_BOUNDARY_REACHED", "reopen must never replay create"]},
  {path:"workers/managed-emulation/image/smoke_boot.py",markers:["validate_boot_log", "Duplicate guest receipt field", "Guest receipt scope mismatch", '"-nic", "none"', "hardware containment"]},

@@ -40,6 +40,7 @@ def validate_boot_log(data, status, credential_case="absent"):
         "absent": {"CLINE_MANAGED_CREDENTIAL_ABSENT_V1": 1},
         "expired": {"CLINE_MANAGED_BOOT_REJECTED_V1": 1},
         "valid": {"CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1": 1, "CLINE_MANAGED_PROBE_UNRESOLVED_V1": 1},
+        "native": {"CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1": 1, "CLINE_MANAGED_PROBE_UNRESOLVED_V1": 1},
     }
     if credential_case not in states:
         raise ValueError("Unknown owned credential fixture")
@@ -49,13 +50,27 @@ def validate_boot_log(data, status, credential_case="absent"):
     return receipt
 
 
-def run(image, output, uefi=False, credential_case="absent"):
+def run(image, output, uefi=False, credential_case="absent", native_generator=None):
     image = image.resolve(strict=True)
     command = ["qemu-system-x86_64", "-accel", "tcg", "-machine", "pc", "-m", "1024", "-smp", "1", "-nic", "none", "-nodefaults", "-display", "none", "-serial", "stdio", "-monitor", "none", "-no-reboot", "-cdrom", str(image), "-boot", "d"]
     with tempfile.TemporaryDirectory(prefix="cline-owned-boot-") as private:
-        if credential_case not in {"absent", "expired", "valid"}:
+        if credential_case not in {"absent", "expired", "valid", "native"}:
             raise ValueError("Unknown owned credential fixture")
-        if credential_case != "absent":
+        if credential_case == "native":
+            if native_generator is None:
+                raise ValueError("Owned native generator required")
+            generator = native_generator.resolve(strict=True)
+            generated = subprocess.run([str(generator), private], check=False, capture_output=True, timeout=30)
+            if (generated.returncode != 0 or generated.stderr
+                    or generated.stdout != b"Owned private boot media written; no VM or readiness established.\n"):
+                # Never echo private material, raw child errors or command input.
+                raise ValueError("Owned native provisioning failed")
+            media = Path(private) / "boot.iso"
+            info = media.lstat()
+            if not media.is_file() or media.is_symlink() or info.st_size != 22 * 2048 or info.st_mode & 0o077:
+                raise ValueError("Owned native media rejected")
+            command.extend(["-drive", f"file={media},media=cdrom,readonly=on,format=raw,index=3"])
+        elif credential_case != "absent":
             media_root = Path(private) / "media"
             media_root.mkdir(mode=0o700)
             # PUBLIC fixture identities only, never production boot credentials.
@@ -98,7 +113,7 @@ def run(image, output, uefi=False, credential_case="absent"):
             child.stdout.close()
             output.write_bytes(data)
         receipt = validate_boot_log(data, status, credential_case)
-        return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved"}[credential_case], **receipt}
+        return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "credentialCase": credential_case, "credentialResult": {"absent": "denied", "expired": "denied", "valid": "owned-fixture-provisioned-exchange-unresolved", "native": "native-private-media-provisioned-exchange-unresolved"}[credential_case], **receipt}
 
 
 if __name__ == "__main__":
@@ -107,7 +122,8 @@ if __name__ == "__main__":
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--uefi", action="store_true")
-    parser.add_argument("--credential-case", choices=["absent", "expired", "valid"], default="absent")
+    parser.add_argument("--credential-case", choices=["absent", "expired", "valid", "native"], default="absent")
+    parser.add_argument("--native-media-generator", type=Path)
     args = parser.parse_args()
-    result = run(args.image, args.log, args.uefi, args.credential_case)
+    result = run(args.image, args.log, args.uefi, args.credential_case, args.native_media_generator)
     args.receipt.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")

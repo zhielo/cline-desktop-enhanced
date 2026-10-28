@@ -34,11 +34,11 @@ engine readiness not tested and Hyper-V exchange not tested.
   explicitly does not certify Hyper-V communication or engine readiness.
 - Without the second per-job CD media, it records missing credentials and powers
   off. No IP, host-share, KVP, manual-shell or native-host fallback exists.
-- A future trusted broker/media writer may supply exactly `boot.json` as the mounted filesystem entry on the
+- The separate native boot-media writer can supply exactly `boot.json` as the mounted filesystem entry on the
   second read-only ISO9660 media. The guest copies at most 1024 bytes into an
   exclusive root-private file, checks stability, validates exact protocol/key/
-  session/expiry and only then starts the one-shot agent. No such broker/media
-  writer is implemented here. Unknown or failed provisioning powers off without
+  session/expiry and only then starts the one-shot agent. Protected broker integration
+  and VM attachment are not implemented. Unknown or failed provisioning powers off without
   printing credential content. Expiry/replay/fresh-key enforcement still needs
   the trusted host lifecycle broker; image code cannot attest those properties.
 
@@ -53,6 +53,9 @@ Additional real UEFI boots mount the second read-only media: expired credentials
 must reject before the listener, while a public valid-format fixture must copy
 and validate. With no host connection, that fixture must remain unresolved and
 power off; it must never report a successful exchange, containment or readiness.
+A fifth real UEFI boot uses fresh native-generated private media, not xorriso
+or public fixture credentials. It must provision successfully, remain unresolved
+without a host exchange and power off. The credential ISO is never uploaded.
 Storage enumeration has a fixed bounded wait. Public fixture keys are not
 production entropy/freshness or trusted broker provisioning evidence.
 QEMU is itself an emulator; these checks are **not** Hyper-V acceptance,
@@ -62,7 +65,7 @@ only bounded boot logs, receipts and the scoped manifest are retained.
 
 Before shipping: finish corresponding-source/notices/license packaging for all
 redistributed runtime components; pin/review the distribution and signing
-policy; build the protected native VM factory/media writer/broker; validate
+policy; build the protected native VM factory/broker and integrate native media; validate
 real Windows 10 Hyper-V cold boot, exact VM ownership, fresh provisioning,
 termination and recovery; add independently pinned engine environments and
 Setup Center transactional Install/Test/Repair/Update/Remove. UEFI boot here

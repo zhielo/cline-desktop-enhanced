@@ -121,6 +121,35 @@ The adapter is **not connected to Setup Center or a privileged Hyper-V broker**.
 Stored event observations remain claims until fresh exact-VM state is independently
 verified. A committed stop intent is not a termination receipt.
 
+## Native private boot-media provisioning (development only)
+
+`host/src/boot_media.rs` now generates a fresh 256-bit key, 128-bit session and
+256-bit challenge using OS entropy, with a bounded 180-second credential lifetime.
+The native writer builds one fixed-size ISO9660 volume in process: only BOOT.JSON;1,
+which the guest mounts as boot.json. No Python, Java, xorriso, external installer,
+network endpoint, shell or user-provided template is needed by this writer.
+
+- Boot material is not Debug/Clone/Serialize/Deserialize. Secret-bearing temporary
+  buffers are zeroized on ordinary drop; this is best effort, not forensic erasure.
+- Media is exclusively created as boot.iso under a caller-protected job directory,
+  synced before success and rechecked for expiry. Retained/partial files are never
+  overwritten, auto-reused or deleted on error. Unix modes are private; reparse/link
+  roots are refused. Windows ACL/owner/ancestor protection still requires the broker.
+- The same in-memory material writes bounded matching input through a private pipe
+  to the native probe, including the host challenge. No keys go into argv/env/logs,
+  model context, receipts or the durable lifecycle journal.
+- OS entropy and byte/identity/private-mode/reuse/refusal tests run on native Linux
+  and Windows. A separate real UEFI guest boot mounts native-generated media and
+  must accept its exact record, remain unresolved without a host exchange, then
+  power off. Earlier absent/expired/public-format fixture boots remain required.
+
+The CI-only owned-boot-media-fixture binary produces no credentials on stdout or
+stderr. Its media is ephemeral, never uploaded. It is NOT an installer, a privileged
+service, VM ownership proof, cleanup authorization or a Setup Center capability.
+The future broker must durably reserve each boot, protect roots/keys, supervise
+operations, enforce no replay, attach only to the verified exact VM and remove media
+only after verified detach/termination. No user WSL or host configuration changes.
+
 ## Development guest-image path
 
 `image/` now contains a separate CI-only diskless ISO builder and fixed guest

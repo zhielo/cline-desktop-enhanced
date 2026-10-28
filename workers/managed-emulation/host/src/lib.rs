@@ -201,3 +201,6 @@ pub mod lifecycle;
 
 /// Durable development journal adapter; no VM effects or readiness claims.
 pub mod store;
+
+/// Native private boot provisioning; not a VM ownership or readiness claim.
+pub mod boot_media;

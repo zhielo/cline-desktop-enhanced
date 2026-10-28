@@ -1097,3 +1097,23 @@ privileged broker (especially Windows ACL/hard-link ownership and ancestor
 protection). Rolling back both stores by their privileged owner is outside this
 adapter's guarantees. No service, VM factory, framework install, Setup Center
 integration, readiness or existing release gate is changed by these storage tests.
+
+## Native managed-guest boot credential media
+
+The development Rust host now generates fresh private boot key/session/challenge
+material from OS entropy and constructs a fixed-size one-record ISO9660 volume
+without external installers, Python/Java or shell/image tools. The same in-memory
+material emits bounded private probe input; keys never enter argv/env, receipts,
+logs, model context or the lifecycle database. Creation is exclusive under a
+caller-protected root, ordinary secret buffers zeroize, writes sync, lifetime is
+rechecked, and existing/partial media is not silently reused/deleted. Windows
+protected ACL/owner/ancestor provisioning remains a future broker requirement.
+
+Native Linux/Windows regressions cover generated identity consistency, bounded
+format, expiry, no-overwrite, private input failures and secret-safe CLI output;
+Unix additionally tests actual private modes/symlink refusal. Image acceptance
+retains all earlier boots and adds actual UEFI provisioning from native-generated
+private media. It must remain unresolved without a real host exchange and never
+promote readiness. The ISO/key are not uploaded. This does not create a VM, bind
+ownership, register services, install any engine or connect Setup Center; complete
+privileged lifecycle, engine packaging and installed acceptance remain mandatory.
