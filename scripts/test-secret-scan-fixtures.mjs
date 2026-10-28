@@ -1,5 +1,6 @@
 /** Regression for the exact provenance-line exception; never prints fixture tokens. */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
 	mkdtempSync,
@@ -94,8 +95,40 @@ try {
 		{ cwd: root, encoding: "utf8", timeout: 30_000 },
 	);
 	assert.equal(r.status, 1, "The exception must not cover another file");
+	// The historical documentation exception must never suppress future findings.
+	const docPath = "workers/managed-emulation/image/README.md";
+	const doc = join(root, docPath);
+	mkdirSync(dirname(doc), { recursive: true });
+	rmSync(join(root, "other.json"));
+	const historicalProse = "escaping links,\n  unresolved/cyclic hardlinks";
+	const currentDoc = readFileSync(join(repo, docPath), "utf8");
+	const generic = "api_key = \"" + createHash("sha256").update("owned scanner negative-control fixture").digest("hex") + "\"";
+	const ignoredHistory = readFileSync(join(repo, ".gitleaksignore"), "utf8");
+	const proseFingerprint = "13ab96fa588bb8c7ee1f34b850f6a2b6ee9db166:" +
+		docPath + ":generic-api-key:18";
+	assert.ok(ignoredHistory.split(/\r?\n/).includes(proseFingerprint));
+	for (const [label, contents, expected] of [
+		["current image documentation", currentDoc, 0],
+		["historical prose in new content", historicalProse, 1],
+		["real token beside current prose", currentDoc + "\n" + generic, 1],
+		["real token replacing historical prose", generic, 1],
+	]) {
+		writeFileSync(doc, contents);
+		const report = join(root, "report.json");
+		const result = spawnSync(process.env.GITLEAKS_BIN || "gitleaks", [
+			"dir", ".", "--redact", "--no-banner", "--no-color",
+			"--config", join(repo, ".gitleaks.toml"),
+			"--gitleaks-ignore-path", join(repo, ".gitleaksignore"),
+			"--report-format", "json", "--report-path", report,
+		], { cwd: root, encoding: "utf8", timeout: 30_000 });
+		assert.equal(result.error, undefined, "Scanner must be available");
+		assert.equal(result.status, expected, label);
+		if (expected) assert.ok(JSON.parse(readFileSync(report, "utf8"))
+			.some((finding) => finding.RuleID === "generic-api-key"), label);
+		rmSync(report, { force: true });
+	}
 	console.log(
-		"Secret scan scope regression: 9 cases passed; real token patterns remain blocking.",
+		"Secret scan scope regression: 13 cases passed; real token patterns remain blocking.",
 	);
 } finally {
 	rmSync(root, { recursive: true, force: true });

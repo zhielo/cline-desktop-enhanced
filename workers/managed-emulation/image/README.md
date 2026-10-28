@@ -15,8 +15,9 @@ engine readiness not tested and Hyper-V exchange not tested.
 - Debian cloud kernel and static BusyBox inputs have exact HTTPS origin,
   version, byte count and SHA-256 locks. Package maintainer scripts never run.
   Debian data archives are parsed in memory, never extracted into the host.
-  No special archive devices, duplicate paths, traversal, escaping links,
-  unresolved/cyclic hardlinks or linked CPIO parents are accepted.
+  Archive members are rejected for special device types, duplicate paths,
+  path traversal, escaping symbolic links, unresolved or cyclic hard links,
+  and linked CPIO parents.
 - The reviewed cloud kernel must advertise initramfs/GZIP, devtmpfs, Hyper-V,
   Hyper-V storage, VSOCK, Hyper-V VSOCK and ISO9660 support. Only explicit boot/
   VSOCK/storage modules and their transitive dependencies are retained; network

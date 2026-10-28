@@ -1143,3 +1143,8 @@ receipts must bind the exact bundle digest to the actual ISO manifest. JNI JVM
 home/native extraction/temp paths are fresh per invocation; no global Java/JNA
 cache is used as fresh-state evidence. These integrity checks are not compiler or
 supply-chain attestation and do not certify arbitrary-target safety.
+
+## Exact historical scanner false-positive repair
+
+- The inert-image archive rejection documentation is reworded to avoid a multiline generic-key false positive. Only the independently reviewed original documentation finding is retained as an exact commit/path/rule/line fingerprint in `.gitleaksignore`; no directory, rule, token-pattern, history-scan or release gate is disabled.
+- Scanner regressions retain the existing nine provenance-scope cases and add current documentation, original prose in new content, and synthetic generic-key detections beside/replacing the documentation. The historical exception cannot suppress future findings at the same path. Full-history scanning remains mandatory.
