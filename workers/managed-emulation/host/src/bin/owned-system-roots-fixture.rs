@@ -138,6 +138,7 @@ fn owned() -> Result<(), i32> {
     for path in &job_paths {
         std::fs::remove_dir(path).map_err(|_| 42)?;
     }
+    installation_acceptance(&roots)?;
     let parent = paths[0].parent().ok_or(17)?.to_path_buf();
     drop(reopened);
     drop(roots);
@@ -163,4 +164,105 @@ fn main() {
 fn main() {
     eprintln!("Owned SYSTEM root acceptance requires native Windows CI.");
     std::process::exit(2);
+}
+
+#[cfg(windows)]
+fn installation_acceptance(
+    roots: &cline_managed_inert_probe::windows_roots::SystemRoots,
+) -> Result<(), i32> {
+    use cline_managed_inert_probe::{
+        lifecycle::{Event, Identity, Phase},
+        windows_identity::{SystemIdentity, INSTALLATION_FILE},
+    };
+    let owner = SystemIdentity::create(roots).map_err(|_| 50)?;
+    let installation = owner.installation().to_owned();
+    if SystemIdentity::create(roots).is_ok() || SystemIdentity::open(roots).is_ok() {
+        return Err(51);
+    }
+    let job = roots.create_job().map_err(|_| 52)?;
+    let id = job.id().to_owned();
+    let expected = Identity {
+        installation: installation.clone(),
+        job: id.clone(),
+        vm_id: "11223344-5566-7788-99aa-bbccddeeff00".into(),
+        image_sha256: "78".repeat(32),
+        host_boot: "9a".repeat(16),
+    };
+    let mut wrong = expected.clone();
+    wrong.installation = "00".repeat(16);
+    if owner.create_store(&job, wrong).is_ok() {
+        return Err(53);
+    }
+    let mut store = owner.create_store(&job, expected.clone()).map_err(|_| 54)?;
+    store.advance(Event::VmCreated {}).map_err(|_| 55)?;
+    drop(store);
+    drop(owner);
+    // Real SYSTEM-user DPAPI decrypt and key re-derivation after handle teardown.
+    let owner = SystemIdentity::open(roots).map_err(|_| 56)?;
+    if owner.installation() != installation {
+        return Err(57);
+    }
+    let mut wrong = expected.clone();
+    wrong.image_sha256 = "ab".repeat(32);
+    if owner.open_store(&job, wrong).is_ok() {
+        return Err(58);
+    }
+    let mut store = owner.open_store(&job, expected.clone()).map_err(|_| 59)?;
+    if store.journal().phase() != Phase::Created || !store.journal().recovery_required() {
+        return Err(60);
+    }
+    {
+        use windows_sys::Win32::Security::{ImpersonateSelf, RevertToSelf, SecurityImpersonation};
+        struct Revert;
+        impl Drop for Revert {
+            fn drop(&mut self) {
+                unsafe {
+                    RevertToSelf();
+                }
+            }
+        }
+        if unsafe { ImpersonateSelf(SecurityImpersonation) } == 0 {
+            return Err(61);
+        }
+        let _revert = Revert;
+        if SystemIdentity::open(roots).err()
+            != Some("Impersonated protected storage access forbidden")
+            || store.advance(Event::RecoveryRequested {}).err()
+                != Some("Impersonated protected storage access forbidden")
+        {
+            return Err(62);
+        }
+    }
+    if store.advance(Event::RecoveryRequested {}).err()
+        != Some("Installation store fenced; reopen and inspect")
+    {
+        return Err(63);
+    }
+    drop(store);
+    let mut store = owner.open_store(&job, expected).map_err(|_| 64)?;
+    store.advance(Event::RecoveryRequested {}).map_err(|_| 65)?;
+    if store.journal().phase() != Phase::StopRequired || store.journal().recovery_required() {
+        return Err(66);
+    }
+    drop(store);
+    drop(owner);
+    let record = roots
+        .anchor_parent()
+        .parent()
+        .ok_or(67)?
+        .join(INSTALLATION_FILE);
+    std::fs::remove_file(record).map_err(|_| 68)?;
+    let paths = [
+        roots.journal_parent().join(&id),
+        roots.anchor_parent().join(&id),
+        roots.job_parent().join(&id),
+    ];
+    drop(job);
+    for path in &paths[..2] {
+        std::fs::remove_file(path.join("recovery.sqlite")).map_err(|_| 69)?;
+    }
+    for path in &paths {
+        std::fs::remove_dir(path).map_err(|_| 70)?;
+    }
+    Ok(())
 }

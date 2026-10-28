@@ -2935,6 +2935,21 @@ requiredMarkers.push(
 	},
 );
 
+requiredMarkers.push(
+	{
+		path: "workers/managed-emulation/host/src/windows_identity.rs",
+		markers: ["CRYPTPROTECT_UI_FORBIDDEN", "CryptProtectData", "CryptUnprotectData", "std::ptr::write_volatile", "file.sync_all()", "Installation record schema mismatch", "mac.update(KEY_DOMAIN)", "pub struct InstallationStore", "Installation store fenced; reopen and inspect", "derived_recovery_keys_bind_every_identity_field_and_master"],
+	},
+	{
+		path: "workers/managed-emulation/host/src/windows_roots.rs",
+		markers: ["pub(crate) fn installation_file", "info.nNumberOfLinks != 1", "validate_security(raw, &Policy::system()?, 0)?", "Single-link protected regular installation file required"],
+	},
+	{
+		path: "workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",
+		markers: ["installation_acceptance(&roots)?", "SystemIdentity::create(roots)", "SystemIdentity::open(roots)", "owner.open_store(&job", "Installation store fenced; reopen and inspect"],
+	},
+);
+
 for (const forbiddenPath of forbiddenPaths) {
 	if (existsSync(forbiddenPath)) {
 		failures.push(`${forbiddenPath}: obsolete file must remain deleted`);

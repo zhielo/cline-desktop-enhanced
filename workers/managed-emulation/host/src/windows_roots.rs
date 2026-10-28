@@ -204,12 +204,19 @@ fn validate(handle: &OwnedHandle, policy: &Policy) -> Result<()> {
     {
         return Err("Non-reparse protected directory required");
     }
+    validate_security(
+        handle.as_raw_handle() as HANDLE,
+        policy,
+        (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE) as u8,
+    )
+}
+fn validate_security(handle: HANDLE, policy: &Policy, flags: u8) -> Result<()> {
     let mut owner = null_mut();
     let mut dacl: *mut ACL = null_mut();
     let mut descriptor: PSECURITY_DESCRIPTOR = null_mut();
     if unsafe {
         GetSecurityInfo(
-            handle.as_raw_handle() as HANDLE,
+            handle,
             SE_FILE_OBJECT,
             OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
             &mut owner,
@@ -256,7 +263,7 @@ fn validate(handle: &OwnedHandle, policy: &Policy) -> Result<()> {
         }
         let header = unsafe { std::ptr::read_unaligned(raw.cast::<ACE_HEADER>()) };
         if header.AceType != 0
-            || header.AceFlags != (OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE) as u8
+            || header.AceFlags != flags
             || header.AceSize < 16
             || at + header.AceSize as usize > end
         {
@@ -437,6 +444,42 @@ impl SystemRoots {
         crate::exact_hex::<16>(job)?;
         SystemJob::access(self, job.into(), false)
     }
+    pub(crate) fn installation_file(&self, create: bool) -> Result<std::fs::File> {
+        use windows_sys::Win32::{
+            Foundation::{GENERIC_READ, GENERIC_WRITE},
+            Storage::FileSystem::{CREATE_NEW, FILE_FLAG_WRITE_THROUGH},
+        };
+        self.revalidate()?;
+        let path = self
+            .anchor_parent()
+            .parent()
+            .ok_or("Fixed installation parent required")?
+            .join(crate::windows_identity::INSTALLATION_FILE);
+        let path = wide(path.as_os_str())?;
+        let descriptor = Descriptor::new("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)")?;
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor.0 .0,
+            bInheritHandle: 0,
+        };
+        let raw = unsafe {
+            CreateFileW(
+                path.as_ptr(),
+                GENERIC_READ | READ_CONTROL | if create { GENERIC_WRITE } else { 0 },
+                0,
+                if create { &attributes } else { null() },
+                if create { CREATE_NEW } else { OPEN_EXISTING },
+                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err("Exclusive protected installation record required; inspect retained state");
+        }
+        let file = unsafe { std::fs::File::from_raw_handle(raw as _) };
+        validate_system_file(&file, create)?;
+        Ok(file)
+    }
     pub fn journal_parent(&self) -> &Path {
         &self.leaves[0].0
     }
@@ -449,6 +492,24 @@ impl SystemRoots {
     pub fn image_parent(&self) -> &Path {
         &self.leaves[3].0
     }
+}
+
+pub(crate) fn validate_system_file(file: &std::fs::File, allow_empty: bool) -> Result<u64> {
+    require_system()?;
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { zeroed() };
+    let raw = file.as_raw_handle() as HANDLE;
+    if unsafe { GetFileInformationByHandle(raw, &mut info) } == 0
+        || info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0
+        || info.nNumberOfLinks != 1
+    {
+        return Err("Single-link protected regular installation file required");
+    }
+    let size = ((info.nFileSizeHigh as u64) << 32) | info.nFileSizeLow as u64;
+    if size > 16384 || (!allow_empty && size == 0) {
+        return Err("Protected installation record budget");
+    }
+    validate_security(raw, &Policy::system()?, 0)?;
+    Ok(size)
 }
 
 /// Pinned per-job roots. Borrowing the parent keeps its protected namespace

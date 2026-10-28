@@ -308,3 +308,26 @@ covers actual SQLite create/reopen, identity mismatch, impersonation fencing,
 media and namespace pinning; its reducer events never create a VM. Only exact
 owned files and empty directories are cleaned after handles close. No arbitrary
 target execution, service, VM ownership, installed pack or readiness is added.
+
+### Persisted SYSTEM installation identity (development only)
+
+`windows_identity` creates/opens a fixed exclusive SYSTEM-owned, protected,
+single-link non-reparse `installation.bin` beneath the pinned root. It retains
+its file handle, checks bounded stable reads/ACLs and pins the envelope digest.
+A user-scoped SYSTEM DPAPI envelope with UI disabled protects an OS-random
+installation ID/master; no machine-wide DPAPI, external password, key getter,
+model/argv/env or log channel is used. Plaintext business buffers and native
+DPAPI allocations are zeroized on success and errors. Initial/partial state is
+never overwritten or automatically repaired/deleted.
+
+The identity guard derives domain/length-bound HMAC keys over every exact
+installation/job/VM/image/original-boot claim, rather than accepting a client key.
+Its borrowing store wrapper keeps all guards alive, revalidates before each
+transition and fences on failure. Reopening still requires explicit recovery;
+it never resumes a VM or certifies termination. Native SYSTEM acceptance actually
+persists/closes/decrypts/re-derives and reopens the owned SQLite journal.
+
+This protects ordinary-user access, not rollback by trusted administrators or
+SYSTEM. It is not caller authentication, a service, actual VM ownership/image
+records, installed Hyper-V acceptance or the promised Setup Center pack. Existing
+Unicorn and external worker behavior are unchanged.
