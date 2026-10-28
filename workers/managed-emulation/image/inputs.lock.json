@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "scope": "development-inert-guest",
+  "runtimeImage": "docker.io/library/python@sha256:70bda1e795ded2a684ef9815955e05829b14ee5bb5c3eb2a940648e88f10fce9",
+  "platform": "linux/amd64",
+  "kernelRelease": "6.1.0-54-cloud-amd64",
+  "packages": {
+    "kernel": {
+      "package": "linux-image-6.1.0-54-cloud-amd64",
+      "version": "6.1.190-1",
+      "url": "https://security.debian.org/debian-security/pool/updates/main/l/linux-signed-amd64/linux-image-6.1.0-54-cloud-amd64_6.1.190-1_amd64.deb",
+      "size": 26639112,
+      "sha256": "1868212d13c009807ddf76a495f7dc2da99e7b4dacf8ddd8117cc1850992989b"
+    },
+    "busybox": {
+      "package": "busybox-static",
+      "version": "1:1.35.0-4+deb12u1+b1",
+      "url": "https://deb.debian.org/debian/pool/main/b/busybox/busybox-static_1.35.0-4+deb12u1+b1_amd64.deb",
+      "size": 928188,
+      "sha256": "3d3fdbe91d4660c873e14b092c213fe81c1da6362daa236eb25d0171eb108744"
+    }
+  },
+  "sourceReferences": [
+    "https://github.com/docker-library/python",
+    "https://sources.debian.org/src/linux/",
+    "https://sources.debian.org/src/busybox/"
+  ]
+}

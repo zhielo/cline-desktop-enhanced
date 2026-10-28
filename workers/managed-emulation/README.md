@@ -84,6 +84,14 @@ establish ownership from a supplied GUID. Its event observations must come from
 fresh independently checked Hyper-V state, not client assertions. Nothing is
 connected to Setup Center or changes the installed application's readiness.
 
+## Development guest-image path
+
+`image/` now contains a separate CI-only diskless ISO builder and fixed guest
+bootstrap. See `image/README.md` for exact input locks, parser and module limits,
+BIOS/UEFI cold-boot validation and unfinished publication/Hyper-V acceptance.
+This is not a distributable four-engine image or an installed Setup Center pack.
+The existing mandatory real-Hyper-V/lifecycle/integration gates below remain.
+
 ## Mandatory unfinished lifecycle integration
 
 Do **not** expose this developer probe as a ready Setup Center function.
