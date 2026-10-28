@@ -154,6 +154,59 @@ class BundleTests(unittest.TestCase):
             with patch.object(selftest,'ROOT',root),self.assertRaises(ValueError):selftest.verify_bundle()
 
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Owned Linux guest supervision')
+    def test_owned_child_captures_both_pipes_input_and_exit_status(self):
+        code="import sys; data=sys.stdin.buffer.read(); sys.stdout.buffer.write(data); sys.stderr.write('owned diagnostic'); raise SystemExit(7)"
+        result=selftest.invoke([sys.executable,'-B','-I','-c',code],b'owned input')
+        self.assertEqual(result.returncode,7)
+        self.assertEqual(result.stdout,b'owned input')
+        self.assertEqual(result.stderr,b'owned diagnostic')
+        with patch.object(selftest.subprocess,'Popen') as launch:
+            with self.assertRaises(ValueError):selftest.invoke(['never-launch'],b'x'*4097)
+            launch.assert_not_called()
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Owned Linux guest supervision')
+    def test_owned_child_enforces_stream_caps_before_collecting_all_output(self):
+        for descriptor in [1,2]:
+            with self.subTest(descriptor=descriptor),patch.object(selftest,'INVOKE_STDOUT_LIMIT',1024),patch.object(selftest,'INVOKE_STDERR_LIMIT',1024):
+                code="import os; os.write("+str(descriptor)+",b'x'*65536)"
+                with self.assertRaisesRegex(ValueError,'output budget'):
+                    selftest.invoke([sys.executable,'-B','-I','-c',code])
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Owned Linux guest supervision')
+    def test_owned_child_deadline_reaps_the_leader(self):
+        actual=selftest.subprocess.Popen
+        started=[]
+        def launch(*args,**kwargs):
+            child=actual(*args,**kwargs);started.append(child);return child
+        with patch.object(selftest,'INVOKE_SECONDS',0.2),patch.object(selftest.subprocess,'Popen',side_effect=launch):
+            with self.assertRaisesRegex(ValueError,'deadline'):
+                selftest.invoke([sys.executable,'-B','-I','-c','import time;time.sleep(60)'])
+        self.assertEqual(len(started),1)
+        self.assertEqual(started[0].returncode,-9)
+        with self.assertRaises(ChildProcessError):os.waitpid(started[0].pid,os.WNOHANG)
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Owned Linux guest supervision')
+    def test_owned_child_cleanup_stops_descendants_after_leader_exit(self):
+        import time
+        with tempfile.TemporaryDirectory() as directory:
+            pidfile=Path(directory)/'child-pid'
+            # The child closes inherited stdout/stderr. EOF therefore must not
+            # allow a background descendant to survive a successful leader.
+            descendant="import time;time.sleep(60)"
+            leader="import subprocess,sys,pathlib; p=subprocess.Popen([sys.executable,'-c',sys.argv[2]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);pathlib.Path(sys.argv[1]).write_text(str(p.pid))"
+            result=selftest.invoke([sys.executable,'-B','-I','-c',leader,str(pidfile),descendant])
+            self.assertEqual(result.returncode,0)
+            pid=int(pidfile.read_text())
+            for _ in range(100):
+                status=Path('/proc')/str(pid)/'stat'
+                if not status.exists() or status.read_text().split(') ',1)[1].split()[0] == 'Z':break
+                time.sleep(0.01)
+            else:
+                os.kill(pid,9)
+                self.fail('Owned background descendant survived group cleanup')
+
+
 
 if __name__ == '__main__':
     unittest.main()

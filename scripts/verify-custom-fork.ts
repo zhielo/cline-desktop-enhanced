@@ -2875,6 +2875,9 @@ requiredMarkers.push(
 			"os.O_NOFOLLOW | os.O_NONBLOCK",
 			"total > MAX_BUNDLE_BYTES",
 			"Special runtime file",
+			"INVOKE_STDOUT_LIMIT = 1024*1024",
+			"os.WEXITED | os.WNOHANG | os.WNOWAIT",
+			"os.killpg(process.pid,signal.SIGKILL)",
 		],
 	},
 	{

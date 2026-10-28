@@ -9,12 +9,18 @@ import json
 import os
 from pathlib import Path
 import stat
+import selectors
+import signal
+import time
 import subprocess
 import sys
 import tempfile
 
 ROOT = Path('/opt/cline-engine')
 MAX_BUNDLE_BYTES = 384*1024**2
+INVOKE_SECONDS = 35
+INVOKE_STDOUT_LIMIT = 1024*1024
+INVOKE_STDERR_LIMIT = 16*1024
 ARCHES = {'qiling': ['x86_64','arm32','arm64'], 'unidbg':['arm32','arm64'], 'rnidbg':['arm64'], 'speakeasy':['x86_64']}
 
 
@@ -94,12 +100,77 @@ def verify_bundle():
 
 
 def invoke(command, input_bytes=None):
-    # Fixed owned adapters only. Guest-wide timeout/poweroff bounds the whole
-    # self-test; this command has its own deadline. No target-derived commands.
-    return subprocess.run(command, input=input_bytes, stdin=subprocess.DEVNULL if input_bytes is None else None,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=35,
+    # Only fixed owned adapters run here, before any guest boot credentials.
+    # Bound pipe allocation as bytes arrive, not after communicate() allocates.
+    if sys.platform != 'linux' or input_bytes is not None and (not isinstance(input_bytes,bytes) or len(input_bytes)>4096):
+        raise ValueError('Owned Linux command input budget')
+    process = subprocess.Popen(command, stdin=subprocess.DEVNULL if input_bytes is None else subprocess.PIPE,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, bufsize=0,
         env={'PATH':'/usr/local/bin:/usr/bin','HOME':'/tmp','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1',
              'LD_LIBRARY_PATH':str(ROOT/'syslibs')+':/usr/local/lib', 'CLINE_RE_ISOLATED_WORKER':'disposable-network-disabled'})
+    output, errors = bytearray(), bytearray()
+    deadline = time.monotonic()+INVOKE_SECONDS
+    selector = selectors.DefaultSelector()
+    try:
+        for stream, kind in [(process.stdout,'stdout'),(process.stderr,'stderr')]:
+            os.set_blocking(stream.fileno(),False)
+            selector.register(stream,selectors.EVENT_READ,kind)
+        pending = memoryview(input_bytes or b'')
+        if process.stdin:
+            if pending:
+                os.set_blocking(process.stdin.fileno(),False)
+                selector.register(process.stdin,selectors.EVENT_WRITE,'stdin')
+            else:
+                process.stdin.close()
+        while True:
+            remaining = deadline-time.monotonic()
+            if remaining <= 0:
+                raise ValueError('Owned command deadline')
+            if not selector.get_map():
+                # Observe without reaping: the leader PID remains reserved until
+                # its whole process group has been killed in finally below.
+                exited = os.waitid(os.P_PID,process.pid,os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                if exited is not None:
+                    break
+                time.sleep(min(remaining,0.01))
+                continue
+            for key,_ in selector.select(min(remaining,0.2)):
+                stream, kind = key.fileobj,key.data
+                if kind == 'stdin':
+                    try:
+                        pending = pending[os.write(stream.fileno(),pending):]
+                    except BrokenPipeError:
+                        pending = memoryview(b'')
+                    except BlockingIOError:
+                        continue
+                    if not pending:
+                        selector.unregister(stream);stream.close()
+                    continue
+                try:
+                    data = os.read(stream.fileno(),65536)
+                except BlockingIOError:
+                    continue
+                if not data:
+                    selector.unregister(stream);stream.close();continue
+                buffer, limit = (output,INVOKE_STDOUT_LIMIT) if kind == 'stdout' else (errors,INVOKE_STDERR_LIMIT)
+                if len(buffer)+len(data)>limit:
+                    raise ValueError('Owned command output budget')
+                buffer.extend(data)
+    finally:
+        selector.close()
+        # Never poll/reap first: that could let the original process-group ID
+        # be reused. This only terminates this fresh owned guest command group.
+        try:
+            os.killpg(process.pid,signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        finally:
+            for stream in (process.stdin,process.stdout,process.stderr):
+                if stream and not stream.closed:
+                    stream.close()
+    return subprocess.CompletedProcess(command,process.returncode,bytes(output),bytes(errors))
 
 
 def qiling_check():

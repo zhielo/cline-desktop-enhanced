@@ -250,3 +250,10 @@ checks allocation limits before reads and rejects changed metadata and special
 files. Aggregate bytes are refused before the next content read. These checks
 remain scoped to development-owned images; they do not implement installation,
 VM ownership, broker filesystem protection or arbitrary-target containment.
+
+Fixed owned guest child commands also have live 1-MiB stdout and 16-KiB stderr
+limits, at most 4-KiB input, one monotonic 35-second command deadline and fresh
+process-group cleanup. The leader is observed without reaping until cleanup,
+so its group ID cannot be reused between observation and termination. This
+stops owned background descendants even after a successful leader exit; it
+is not proof that the host VM has stopped or that arbitrary targets are safe.
