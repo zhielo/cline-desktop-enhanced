@@ -4119,6 +4119,7 @@ ConvertTo-Json -InputObject @($rows) -Compress
 			}>(page, "session_tool_inventory", { sessionId: modelSessionId })
 			if (
 				inventory.sessionId !== modelSessionId ||
+				!triageModel.lastToolNames.includes("reverse_engineer") ||
 				inventory.status !== "last-request" ||
 				!inventory.evidence ||
 				inventory.evidence.truncated ||

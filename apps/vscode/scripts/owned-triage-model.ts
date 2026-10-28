@@ -58,12 +58,13 @@ export async function startOwnedTriageModel() {
 			}
 			const request = JSON.parse(body)
 			providerRequests++
+			const declaredTools = request.tools ?? []
 			if (
-				!Array.isArray(request.tools) ||
-				request.tools.some((t: { function?: { name?: unknown } }) => typeof t.function?.name !== "string")
+				!Array.isArray(declaredTools) ||
+				declaredTools.some((t: { function?: { name?: unknown } }) => typeof t.function?.name !== "string")
 			)
 				throw new Error("Owned provider request lacks function definitions")
-			lastToolNames = request.tools.map((t: { function: { name: string } }) => t.function.name)
+			lastToolNames = declaredTools.map((t: { function: { name: string } }) => t.function.name)
 			const tools = (request.messages as Array<Record<string, unknown>>).filter((m) => m.role === "tool")
 			results.length = 0
 			for (const message of tools) {

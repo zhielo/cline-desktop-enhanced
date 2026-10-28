@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/vscode/scripts/owned-triage-model.ts",markers:["const declaredTools = request.tools ?? []", "lastToolNames = declaredTools.map"]},
  {path:"sdk/packages/agents/src/agent-runtime.ts",markers:["getModelToolExposure", "modelToolExposure: this.getModelToolExposure()", "toolCount: request.tools.length"]},
  {path:"sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.ts",markers:["lastToolExposure", "exposureRevision++", "activeExposureConfig"]},
  {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["session_tool_inventory_sessions", "Owning session changed; inspect again", "includeToolExposure: true"]},
