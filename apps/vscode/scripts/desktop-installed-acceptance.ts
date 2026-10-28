@@ -4167,6 +4167,46 @@ ConvertTo-Json -InputObject @($rows) -Compress
 		}
 		await settings(page, "Setup Center")
 
+		const preflightPanel = page.getByRole("region", { name: "Managed emulation host prerequisites", exact: true })
+		if ((await preflightPanel.locator("time").count()) !== 0)
+			throw new Error("Opening Setup Center unexpectedly populated an emulation host probe")
+		page.once("dialog", async (dialog) => {
+			if (dialog.message().includes("fixed read-only local Windows prerequisite query")) await dialog.accept()
+			else await dialog.dismiss()
+		})
+		await preflightPanel.getByRole("button", { name: "Check local emulation prerequisites", exact: true }).click()
+		await preflightPanel.getByText(/Query: observed · Windows build: \d{4,6}/).waitFor({ timeout: 25000 })
+		const preflightTime = await preflightPanel.locator("time").getAttribute("datetime")
+		const preflightChecks = await preflightPanel
+			.getByRole("list", { name: "Observed host prerequisite checks", exact: true })
+			.locator("li")
+			.allTextContents()
+		const preflightText = await preflightPanel.innerText()
+		if (
+			!preflightTime ||
+			!Number.isFinite(Date.parse(preflightTime)) ||
+			preflightChecks.length !== 9 ||
+			!preflightText.includes(
+				"Managed installation: not implemented. Containment: not tested. Engine readiness: not tested.",
+			)
+		)
+			throw new Error("Installed host preflight omitted observations or falsely promoted managed engine readiness")
+		await writeFile(
+			join(evidence, "managed-emulation-host-preflight.json"),
+			JSON.stringify(
+				{
+					checkedAt: preflightTime,
+					checks: preflightChecks,
+					renderedReport: preflightText,
+					vmFeasibilityTested: false,
+					enginesInstalledOrTested: false,
+				},
+				null,
+				2,
+			),
+		)
+		stages.push("installed-managed-emulation-readonly-host-preflight-no-readiness-passed")
+
 		page.once("dialog", async (dialog) => {
 			if (dialog.message().includes("reviewed and accept")) await dialog.accept()
 			else await dialog.dismiss()

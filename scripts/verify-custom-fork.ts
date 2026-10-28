@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/managed-emulation-preflight.ts",markers:["projectManagedEmulationPreflight", "Get-CimInstance -ClassName Win32_OperatingSystem", "managedInstallation: \"not-implemented\"", "engineReadiness: \"not-tested\"", "timeout: 15_000"]},
+ {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["setup_center_emulation_host_preflight", "readManagedEmulationPreflight"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/managed-emulation-preflight.tsx",markers:["Check local emulation prerequisites", "No installation or readiness is inferred", "not reserved resources", "confirmed: true"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-managed-emulation-readonly-host-preflight-no-readiness-passed", "vmFeasibilityTested: false", "enginesInstalledOrTested: false"]},
  {path:"apps/examples/desktop-app/sidecar/release-gate-collector.ts",markers:["`consolidated-validation-${run.id}-${run.run_attempt}`"]},
  {path:"apps/examples/desktop-app/sidecar/release-gate-verifier.ts",markers:["`consolidated-validation-${r.id}-${r.run_attempt}`"]},
  {path:"apps/vscode/scripts/owned-triage-model.ts",markers:["const declaredTools = request.tools ?? []", "lastToolNames = declaredTools.map"]},
