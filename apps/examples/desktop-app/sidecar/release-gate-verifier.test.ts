@@ -16,10 +16,20 @@ import {
 test("owned complete evidence passes without claiming behavior verification", () => {
 	const r = verifyReleaseGateEvidence(133, head, fixture());
 	assert.equal(r.status, "passed");
-	assert.equal(r.installedStages, 73);
+	assert.equal(r.installedStages, 74);
 	assert.match(r.limitations.join(" "), /Unsigned/);
 });
 const cases: Array<[string, (e: ReleaseGateEvidence) => void]> = [
+	[
+		"missing installed read-only host preflight",
+		(e) => {
+			e.installed.stages = e.installed.stages.filter(
+				(stage: string) =>
+					stage !==
+					"installed-managed-emulation-readonly-host-preflight-no-readiness-passed",
+			);
+		},
+	],
 	[
 		"consolidated artifact from another attempt",
 		(e) => {

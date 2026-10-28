@@ -4585,6 +4585,10 @@ export async function handleCommand(
 			throw new Error("Setup changes require a trusted desktop connection");
 		if (args?.confirmed !== true)
 			throw new Error("Explicit Setup Center confirmation required");
+		if (command === "setup_center_emulation_host_preflight") {
+			const { readManagedEmulationPreflight } = await import("./managed-emulation-preflight");
+			return await readManagedEmulationPreflight();
+		}
 		if (command === "setup_center_recovery_status") return inspectSetupRecovery();
 		if (command === "setup_center_recover_after_reboot") {
 			if (typeof args.jobId !== "string") throw new Error("Exact setup job identity required");

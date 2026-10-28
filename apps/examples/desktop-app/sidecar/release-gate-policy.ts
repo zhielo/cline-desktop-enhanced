@@ -91,6 +91,7 @@ export const RELEASE_GATE_POLICY = {
 		"Engine corpus: advanced-crypto.test.py",
 	],
 	installedStages: [
+		"installed-managed-emulation-readonly-host-preflight-no-readiness-passed",
 		"installed-session-tool-inventory-exact-provider-names-no-extra-request-passed",
 		"installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed",
 
@@ -180,8 +181,8 @@ export const RELEASE_GATE_POLICY = {
 		".github/workflows/build-custom-windows-installer.yml":
 			"592ec2ed9bc19cdec890b6d54f6a6c15fce27847d73606f74d94249b2ef56526",
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
-			"fc6c8909e007d4c3f9714553554d3c30638e1e412e6c75d238b8f6eab13c7171",
+			"b6ad34ffe811fbf5b867a1f356dcdfa11b64b144a96cf275c5c96f4f9b902388",
 		"scripts/validate-advanced-build.mjs":
-			"98762e3a1cee840ae8d4b928023180ba7a786f89fb05f5120f0878b603efcbc9",
+			"ef4053503d27c62f2a11681dfff1c8af6ce5589f8009c5de6fda5c923a322480",
 	},
 } as const;
