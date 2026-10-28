@@ -1351,6 +1351,14 @@ export class LocalRuntimeHost implements RuntimeHost {
 		this.aggregateUsageBySession.clear();
 	}
 
+	readSessionToolExposure(sessionId: string) {
+		return (
+			this.sessions.get(sessionId)?.agent.getModelToolExposure?.() ?? {
+				status: "unavailable" as const,
+			}
+		);
+	}
+
 	async getSession(sessionId: string): Promise<SessionRecord | undefined> {
 		const active = this.sessions.get(sessionId);
 		if (active) {

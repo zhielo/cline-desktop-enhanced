@@ -352,7 +352,9 @@ export function verifyReleaseGateEvidence(
 		);
 		return a;
 	};
-	const validation = artifact(`consolidated-validation-${r.id}`),
+	const validation = artifact(
+			`consolidated-validation-${r.id}-${r.run_attempt}`,
+		),
 		ui = artifact(`installed-ui-evidence-${r.id}-${r.run_attempt}`),
 		installer = artifact("cline-enhanced-windows-x64-unsigned-", true);
 	requireProof(

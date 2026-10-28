@@ -624,7 +624,7 @@ test("installed RPC records discovery and submission once without caching or dro
  assert.equal(attempts,1);assert.equal(records.at(-1).status,"failed");
  const driver=readFileSync(new URL("../apps/vscode/scripts/desktop-installed-acceptance.ts",import.meta.url),"utf8");
  const rpc=driver.slice(driver.indexOf("async function rpc<T>"),driver.indexOf("async function settings("));
- assert.ok(rpc.includes("recordInstalledRpc<T>(command, acceptanceAction"));
+ assert.ok(rpc.includes("recordInstalledRpc<T>(\n\t\t\tcommand,\n\t\t\tacceptanceAction,"));
  assert.ok(rpc.includes("waitForInstalledBackendEndpoint"));
  assert.ok(!rpc.includes('"backend-endpoint-discovery"'));
 });

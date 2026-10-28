@@ -3315,6 +3315,56 @@ export async function handleCommand(
 		);
 	}
 
+	if (
+		command === "session_tool_inventory_sessions" ||
+		command === "session_tool_inventory"
+	) {
+		if (!options?.connection?.data?.canApproveTools)
+			throw new Error(
+				"Session inventory requires the trusted desktop connection",
+			);
+		if (command === "session_tool_inventory_sessions")
+			return {
+				sessions: [...ctx.liveSessions.entries()].map(([sessionId, live]) => ({
+					sessionId,
+					local: live.config.executionTarget !== "cloud" &&
+						(live.environmentId ??
+							ctx.sessionEnvironmentIds.get(sessionId) ??
+							"local") === "local",
+				})),
+			};
+		const id = typeof args?.sessionId === "string" ? args.sessionId.trim() : "";
+		if (!id || id.length > 256 || !ctx.liveSessions.has(id))
+			throw new Error("An attached owning session is required");
+		const live = ctx.liveSessions.get(id)!;
+		const environmentId =
+			live.environmentId ?? ctx.sessionEnvironmentIds.get(id) ?? "local";
+		const { projectSessionToolInventory } = await import(
+			"./session-tool-inventory"
+		);
+		const binding = ctx.runtimeBindings.get(environmentId);
+		if (!binding || binding.kind !== "local" || live.config.executionTarget === "cloud")
+			return projectSessionToolInventory(id, undefined);
+		const reply = await binding.hubClient.command(
+			"session.get",
+			{ includeSnapshot: true, includeToolExposure: true },
+			id,
+		);
+		if (!reply.ok) throw new Error("Owning session inventory is unavailable");
+		if (
+			ctx.liveSessions.get(id) !== live ||
+			(live.environmentId ?? ctx.sessionEnvironmentIds.get(id) ?? "local") !==
+				environmentId
+		)
+			throw new Error("Owning session changed; inspect again");
+		const snapshot = reply.payload?.snapshot as
+			| { sessionId?: string; toolExposure?: unknown }
+			| undefined;
+		if (snapshot?.sessionId !== id)
+			return projectSessionToolInventory(id, undefined);
+		return projectSessionToolInventory(id, snapshot.toolExposure);
+	}
+
 	// ── Chat session commands ──────────────────────────────────────────
 	if (command === "chat_session_command") {
 		const { handleChatSessionCommand } = await import("./chat-session");

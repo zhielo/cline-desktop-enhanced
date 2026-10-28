@@ -4,6 +4,7 @@ import {
 	DESKTOP_CHANNELS_VISIBLE,
 } from "@cline/shared/browser";
 import { useState } from "react";
+import { SessionToolInventoryPanel } from "./session-tool-inventory";
 import catalog from "@/lib/desktop-capability-catalog.json";
 
 /** A source-backed map, deliberately distinct from live Setup Center checks. */
@@ -37,6 +38,7 @@ export function CapabilitiesView() {
 				navigation: {DESKTOP_CHANNELS_VISIBLE ? "visible" : "hidden"}. Existing
 				feature implementations are preserved.
 			</p>
+			<SessionToolInventoryPanel />
 			<label className="block text-sm">
 				Filter capabilities
 				<input

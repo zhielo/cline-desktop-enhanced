@@ -2543,7 +2543,9 @@ async function validateDexOutput(file: string) {
 	validateDexBytes(bytes);
 }
 
-export function createReverseEngineeringExecutor(options: { readGhidraAcceptance?: () => Promise<unknown> } = {}): ReverseEngineeringExecutor {
+export function createReverseEngineeringExecutor(
+	options: { readGhidraAcceptance?: () => Promise<unknown> } = {},
+): ReverseEngineeringExecutor {
 	return async (input, context) => {
 		if (
 			input.advanced_action === "binary_triage" ||
@@ -2685,8 +2687,10 @@ export function createReverseEngineeringExecutor(options: { readGhidraAcceptance
 			throw new Error(
 				"runtime_observation_plan is only accepted by plan_runtime_observation",
 			);
-		if(input.emulation_plan && input.operation!=="plan_emulation")throw new Error("emulation_plan is only accepted by plan_emulation");
-		if(input.operation==="plan_emulation")return JSON.stringify(await planEmulation(input,context.signal));
+		if (input.emulation_plan && input.operation !== "plan_emulation")
+			throw new Error("emulation_plan is only accepted by plan_emulation");
+		if (input.operation === "plan_emulation")
+			return JSON.stringify(await planEmulation(input, context.signal));
 		if (input.operation === "plan_runtime_observation")
 			return JSON.stringify(
 				await planRuntimeObservation(input, context.signal),
@@ -2919,7 +2923,12 @@ export function createReverseEngineeringExecutor(options: { readGhidraAcceptance
 				),
 			);
 		if (input.operation === "analysis_command_catalog")
-			return JSON.stringify(analysisCommandCatalog());
+			return JSON.stringify({
+				...analysisCommandCatalog(),
+				modelToolExposure: context.modelToolExposure ?? null,
+				modelToolExposureScope:
+					"Last core model-adapter request, after hooks. Not provider receipt, current settings, installed readiness or authorization. Missing evidence is unknown.",
+			});
 		if (["plan_investigation", "plan_batch"].includes(input.operation))
 			return JSON.stringify(planInvestigation(input));
 		if (
@@ -3015,7 +3024,7 @@ export function createReverseEngineeringExecutor(options: { readGhidraAcceptance
 					bundleRecovery: receipt.result?.bundleRecovery
 						? {
 								engine: receipt.result.bundleRecovery.engine,
-                                sourceSha256:receipt.result.bundleRecovery.sourceSha256,
+								sourceSha256: receipt.result.bundleRecovery.sourceSha256,
 								modules: receipt.result.bundleRecovery.modules.length,
 								truncated: receipt.result.bundleRecovery.truncated,
 								next: "analysis_evidence bundle-recovery to obtain the reportHash and paginated module provenance",
@@ -3270,7 +3279,12 @@ export function createReverseEngineeringExecutor(options: { readGhidraAcceptance
 				{
 					...discovered,
 					setupCapabilities: setupCapabilityCatalog(),
-     ...(options.readGhidraAcceptance ? {ghidraOwnedAcceptance: await options.readGhidraAcceptance()} : {}),
+					modelToolExposure: context.modelToolExposure ?? null,
+					modelToolExposureScope:
+						"Last core model-adapter request, not provider receipt, readiness or authorization.",
+					...(options.readGhidraAcceptance
+						? { ghidraOwnedAcceptance: await options.readGhidraAcceptance() }
+						: {}),
 					pathRefreshed,
 					recommendations: {
 						ida: "Use the selected IDA executable directly. IDAPython/Hex-Rays are checked by the actual request; no plugin filename, license-file scan or optional Setup Center receipt blocks an attempt. idalib activation is not required by this adapter.",

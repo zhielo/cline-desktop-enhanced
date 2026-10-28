@@ -470,3 +470,11 @@ describe("SessionVersioningService", () => {
 		});
 	});
 });
+
+it("includes tool evidence only when explicitly supplied and never aliases or persists it into session metadata",()=>{
+ const evidence={status:'last-request' as const,revision:0,providerId:'owned',modelId:'owned',evidence:{version:1 as const,capturedAt:'2026-10-28T00:00:00.000Z',iteration:1,toolNames:['read_files'],toolCount:1,modelToolNames:[],modelToolCount:0,truncated:false}};
+ const snapshot=createCoreSessionSnapshot({session:makeSession(),toolExposure:evidence});
+ evidence.evidence.toolNames.push('forged');expect(snapshot.toolExposure?.evidence?.toolNames).toEqual(['read_files']);
+ expect(snapshot.metadata).not.toHaveProperty('toolExposure');
+ expect(createCoreSessionSnapshot({session:makeSession()})).not.toHaveProperty('toolExposure');
+});

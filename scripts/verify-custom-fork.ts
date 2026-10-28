@@ -4,7 +4,16 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed", "actualRebootTested:false", "Same-boot inspection changed admission"]},
+ {path:"apps/examples/desktop-app/sidecar/release-gate-collector.ts",markers:["`consolidated-validation-${run.id}-${run.run_attempt}`"]},
+ {path:"apps/examples/desktop-app/sidecar/release-gate-verifier.ts",markers:["`consolidated-validation-${r.id}-${r.run_attempt}`"]},
+ {path:"apps/vscode/scripts/owned-triage-model.ts",markers:["const declaredTools = request.tools ?? []", "lastToolNames = declaredTools.map"]},
+ {path:"sdk/packages/agents/src/agent-runtime.ts",markers:["getModelToolExposure", "modelToolExposure: this.getModelToolExposure()", "toolCount: request.tools.length"]},
+ {path:"sdk/packages/core/src/runtime/orchestration/session-runtime-orchestrator.ts",markers:["lastToolExposure", "exposureRevision++", "activeExposureConfig"]},
+ {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["session_tool_inventory_sessions", "Owning session changed; inspect again", "includeToolExposure: true"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/session-tool-inventory.tsx",markers:["Refresh attached sessions", "Inspect last request", "Stale", "inventory.authorization", "htmlFor={sessionSelectId}", "id={sessionSelectId}"]},
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-session-tool-inventory-exact-provider-names-no-extra-request-passed", "triageModel.providerRequests !== requestsBeforeInventory"]},
+
+ {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-setup-recovery-real-boot-same-boot-refusal-no-replay-passed", "actualRebootTested: false", "Same-boot inspection changed admission"]},
 
 
 
@@ -21,8 +30,8 @@ const requiredMarkers: Array<{
  {path:"apps/examples/desktop-app/webview/components/views/settings/setup-center-view.tsx",markers:["Ghidra acceptance architecture", "Test all Ghidra profiles", "cline.setup.ghidra-processor"]},
  {path:"sdk/packages/core/src/extensions/tools/executors/reverse-engineering.ts",markers:["readGhidraAcceptance", "ghidraOwnedAcceptance"]},
  {path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["installed-ghidra-three-owned-architectures-java-no-target-execution-passed", "ghidra-profile-readiness.json"]},
-	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["export async function recordInstalledRpc<T>","recordInstalledRpc<T>(command, acceptanceAction","return record(`rpc-${command}`, async () => send(await discover()))"]},
-	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:['["qiling","x86_64"],["qiling","arm32"],["qiling","arm64"],["unidbg","arm32"],["unidbg","arm64"],["rnidbg","arm64"]',"planned.result.nextRequest.architecture!==architecture"]},
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["export async function recordInstalledRpc<T>","recordInstalledRpc<T>(\n\t\t\tcommand,\n\t\t\tacceptanceAction,","return record(`rpc-${command}`, async () => send(await discover()))"]},
+	{path:"apps/vscode/scripts/desktop-installed-acceptance.ts",markers:["[\"qiling\", \"x86_64\"],\n\t\t\t\t[\"qiling\", \"arm32\"],\n\t\t\t\t[\"qiling\", \"arm64\"],\n\t\t\t\t[\"unidbg\", \"arm32\"],\n\t\t\t\t[\"unidbg\", \"arm64\"],\n\t\t\t\t[\"rnidbg\", \"arm64\"]","planned.result.nextRequest.architecture !== architecture"]},
 	{path:"workers/emulation/profiles.json",markers:['"qiling-linux-static-v2"','"architectures":["x86_64","arm32","arm64"]']},
 	{path:"workers/emulation/qiling_runner.py",markers:["'arm32':{'write':4,'exit':1,'exit_group':248}","'arm64':{'write':64,'exit':93,'exit_group':94}","Qiling architecture differs from admitted ELF","if number not in calls.values()"]},
 	{path:"workers/emulation/server.py",markers:["Owned startup fixtures must cover every advertised architecture","Startup fixture is not sealed","Owned startup stdout check failed"]},

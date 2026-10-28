@@ -29,6 +29,7 @@ import {
 	type AgentExtensionRule,
 	type AgentFinishReason,
 	type AgentMessage,
+	type AgentModelToolExposure,
 	type AgentResult,
 	type AgentRunResult,
 	type AgentRuntimeEvent,
@@ -367,6 +368,18 @@ export class SessionRuntime {
 	/** Last abort reason requested for the active run. */
 	private abortReason: string | undefined;
 	/** Reference to the current run's `AgentRuntime` so `abort` can forward. */
+	private exposureRevision = 0;
+	private lastToolExposure?: {
+		evidence: AgentModelToolExposure;
+		revision: number;
+		providerId: string;
+		modelId: string;
+	};
+	private activeExposureConfig?: {
+		revision: number;
+		providerId: string;
+		modelId: string;
+	};
 	private activeRuntime: AgentRuntime | null = null;
 	/** Promise returned from the current run so shutdown can await its drain. */
 	private activeRunPromise: Promise<AgentResult> | null = null;
@@ -501,6 +514,23 @@ export class SessionRuntime {
 		return this.conversation.getConversationId();
 	}
 
+	getModelToolExposure() {
+		const evidence = this.activeRuntime?.getModelToolExposure?.();
+		const entry =
+			evidence && this.activeExposureConfig
+				? { evidence, ...this.activeExposureConfig }
+				: this.lastToolExposure;
+		return entry
+			? {
+					status:
+						entry.revision === this.exposureRevision
+							? ("last-request" as const)
+							: ("stale" as const),
+					...structuredClone(entry),
+				}
+			: { status: "unavailable" as const };
+	}
+
 	getMessages(): MessageWithMetadata[] {
 		return this.conversation.getMessages();
 	}
@@ -541,6 +571,7 @@ export class SessionRuntime {
 			}
 		}
 		this.config = { ...this.config, tools: merged };
+		this.exposureRevision++;
 	}
 
 	/** Mutate provider / reasoning fields for subsequent runs. */
@@ -568,6 +599,7 @@ export class SessionRuntime {
 			}
 		}
 		this.config = next;
+		this.exposureRevision++;
 	}
 
 	clearHistory(): void {
@@ -922,6 +954,11 @@ export class SessionRuntime {
 			});
 		}
 
+		const exposureConfig = {
+			revision: this.exposureRevision,
+			providerId: this.config.providerId,
+			modelId: this.config.modelId,
+		};
 		// Build the AgentRuntime for this turn.
 		const agentModel = createAgentModelFromConfig(
 			this.config,
@@ -997,6 +1034,7 @@ export class SessionRuntime {
 			systemPrompt,
 		});
 		const runtime = this.createAgentRuntimeImpl(runtimeConfig);
+		this.activeExposureConfig = exposureConfig;
 		this.activeRuntime = runtime;
 
 		// Subscribe to runtime events; fan out legacy events to listeners
@@ -1053,6 +1091,13 @@ export class SessionRuntime {
 					{ agentId: this.agentId, error },
 				);
 			}
+			const exposure = runtime.getModelToolExposure?.();
+			if (exposure && this.activeExposureConfig)
+				this.lastToolExposure = {
+					evidence: exposure,
+					...this.activeExposureConfig,
+				};
+			this.activeExposureConfig = undefined;
 			this.activeRuntime = null;
 			this.running = false;
 			this.abortRequested = false;

@@ -1,6 +1,7 @@
 import type * as LlmsProviders from "@cline/llms";
 import type {
 	AgentMode,
+	AgentModelToolExposure,
 	AgentResult,
 	RuntimeConfigExtensionKind,
 } from "@cline/shared";
@@ -399,6 +400,13 @@ export interface RuntimeHost {
 	abort(sessionId: string, reason?: unknown): Promise<void>;
 	stopSession(sessionId: string): Promise<void>;
 	dispose(reason?: string): Promise<void>;
+	readSessionToolExposure?(sessionId: string): {
+		status: "last-request" | "stale" | "unavailable";
+		evidence?: AgentModelToolExposure;
+		revision?: number;
+		providerId?: string;
+		modelId?: string;
+	};
 	getSession(sessionId: string): Promise<SessionRecord | undefined>;
 	listSessions(
 		limit?: number,

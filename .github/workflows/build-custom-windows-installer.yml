@@ -365,7 +365,7 @@ jobs:
         if: ${{ always() && (steps.consolidated.outcome == 'success' || steps.consolidated.outcome == 'failure' || steps.consolidated.outcome == 'cancelled') }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: consolidated-validation-${{ github.run_id }}
+          name: consolidated-validation-${{ github.run_id }}-${{ github.run_attempt }}
           path: .cline-validation/**
           include-hidden-files: true
           if-no-files-found: error

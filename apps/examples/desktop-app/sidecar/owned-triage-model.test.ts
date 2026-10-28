@@ -204,3 +204,14 @@ it.each([
 		await model.close();
 	}
 });
+
+it("captures only declared HTTP function names while allowing the optional tools field to be absent", async () => {
+ const model=await startOwnedTriageModel();
+ try {
+  const response=await fetch(`${model.baseUrl}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'owned',messages:[],stream:false,tools:[{type:'function',function:{name:'reverse_engineer',description:'PRIVATE',parameters:{private:'SECRET'}}}]})});
+  expect(response.status).toBe(200);expect(model.lastToolNames).toEqual(['reverse_engineer']);
+  const names=model.lastToolNames;names.push('forged');expect(model.lastToolNames).toEqual(['reverse_engineer']);
+  const ordinary=await fetch(`${model.baseUrl}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'owned',messages:[],stream:false})});
+  expect(ordinary.status).toBe(200);expect(model.lastToolNames).toEqual([]);expect(model.providerRequests).toBe(2);
+ }finally{await model.close();}
+});

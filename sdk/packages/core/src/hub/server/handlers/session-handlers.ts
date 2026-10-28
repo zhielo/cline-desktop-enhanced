@@ -935,7 +935,11 @@ export async function handleSessionGet(
 	const [session, snapshot] = await Promise.all([
 		readHubSessionRecord(ctx, sessionId),
 		includeSnapshot
-			? readCoreSessionSnapshot(ctx, sessionId)
+			? readCoreSessionSnapshot(
+					ctx,
+					sessionId,
+					envelope.payload?.includeToolExposure === true,
+				)
 			: Promise.resolve(undefined),
 	]);
 	return session

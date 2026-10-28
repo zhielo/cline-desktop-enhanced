@@ -11,6 +11,11 @@ export interface CoreSessionCheckpointSnapshot {
 
 export interface CoreSessionSnapshot {
 	version: 1;
+	toolExposure?: ReturnType<
+		NonNullable<
+			import("../runtime/host/runtime-host").RuntimeHost["readSessionToolExposure"]
+		>
+	>;
 	sessionId: string;
 	source: SessionRecord["source"];
 	status: SessionRecord["status"];
@@ -118,6 +123,7 @@ function readCheckpointSnapshot(
 
 export function createCoreSessionSnapshot(input: {
 	session: SessionRecord;
+	toolExposure?: CoreSessionSnapshot["toolExposure"];
 	messages?: LlmsProviders.MessageWithMetadata[];
 	usage?: SessionAccumulatedUsage;
 	aggregateUsage?: SessionAccumulatedUsage;
@@ -126,6 +132,9 @@ export function createCoreSessionSnapshot(input: {
 	const metadata = cloneJsonObject(session.metadata);
 	return {
 		version: 1,
+		...(input.toolExposure
+			? { toolExposure: structuredClone(input.toolExposure) }
+			: {}),
 		sessionId: session.sessionId,
 		source: session.source,
 		status: session.status,

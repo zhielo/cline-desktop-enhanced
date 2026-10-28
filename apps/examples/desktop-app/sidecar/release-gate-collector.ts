@@ -203,7 +203,9 @@ export async function collectReleaseGate(
 			JSON.parse(archiveRead(zip, m.name, 512 * 1024).bytes.toString("utf8")),
 		);
 	};
-	const receipts = await loadArtifact(`consolidated-validation-${run.id}`);
+	const receipts = await loadArtifact(
+		`consolidated-validation-${run.id}-${run.run_attempt}`,
+	);
 	const coreMatches = receipts.filter(
 			(r) => r.engineProfile === "not-requested",
 		),

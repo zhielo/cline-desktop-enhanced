@@ -15,12 +15,21 @@ export async function stageOwnedTriagePe(packRoot: string, workspace: string) {
 	if (typeof expected !== "string" || !/^[a-f0-9]{64}$/.test(expected) || hash !== expected)
 		throw new Error("Installed owned PE fixture does not match its pack manifest")
 	const pe = bytes.length >= 64 ? bytes.readUInt32LE(0x3c) : -1
-	if (bytes.toString("ascii", 0, 2) !== "MZ" || pe < 64 || pe > bytes.length - 24 ||
-		bytes.readUInt32LE(pe) !== 0x00004550 || !bytes.includes(Buffer.from("CLINE_OWNED_TRIAGE_FIXTURE_V1")))
+	if (
+		bytes.toString("ascii", 0, 2) !== "MZ" ||
+		pe < 64 ||
+		pe > bytes.length - 24 ||
+		bytes.readUInt32LE(pe) !== 0x00004550 ||
+		!bytes.includes(Buffer.from("CLINE_OWNED_TRIAGE_FIXTURE_V1"))
+	)
 		throw new Error("Installed owned fixture lacks valid PE structure and owned marker")
 	const target = join(workspace, OWNED_TRIAGE_TARGET)
 	await writeFile(target, bytes, { flag: "wx" })
-	if (createHash("sha256").update(await readFile(target)).digest("hex") !== hash)
+	if (
+		createHash("sha256")
+			.update(await readFile(target))
+			.digest("hex") !== hash
+	)
 		throw new Error("Staged owned PE fixture changed")
 	return { target: OWNED_TRIAGE_TARGET, sha256: hash, bytes: bytes.length }
 }
@@ -37,6 +46,7 @@ export async function startOwnedTriageModel() {
 	const results: Record<string, unknown>[] = []
 	let error: Error | undefined, selectedAddress: string | undefined
 	let providerRequests = 0
+	let lastToolNames: string[] = []
 	const server = createServer(async (req, res) => {
 		try {
 			if (req.method !== "POST" || !req.url?.endsWith("/chat/completions"))
@@ -48,6 +58,13 @@ export async function startOwnedTriageModel() {
 			}
 			const request = JSON.parse(body)
 			providerRequests++
+			const declaredTools = request.tools ?? []
+			if (
+				!Array.isArray(declaredTools) ||
+				declaredTools.some((t: { function?: { name?: unknown } }) => typeof t.function?.name !== "string")
+			)
+				throw new Error("Owned provider request lacks function definitions")
+			lastToolNames = declaredTools.map((t: { function: { name: string } }) => t.function.name)
 			const tools = (request.messages as Array<Record<string, unknown>>).filter((m) => m.role === "tool")
 			results.length = 0
 			for (const message of tools) {
@@ -60,9 +77,16 @@ export async function startOwnedTriageModel() {
 					typeof result.receiptId !== "string" ||
 					!/^[a-f0-9]{64}$/.test(String(result.targetSha256))
 				)
-					throw new Error("Owned model received a failed or incomplete triage result: " +
-						JSON.stringify({status:result.status, operation:result.operation, diagnostic:result.diagnostic,
-							error:result.error, receiptId:result.receiptId}).slice(0, 600))
+					throw new Error(
+						"Owned model received a failed or incomplete triage result: " +
+							JSON.stringify({
+								status: result.status,
+								operation: result.operation,
+								diagnostic: result.diagnostic,
+								error: result.error,
+								receiptId: result.receiptId,
+							}).slice(0, 600),
+					)
 				results.push(result)
 				if (result.operation === "list_functions") {
 					// Pinned radare2 6.2.4 aflj emits addr; older fixtures used offset.
@@ -158,6 +182,9 @@ export async function startOwnedTriageModel() {
 	return {
 		baseUrl: `http://127.0.0.1:${address.port}/v1`,
 		results,
+		get lastToolNames() {
+			return [...lastToolNames]
+		},
 		get providerRequests() {
 			return providerRequests
 		},
