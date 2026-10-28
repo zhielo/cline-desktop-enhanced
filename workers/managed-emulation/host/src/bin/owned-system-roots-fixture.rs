@@ -276,30 +276,28 @@ fn reservation_acceptance(
         lifecycle::{Event, Phase},
         windows_identity::{SystemIdentity, INSTALLATION_FILE, OWNERSHIP_FILE},
     };
+    let boot = cline_managed_inert_probe::windows_boot::HostBoot::observe().map_err(|_| 108)?;
     let owner = SystemIdentity::create(roots).map_err(|_| 80)?;
     let job = roots.create_job().map_err(|_| 81)?;
     let id = job.id().to_owned();
     if owner.open_vm(&job).is_ok() {
         return Err(82);
     }
-    let record = owner
-        .reserve_vm(&job, &"35".repeat(32), &"57".repeat(16))
-        .map_err(|_| 83)?;
+    let record = owner.reserve_vm(&job, &"35".repeat(32)).map_err(|_| 83)?;
     let expected = record.identity().clone();
     if expected.installation != owner.installation()
         || expected.job != id
         || expected.vm_id.as_bytes()[14] != b'4'
         || !b"89ab".contains(&expected.vm_id.as_bytes()[19])
         || expected.image_sha256 != "35".repeat(32)
-        || expected.host_boot != "57".repeat(16)
-        || owner
-            .reserve_vm(&job, &"35".repeat(32), &"57".repeat(16))
-            .is_ok()
+        || expected.host_boot != boot.id()
+        || owner.reserve_vm(&job, &"35".repeat(32)).is_ok()
         || owner.open_vm(&job).is_ok()
     {
         return Err(84);
     }
     record.revalidate().map_err(|_| 85)?;
+    record.require_original_boot().map_err(|_| 109)?;
     let mut store = record.create_store().map_err(|_| 86)?;
     store.advance(Event::VmCreated {}).map_err(|_| 87)?;
     drop(store);

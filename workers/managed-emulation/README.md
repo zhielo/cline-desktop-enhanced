@@ -350,3 +350,17 @@ queried, stopped or authorized here. Live Hyper-V factory/configuration checks,
 authenticated service, reviewed distributable pack and Setup Center integration
 remain unimplemented. Ordinary-user protection is not administrator rollback
 resistance or readiness attestation.
+
+### Native original-boot binding
+
+The reservation API no longer accepts an external original-boot claim. It reads
+`SystemBootEnvironmentInformation` directly from ntdll, with initialized bounded
+aligned storage, exact GUID decoding and no shell/clock/uptime fallback. Missing,
+failed or placeholder observations refuse reservation. `HostBoot` has no public
+constructor/deserializer; its value is read-only OS evidence, not hardware trust.
+Reservation-bound stores re-observe this boot before forward VM-created,
+boot-requested or inert-probe-recorded transitions, fencing after failure.
+Original records remain openable for explicit recovery, never automatic replay.
+A changed host boot is not a VM stop, removal or containment receipt. Native
+Windows tests include real stable queries and explicit different-boot refusal;
+no physical reboot or actual Hyper-V lifecycle acceptance is implied.

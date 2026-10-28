@@ -175,19 +175,18 @@ impl<'roots> SystemIdentity<'roots> {
             key,
         })
     }
-    /// Reservation intent only. Inputs must come from the future trusted image/
-    /// boot observer; this does not prove image approval, VM existence or ownership.
+    /// Reservation intent only. Image input still requires a future trusted image
+    /// policy; native OS observation supplies boot identity, never client claims.
     /// VM GUID comes only from OS entropy, never a caller-provided VM identifier.
     pub fn reserve_vm<'owner, 'job, 'r>(
         &'owner self,
         job: &'job SystemJob<'r>,
         image: &str,
-        host_boot: &str,
     ) -> Result<OwnedVmRecord<'owner, 'roots, 'job, 'r>> {
         self.revalidate()?;
         job.revalidate()?;
         crate::exact_hex::<32>(image)?;
-        crate::exact_hex::<16>(host_boot)?;
+        let host_boot = crate::windows_boot::HostBoot::observe()?;
         let mut vm = [0u8; 16];
         getrandom::fill(&mut vm).map_err(|_| "VM reservation entropy unavailable")?;
         vm[6] = (vm[6] & 15) | 64;
@@ -205,7 +204,7 @@ impl<'roots> SystemIdentity<'roots> {
                 &text[20..]
             ),
             image_sha256: image.into(),
-            host_boot: host_boot.into(),
+            host_boot: host_boot.id().into(),
         };
         let signature = self.reservation_mac(&identity)?.finalize().into_bytes();
         let envelope = Reservation {
@@ -381,26 +380,44 @@ impl<'roots, 'job, 'job_roots> OwnedVmRecord<'_, 'roots, 'job, 'job_roots> {
         }
         Ok(())
     }
+    /// Forward work must use the original observed boot; recovery remains explicit.
+    pub fn require_original_boot(&self) -> Result<()> {
+        self.revalidate()?;
+        crate::windows_boot::HostBoot::observe()?.require_same(&self.identity.host_boot)
+    }
     pub fn create_store(&self) -> Result<InstallationStore<'_, 'roots, 'job, 'job_roots>> {
         self.revalidate()?;
         let mut store = self.owner.create_store(self.job, self.identity.clone())?;
-        store.record = Some((&self.file, self.digest));
+        store.record = Some(RecordBinding {
+            file: &self.file,
+            digest: self.digest,
+            host_boot: &self.identity.host_boot,
+        });
         Ok(store)
     }
     pub fn open_store(&self) -> Result<InstallationStore<'_, 'roots, 'job, 'job_roots>> {
         self.revalidate()?;
         let mut store = self.owner.open_store(self.job, self.identity.clone())?;
-        store.record = Some((&self.file, self.digest));
+        store.record = Some(RecordBinding {
+            file: &self.file,
+            digest: self.digest,
+            host_boot: &self.identity.host_boot,
+        });
         Ok(store)
     }
 }
 
+struct RecordBinding<'record> {
+    file: &'record File,
+    digest: [u8; 32],
+    host_boot: &'record str,
+}
 /// Installation identity stays borrowed through every recovery-store transition.
 pub struct InstallationStore<'installation, 'roots, 'job, 'job_roots> {
     owner: &'installation SystemIdentity<'roots>,
     store: ProtectedStore<'job, 'job_roots>,
     fenced: bool,
-    record: Option<(&'installation File, [u8; 32])>,
+    record: Option<RecordBinding<'installation>>,
 }
 impl InstallationStore<'_, '_, '_, '_> {
     pub fn journal(&self) -> &Journal {
@@ -412,10 +429,14 @@ impl InstallationStore<'_, '_, '_, '_> {
         }
         self.fenced = true;
         self.owner.revalidate()?;
-        if let Some((file, digest)) = self.record {
-            if <[u8; 32]>::from(Sha256::digest(contents(file, MAX_RECORD)?.as_slice())) != digest {
+        if let Some(record) = &self.record {
+            if <[u8; 32]>::from(Sha256::digest(
+                contents(record.file, MAX_RECORD)?.as_slice(),
+            )) != record.digest
+            {
                 return Err("Owned reservation changed; explicit recovery required");
             }
+            require_forward_boot(&event, record.host_boot)?;
         }
         self.store.advance(event)?;
         self.fenced = false;
@@ -423,9 +444,57 @@ impl InstallationStore<'_, '_, '_, '_> {
     }
 }
 
+// Historical cleanup/recovery observations do not become proof of termination
+// just because the host boot differs. Only forward work is boot-bound here.
+fn require_forward_boot(event: &Event, expected: &str) -> Result<()> {
+    if matches!(
+        event,
+        Event::VmCreated {} | Event::BootRequested { .. } | Event::InertProbeRecorded { .. }
+    ) {
+        crate::windows_boot::HostBoot::observe()?.require_same(expected)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn forward_work_requires_native_original_boot_without_authorizing_recovery() {
+        let actual = crate::windows_boot::HostBoot::observe().unwrap();
+        let forward = [
+            Event::VmCreated {},
+            Event::BootRequested {
+                session: "11".repeat(16),
+                challenge: "22".repeat(32),
+            },
+            Event::InertProbeRecorded {
+                response: "owned-fixture-only".into(),
+            },
+        ];
+        for event in forward {
+            require_forward_boot(&event, actual.id()).unwrap();
+            assert_eq!(
+                require_forward_boot(&event, &"00".repeat(16)).err(),
+                Some("OS boot changed; explicit VM recovery required")
+            );
+        }
+        // This helper permits only the reducer to consider these events. It
+        // does not observe a VM or certify a valid stop/removal/recovery.
+        for event in [
+            Event::RecoveryRequested {},
+            Event::StopRequested {},
+            Event::StopObserved {
+                vm_id: "11223344-5566-7788-99aa-bbccddeeff00".into(),
+            },
+            Event::RemoveRequested {},
+            Event::RemovalObserved {
+                vm_id: "11223344-5566-7788-99aa-bbccddeeff00".into(),
+            },
+        ] {
+            require_forward_boot(&event, &"00".repeat(16)).unwrap();
+        }
+    }
     #[test]
     fn derived_recovery_keys_bind_every_identity_field_and_master() {
         let identity = Identity {

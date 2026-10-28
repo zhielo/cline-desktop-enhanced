@@ -211,3 +211,7 @@ pub mod windows_roots;
 
 #[cfg(windows)]
 pub mod windows_identity;
+
+/// Fresh native OS boot observation, never a VM termination attestation.
+#[cfg(windows)]
+pub mod windows_boot;
