@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/image/smoke_boot.py",markers:["validate_boot_log", "Duplicate guest receipt field", "Guest receipt scope mismatch", '"-nic", "none"', "hardware containment"]},
  {path:"workers/managed-emulation/image/build_image.py",markers:["Pinned package integrity", "Special archive member forbidden", "Linked/non-directory CPIO parent", "CONFIG_HYPERV_VSOCKETS=m", '"installable": False']},
  {path:"workers/managed-emulation/image/init",markers:["CLINE_MANAGED_CREDENTIAL_ABSENT_V1", "modprobe vsock", "timeout -s KILL 45", "poweroff -f"]},
  {path:"workers/managed-emulation/image/provision_boot.py",markers:["os.O_EXCL | os.O_NOFOLLOW", "read_boot_config()", "1025"]},

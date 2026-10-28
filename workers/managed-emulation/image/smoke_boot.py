@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import re
 import shutil
 import signal
 import subprocess
@@ -15,6 +16,27 @@ import tempfile
 import time
 
 MAX_LOG = 1024 * 1024
+
+
+def validate_boot_log(data, status):
+    # Preserve raw evidence; strip terminal CSI decoration only for parsing.
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", data.decode("utf-8", errors="replace"))
+    marker = "CLINE_MANAGED_INERT_BOOT_V1 "
+    lines = [line.strip() for line in text.splitlines() if line.startswith(marker)]
+    if status != 0 or len(lines) != 1 or text.count("CLINE_MANAGED_CREDENTIAL_ABSENT_V1") != 1:
+        raise ValueError("Owned guest failed boot or missing-credential denial")
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("Duplicate guest receipt field")
+            value[key] = item
+        return value
+    receipt = json.loads(lines[0][len(marker):], object_pairs_hook=unique)
+    expected = {"fixtureSha256": hashlib.sha256(b"cline-managed-owned-inert-fixture/v1\n").hexdigest(), "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested"}
+    if receipt != expected or "CLINE_MANAGED_PROBE_" in text or "CLINE_MANAGED_BOOT_REJECTED_V1" in text:
+        raise ValueError("Guest receipt scope mismatch")
+    return receipt
 
 
 def run(image, output, uefi=False):
@@ -52,15 +74,7 @@ def run(image, output, uefi=False):
                 child.wait(timeout=5)
             child.stdout.close()
             output.write_bytes(data)
-        text = data.decode("utf-8", errors="replace")
-        marker = "CLINE_MANAGED_INERT_BOOT_V1 "
-        lines = [line.strip() for line in text.splitlines() if line.startswith(marker)]
-        if status != 0 or len(lines) != 1 or "CLINE_MANAGED_CREDENTIAL_ABSENT_V1" not in text:
-            raise ValueError("Owned guest failed boot or missing-credential denial")
-        receipt = json.loads(lines[0][len(marker):])
-        expected = {"fixtureSha256": hashlib.sha256(b"cline-managed-owned-inert-fixture/v1\n").hexdigest(), "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested"}
-        if receipt != expected or "CLINE_MANAGED_PROBE_EXITED_V1" in text or "CLINE_MANAGED_BOOT_REJECTED_V1" in text:
-            raise ValueError("Guest receipt scope mismatch")
+        receipt = validate_boot_log(data, status)
         return {"schema": 1, "boot": "uefi" if uefi else "bios", "backend": "qemu-tcg-no-nic", "imageSha256": hashlib.sha256(image.read_bytes()).hexdigest(), "ownedBoot": "passed", "missingCredential": "denied", **receipt}
 
 

@@ -14,6 +14,7 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent)]
 import build_image as image
 import provision_boot
+import smoke_boot
 
 
 def tar(entries):
@@ -132,6 +133,27 @@ class ArchiveTests(unittest.TestCase):
             for revision in ["main","a"*40]:
                 with self.assertRaises(ValueError): image.build(path,path,path,path,revision)
             self.assertTrue(path.is_dir())
+
+
+
+class ColdBootReceiptTests(unittest.TestCase):
+    def log(self, **fields):
+        value={"fixtureSha256":hashlib.sha256(b"cline-managed-owned-inert-fixture/v1\n").hexdigest(),"vmIsolation":"not-attested","engineReadiness":"not-tested","hypervExchange":"not-tested",**fields}
+        return ("CLINE_MANAGED_INERT_BOOT_V1 "+json.dumps(value)+"\r\nCLINE_MANAGED_CREDENTIAL_ABSENT_V1\r\n").encode()
+
+    def test_grub_serial_control_prefix_does_not_hide_actual_guest_receipt(self):
+        data=b"\x1b[H\x1b[J\x1b[1;1H"+self.log()
+        self.assertEqual(smoke_boot.validate_boot_log(data,0)["engineReadiness"],"not-tested")
+
+    def test_missing_duplicate_failed_or_promoted_boot_is_not_success(self):
+        for data,status in [(self.log(),1),(self.log()+self.log(),0),(self.log().replace(b"CREDENTIAL_ABSENT",b"OTHER"),0),
+                            (self.log()+b"CLINE_MANAGED_PROBE_UNRESOLVED_V1",0),(self.log(vmIsolation="attested"),0),
+                            (self.log(engineReadiness="ready"),0),(self.log(extra="unexpected"),0)]:
+            with self.subTest(status=status,data=data),self.assertRaises(ValueError):smoke_boot.validate_boot_log(data,status)
+
+    def test_duplicate_json_receipt_fields_are_rejected(self):
+        data=self.log().replace(b'{"fixtureSha256"',b'{"engineReadiness":"not-tested","fixtureSha256"')
+        with self.assertRaises(ValueError):smoke_boot.validate_boot_log(data,0)
 
 
 class ProvisioningTests(unittest.TestCase):
