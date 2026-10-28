@@ -2890,6 +2890,39 @@ requiredMarkers.push(
 	},
 );
 
+requiredMarkers.push(
+	{
+		path: "workers/managed-emulation/host/src/windows_roots.rs",
+		markers: [
+			"LocalSystem broker required; no host settings changed",
+			"Impersonated protected storage access forbidden",
+			"O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)",
+			"FILE_SHARE_READ | FILE_SHARE_WRITE",
+			"FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT",
+			"pub fn open_existing()",
+			"real_owned_junctions_are_refused_as_roots_and_ancestors",
+		],
+	},
+	{
+		path: "workers/managed-emulation/host/test-system-roots.ps1",
+		markers: [
+			"New-ScheduledTaskPrincipal -UserId 'SYSTEM'",
+			"No -Force: never overwrite an existing task",
+			"LastRunTime.Year -gt 2000",
+			"Owned fixture executable changed before launch",
+			"Owned task termination unresolved",
+		],
+	},
+	{
+		path: "workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",
+		markers: ["SystemRoots::create_new()", "SystemRoots::open_existing()", "std::fs::remove_dir(path)", "No recursive deletion"],
+	},
+	{
+		path: "workers/managed-emulation/host/Cargo.toml",
+		markers: ['required-features = ["owned-system-acceptance"]', 'version = "=0.52.0"'],
+	},
+);
+
 for (const forbiddenPath of forbiddenPaths) {
 	if (existsSync(forbiddenPath)) {
 		failures.push(`${forbiddenPath}: obsolete file must remain deleted`);

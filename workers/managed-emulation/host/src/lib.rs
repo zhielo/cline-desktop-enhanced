@@ -204,3 +204,7 @@ pub mod store;
 
 /// Native private boot provisioning; not a VM ownership or readiness claim.
 pub mod boot_media;
+
+/// Fixed SYSTEM-only Windows root provisioning, not a running broker/service.
+#[cfg(windows)]
+pub mod windows_roots;

@@ -17,8 +17,20 @@ zeroize = "=1.8.1"
 
 [target.'cfg(windows)'.dependencies]
 socket2 = { version = "=0.5.9", features = ["all"] }
+windows-sys = { version = "=0.52.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Shell"] }
 
 [[test]]
 name = "store_crash"
 path = "tests/store_crash.rs"
 harness = false
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "=0.52.0", features = ["Win32_System_IO"] }
+
+[features]
+owned-system-acceptance = []
+
+[[bin]]
+name = "owned-system-roots-fixture"
+path = "src/bin/owned-system-roots-fixture.rs"
+required-features = ["owned-system-acceptance"]

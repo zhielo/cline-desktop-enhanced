@@ -257,3 +257,30 @@ process-group cleanup. The leader is observed without reaping until cleanup,
 so its group ID cannot be reused between observation and termination. This
 stops owned background descendants even after a successful leader exit; it
 is not proof that the host VM has stopped or that arbitrary targets are safe.
+
+## Native Windows protected parent provisioning
+
+`host/src/windows_roots.rs` supplies fixed-location SYSTEM-only root creation and
+existing-root validation, not a running service, an installer or VM authority.
+The public API accepts no client paths or identities. It rejects impersonation
+and ordinary/admin process identities before accessing ProgramData. New roots
+are exclusive and explicitly SYSTEM-owned; protected ACLs admit only SYSTEM and
+built-in Administrators with full access. Handle-based ACL checks reject null,
+inherited/unprotected, duplicate, missing or changed rights/principals. Held
+non-reparse ancestor/root handles deny delete sharing and pin directory names.
+
+All roots must be retained for the future operation lifetime and revalidated
+before effects. Opening roots does not authenticate an installation, image,
+caller or VM: protected ownership/key records and the actual service/factory
+remain necessary. Administrators/SYSTEM are trusted; this does not prevent their
+intentional state rollback or certify containment. No existing state is adopted
+by initial creation, and failures leave partial state for explicit review.
+
+Native Windows tests exercise owned ACLs and real junctions. The separate
+`owned-system-acceptance` Cargo feature enables an unshipped CI-only executable.
+A Windows CI step runs it as actual SYSTEM through a fresh bounded scheduled
+task, checking exclusive public provisioning, revalidation, reopening and pinned
+lifetime. Successful fixture cleanup removes only its newly created empty
+directories; no recursive cleanup, user-PC installation or VM execution occurs.
+The executable is not built by default, included in an installer, or exposed to
+models. This scope is not Windows 10 installed Hyper-V acceptance.
