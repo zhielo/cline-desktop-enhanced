@@ -201,10 +201,10 @@ def modules(kernel, release):
         for line in (base / "modules.dep").read_text().splitlines():
             key, following = line.split(":", 1)
             dependencies[key] = following.split()
-        wanted = {"vsock", "hv_sock", "hv_vmbus", "hv_storvsc", "ahci", "ata_piix", "sr_mod", "isofs"}
+        wanted = {"vsock", "hv_sock", "hv_vmbus", "hv_storvsc", "ata_piix", "sr_mod", "isofs"}
         names = {Path(path).name.split(".ko")[0].replace("-", "_"): path for path in dependencies}
         if not wanted <= names.keys():
-            raise ValueError("Required guest driver absent")
+            raise ValueError("Required guest driver absent: " + ",".join(sorted(wanted - names.keys())))
         retained = set()
         def retain(path):
             if path in retained:

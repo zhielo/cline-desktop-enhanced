@@ -111,7 +111,7 @@ class ArchiveTests(unittest.TestCase):
             self.assertTrue(package["url"].startswith("https://"))
 
     def test_pruned_modules_retain_transitive_dependencies_not_network_drivers(self):
-        wanted=["vsock","hv_sock","hv_vmbus","hv_storvsc","ahci","ata_piix","sr_mod","isofs"]
+        wanted=["vsock","hv_sock","hv_vmbus","hv_storvsc","ata_piix","sr_mod","isofs"]
         paths={name:f"kernel/{name}.ko" for name in wanted+["scsi_mod","unrelated_net"]}
         prefix="lib/modules/owned/"
         kernel={prefix+path:image.Node("file",0o644,name.encode()) for name,path in paths.items()}

@@ -14,7 +14,7 @@ $bb mount -t tmpfs -o nosuid,nodev,noexec,mode=0755 tmpfs /run || fail
 # A failed required core load is fatal. Hyper-V-only drivers may legitimately
 # report ENODEV in the QEMU compatibility smoke test; that is NOT Hyper-V proof.
 $bb modprobe vsock || fail
-for module in hv_vmbus hv_storvsc hv_sock ahci ata_piix sr_mod isofs; do
+for module in hv_vmbus hv_storvsc hv_sock ata_piix sr_mod isofs; do
     $bb modprobe "$module" >/dev/null 2>&1 || :
 done
 /usr/local/bin/python3.13 -B -E -s /opt/cline/boot_selftest.py || fail
