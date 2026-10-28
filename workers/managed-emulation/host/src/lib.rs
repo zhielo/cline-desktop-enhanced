@@ -198,3 +198,6 @@ pub fn fixture_response(challenge: &str) -> Value {
 
 /// Development lifecycle reducer; not a host operation or readiness certificate.
 pub mod lifecycle;
+
+/// Durable development journal adapter; no VM effects or readiness claims.
+pub mod store;

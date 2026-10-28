@@ -6,6 +6,7 @@ rust-version = "1.85"
 publish = false
 
 [dependencies]
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
 hex = "=0.4.3"
 hmac = "=0.12.1"
 serde = { version = "=1.0.219", features = ["derive"] }
@@ -15,3 +16,8 @@ zeroize = "=1.8.1"
 
 [target.'cfg(windows)'.dependencies]
 socket2 = { version = "=0.5.9", features = ["all"] }
+
+[[test]]
+name = "store_crash"
+path = "tests/store_crash.rs"
+harness = false

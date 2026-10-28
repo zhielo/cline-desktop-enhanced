@@ -29,7 +29,7 @@ jobs:
       - name: Select pinned native compiler
         shell: bash
         run: rustup toolchain install 1.85.1 --profile minimal --component rustfmt,clippy
-      - name: Native locked protocol, lifecycle and process tests
+      - name: Native locked protocol, lifecycle, storage and kill/reopen tests
         run: cargo +1.85.1 test --locked --manifest-path workers/managed-emulation/host/Cargo.toml
       - name: Native formatting
         run: cargo +1.85.1 fmt --manifest-path workers/managed-emulation/host/Cargo.toml -- --check
@@ -44,4 +44,4 @@ jobs:
         run: python -B workers/managed-emulation/probe_protocol_test.py
       - name: Record scope
         shell: bash
-        run: echo 'Protocol/process, lifecycle-reducer and credential-path tests only. No actual VM lifecycle, durable recovery, Hyper-V connection, framework installation or containment acceptance.'
+        run: echo 'Protocol/process, lifecycle reducer, real SQLite kill/reopen storage and credential-path tests only. No physical-power-loss, protected broker, actual VM lifecycle, Hyper-V connection, framework installation or containment acceptance.'

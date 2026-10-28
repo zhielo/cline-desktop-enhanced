@@ -1075,3 +1075,25 @@ Setup Center exposes an explicit trusted-local, confirmed read-only prerequisite
 Query failure, inaccessible properties, unsupported hosts and missing prerequisites remain explicit. Concurrent requests share only an in-flight bounded query; subsequent explicit checks reread the OS. Even fully observed prerequisites always report managed installation not implemented, VM containment not tested and engine readiness not tested. Existing Ubuntu/WSL, engine packs and approvals are unchanged. This is not VM creation, management, containment validation or installation of Qiling, unidbg, rnidbg or Speakeasy.
 
 Regressions require trusted confirmation before querying, bounded fixed execution with no shell/PATH fallback, scalar projection and no automatic UI probe. Real Windows scalar-query coverage is separate from mocked projections. The installed Windows journey explicitly uses the new UI and retains a read-only host observation without claiming Windows 10/VM feasibility. Release acceptance adds a 74th stage, preserving all prior checks and deadlines.
+
+## Managed-emulation development persistence
+
+The native development adapter now persists bounded authenticated lifecycle snapshots
+and an independent trusted-current checkpoint through two SQLite databases. The
+pinned bundled SQLite dependency is Rust-1.85-compatible. Snapshot commit precedes
+anchor compare-and-swap commit; stale writers and ambiguous errors fence the handle.
+Open verifies the anchor-selected digest/full MAC chain and requires explicit
+nonterminal recovery. Orphan snapshots never become current automatically; no
+create/boot/target action is replayed. Key bytes are supplied privately in memory,
+not stored in either database. New storage is exclusive; retained state is never
+silently removed or repaired. Root/file/sidecar guards and fixed schemas/size/count
+budgets fail closed.
+
+Actual writer processes are forcibly terminated at four before/after commit
+boundaries, then reopened to verify rollback or the exact committed checkpoint
+and recovery fence. This does not prove physical-power-loss durability or VM
+termination. Separate protected roots/key provisioning still require the future
+privileged broker (especially Windows ACL/hard-link ownership and ancestor
+protection). Rolling back both stores by their privileged owner is outside this
+adapter's guarantees. No service, VM factory, framework install, Setup Center
+integration, readiness or existing release gate is changed by these storage tests.

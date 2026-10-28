@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/store.rs",markers:["SnapshotWrittenBeforeCommit", "Recovery anchor changed; stale writer fenced", "PRAGMA synchronous=FULL", "Recovery store fenced; reopen and inspect", "SQLITE_OPEN_NOFOLLOW"]},
+ {path:"workers/managed-emulation/host/tests/store_crash.rs",markers:["child.kill()", "COMMIT_BOUNDARY_REACHED", "reopen must never replay create"]},
  {path:"workers/managed-emulation/image/smoke_boot.py",markers:["validate_boot_log", "Duplicate guest receipt field", "Guest receipt scope mismatch", '"-nic", "none"', "hardware containment"]},
  {path:"workers/managed-emulation/image/build_image.py",markers:["Pinned package integrity", "Special archive member forbidden", "Linked/non-directory CPIO parent", "CONFIG_HYPERV_VSOCKETS=m", '"installable": False']},
  {path:"workers/managed-emulation/image/init",markers:["CLINE_MANAGED_CREDENTIAL_ABSENT_V1", "modprobe vsock", "timeout -s KILL 45", "poweroff -f"]},

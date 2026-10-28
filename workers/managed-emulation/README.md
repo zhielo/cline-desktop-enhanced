@@ -47,8 +47,9 @@ There are intentionally no user setup instructions here.
 ## Lifecycle recovery core (development only)
 
 `host/src/lifecycle.rs` now supplies a strict, bounded, authenticated lifecycle
-journal reducer. This is **not** the privileged broker, a persistence backend,
-a VM factory, or a certificate that an observation actually occurred.
+journal reducer. This reducer is **not** the privileged broker, a VM factory,
+or a certificate that an observation actually occurred. The development persistence
+adapter below stores it without implementing host effects.
 
 - Each entry binds the installation/job, exact VM ID, image digest and original
   host-boot identity, sequence, previous MAC and typed event. HMAC uses a separate
@@ -84,6 +85,42 @@ establish ownership from a supplied GUID. Its event observations must come from
 fresh independently checked Hyper-V state, not client assertions. Nothing is
 connected to Setup Center or changes the installed application's readiness.
 
+## Durable recovery storage adapter (development only)
+
+`host/src/store.rs` uses pinned rusqlite 0.40.2 with bundled SQLite. It writes
+immutable content-addressed full journal snapshots and a compare-and-swap current
+checkpoint into **separate databases in independent caller-protected directories**.
+Snapshots commit first, then the trusted anchor commits; both use rollback journals,
+`FULL` synchronization and bounded lock waits. State advances only after both commits.
+The key is privately supplied in memory and is never persisted in either database.
+
+- Open reads only the exact anchor-selected digest, verifies its bytes and the full
+  lifecycle MAC chain, and fences every nonterminal journal for explicit recovery.
+  It never scans for the highest sequence or promotes an orphan staged snapshot.
+- Stale writers lose the anchor compare-and-swap. Invalid requests, failed or ambiguous
+  commits fence the handle; reopening does not replay VM creation, boot or execution.
+- New leaf directories and files are exclusively created. Retained state is not
+  reused or deleted on failed creation. Symlink/reparse roots/files and linked
+  sidecars are rejected; Unix additionally enforces private modes/single links.
+- Fixed schemas, application/version IDs, integrity checks, 16 MiB database bounds,
+  256 retained snapshots, 128 journal events and 64 KiB snapshots bound this adapter.
+  Exhaustion remains unresolved. Repair/compaction is not implemented.
+- **Root ACL/owner protection, ancestor protection, secure key provisioning and
+  service identity are caller requirements, not supplied by this adapter.** Windows
+  roots must be provisioned by the future privileged broker; inherited ACLs and
+  hard-link ownership are not independently established here. Separate files do not
+  detect a privileged owner rolling back both the anchor and snapshot stores. MACs
+  do not replace a separately protected current checkpoint. No anti-rollback hardware
+  or physical-power-loss guarantee is claimed.
+- Four subprocess tests forcibly kill a real writer before/after each database
+  commit, reopen hot journals, and require the old or new exact checkpoint plus
+  recovery fencing. These are process-crash tests, not disk-failure, host-reboot,
+  Hyper-V lifecycle, engine readiness or installer acceptance.
+
+The adapter is **not connected to Setup Center or a privileged Hyper-V broker**.
+Stored event observations remain claims until fresh exact-VM state is independently
+verified. A committed stop intent is not a termination receipt.
+
 ## Development guest-image path
 
 `image/` now contains a separate CI-only diskless ISO builder and fixed guest
@@ -111,9 +148,9 @@ The lifecycle broker still has to:
 7. Add separate target admission/execution/approval and per-engine runtime
    identities. The inert probe does not grant permission to execute targets.
 
-No persistent replay ledger exists in this probe. Its one-shot process and
-fresh boot session/key are necessary assumptions, not a replacement for the
-future broker's lifecycle/no-replay enforcement.
+The probe itself is not wired to the development persistence adapter. Its one-shot
+process and fresh boot session/key are necessary assumptions, not a replacement
+for the future broker's cross-job lifecycle/no-replay enforcement.
 An authenticated response proves possession of the boot key and agreement on
 the inert protocol, not the guest image's integrity, safe containment, or that a
 particular runtime binary executed. Those require separate host lifecycle and
@@ -132,7 +169,8 @@ cargo +1.85.1 fmt --manifest-path workers/managed-emulation/host/Cargo.toml -- -
 Public fixture vectors contain public test credentials only. Python descriptor
 fixtures exercise real no-follow/FIFO/hard-link behavior with synthesized root
 ownership (unprivileged CI is not root/VM attestation). Journal tests establish
-state-machine/authentication behavior, not actual durable recovery. Python socketpair
+state-machine/authentication behavior; separate storage tests kill actual processes
+at commit boundaries, not actual VMs or physical power. Python socketpair
 and native codec/process tests establish protocol behavior, **not** Hyper-V
 communication, Windows 10 compatibility, guest isolation or engine readiness.
 The dedicated CI workflow builds/tests the native helper on Linux and Windows;
