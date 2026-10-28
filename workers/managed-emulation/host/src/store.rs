@@ -189,6 +189,28 @@ impl Store {
         identity: Identity,
         key: [u8; 32],
     ) -> Result<Self> {
+        Self::create_in_roots(snapshot_root, anchor_root, identity, key, false)
+    }
+
+    /// Windows-only adapter for already exclusively provisioned SYSTEM job roots.
+    /// The caller must retain and revalidate all root/ancestor handles.
+    #[cfg(windows)]
+    pub(crate) fn create_protected(
+        snapshot_root: &Path,
+        anchor_root: &Path,
+        identity: Identity,
+        key: [u8; 32],
+    ) -> Result<Self> {
+        Self::create_in_roots(snapshot_root, anchor_root, identity, key, true)
+    }
+
+    fn create_in_roots(
+        snapshot_root: &Path,
+        anchor_root: &Path,
+        identity: Identity,
+        key: [u8; 32],
+        provisioned: bool,
+    ) -> Result<Self> {
         let key = Zeroizing::new(key);
         let journal = Journal::reserve(identity.clone(), &key)?;
         // Check parent topology before making either leaf.
@@ -199,8 +221,16 @@ impl Store {
             .map_err(|_| "Storage parent required")?
             .join(anchor_root.file_name().ok_or("Storage leaf required")?);
         distinct(&a, &b)?;
-        let a = new_root(&a)?;
-        let b = new_root(&b)?;
+        let a = if provisioned {
+            root(&a)?
+        } else {
+            new_root(&a)?
+        };
+        let b = if provisioned {
+            root(&b)?
+        } else {
+            new_root(&b)?
+        };
         let snapshots = database(&a, true, 0x434c5301)?;
         let anchors = database(&b, true, 0x434c4101)?;
         let mut store = Self {

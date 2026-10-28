@@ -2924,6 +2924,17 @@ requiredMarkers.push(
 	},
 );
 
+requiredMarkers.push(
+	{
+		path: "workers/managed-emulation/host/src/windows_roots.rs",
+		markers: ["pub struct SystemJob<'roots>", "pub struct ProtectedStore<'job, 'roots>", "Protected job identity mismatch", "Protected store fenced; reopen and inspect", "Store::create_protected", "self.job.revalidate()?", "material.write_media(&self.directories[2].0)?"],
+	},
+	{
+		path: "workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",
+		markers: ["roots.create_job()", "opened_job.open_store", "ImpersonateSelf(SecurityImpersonation)", "job.write_boot_media()", "MEDIA_BYTES as u64", 'std::fs::remove_file(path.join("recovery.sqlite"))'],
+	},
+);
+
 for (const forbiddenPath of forbiddenPaths) {
 	if (existsSync(forbiddenPath)) {
 		failures.push(`${forbiddenPath}: obsolete file must remain deleted`);

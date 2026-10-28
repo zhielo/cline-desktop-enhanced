@@ -422,6 +422,21 @@ impl SystemRoots {
         }
         Ok(())
     }
+    /// Creates three fixed-role, explicitly protected job leaves from fresh OS
+    /// entropy. No caller-selected path or reused job identifier is accepted.
+    pub fn create_job(&self) -> Result<SystemJob<'_>> {
+        self.revalidate()?;
+        let mut id = [0u8; 16];
+        getrandom::fill(&mut id).map_err(|_| "Protected job entropy unavailable")?;
+        SystemJob::access(self, hex::encode(id), true)
+    }
+    /// Protected bytes alone are NOT VM ownership or caller authorization. The
+    /// future broker must obtain this exact ID from its protected ownership record.
+    pub fn open_job(&self, job: &str) -> Result<SystemJob<'_>> {
+        self.revalidate()?;
+        crate::exact_hex::<16>(job)?;
+        SystemJob::access(self, job.into(), false)
+    }
     pub fn journal_parent(&self) -> &Path {
         &self.leaves[0].0
     }
@@ -433,6 +448,129 @@ impl SystemRoots {
     }
     pub fn image_parent(&self) -> &Path {
         &self.leaves[3].0
+    }
+}
+
+/// Pinned per-job roots. Borrowing the parent keeps its protected namespace
+/// alive. No deletion/VM API is supplied; ambiguous state is retained for recovery.
+pub struct SystemJob<'roots> {
+    parents: &'roots SystemRoots,
+    id: String,
+    directories: Vec<(PathBuf, OwnedHandle)>,
+}
+impl<'roots> SystemJob<'roots> {
+    fn access(parents: &'roots SystemRoots, id: String, create: bool) -> Result<Self> {
+        crate::exact_hex::<16>(&id)?;
+        let policy = Policy::system()?;
+        let descriptor = Descriptor::new(SYSTEM_SDDL)?;
+        let mut directories = Vec::new();
+        for parent in [
+            parents.journal_parent(),
+            parents.anchor_parent(),
+            parents.job_parent(),
+        ] {
+            let path = parent.join(&id);
+            let handle = if create {
+                create_directory(&path, &descriptor, &policy)?
+            } else {
+                let handle = directory_handle(&path)?;
+                validate(&handle, &policy)?;
+                handle
+            };
+            directories.push((path, handle));
+        }
+        Ok(Self {
+            parents,
+            id,
+            directories,
+        })
+    }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn revalidate(&self) -> Result<()> {
+        self.parents.revalidate()?;
+        let policy = Policy::system()?;
+        for (_, handle) in &self.directories {
+            validate(handle, &policy)?;
+        }
+        Ok(())
+    }
+    /// Fresh, exclusive credential media only. Not a boot/VM authorization.
+    pub fn write_boot_media(&self) -> Result<crate::boot_media::BootMaterial> {
+        self.revalidate()?;
+        let material = crate::boot_media::BootMaterial::generate()?;
+        material.write_media(&self.directories[2].0)?;
+        Ok(material)
+    }
+    fn require_identity(&self, identity: &crate::lifecycle::Identity) -> Result<()> {
+        self.revalidate()?;
+        if identity.job != self.id {
+            return Err("Protected job identity mismatch");
+        }
+        Ok(())
+    }
+    /// The in-process key/installation/VM claims must come from the future
+    /// protected broker, never a model/client. This does not persist that key.
+    pub fn create_store(
+        &self,
+        identity: crate::lifecycle::Identity,
+        key: [u8; 32],
+    ) -> Result<ProtectedStore<'_, 'roots>> {
+        let key = zeroize::Zeroizing::new(key);
+        self.require_identity(&identity)?;
+        let store = crate::store::Store::create_protected(
+            &self.directories[0].0,
+            &self.directories[1].0,
+            identity,
+            *key,
+        )?;
+        Ok(ProtectedStore {
+            job: self,
+            store,
+            fenced: false,
+        })
+    }
+    pub fn open_store(
+        &self,
+        identity: crate::lifecycle::Identity,
+        key: [u8; 32],
+    ) -> Result<ProtectedStore<'_, 'roots>> {
+        let key = zeroize::Zeroizing::new(key);
+        self.require_identity(&identity)?;
+        let store = crate::store::Store::open(
+            &self.directories[0].0,
+            &self.directories[1].0,
+            identity,
+            *key,
+        )?;
+        Ok(ProtectedStore {
+            job: self,
+            store,
+            fenced: false,
+        })
+    }
+}
+/// No mutable/raw Store escape: every durable transition rechecks real SYSTEM
+/// identity and pinned parent/job ACLs. Any failed transition fences this handle.
+pub struct ProtectedStore<'job, 'roots> {
+    job: &'job SystemJob<'roots>,
+    store: crate::store::Store,
+    fenced: bool,
+}
+impl ProtectedStore<'_, '_> {
+    pub fn journal(&self) -> &crate::lifecycle::Journal {
+        self.store.journal()
+    }
+    pub fn advance(&mut self, event: crate::lifecycle::Event) -> Result<()> {
+        if self.fenced {
+            return Err("Protected store fenced; reopen and inspect");
+        }
+        self.fenced = true;
+        self.job.revalidate()?;
+        self.store.advance(event)?;
+        self.fenced = false;
+        Ok(())
     }
 }
 

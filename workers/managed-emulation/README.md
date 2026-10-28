@@ -286,3 +286,25 @@ The executable is not built by default, included in an installer, or exposed to
 models. This scope is not Windows 10 installed Hyper-V acceptance.
 
 Windows root handles request directory-list read access, not attributes alone: attribute-only opens do not enforce delete-sharing denial. Native acceptance retains an actual rename-refusal assertion to verify the pinning behavior rather than inferring it from flags.
+
+### Protected per-job adapter (development only)
+
+`SystemRoots::create_job` generates a fresh 128-bit ID in process and exclusively
+creates explicit protected/pinned snapshot, independent-anchor and media leaves.
+`open_job` accepts only an exact ID, never a path, and revalidates the SYSTEM
+identity, parent roots and each leaf. The future service must select identities
+from protected ownership records; opening filesystem objects is not authorization.
+
+`SystemJob` keeps the parent guard borrowed. Its `ProtectedStore` keeps the job
+borrowed, exposes no raw mutable store and rechecks the identity/ACL boundary
+before every transition. Any failed transition fences that handle until explicit
+reopen/inspection. Existing caller-protected cross-platform Store adapters remain
+unchanged; only this Windows adapter provisions/retains the explicit ACL guards.
+The in-process journal key is zeroized but not persisted by this adapter.
+
+Fresh `write_boot_media` exclusively writes the existing bounded ISO beneath the
+pinned job; duplicate writes fail and retain state. Native SYSTEM acceptance
+covers actual SQLite create/reopen, identity mismatch, impersonation fencing,
+media and namespace pinning; its reducer events never create a VM. Only exact
+owned files and empty directories are cleaned after handles close. No arbitrary
+target execution, service, VM ownership, installed pack or readiness is added.
