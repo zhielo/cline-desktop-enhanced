@@ -17,6 +17,7 @@ import sys
 import subprocess
 import tarfile
 import tempfile
+import zipfile
 
 HERE = Path(__file__).resolve().parent
 MAX_INPUT = 512 * 1024 * 1024
@@ -283,6 +284,72 @@ def owned_bundle(original, engine):
     return selected
 
 
+def owned_native_evidence(tree, engine):
+    """Retain sealed build metadata, not an attestation or execution receipt."""
+    prefix = "opt/cline-engine/"
+    node = tree.get(prefix+"native-build.json")
+    if engine != "unidbg":
+        if node is not None:
+            raise ValueError("Unexpected native build record")
+        return None
+    if node is None or node.kind != "file" or not 1 <= len(node.data) <= 64*1024:
+        raise ValueError("Native build record absent/type/budget")
+    def unique(pairs):
+        out = {}
+        for key, value in pairs:
+            if key in out:
+                raise ValueError("Duplicate native build field")
+            out[key] = value
+        return out
+    record = json.loads(node.data, object_pairs_hook=unique)
+    fields = {"schema", "scope", "sourceInputs", "patchedBridgeSha256",
+              "patchedJnaSha256", "jnaNativeAbi", "jnaNativeApiChecksum",
+              "resources", "emulatorExecutedDuringBuild", "engineReadiness"}
+    if not isinstance(record, dict) or set(record) != fields or type(record["schema"]) is not int or record["schema"] != 1 or record["scope"] != "development-owned-guest-tests-only" or record["emulatorExecutedDuringBuild"] is not False or record["engineReadiness"] != "not-tested":
+        raise ValueError("Native build scope/schema")
+    expected = json.loads((HERE.parent/"engines/native-inputs.lock.json").read_bytes())
+    # Canonical JSON comparison distinguishes booleans from integer identities.
+    if json.dumps(record["sourceInputs"], sort_keys=True) != json.dumps(expected, sort_keys=True):
+        raise ValueError("Native build source inputs differ")
+    if record["jnaNativeAbi"] != "6.1.2" or record["jnaNativeApiChecksum"] != "147a998f0cbc89681a1ae6c0dd121629":
+        raise ValueError("Native build JNA ABI differs")
+    def digest(value):
+        return isinstance(value, str) and re.fullmatch("[0-9a-f]{64}", value) is not None
+    if not all(digest(record[key]) for key in ("patchedBridgeSha256", "patchedJnaSha256")):
+        raise ValueError("Native patched source digest")
+    resources = record["resources"]
+    identities = {
+        "jna-5.10.0.jar": "com/sun/jna/linux-x86-64/libjnidispatch.so",
+        "unidbg-unicorn2-0.9.9.jar": "natives/linux_64/libunicorn.so",
+    }
+    dependency_lock = HERE.parents[2]/"workers/emulation/unidbg/dependencies.sha256"
+    originals = {Path(label.lstrip("*")).name: sha for sha, label in
+                 (line.split(maxsplit=1) for line in dependency_lock.read_text().splitlines())}
+    if not isinstance(resources, list) or len(resources) != len(identities):
+        raise ValueError("Native resource inventory")
+    seen = set()
+    for item in resources:
+        if not isinstance(item, dict) or set(item) != {"jar", "resource", "originalJarSha256", "rebuiltJarSha256", "nativeSha256"}:
+            raise ValueError("Native resource schema")
+        jar, label = item["jar"], item["resource"]
+        if not isinstance(jar, str) or jar not in identities or jar in seen or label != identities[jar]:
+            raise ValueError("Native resource identity")
+        seen.add(jar)
+        if not all(digest(item[key]) for key in ("originalJarSha256", "rebuiltJarSha256", "nativeSha256")) or item["originalJarSha256"] != originals[jar]:
+            raise ValueError("Native original dependency identity")
+        sealed = tree.get(prefix+"dependency/"+jar)
+        if sealed is None or sealed.kind != "file" or not 1 <= len(sealed.data) <= 64*1024**2 or hashlib.sha256(sealed.data).hexdigest() != item["rebuiltJarSha256"] or item["rebuiltJarSha256"] == item["originalJarSha256"]:
+            raise ValueError("Native rebuilt dependency identity")
+        with zipfile.ZipFile(io.BytesIO(sealed.data)) as archive:
+            entries = archive.infolist()
+            if len(entries) > 4096 or len({entry.filename for entry in entries}) != len(entries) or sum(entry.file_size for entry in entries) > 128*1024**2:
+                raise ValueError("Native resource archive budget/duplicates")
+            resource = archive.getinfo(label)
+            if resource.is_dir() or not 1 <= resource.file_size <= 8*1024**2 or hashlib.sha256(archive.read(resource)).hexdigest() != item["nativeSha256"]:
+                raise ValueError("Native binary resource mismatch/budget")
+    return node.data
+
+
 def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None):
     if not re.fullmatch("[0-9a-f]{40}", revision) or output.exists() or output.is_symlink():
         raise ValueError("New output and exact source revision required")
@@ -304,6 +371,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None
             tree[resolved] = node
     if owned_engine:
         tree.update(owned_bundle(original, owned_engine))
+    native_evidence = owned_native_evidence(tree, owned_engine)
     tree.update({"lib": Node("symlink", 0o777, b"usr/lib"), "lib64": Node("symlink", 0o777, b"usr/lib64")})
     if "usr/local/bin/python3.13" not in tree or "usr/local/lib/libpython3.13.so.1.0" not in tree:
         raise ValueError("Pinned Python runtime absent")
@@ -354,6 +422,9 @@ def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None
             if stream.read(5) != b"CD001":
                 raise ValueError("Boot ISO descriptor absent")
         manifest = {"schema": 1, "scope": "development-inert-guest", "installable": False, "sourceRevision": revision, "vmIsolation": "not-attested", "engineReadiness": "not-tested", "hypervExchange": "not-tested", "inputs": lock, "rootfsExportSha256": hashlib.sha256(raw).hexdigest(), "generatedInitSha256": hashlib.sha256(tree["init"].data).hexdigest(), "ownedEngine": owned_engine, "ownedEngineBundleSha256": hashlib.sha256(tree["opt/cline-engine/bundle.json"].data).hexdigest() if owned_engine else None, "guestSources": {path: hashlib.sha256(source.read_bytes()).hexdigest() for path, source in sources.items()}, "explicitEntryCount": len(tree), "regularFileCount": sum(n.kind == "file" for n in tree.values()), "artifacts": {"inert-guest.iso": {"sha256": hashlib.sha256(iso.read_bytes()).hexdigest(), "size": iso.stat().st_size}}}
+        manifest["ownedNativeBuildSha256"] = hashlib.sha256(native_evidence).hexdigest() if native_evidence is not None else None
+        if native_evidence is not None:
+            (stage/"native-build.json").write_bytes(native_evidence)
         (stage / "image-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         # No image bytes are considered published until the complete build succeeds.
         os.rename(stage, output)

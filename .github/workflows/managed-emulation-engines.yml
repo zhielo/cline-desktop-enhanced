@@ -78,6 +78,7 @@ jobs:
           name: managed-owned-guest-${{ matrix.engine }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/owned-engine-image/image-manifest.json
+            ${{ runner.temp }}/owned-engine-image/native-build.json
             ${{ runner.temp }}/owned-engine-image/*.log
             ${{ runner.temp }}/owned-engine-image/*-receipt.json
           if-no-files-found: warn

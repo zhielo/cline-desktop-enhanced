@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
@@ -19,7 +20,112 @@ import prepare
 import selftest
 sys.path.insert(0,str(HERE.parent/'image'))
 from smoke_boot import validate_engine_log
-from build_image import Node, owned_bundle
+from build_image import Node, owned_bundle, owned_native_evidence
+
+
+class NativeEvidenceTests(unittest.TestCase):
+    def fixture(self):
+        prefix = "opt/cline-engine/"
+        tree = {}
+        lock = HERE.parents[1]/"emulation/unidbg/dependencies.sha256"
+        originals = {Path(label).name: sha for sha, label in
+                     (line.split(maxsplit=1) for line in lock.read_text().splitlines())}
+        resources = []
+        for jar, label in (
+            ("jna-5.10.0.jar", "com/sun/jna/linux-x86-64/libjnidispatch.so"),
+            ("unidbg-unicorn2-0.9.9.jar", "natives/linux_64/libunicorn.so"),
+        ):
+            body = b"data-only owned native placeholder"
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, "w") as archive:
+                archive.writestr(label, body)
+            raw = output.getvalue()
+            tree[prefix+"dependency/"+jar] = Node("file", 0o644, raw)
+            resources.append({"jar": jar, "resource": label,
+                              "originalJarSha256": originals[jar],
+                              "rebuiltJarSha256": hashlib.sha256(raw).hexdigest(),
+                              "nativeSha256": hashlib.sha256(body).hexdigest()})
+        value = {
+            "schema": 1, "scope": "development-owned-guest-tests-only",
+            "sourceInputs": json.loads((HERE/"native-inputs.lock.json").read_bytes()),
+            "patchedBridgeSha256": "a"*64, "patchedJnaSha256": "b"*64,
+            "jnaNativeAbi": "6.1.2", "jnaNativeApiChecksum": "147a998f0cbc89681a1ae6c0dd121629",
+            "resources": resources, "emulatorExecutedDuringBuild": False,
+            "engineReadiness": "not-tested",
+        }
+        return tree, value
+
+    def seal(self, tree, value):
+        raw = json.dumps(value).encode()
+        tree["opt/cline-engine/native-build.json"] = Node("file", 0o644, raw)
+        return raw
+
+    def test_retains_exact_bytes_without_execution_or_readiness_promotion(self):
+        tree, record = self.fixture()
+        raw = self.seal(tree, record)
+        self.assertEqual(owned_native_evidence(tree, "unidbg"), raw)
+        self.assertIsNone(owned_native_evidence({}, "qiling"))
+        with self.assertRaises(ValueError):
+            owned_native_evidence(tree, "qiling")
+        with self.assertRaises(ValueError):
+            owned_native_evidence({}, "unidbg")
+
+    def test_rejects_scope_schema_budget_duplicate_and_linked_records(self):
+        for field, value in (
+            ("schema", True), ("scope", "production"), ("engineReadiness", "ready"),
+            ("emulatorExecutedDuringBuild", 0), ("extra", "unexpected"),
+            ("patchedBridgeSha256", "invalid"), ("jnaNativeAbi", "5.1.0"),
+            ("jnaNativeApiChecksum", "0"*32),
+        ):
+            tree, record = self.fixture()
+            record[field] = value
+            self.seal(tree, record)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                owned_native_evidence(tree, "unidbg")
+        tree, record = self.fixture()
+        raw = self.seal(tree, record)
+        for node in (Node("symlink", 0o777, raw), Node("file", 0o644, b" "*65537),
+                     Node("file", 0o644, b'{"schema":1,'+raw[1:])):
+            tree["opt/cline-engine/native-build.json"] = node
+            with self.assertRaises(ValueError):
+                owned_native_evidence(tree, "unidbg")
+
+    def test_requires_exact_locked_source_inputs_and_resource_inventory(self):
+        for mutate in (
+            lambda r: r["sourceInputs"].update(schema=True),
+            lambda r: r["sourceInputs"]["files"][0].update(sha256="c"*64),
+            lambda r: r["resources"].pop(),
+            lambda r: r["resources"].__setitem__(1, r["resources"][0]),
+            lambda r: r["resources"][0].update(jar="../other.jar"),
+            lambda r: r["resources"][0].update(resource="wrong.so"),
+            lambda r: r["resources"][0].update(originalJarSha256="c"*64),
+            lambda r: r["resources"][0].update(nativeSha256="c"*64),
+            lambda r: r["resources"][0].update(rebuiltJarSha256="c"*64),
+        ):
+            tree, record = self.fixture()
+            mutate(record)
+            self.seal(tree, record)
+            with self.assertRaises(ValueError):
+                owned_native_evidence(tree, "unidbg")
+
+    def test_compares_sealed_native_resource_not_only_the_generated_manifest(self):
+        for body, duplicate in ((b"changed native bytes", False), (b"owned", True)):
+            tree, record = self.fixture()
+            resource = record["resources"][0]
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, "w") as archive:
+                archive.writestr(resource["resource"], body)
+                if duplicate:
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        archive.writestr(resource["resource"], body)
+            raw = output.getvalue()
+            resource["rebuiltJarSha256"] = hashlib.sha256(raw).hexdigest()
+            tree["opt/cline-engine/dependency/"+resource["jar"]] = Node("file", 0o644, raw)
+            self.seal(tree, record)
+            with self.assertRaises(ValueError):
+                owned_native_evidence(tree, "unidbg")
 
 
 class BundleTests(unittest.TestCase):

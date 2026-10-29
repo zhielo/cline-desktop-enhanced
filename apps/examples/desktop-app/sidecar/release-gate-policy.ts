@@ -193,7 +193,7 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/managed-emulation-engines.yml":
-			"3255ec28df7527be218ac669183c736a56759901ab64d6ad13f88736d4fabf8c",
+			"6bcbc82798352bfbd1da50fdd09757fa3c7a78fbf217409d1b152baf48e69aa2",
 		".github/workflows/managed-emulation-image.yml":
 			"8536f191dc3359e6f889e8c45a3501dd7fdcee04dd1ae2e6a580992dff5d58ff",
 		".github/workflows/managed-emulation-transport.yml":

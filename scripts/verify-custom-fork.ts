@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/image/build_image.py",markers:["def owned_native_evidence(tree, engine):", "Native build source inputs differ", "Native binary resource mismatch/budget", "ownedNativeBuildSha256", "(stage/\"native-build.json\").write_bytes(native_evidence)"]},
+ {path:".github/workflows/managed-emulation-engines.yml",markers:["owned-engine-image/native-build.json"]},
  {path:"workers/managed-emulation/engines/Dockerfile",markers:["openjdk-17-jdk libx11-dev", "libffi-dev"]},
  {path:"workers/managed-emulation/engines/native_rebuild.py",markers:["verify_java_abi(inspected.stdout,native_version)", "JNA_JNI_VERSION", "jnaNativeAbi", "class NoRedirect", "Native source patch context", "Native void callback inventory", "if ((*env)->ExceptionCheck(env)) uc_emu_stop(eng);", "-DUNICORN_BUILD_TESTS=OFF", "originalJarSha256", "native-build.json", "emulatorExecutedDuringBuild"]},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))"]},
