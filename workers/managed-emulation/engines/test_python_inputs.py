@@ -145,6 +145,20 @@ class InputTests(unittest.TestCase):
             self.assertFalse((output/artifact['filename']).exists())
             self.assertTrue((output/(artifact['filename']+'.part')).exists())
 
+    def test_default_downloader_refuses_redirects_before_following_any_destination(self):
+        handler = inputs.NoRedirect()
+        request = inputs.urllib.request.Request('https://files.pythonhosted.org/packages/owned/archive.zip')
+        for target in ['https://evil.invalid/archive.zip', 'http://127.0.0.1/internal',
+                       'https://files.pythonhosted.org/packages/other/archive.zip']:
+            with self.subTest(target=target), self.assertRaisesRegex(ValueError, 'redirect refused'):
+                handler.redirect_request(request, None, 302, 'Moved', {}, target)
+        with patch.object(inputs.urllib.request, 'build_opener') as build:
+            response = object()
+            build.return_value.open.return_value = response
+            self.assertIs(inputs.open_artifact(request, 30), response)
+            self.assertIsInstance(build.call_args.args[0], inputs.NoRedirect)
+            build.return_value.open.assert_called_once_with(request, timeout=30)
+
     def test_duplicate_artifact_filenames_fail_without_creating_output(self):
         _, artifact = self.owned()
         with tempfile.TemporaryDirectory() as directory:
@@ -158,6 +172,7 @@ class InputTests(unittest.TestCase):
         self.assertIn("python_inputs.load(Path('/build'))", source)
         self.assertIn("python_inputs.fetch(components, profiles, engine, archives)", source)
         self.assertEqual(source.count("'--require-hashes'"), 2)
+        self.assertEqual(source.count("'--no-cache-dir'"), 2)
         self.assertIn("'--no-build-isolation'", source)
         self.assertIn("'--ignore-installed'", source)
         self.assertIn("'--no-index'", source)

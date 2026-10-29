@@ -66,10 +66,10 @@ def prepare(engine):
         if tools.exists() or tools.is_symlink():
             raise ValueError('New private Python build-tool directory required')
         python_inputs.fetch(components, profiles, engine, archives)
-        run(python, '-m', 'pip', '--isolated', 'install', '--no-index',
+        run(python, '-m', 'pip', '--isolated', 'install', '--no-cache-dir', '--no-index',
             '--find-links', str(archives), '--require-hashes', '--target', str(tools),
             '-r', '/build/managed/requirements-build.lock')
-        run(python, '-m', 'pip', '--isolated', 'install', '--no-index',
+        run(python, '-m', 'pip', '--isolated', 'install', '--no-cache-dir', '--no-index',
             '--find-links', str(archives), '--require-hashes', '--no-build-isolation',
             '--ignore-installed', '-r', '/build/managed/requirements-'+engine+'.lock',
             env={**os.environ, 'PYTHONPATH':str(tools)})

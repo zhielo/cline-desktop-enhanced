@@ -117,7 +117,18 @@ def selected_artifacts(components, profiles, engine):
     return [components[item]['install'] for item in sorted(set(profiles[engine] + BUILD))]
 
 
-def fetch(components, profiles, engine, output, opener=urllib.request.urlopen):
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, stream, code, message, headers, newurl):
+        # Refuse BEFORE contacting any redirect destination, even one claiming
+        # the same origin. Exact committed archive URLs require no redirects.
+        raise ValueError('Private Python artifact redirect refused')
+
+
+def open_artifact(request, timeout):
+    return urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout)
+
+
+def fetch(components, profiles, engine, output, opener=None):
     # Fixed CI build directory only; never accepts a desktop IPC path or manifest.
     artifacts = selected_artifacts(components, profiles, engine)
     names = [entry['filename'] for entry in artifacts]
@@ -133,7 +144,7 @@ def fetch(components, profiles, engine, output, opener=urllib.request.urlopen):
         request = urllib.request.Request(entry['url'], headers={'User-Agent': 'cline-managed-private-inputs/v1'})
         path = output/filename
         partial = output/(filename + '.part')
-        with opener(request, timeout=30) as response, partial.open('xb') as stream:
+        with (opener or open_artifact)(request, timeout=30) as response, partial.open('xb') as stream:
             url(response.geturl(), filename)
             if response.status != 200:
                 raise ValueError('Private Python artifact HTTP status')

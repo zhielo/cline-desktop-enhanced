@@ -4,8 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"workers/managed-emulation/engines/python_inputs.py",markers:["cpython-3.13-linux-x86_64-glibc-2.36", "Duplicate private Python input field", "digest.hexdigest() != entry['sha256']", "output.mkdir(mode=0o700)", "partial.open('xb')", "files.pythonhosted.org", "Private Python requirement lock differs"]},
- {path:"workers/managed-emulation/engines/prepare.py",markers:["python_inputs.fetch(components, profiles, engine, archives)", "'--require-hashes'", "'--no-build-isolation'", "'--ignore-installed'", "'/build/private-python-tools'"]},
+ {path:"workers/managed-emulation/engines/python_inputs.py",markers:["cpython-3.13-linux-x86_64-glibc-2.36", "Duplicate private Python input field", "digest.hexdigest() != entry['sha256']", "output.mkdir(mode=0o700)", "partial.open('xb')", "files.pythonhosted.org", "Private Python requirement lock differs", "class NoRedirect", "build_opener(NoRedirect())"]},
+ {path:"workers/managed-emulation/engines/prepare.py",markers:["python_inputs.fetch(components, profiles, engine, archives)", "'--require-hashes'", "'--no-build-isolation'", "'--ignore-installed'", "'/build/private-python-tools'", "'--no-cache-dir'"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["python3 -B workers/managed-emulation/engines/test_python_inputs.py"]},
  {path:"workers/managed-emulation/image/engine_entry.py",markers:["os.setgroups([])", "os.setresgid(ENGINE_UID, ENGINE_UID, ENGINE_UID)", "os.setresuid(ENGINE_UID, ENGINE_UID, ENGINE_UID)", "PR_SET_NO_NEW_PRIVS = 38", "except PermissionError", "os.execve(PYTHON", "resource.RLIMIT_CORE", "b'CapInh',b'CapPrm',b'CapEff',b'CapAmb'", "no_capabilities()"]},
  {path:"workers/managed-emulation/image/build_image.py",markers:["mode=1777 tmpfs /tmp", "/opt/cline/engine_entry.py || fail"]},
