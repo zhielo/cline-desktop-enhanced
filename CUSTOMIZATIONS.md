@@ -2,6 +2,10 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Mandatory managed-engine release gates
+
+Finite release policy v5 now requires all four actual managed guest engine checks, both native transport platforms and the real inert BIOS/UEFI guest check, with all three workflow recipes SHA-256 pinned. Each managed check must bind its exact job URL to one authoritative successful pull-request workflow on the same head/repository and expected workflow path; missing, repeated, spoofed, skipped, pending or failed evidence cannot certify a release. Existing checks, installed stages, integration-merge identity, artifact and pagination/budget requirements remain intact. The managed workflows also trigger on the customization ledger and release-policy changes, so durable custom patches do not silently omit these required jobs. This is scoped CI evidence, not production Hyper-V containment, shipping-pack completion or installed Windows 10 acceptance.
+
 ## Exact private Python engine input archives
 
 Managed owned-guest Qiling/Speakeasy builds now pin actual distribution archive SHA-256 and byte lengths, not version strings alone. The committed private inventory covers the existing exact upstream runtime requirement sets and separate pinned setuptools/wheel build tools; canonical requirement/hash locks must match it exactly. A fixed CPython 3.13 Linux x86-64/glibc 2.36 artifact profile chooses one exact wheel or source archive per requirement. Bounded HTTPS fetches accept only the committed Python-hosted archive origin/path, refuse every redirect before contacting its destination, verify bytes before exclusive publication, and never resume/adopt partial output. Missing, extra, duplicate, changed or unpinned requirements fail before installation.

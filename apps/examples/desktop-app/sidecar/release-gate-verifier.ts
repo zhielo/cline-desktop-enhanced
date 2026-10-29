@@ -112,6 +112,49 @@ export function verifyReleaseGateEvidence(
 		...(conditionalTriggered ? policy.conditionalChecks : []),
 	];
 	const requiredCheckCount = remaining.length;
+	// A name and trusted GitHub app alone do not prove which workflow ran.
+	// Use the already-collected complete exact-head run inventory, never a URL
+	// fetched from a check's details_url or a client-supplied success claim.
+	const managedRuns = e.workflowRuns;
+	requireProof(
+		!!managedRuns &&
+			managedRuns.total_count === managedRuns.workflow_runs.length &&
+			managedRuns.total_count <= 100,
+		"Managed checks require complete authoritative workflow provenance",
+	);
+	for (const [name, path] of Object.entries(policy.managedCheckWorkflows)) {
+		const checks = e.checks.check_runs.filter((c) => c.name === name);
+		requireProof(
+			checks.length === 1,
+			`Missing or repeated managed check: ${name}`,
+		);
+		const c = checks[0];
+		requireProof(
+			Number.isSafeInteger(c.id) && c.id > 0,
+			`Invalid managed check identity: ${name}`,
+		);
+		const matched = managedRuns.workflow_runs.filter(
+			(r) =>
+				c.details_url ===
+				`https://github.com/${repo}/actions/runs/${r.id}/job/${c.id}`,
+		);
+		requireProof(
+			matched.length === 1,
+			`Managed check lacks exact job/workflow binding: ${name}`,
+		);
+		const r = matched[0];
+		requireProof(
+			Number.isSafeInteger(r.id) &&
+				r.id > 0 &&
+				r.path === path &&
+				r.event === "pull_request" &&
+				r.head_sha === expectedHead &&
+				r.repository.full_name === repo &&
+				r.status === "completed" &&
+				r.conclusion === "success",
+			`Managed workflow is not successful on this exact head: ${name}`,
+		);
+	}
 	// ready_for_review can legitimately create another complete E2E suite on the
 	// same head. Retain and verify every check; never discard a failed duplicate.
 	const repeated = new Set<string>();

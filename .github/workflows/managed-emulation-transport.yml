@@ -2,6 +2,8 @@ name: Managed emulation inert transport foundation
 on:
   pull_request:
     paths:
+      - CUSTOMIZATIONS.md
+      - apps/examples/desktop-app/sidecar/release-gate*
       - workers/managed-emulation/**
       - .github/workflows/managed-emulation-transport.yml
       - apps/examples/desktop-app/sidecar/managed-emulation-pack*

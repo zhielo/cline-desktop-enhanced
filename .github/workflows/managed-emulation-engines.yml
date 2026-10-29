@@ -2,6 +2,8 @@ name: Managed emulation real guest engines
 on:
   pull_request:
     paths:
+      - CUSTOMIZATIONS.md
+      - apps/examples/desktop-app/sidecar/release-gate*
       - workers/managed-emulation/**
       - workers/emulation/**
       - workers/re-analysis/**

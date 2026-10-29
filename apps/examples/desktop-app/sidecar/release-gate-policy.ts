@@ -1,9 +1,16 @@
 /** Host-owned finite release policy. Changes require explicit review and full CI. */
 export const RELEASE_GATE_POLICY = {
-	version: "cline-desktop-release-gate/v4",
+	version: "cline-desktop-release-gate/v5",
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
+		"Actual owned guest engine (qiling)",
+		"Actual owned guest engine (unidbg)",
+		"Actual owned guest engine (rnidbg)",
+		"Actual owned guest engine (speakeasy)",
+		"Managed inert transport contracts (ubuntu-latest)",
+		"Managed inert transport contracts (windows-latest)",
+		"Owned inert guest BIOS and UEFI boot (not Hyper-V)",
 		"Owned additive emulation (qiling)",
 		"Owned additive emulation (unidbg)",
 		"Owned additive emulation (rnidbg)",
@@ -38,6 +45,23 @@ export const RELEASE_GATE_POLICY = {
 		"Quality Checks",
 		"Detect Changes",
 	],
+	// Exact authoritative workflow provenance is mandatory for managed checks.
+	managedCheckWorkflows: {
+		"Actual owned guest engine (qiling)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Actual owned guest engine (unidbg)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Actual owned guest engine (rnidbg)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Actual owned guest engine (speakeasy)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Managed inert transport contracts (ubuntu-latest)":
+			".github/workflows/managed-emulation-transport.yml",
+		"Managed inert transport contracts (windows-latest)":
+			".github/workflows/managed-emulation-transport.yml",
+		"Owned inert guest BIOS and UEFI boot (not Hyper-V)":
+			".github/workflows/managed-emulation-image.yml",
+	},
 	// desktop-test is path-triggered. When either check appears, require both.
 	conditionalChecks: [
 		"Test DMG background tooling",
@@ -168,6 +192,12 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+		".github/workflows/managed-emulation-engines.yml":
+			"e15cff17d6bc4e4a24b78324514fbf9af40aeb20f88e587348dee534e0c341ff",
+		".github/workflows/managed-emulation-image.yml":
+			"28558d2f4bbe4cef28af1f4fe8c9c2bea99af318d7f1a92cfbde86b4045bf416",
+		".github/workflows/managed-emulation-transport.yml":
+			"4d9a3b257767a6aa89579dfd6b477fc2a230565d001e297065386ba617eb70a3",
 		".github/workflows/additive-emulation-validation.yml":
 			"06e4e9be98d1a406f371fe0c9bd74906d79603a1d347b44344b225c09f47639d",
 		".github/workflows/general-recovery-validation.yml":

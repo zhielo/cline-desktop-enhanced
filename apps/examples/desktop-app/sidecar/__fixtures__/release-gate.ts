@@ -9,12 +9,33 @@ const repo = `${p.owner}/${p.repo}`;
 export function fixture(): ReleaseGateEvidence {
 	const checks = p.requiredChecks.map((name, i) => ({
 		id: i + 1,
+		details_url: undefined as string | undefined,
 		name,
 		head_sha: head,
 		status: "completed",
 		conclusion: "success",
 		app: { id: 15368 },
 	}));
+	const managedPaths = [...new Set(Object.values(p.managedCheckWorkflows))];
+	const managedRuns = managedPaths.map((path, index) => ({
+		id: 910 + index,
+		path,
+		event: "pull_request",
+		head_sha: head,
+		status: "completed",
+		conclusion: "success",
+		repository: { full_name: repo },
+	}));
+	for (const check of checks) {
+		const path =
+			p.managedCheckWorkflows[
+				check.name as keyof typeof p.managedCheckWorkflows
+			];
+		if (path) {
+			const run = managedRuns.find((r) => r.path === path)!;
+			check.details_url = `https://github.com/${repo}/actions/runs/${run.id}/job/${check.id}`;
+		}
+	}
 	const receipt = (names: readonly string[], engineProfile: string) => ({
 		schemaVersion: 1,
 		status: "passed",
@@ -42,6 +63,10 @@ export function fixture(): ReleaseGateEvidence {
 		"Upload verified setup.exe",
 	].map((name) => ({ name, status: "completed", conclusion: "success" }));
 	return {
+		workflowRuns: {
+			total_count: managedRuns.length,
+			workflow_runs: managedRuns,
+		},
 		pull: {
 			number: 133,
 			merge_commit_sha: tested,
@@ -125,11 +150,12 @@ export function repeatedE2EEvidence() {
 		repository: { full_name: repo },
 	});
 	e.workflowRuns = {
-		total_count: 3,
+		total_count: 3 + (e.workflowRuns?.workflow_runs.length ?? 0),
 		workflow_runs: [
 			makeRun(801, ".github/workflows/ext-vscode-test-e2e.yml"),
 			makeRun(802, ".github/workflows/ext-vscode-test-e2e.yml"),
 			makeRun(803, ".github/workflows/ext-vscode-test.yml"),
+			...(e.workflowRuns?.workflow_runs ?? []),
 		],
 	};
 	let detect = 0;
