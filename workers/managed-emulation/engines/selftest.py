@@ -262,6 +262,21 @@ def owned_jvm_crash_evidence(result, private, arch, case):
     print('CLINE_MANAGED_OWNED_JVM_CRASH_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
 
 
+def validate_owned_checked_jni(result, arch, case):
+    # HotSpot can warn about invalid JNI usage yet let the process return 0.
+    # Fixed public owned fixtures only: warnings are not passed evidence.
+    if arch not in ARCHES['unidbg'] or case not in ('positive','denied','budget','missing','fresh'):
+        raise ValueError('Unknown owned checked JNI profile')
+    markers = (b'WARNING in native method:', b'WARNING: JNI local refs:', b'FATAL ERROR in native method:')
+    if any(marker in stream for stream in (result.stdout,result.stderr) for marker in markers):
+        value = {'architecture':arch,'case':case,'observedExit':result.returncode,
+                 'stdoutBytes':len(result.stdout),'stderrBytes':len(result.stderr),
+                 'stdoutPrefix':result.stdout[:4096].decode('utf-8',errors='replace'),
+                 'stderrPrefix':result.stderr[:4096].decode('utf-8',errors='replace')}
+        print('CLINE_MANAGED_OWNED_CHECKED_JNI_FAILED_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
+        raise ValueError('Owned checked JNI reported invalid native usage')
+
+
 def jni_check(engine):
     checks = 0
     for arch in ARCHES[engine]:
@@ -277,6 +292,7 @@ def jni_check(engine):
                 result = invoke(command)
                 if engine == 'unidbg':
                     owned_jvm_crash_evidence(result, root, arch, case)
+                    validate_owned_checked_jni(result, arch, case)
                 if case in ('denied','budget','missing'):
                     validate_jni_refusal(result, root/'result.json', engine, arch, case)
                 else:

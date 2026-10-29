@@ -94,6 +94,27 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(selftest.jni_check('unidbg'),10)
         self.assertEqual(len(commands),10)
 
+    def test_checked_jni_warnings_cannot_pass_with_success_or_guard_exits(self):
+        for marker in (b'WARNING in native method:',b'WARNING: JNI local refs:',b'FATAL ERROR in native method:'):
+            for code in (0,75,76,1,-6):
+                for target in ('stdout','stderr'):
+                    with self.subTest(marker=marker,code=code,target=target):
+                        values={'stdout':b'', 'stderr':b''};values[target]=marker+b'x'*8000
+                        output=io.StringIO()
+                        result=subprocess.CompletedProcess([],code,values['stdout'],values['stderr'])
+                        with contextlib.redirect_stderr(output),self.assertRaisesRegex(ValueError,'invalid native usage'):
+                            selftest.validate_owned_checked_jni(result,'arm64','denied')
+                        data=json.loads(output.getvalue().split(' ',1)[1])
+                        self.assertEqual(data['observedExit'],code)
+                        self.assertLessEqual(len(data['stdoutPrefix']),4096)
+                        self.assertLessEqual(len(data['stderrPrefix']),4096)
+        with contextlib.redirect_stderr(io.StringIO()) as output:
+            for code in (0,75,76,1):
+                selftest.validate_owned_checked_jni(subprocess.CompletedProcess([],code,b'',b'SLF4J(W): No SLF4J providers were found.'),'arm32','positive')
+            self.assertEqual(output.getvalue(),'')
+        with self.assertRaisesRegex(ValueError,'Unknown owned checked JNI profile'):
+            selftest.validate_owned_checked_jni(subprocess.CompletedProcess([],0,b'',b''),'x86_64','positive')
+
     def test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass(self):
         result=subprocess.CompletedProcess(['owned-fixture'],137,b'never print stdout',b'x'*16000)
         output=io.StringIO()
