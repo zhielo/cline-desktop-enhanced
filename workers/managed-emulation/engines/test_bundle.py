@@ -323,6 +323,61 @@ class BundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unknown owned JVM failure profile'):
             selftest.owned_jvm_failure_evidence(subprocess.CompletedProcess([],-6,b'',b''),Path('/never-open'),'x86_64','denied')
 
+    def test_post_failure_jvm_probe_has_no_engine_classpath_or_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'jre').mkdir()
+            (root/'jre/release').write_text('JAVA_VERSION="17.0.21"\nOS_ARCH="x86_64"\nUNSELECTED="do not log"\n')
+            result=subprocess.CompletedProcess([],0,b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n',b'')
+            with patch.object(selftest,'ROOT',root),patch.object(selftest,'invoke',return_value=result) as invoke,contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_runtime_probe()
+            command=invoke.call_args.args[0]
+            self.assertEqual(command[-3:],['-cp',str(root/'jvm-probe'),'OwnedJvmProbe'])
+            self.assertNotIn('dependency',str(command))
+            self.assertNotIn('ClineRunner',command)
+            self.assertIn('-Xcheck:jni',command)
+            self.assertEqual(invoke.call_count,1)
+            value=json.loads(output.getvalue().split(' ',1)[1])
+            self.assertTrue(value['exactProbePassed'])
+            self.assertTrue(value['engineFailureUnchanged'])
+            self.assertFalse(value['engineRetried'])
+            self.assertEqual(value['identity']['fields'],{'JAVA_VERSION':'"17.0.21"','OS_ARCH':'"x86_64"'})
+            self.assertNotIn('do not log',output.getvalue())
+
+    def test_post_failure_jvm_probe_bounds_output_and_rejects_false_passes(self):
+        for code,stdout,stderr in [(1,b'x'*10000,b'y'*10000),(0,b'passed',b''),(0,b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n',b'warning')]:
+            with patch.object(selftest,'regular_bytes',return_value=b'JAVA_VERSION="17"\n'),patch.object(selftest,'invoke',return_value=subprocess.CompletedProcess([],code,stdout,stderr)),contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_runtime_probe()
+            value=json.loads(output.getvalue().split(' ',1)[1])
+            self.assertFalse(value['exactProbePassed'])
+            self.assertLessEqual(len(value['stdoutPrefix']),4096)
+            self.assertLessEqual(len(value['stderrPrefix']),4096)
+            self.assertTrue(value['engineFailureUnchanged'])
+        with patch.object(selftest,'regular_bytes',side_effect=ValueError('bad identity')),patch.object(selftest,'invoke',side_effect=ValueError('Owned command deadline')),contextlib.redirect_stderr(io.StringIO()) as output:
+            selftest.owned_jvm_runtime_probe()
+        value=json.loads(output.getvalue().split(' ',1)[1])
+        self.assertEqual(value['identity'],{'status':'unavailable'})
+        self.assertEqual(value['status'],'unavailable-or-budget')
+        self.assertFalse(value['engineRetried'])
+        self.assertNotIn('exactProbePassed',value)
+
+    def test_post_failure_jvm_probe_rejects_ambiguous_release_metadata(self):
+        for raw in [b'JAVA_VERSION="17"\nJAVA_VERSION="21"',b'IMPLEMENTOR='+b'x'*257,b'JAVA_VERSION=\xff']:
+            with patch.object(selftest,'regular_bytes',return_value=raw),patch.object(selftest,'invoke',side_effect=OSError),contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_runtime_probe()
+            self.assertEqual(json.loads(output.getvalue().split(' ',1)[1])['identity'],{'status':'unavailable'})
+
+    def test_post_failure_probe_never_retries_or_accepts_original_jni_failure(self):
+        failed=subprocess.CompletedProcess([],1,b'',b'owned failure')
+        with patch.object(selftest,'invoke',return_value=failed) as invoke,patch.object(selftest,'owned_jvm_runtime_probe') as probe,contextlib.redirect_stderr(io.StringIO()),self.assertRaisesRegex(ValueError,'Owned JNI execution failed'):
+            selftest.jni_check('unidbg')
+        self.assertEqual(invoke.call_count,1)
+        probe.assert_called_once_with()
+        # An expected exit never launches the diagnostic, even when its result
+        # is independently malformed. Only fresh failing JVM exits trigger it.
+        with patch.object(selftest,'invoke',return_value=subprocess.CompletedProcess([],0,b'',b'')),patch.object(selftest,'owned_jvm_runtime_probe') as probe,contextlib.redirect_stderr(io.StringIO()),self.assertRaises(OSError):
+            selftest.jni_check('unidbg')
+        probe.assert_not_called()
+
     def test_manifest_hashes_actual_bytes_and_rejects_mutation_or_extra_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);value=self.fixture(root)

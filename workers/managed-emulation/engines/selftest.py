@@ -267,6 +267,50 @@ def owned_jvm_failure_evidence(result, private, arch, case):
     print('CLINE_MANAGED_OWNED_JVM_FAILURE_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
 
 
+def owned_jvm_runtime_probe():
+    """After failure only, distinguish fixed JDK operations from JNI loading.
+
+    Separate fresh process, no dependency JARs or engine retry. A passing probe
+    never changes the original failure into a passed engine or readiness claim.
+    """
+    identity = {'status':'unavailable'}
+    try:
+        raw = regular_bytes(ROOT/'jre/release', 16384).decode('utf-8')
+        selected = {}
+        for line in raw.splitlines():
+            key, separator, value = line.partition('=')
+            if key in ('JAVA_VERSION','JAVA_RUNTIME_VERSION','IMPLEMENTOR','OS_ARCH'):
+                if not separator or key in selected or len(value)>256:
+                    raise ValueError('Owned JRE release identity budget')
+                selected[key] = value
+        if selected:
+            identity = {'status':'observed','fields':selected}
+    except (OSError, ValueError, UnicodeError):
+        pass
+    with tempfile.TemporaryDirectory(prefix='owned-jvm-probe-') as private:
+        command = [str(ROOT/'jre/bin/java'),'-Xcheck:jni',
+                   '-Duser.home='+private,'-Djava.io.tmpdir='+private,
+                   '-XX:ErrorFile='+str(Path(private)/'hotspot-crash.log'),
+                   '-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData',
+                   '-Xmx256m','-XX:ReservedCodeCacheSize=64m',
+                   '-XX:CompressedClassSpaceSize=64m',
+                   '-cp',str(ROOT/'jvm-probe'),'OwnedJvmProbe']
+        value = {'identity':identity,'scope':'post-failure-diagnostic-only',
+                 'engineRetried':False,'engineFailureUnchanged':True}
+        try:
+            result = invoke(command)
+            value.update(observedExit=result.returncode,
+                         exactProbePassed=(result.returncode==0 and result.stdout==b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n' and not result.stderr),
+                         stdoutBytes=len(result.stdout),stderrBytes=len(result.stderr),
+                         stdoutPrefix=result.stdout[:4096].decode('utf-8',errors='replace'),
+                         stderrPrefix=result.stderr[:4096].decode('utf-8',errors='replace'))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            # The original exit diagnostic has already been retained. Probe
+            # resource/deadline failures cannot erase it or authorize a retry.
+            value['status'] = 'unavailable-or-budget'
+        print('CLINE_MANAGED_OWNED_JVM_RUNTIME_DIAGNOSTIC_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
+
+
 def validate_owned_checked_jni(result, arch, case):
     # HotSpot can warn about invalid JNI usage yet let the process return 0.
     # Fixed public owned fixtures only: warnings are not passed evidence.
@@ -297,6 +341,8 @@ def jni_check(engine):
                 result = invoke(command)
                 if engine == 'unidbg':
                     owned_jvm_failure_evidence(result, root, arch, case)
+                    if result.returncode != {'positive':0,'fresh':0,'denied':76,'budget':75,'missing':1}[case]:
+                        owned_jvm_runtime_probe()
                     validate_owned_checked_jni(result, arch, case)
                 if case in ('denied','budget','missing'):
                     validate_jni_refusal(result, root/'result.json', engine, arch, case)

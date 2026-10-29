@@ -92,6 +92,10 @@ def prepare(engine):
         # Fake-backend unit test only: no emulator, native backend or fixture is
         # instantiated during build. Real execution remains in the guest gate.
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/java', '-cp', str(build/'classes')+':'+str(build/'test-classes')+':'+str(build/'dependency/*'), 'ClineGuardTest')
+        # Compile only. This standalone JDK diagnostic has no emulator/JAR
+        # dependency and is never run in the builder or on a successful boot.
+        run('/usr/lib/jvm/java-17-openjdk-amd64/bin/javac', '--release', '17',
+            '-d', str(ROOT/'jvm-probe'), '/build/managed/OwnedJvmProbe.java')
         shutil.copytree(build/'classes', ROOT/'classes')
         shutil.copytree(build/'dependency', ROOT/'dependency')
         native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))

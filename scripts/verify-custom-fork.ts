@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/engines/OwnedJvmProbe.java",markers:["No probe arguments",'Set.of("Cipher", "KeyStore", "MessageDigest", "Signature")','MessageDigest.getInstance("SHA-256")',"new SecureRandom().nextBytes(random)","File.createTempFile", "CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed"]},
+ {path:"workers/managed-emulation/engines/selftest.py",markers:["def owned_jvm_runtime_probe():", "CLINE_MANAGED_OWNED_JVM_RUNTIME_DIAGNOSTIC_V1", "post-failure-diagnostic-only", "'engineRetried':False", "'engineFailureUnchanged':True", "regular_bytes(ROOT/'jre/release', 16384)"]},
+ {path:"workers/managed-emulation/engines/prepare.py",markers:["'--release', '17'", "'/build/managed/OwnedJvmProbe.java'", "str(ROOT/'jvm-probe')"]},
+ {path:"workers/managed-emulation/engines/test_bundle.py",markers:["test_post_failure_probe_never_retries_or_accepts_original_jni_failure", "test_post_failure_jvm_probe_rejects_ambiguous_release_metadata"]},
  {path:"workers/managed-emulation/host/tests/store.rs",markers:["getrandom::fill(&mut nonce).unwrap()", "fixture_names_do_not_depend_on_clock_resolution"]},
  {path:"scripts/prepare-wakaru-engine.ts",markers:["System32", "tar.exe", "timeout: 30000", "Pinned archive extraction failed (exit="]},
  {path:"scripts/test-secret-scan-fixtures.mjs",markers:["current public ABI fixture", "credential beside ABI fixture", "credential-shaped checksum assignment stays blocking", "16 cases passed"]},
