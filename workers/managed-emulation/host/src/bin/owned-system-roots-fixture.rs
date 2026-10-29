@@ -8,6 +8,7 @@ fn owned() -> Result<(), i32> {
     }
     // This executable requires an explicit test-only Cargo feature. Public
     // root APIs independently require real LocalSystem and no impersonation.
+    cline_managed_inert_probe::windows_ipc::owned_system_acceptance().map_err(|_| 90)?;
     let roots = SystemRoots::create_new().map_err(|_| 11)?;
     roots.revalidate().map_err(|_| 12)?;
     let paths = [

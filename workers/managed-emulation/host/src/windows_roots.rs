@@ -108,7 +108,7 @@ impl Descriptor {
     }
 }
 
-fn require_system() -> Result<()> {
+pub(crate) fn require_system() -> Result<()> {
     // A service must never create/open protected state while impersonating a
     // client, even if its process is SYSTEM. No RevertToSelf side effect.
     let mut thread = 0;

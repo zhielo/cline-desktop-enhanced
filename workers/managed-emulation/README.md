@@ -364,3 +364,26 @@ Original records remain openable for explicit recovery, never automatic replay.
 A changed host boot is not a VM stop, removal or containment receipt. Native
 Windows tests include real stable queries and explicit different-boot refusal;
 no physical reboot or actual Hyper-V lifecycle acceptance is implied.
+
+
+## Native local caller authentication (development only)
+
+`host/src/windows_ipc.rs` supplies a fixed inert local message-pipe exchange for
+future service integration. Public binding/serving requires actual LocalSystem
+without pre-existing thread impersonation. Explicit DACL/first-instance/remote
+refusal and actual client token user + authentication LUID + session validation
+precede any response. Client owner validation requires SYSTEM before transmitting,
+with identification-only SQOS and nonce correlation. Token observation is not a
+registration grant or per-request authorization. No external SID/PID/session/JSON
+claims can construct a scope, and no target/command/path/credential is exchanged.
+
+One five-second monotonic connection budget covers all overlapped I/O. Cancellation
+retains async memory until completed; unresolved drain or identity reversion aborts
+the process instead of allowing privileged work with unsafe state. Native tests
+cover real user-mode pipes, anonymous/mismatched scope/owner and timeout refusal;
+the explicit owned SYSTEM fixture additionally uses the actual public endpoint.
+
+This component does not install or run an SCM service, register a UI logon scope,
+provision a VM/image/engine, integrate Setup Center or promote readiness. Protected
+service deployment, consented client registration and actual supervised Hyper-V
+lifecycle remain mandatory before the framework pack can become available.

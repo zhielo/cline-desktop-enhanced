@@ -215,3 +215,7 @@ pub mod windows_identity;
 /// Fresh native OS boot observation, never a VM termination attestation.
 #[cfg(windows)]
 pub mod windows_boot;
+
+/// Native local caller-authentication exchange, not a running service or installer.
+#[cfg(windows)]
+pub mod windows_ipc;

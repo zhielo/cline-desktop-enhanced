@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/windows_ipc.rs",markers:["PIPE_REJECT_REMOTE_CLIENTS", "FILE_FLAG_FIRST_PIPE_INSTANCE", "SECURITY_SQOS_PRESENT | qos", "SECURITY_IDENTIFICATION", "ImpersonateNamedPipeClient(pipe)", "revert.finish()?", "IPC client scope mismatch", "TokenStatistics", "TokenSessionId", "CancelIoEx", "IPC server owner mismatch", "fn anonymous_client_is_denied_without_identity_fallback", "fn connected_silent_client_cancels_read_before_buffer_is_freed", "fn public_server_requires_real_system_without_escalation"]},
+ {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["windows_ipc::owned_system_acceptance()"]},
  {path:"workers/emulation/unidbg/src/main/java/ClineRunner.java",markers:["backend.emu_stop();", "code.compareAndSet(0,reason)", "if(!guard.failed && guard.code.get()!=0)", "finally {emulator.close();}", "CLINE_UNIDBG_GUARD_V1 "]},
  {path:"workers/emulation/unidbg/src/test/java/ClineGuardTest.java",markers:["Proxy.newProxyInstance", "new int[]{75,76}", "Repeated failed stop admitted", "!guard.failed"]},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["'ClineGuardTest'"]},
