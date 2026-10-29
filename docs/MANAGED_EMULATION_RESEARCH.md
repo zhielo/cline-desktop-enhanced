@@ -41,7 +41,9 @@ different from requiring the user to install Python, Java or a remote worker.
    The retained guest log does not identify the architecture/case/exit. Do not
    guess the cause, rerun until green, enlarge budgets or call the pack ready.
    Preserve this failure and add bounded exact-scenario diagnostics. Also reject
-   unrelated OOM/signal/JVM failures as proof of missing-export refusal.
+   unrelated OOM/signal/JVM failures as proof of missing-export refusal. Require
+   all three fresh unidbg cold boots, not retry-until-green; all 30 scenarios
+   must pass. A later successful boot does not explain the old generic failure.
 2. **Authenticate and scope the service.** Protected binary/configuration,
    narrow typed local IPC, exact caller identity, request budgets/deadlines,
    explicit operation approval and no arbitrary command execution.

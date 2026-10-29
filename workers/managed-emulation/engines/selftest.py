@@ -205,7 +205,7 @@ def validate_jni_refusal(result, result_path, engine, arch, case):
     if engine not in ('unidbg', 'rnidbg') or arch not in ARCHES[engine] or case not in contracts:
         raise ValueError('Unknown owned JNI refusal profile')
     expected, evidence = contracts[case]
-    exists = result_path.exists()
+    exists = result_path.exists() or result_path.is_symlink()
     if result.returncode != expected or exists or (evidence is not None and evidence not in result.stderr):
         # Structured bounded diagnostics distinguish the exact engine/profile/
         # scenario and JVM error without printing argv, stdout or result bytes.

@@ -59,6 +59,18 @@ jobs:
             --log "$RUNNER_TEMP/owned-engine-image/engine.log" \
             --receipt "$RUNNER_TEMP/owned-engine-image/engine-receipt.json" \
             --uefi --owned-engine '${{ matrix.engine }}'
+          # A previous unidbg guest failed a refusal boundary without an exact
+          # case diagnostic. Require ALL three fresh cold boots, not retries
+          # until one passes; every failure remains fatal and retained.
+          if [ '${{ matrix.engine }}' = unidbg ]; then
+            for repetition in 2 3; do
+              python3 -B workers/managed-emulation/image/smoke_boot.py \
+                --image "$RUNNER_TEMP/owned-engine-image/inert-guest.iso" \
+                --log "$RUNNER_TEMP/owned-engine-image/engine-$repetition.log" \
+                --receipt "$RUNNER_TEMP/owned-engine-image/engine-$repetition-receipt.json" \
+                --uefi --owned-engine unidbg
+            done
+          fi
       - name: Retain scoped engine evidence only (no runtime ISO)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

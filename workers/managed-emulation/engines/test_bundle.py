@@ -56,6 +56,9 @@ class BundleTests(unittest.TestCase):
                         path.write_text('unexpected result')
                         with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(ValueError):
                             selftest.validate_jni_refusal(result,path,engine,arch,case)
+                        path.unlink(); path.symlink_to(Path(directory)/'missing-target')
+                        with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(ValueError):
+                            selftest.validate_jni_refusal(result,path,engine,arch,case)
 
     def test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass(self):
         result=subprocess.CompletedProcess(['owned-fixture'],137,b'never print stdout',b'x'*16000)
