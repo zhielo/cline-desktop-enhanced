@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/managed-emulation-pack.mjs",markers:["selectEmulationEngines", "const reused = []", "const needed = []", "await verifyEngine(", "ERR_MANAGED_PACK_INTEGRITY", "corresponding-source.tar.zst", "signal?.throwIfAborted()", "output.sync()", "await transfer(", "install.lock", "Retained pack installation budget", "await rename(temporary", 'activation: "not-implemented"', 'engineReadiness: "not-tested"']},
+ {path:"apps/examples/desktop-app/sidecar/managed-emulation-catalog.ts",markers:["managedEmulationCatalog: ManagedPackCatalog | null = null"]},
+ {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["setup_center_emulation_install", "setup_center_emulation_verify_files", "installManagedEmulationPack(args.engines, phase)", "verifyManagedEmulationPack(args.engines, phase)"]},
+ {path:"apps/examples/desktop-app/webview/components/views/settings/managed-emulation-install.tsx",markers:["Install all four", "Install selected engines (", "Verify selected files", "Installed files are not runtime readiness"]},
+ {path:".github/workflows/managed-emulation-transport.yml",markers:["node --test scripts/managed-emulation-pack-install.test.mjs"]},
  {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["fn process_exit(process: HANDLE)", "GetExitCodeProcess(process, &mut code)", "clean_exit(process.as_raw_handle() as HANDLE)", "process_exit(refused_handle) != Ok(2)", "Owned service process has not exited", "Owned service process exited unsuccessfully"]},
  {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["ERROR_SERVICE_EXISTS", "ERROR_SHARING_VIOLATION as i32"]},
  {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["StartServiceCtrlDispatcherW", "RegisterServiceCtrlHandlerExW", "SERVICE_STOP_PENDING", "state.cancel.signal()", "roots.open_job(job_id)?", "job.owned_service_file(false)?", "LOAD_LIBRARY_SEARCH_SYSTEM32", "No service command-line arguments allowed", "SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE", "Never OpenService/adopt an existing entry", "WaitForSingleObject(process.as_raw_handle() as HANDLE, 5000)", "ERROR_SERVICE_DOES_NOT_EXIST", "join(\"owned-local-service-fixture.exe\")"]},
