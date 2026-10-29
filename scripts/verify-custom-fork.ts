@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/engines/selftest.py",markers:["def validate_jni_refusal", "CLINE_MANAGED_JNI_REFUSAL_DIAGNOSTIC_V1", "'denied': (76, None)", "'budget': (75, None)", "java.lang.IllegalArgumentException: Exact static JNI export required", "-signal.SIGABRT", "result.stderr[-4096:]"]},
+ {path:"workers/managed-emulation/engines/test_bundle.py",markers:["test_owned_jni_refusals_require_exact_reason_and_exit_without_result", "test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass", "OutOfMemoryError", "unexpected result"]},
+ {path:"docs/MANAGED_EMULATION_RESEARCH.md",markers:["DefineSystem", "PIPE_REJECT_REMOTE_CLIENTS", "Missing evidence must retain state", "Do not ship Microsoft rootfs assets", "Merge only after"]},
+
  {path:"workers/managed-emulation/host/src/windows_boot.rs",markers:["SYSTEM_BOOT_ENVIRONMENT_INFORMATION: u32 = 90", "NtQuerySystemInformation", "native_boot_observation_is_stable_and_exact", "no fallback", "guid[..4].reverse()", "OS boot changed; explicit VM recovery required"]},
  {path:"workers/managed-emulation/host/src/windows_identity.rs",markers:["let host_boot = crate::windows_boot::HostBoot::observe()?", "require_forward_boot(&event, record.host_boot)?", "forward_work_requires_native_original_boot_without_authorizing_recovery", "pub fn require_original_boot"]},
 

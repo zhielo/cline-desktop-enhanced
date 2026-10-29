@@ -193,6 +193,30 @@ def qiling_check():
     return checks
 
 
+def validate_jni_refusal(result, result_path, engine, arch, case):
+    # Fixed owned guest checks only, before any private boot credentials. Do not
+    # count an OOM, unrelated JVM error or killed runner as a missing-export test.
+    contracts = {
+        'denied': (76, None),
+        'budget': (75, None),
+        'missing': ((1, b'java.lang.IllegalArgumentException: Exact static JNI export required')
+                    if engine == 'unidbg' else (-signal.SIGABRT, b'exact JNI export missing')),
+    }
+    if engine not in ('unidbg', 'rnidbg') or arch not in ARCHES[engine] or case not in contracts:
+        raise ValueError('Unknown owned JNI refusal profile')
+    expected, evidence = contracts[case]
+    exists = result_path.exists()
+    if result.returncode != expected or exists or (evidence is not None and evidence not in result.stderr):
+        # Structured bounded diagnostics distinguish the exact engine/profile/
+        # scenario and JVM error without printing argv, stdout or result bytes.
+        diagnostic = {'engine':engine,'architecture':arch,'case':case,
+                      'expectedExit':expected,'observedExit':result.returncode,
+                      'resultExists':exists,'stderrBytes':len(result.stderr),
+                      'stderrTail':result.stderr[-4096:].decode('utf-8',errors='replace')}
+        print('CLINE_MANAGED_JNI_REFUSAL_DIAGNOSTIC_V1 '+json.dumps(diagnostic,sort_keys=True,separators=(',',':')),file=sys.stderr)
+        raise ValueError('JNI refusal/budget boundary')
+
+
 def jni_check(engine):
     checks = 0
     for arch in ARCHES[engine]:
@@ -207,8 +231,7 @@ def jni_check(engine):
                 command = ([str(ROOT/'jre/bin/java'),'--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
                 result = invoke(command)
                 if case in ('denied','budget','missing'):
-                    if result.returncode == 0 or (root/'result.json').exists() or (case == 'denied' and result.returncode != 76) or (case == 'budget' and result.returncode != 75):
-                        raise ValueError('JNI refusal/budget boundary')
+                    validate_jni_refusal(result, root/'result.json', engine, arch, case)
                 else:
                     if result.returncode:
                         print('CLINE_MANAGED_ENGINE_DIAGNOSTIC_V1 JNI exit='+str(result.returncode)+' '+result.stderr[-4096:].decode(errors='replace'),file=sys.stderr)

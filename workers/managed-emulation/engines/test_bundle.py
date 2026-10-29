@@ -1,5 +1,9 @@
 """No emulator or downloaded executable runs in these host parser tests."""
 import hashlib
+import contextlib
+import io
+import signal
+import subprocess
 import importlib.util
 import json
 import os
@@ -25,6 +29,47 @@ class BundleTests(unittest.TestCase):
         value = prepare.manifest(root,engine)
         (root/'bundle.json').write_text(json.dumps(value,sort_keys=True,separators=(',',':')))
         return value
+
+    def test_owned_jni_refusals_require_exact_reason_and_exit_without_result(self):
+        for engine in ('unidbg','rnidbg'):
+            for arch in selftest.ARCHES[engine]:
+                for case in ('denied','budget','missing'):
+                    expected = 76 if case == 'denied' else 75 if case == 'budget' else 1 if engine == 'unidbg' else -signal.SIGABRT
+                    stderr = (b'java.lang.IllegalArgumentException: Exact static JNI export required'
+                              if engine == 'unidbg' else b"thread main panicked: exact JNI export missing") if case == 'missing' else b''
+                    with self.subTest(engine=engine,arch=arch,case=case), tempfile.TemporaryDirectory() as directory:
+                        path=Path(directory)/'result.json'
+                        result=subprocess.CompletedProcess(['owned-fixture'],expected,b'never print stdout',stderr)
+                        selftest.validate_jni_refusal(result,path,engine,arch,case)
+                        for code, error in [(0,stderr),(-9,stderr),(137,b'OutOfMemoryError'),(expected,b'unrelated initialization error')]:
+                            if code == expected and case != 'missing': continue
+                            bad=subprocess.CompletedProcess(['owned-fixture'],code,b'never print stdout',error)
+                            output=io.StringIO()
+                            with contextlib.redirect_stderr(output),self.assertRaisesRegex(ValueError,'JNI refusal/budget boundary'):
+                                selftest.validate_jni_refusal(bad,path,engine,arch,case)
+                            line=output.getvalue()
+                            self.assertNotIn('never print stdout',line)
+                            data=json.loads(line.split(' ',1)[1])
+                            self.assertEqual((data['engine'],data['architecture'],data['case']),(engine,arch,case))
+                            self.assertEqual(data['observedExit'],code)
+                            self.assertFalse(data['resultExists'])
+                        path.write_text('unexpected result')
+                        with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(ValueError):
+                            selftest.validate_jni_refusal(result,path,engine,arch,case)
+
+    def test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass(self):
+        result=subprocess.CompletedProcess(['owned-fixture'],137,b'never print stdout',b'x'*16000)
+        output=io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'result.json'
+            with contextlib.redirect_stderr(output),self.assertRaises(ValueError):
+                selftest.validate_jni_refusal(result,path,'unidbg','arm64','budget')
+            data=json.loads(output.getvalue().split(' ',1)[1])
+            self.assertEqual(len(data['stderrTail']),4096)
+            self.assertEqual(data['stderrBytes'],16000)
+            for engine,arch,case in [('unknown','arm64','budget'),('unidbg','x86_64','budget'),('rnidbg','arm64','unknown')]:
+                with self.assertRaisesRegex(ValueError,'Unknown owned JNI refusal profile'):
+                    selftest.validate_jni_refusal(result,path,engine,arch,case)
 
     def test_manifest_hashes_actual_bytes_and_rejects_mutation_or_extra_file(self):
         with tempfile.TemporaryDirectory() as directory:
