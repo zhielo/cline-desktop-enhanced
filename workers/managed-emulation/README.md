@@ -430,3 +430,9 @@ during owned engine tests. Receipts require the exact unprivileged identity and
 all prior scenario/architecture/bundle assertions. This is not a production
 target process supervisor, authenticated host/guest target execution, Hyper-V
 acceptance or the unfinished Setup Center pack.
+
+### Private Python artifact acquisition
+
+Owned Qiling/Speakeasy guest builds use the committed `engines/python-inputs.lock.json` inventory and per-profile `requirements-*.lock` files. `python_inputs.py verify` checks exact agreement with existing upstream version files; fetch accepts only fixed archive URLs, bounded bytes and SHA-256. Pip sees only the local verified archives with required hashes and no package index. Pinned setuptools/wheel build tools live under the disposable build directory, not the engine environment; no isolated build dependency resolver is permitted. Runtime installation ignores build-only installed metadata so required runtime packages cannot be accidentally omitted.
+
+`python3 -B workers/managed-emulation/engines/test_python_inputs.py` exercises parsing, drift, duplicates, origins, redirects, truncation, growth, corruption and exclusive partial-file retention without executing any distribution. Actual offline guest jobs remain mandatory. Source archive entries are references, not a complete corresponding-source bundle or license approval; apt/JRE/toolchain and shipping review remain separate. No desktop installation, VM, HTTPS worker, existing WSL or readiness claim changes.

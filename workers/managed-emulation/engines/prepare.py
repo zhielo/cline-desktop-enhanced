@@ -11,12 +11,14 @@ import shutil
 import subprocess
 import sys
 
+import python_inputs
+
 ROOT = Path('/opt/cline-engine')
 ENGINES = ('qiling', 'unidbg', 'rnidbg', 'speakeasy')
 
 
-def run(*command):
-    subprocess.run(command, check=True, timeout=900)
+def run(*command, env=None):
+    subprocess.run(command, check=True, timeout=900, env=env)
 
 
 def manifest(root, engine):
@@ -47,6 +49,7 @@ def manifest(root, engine):
 def prepare(engine):
     if engine not in ENGINES or ROOT.exists():
         raise ValueError('New fixed engine runtime required')
+    components, profiles = python_inputs.load(Path('/build'))
     ROOT.mkdir(mode=0o755)
     (ROOT/'engine').write_text(engine+'\n')
     shutil.copyfile('/build/managed/selftest.py', ROOT/'selftest.py')
@@ -55,8 +58,21 @@ def prepare(engine):
     run('/usr/local/bin/python3.13', '-m', 'venv', str(ROOT/'env'))
     python = str(ROOT/'env/bin/python')
     if engine in ('qiling', 'speakeasy'):
-        requirements = '/build/emulation/requirements-qiling.txt' if engine == 'qiling' else '/build/re-analysis/requirements.txt'
-        run(python, '-m', 'pip', 'install', '--no-cache-dir', '-r', requirements)
+        # Pin actual distribution bytes, not merely version names. Fetch is
+        # data-only; pip gets a local hash-checked repository, no package index
+        # and no network-resolved PEP 517 build dependencies.
+        archives = Path('/build/private-python-archives')
+        tools = Path('/build/private-python-tools')
+        if tools.exists() or tools.is_symlink():
+            raise ValueError('New private Python build-tool directory required')
+        python_inputs.fetch(components, profiles, engine, archives)
+        run(python, '-m', 'pip', '--isolated', 'install', '--no-index',
+            '--find-links', str(archives), '--require-hashes', '--target', str(tools),
+            '-r', '/build/managed/requirements-build.lock')
+        run(python, '-m', 'pip', '--isolated', 'install', '--no-index',
+            '--find-links', str(archives), '--require-hashes', '--no-build-isolation',
+            '--ignore-installed', '-r', '/build/managed/requirements-'+engine+'.lock',
+            env={**os.environ, 'PYTHONPATH':str(tools)})
     if engine in ('qiling', 'unidbg', 'rnidbg'):
         run('bash', '/build/emulation/build-fixtures.sh')
         shutil.copytree('/build/emulation/fixtures/build', ROOT/'fixtures')
