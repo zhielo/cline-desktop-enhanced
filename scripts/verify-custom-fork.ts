@@ -4,7 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"apps/examples/desktop-app/sidecar/managed-emulation-pack.mjs",markers:["selectEmulationEngines", "const reused = []", "await releaseLease(", "const needed = []", "await verifyEngine(", "ERR_MANAGED_PACK_INTEGRITY", "corresponding-source.tar.zst", "signal?.throwIfAborted()", "output.sync()", "await transfer(", "install.lock", "Retained pack installation budget", "await rename(temporary", 'activation: "not-implemented"', 'engineReadiness: "not-tested"']},
+ {path:"apps/examples/desktop-app/sidecar/managed-emulation-pack.mjs",markers:["selectEmulationEngines", "const reused = []", "await releaseLease(", "parent === path", "info = await lstat(path)", "const needed = []", "await verifyEngine(", "ERR_MANAGED_PACK_INTEGRITY", "corresponding-source.tar.zst", "signal?.throwIfAborted()", "output.sync()", "await transfer(", "install.lock", "Retained pack installation budget", "await rename(temporary", 'activation: "not-implemented"', 'engineReadiness: "not-tested"']},
  {path:"apps/examples/desktop-app/sidecar/managed-emulation-catalog.ts",markers:["managedEmulationCatalog: ManagedPackCatalog | null = null"]},
  {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["setup_center_emulation_install", "setup_center_emulation_verify_files", "installManagedEmulationPack(args.engines, phase)", "verifyManagedEmulationPack(args.engines, phase)"]},
  {path:"apps/examples/desktop-app/webview/components/views/settings/managed-emulation-install.tsx",markers:["Install all four", "Install selected engines (", "Verify selected files", "Installed files are not runtime readiness"]},

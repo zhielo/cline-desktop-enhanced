@@ -93,14 +93,21 @@ async function directory(path, create = false) {
 		throw new Error("Fixed absolute pack root required");
 	const parent = dirname(path);
 	if (parent !== path) await directory(parent, create);
-	if (create) {
+	let info;
+	try {
+		info = await lstat(path);
+	} catch (error) {
+		// Existing ancestors, especially Windows drive roots, are inspection
+		// only. mkdir("C:\\") can return EPERM even though the root exists.
+		if (error.code !== "ENOENT" || !create || parent === path) throw error;
 		try {
 			await mkdir(path, { mode: 0o700 });
-		} catch (error) {
-			if (error.code !== "EEXIST") throw error;
+		} catch (creationError) {
+			if (creationError.code !== "EEXIST") throw creationError;
 		}
+		// Recheck after exclusive creation/race; never adopt a linked path.
+		info = await lstat(path);
 	}
-	const info = await lstat(path);
 	if (!info.isDirectory() || info.isSymbolicLink())
 		throw new Error("Linked managed pack directory forbidden");
 }
