@@ -86,6 +86,16 @@ class NativeTests(unittest.TestCase):
                 m=tarfile.TarInfo('root/a');m.size=1;t.addfile(m,io.BytesIO(b'a'))
             n.extract_core(path,Path(d)/'out');self.assertEqual((Path(d)/'out/a').read_bytes(),b'a')
 
+    def test_jna_release_abi_comes_from_matching_pinned_source_and_java_constants(self):
+        source='\n'.join('<property name="'+name+'" value="'+value+'"/>' for name,value in [('jni.major','6'),('jni.minor','1'),('jni.revision','2'),('jni.md5','a'*32)])
+        self.assertEqual(n.jna_identity(source),('6.1.2','a'*32))
+        for bad in (source+source,source.replace('name="jni.major"','name="other"'),source.replace('a'*32,'unknown')):
+            with self.assertRaises(ValueError):n.jna_identity(bad)
+        output='public static final java.lang.String VERSION_NATIVE = "6.1.2";'
+        n.verify_java_abi(output,'6.1.2')
+        for bad in (output+output,'missing',output.replace('6.1.2','5.1.0')):
+            with self.assertRaises(ValueError):n.verify_java_abi(bad,'6.1.2')
+
     def test_exact_jna_patch_preserves_pending_exception(self):
         original='before\n  fileEncoding = get_system_property(env, "file.encoding");\n  if (fileEncoding) {\nafter\n'
         result=n.patch_jna(original)

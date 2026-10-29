@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 
 NAMES = {'jna-sources.jar','unicorn-source.tar.gz','jna-dispatch.c','jna-callback.c',
-    'jna-dispatch.h','jna-protect.h','jna-Makefile','bridge-unicorn.c','bridge-unicorn.h',
+    'jna-dispatch.h','jna-protect.h','jna-Makefile','jna-build.xml','bridge-unicorn.c','bridge-unicorn.h',
     'bridge-sample_arm.c','bridge-sample_arm64.c','bridge-khash.h',
     'bridge-com_github_unidbg_arm_backend_unicorn_Unicorn.h',
     'bridge-com_github_unidbg_arm_backend_unicorn_Unicorn_NewHook.h',
@@ -102,6 +102,23 @@ def replace_once(source,old,new):
     if source.count(old)!=1:raise ValueError('Native source patch context')
     return source.replace(old,new)
 
+def jna_identity(source):
+    # Upstream Makefile is a generated template, NOT the release ABI identity.
+    # Read only the exact source-pinned Ant properties; never execute Ant tasks.
+    import re
+    values={}
+    for name,pattern in [('jni.major',r'[0-9]{1,2}'),('jni.minor',r'[0-9]{1,2}'),('jni.revision',r'[0-9]{1,2}'),('jni.md5',r'[0-9a-f]{32}')]:
+        found=re.findall(r'<property name="'+re.escape(name)+r'" value="('+pattern+r')"\s*/>',source)
+        if len(found)!=1:raise ValueError('JNA release ABI metadata')
+        values[name]=found[0]
+    return '.'.join(values[x] for x in ('jni.major','jni.minor','jni.revision')),values['jni.md5']
+
+def verify_java_abi(output,expected):
+    import re
+    found=re.findall(r'public static final java.lang.String VERSION_NATIVE = "([0-9]+\.[0-9]+\.[0-9]+)";',output)
+    if found!=[expected]:raise ValueError('Pinned Java/native JNA ABI mismatch')
+
+
 def patch_jna(source):
     # No new JNI call may follow getProperty with an unchecked pending exception.
     return replace_once(source,'  fileEncoding = get_system_property(env, "file.encoding");\n  if (fileEncoding) {',
@@ -176,9 +193,13 @@ def build(runtime, work, java_home=Path('/usr/lib/jvm/java-17-openjdk-amd64')):
             with target.open('x') as stream:stream.write(text)
     def run(*args):subprocess.run([str(x) for x in args],check=True,timeout=900)
     run(java_home/'bin/java','com.sun.tools.javac.Main','--release','8','-proc:none','-encoding','UTF-8','-h',headers,'-d',classes,*sorted(sources.rglob('*.java')))
+    native_version,native_checksum=jna_identity((jna/'build.xml').read_text())
+    inspected=subprocess.run([str(java_home/'bin/java'),'com.sun.tools.javap.Main','-constants','-classpath',str(runtime/'dependency/jna-5.10.0.jar'),'com.sun.jna.Version'],check=True,timeout=30,capture_output=True,text=True)
+    if len(inspected.stdout)>4096 or len(inspected.stderr)>4096:raise ValueError('JNA ABI inspection budget')
+    verify_java_abi(inspected.stdout,native_version)
     jna_output=work/'jna-build';jna_output.mkdir()
     run('make','-C',jna,'DYNAMIC_LIBFFI=true','JAVA_HOME='+str(java_home),'BUILD='+str(jna_output),
-        'JAVAH='+str(headers),str(jna_output/'libjnidispatch.so'))
+        'JAVAH='+str(headers),'JNA_JNI_VERSION='+native_version,'CHECKSUM='+native_checksum,str(jna_output/'libjnidispatch.so'))
     core_build=work/'core-build'
     run('cmake','-S',core,'-B',core_build,'-DCMAKE_BUILD_TYPE=Release','-DCMAKE_POSITION_INDEPENDENT_CODE=ON',
         '-DBUILD_SHARED_LIBS=OFF','-DUNICORN_BUILD_TESTS=OFF','-DUNICORN_INSTALL=OFF','-DUNICORN_ARCH=arm;aarch64')
@@ -194,5 +215,6 @@ def build(runtime, work, java_home=Path('/usr/lib/jvm/java-17-openjdk-amd64')):
         records.append({'jar':jar.name,'resource':label,'originalJarSha256':old,'rebuiltJarSha256':digest(jar.read_bytes()),'nativeSha256':digest(binary.read_bytes())})
     record={'schema':1,'scope':'development-owned-guest-tests-only','sourceInputs':inputs,
         'patchedBridgeSha256':digest((bridge/'unicorn.c').read_bytes()),'patchedJnaSha256':digest((jna/'dispatch.c').read_bytes()),
+        'jnaNativeAbi':native_version,'jnaNativeApiChecksum':native_checksum,
         'resources':records,'emulatorExecutedDuringBuild':False,'engineReadiness':'not-tested'}
     (runtime/'native-build.json').write_text(json.dumps(record,sort_keys=True,separators=(',',':'))+'\n')

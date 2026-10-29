@@ -97,6 +97,12 @@
       "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/com_github_unidbg_arm_backend_unicorn_Unicorn_UnHook.h",
       "bytes": 364,
       "sha256": "9cb4cd6483910797010c008760b97e9d9add0338cde0123c59db6c50b42c6204"
+    },
+    {
+      "name": "jna-build.xml",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/build.xml",
+      "bytes": 78888,
+      "sha256": "b0760950a899c351cf657ce073af9809ba47014fe4b174c2673db63a10952fe4"
     }
   ]
 }
