@@ -501,6 +501,9 @@ fn protected_regular_file(path: &Path, create: bool) -> Result<std::fs::File> {
 }
 
 pub(crate) fn validate_system_file(file: &std::fs::File, allow_empty: bool) -> Result<u64> {
+    validate_system_regular(file, allow_empty, 16384)
+}
+fn validate_system_regular(file: &std::fs::File, allow_empty: bool, maximum: u64) -> Result<u64> {
     require_system()?;
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { zeroed() };
     let raw = file.as_raw_handle() as HANDLE;
@@ -511,7 +514,7 @@ pub(crate) fn validate_system_file(file: &std::fs::File, allow_empty: bool) -> R
         return Err("Single-link protected regular installation file required");
     }
     let size = ((info.nFileSizeHigh as u64) << 32) | info.nFileSizeLow as u64;
-    if size > 16384 || (!allow_empty && size == 0) {
+    if size > maximum || (!allow_empty && size == 0) {
         return Err("Protected installation record budget");
     }
     validate_security(raw, &Policy::system()?, 0)?;
@@ -560,6 +563,42 @@ impl<'roots> SystemJob<'roots> {
                 .join(crate::windows_identity::OWNERSHIP_FILE),
             create,
         )
+    }
+    #[cfg(feature = "owned-system-acceptance")]
+    pub(crate) fn owned_service_path(&self) -> PathBuf {
+        self.directories[2].0.join("owned-service.exe")
+    }
+    #[cfg(feature = "owned-system-acceptance")]
+    pub(crate) fn owned_service_file(&self, create: bool) -> Result<std::fs::File> {
+        use windows_sys::Win32::{
+            Foundation::{GENERIC_READ, GENERIC_WRITE},
+            Storage::FileSystem::{CREATE_NEW, FILE_FLAG_WRITE_THROUGH},
+        };
+        self.revalidate()?;
+        let path = wide(self.owned_service_path().as_os_str())?;
+        let descriptor = Descriptor::new("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)")?;
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor.0 .0,
+            bInheritHandle: 0,
+        };
+        let raw = unsafe {
+            CreateFileW(
+                path.as_ptr(),
+                GENERIC_READ | READ_CONTROL | if create { GENERIC_WRITE } else { 0 },
+                if create { 0 } else { FILE_SHARE_READ },
+                if create { &attributes } else { null() },
+                if create { CREATE_NEW } else { OPEN_EXISTING },
+                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_WRITE_THROUGH,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err("Exclusive owned service binary required");
+        }
+        let file = unsafe { std::fs::File::from_raw_handle(raw as _) };
+        validate_system_regular(&file, create, 64 * 1024 * 1024)?;
+        Ok(file)
     }
     pub fn id(&self) -> &str {
         &self.id

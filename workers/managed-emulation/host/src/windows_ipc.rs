@@ -14,8 +14,8 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::{
-        GetLastError, LocalFree, ERROR_IO_PENDING, ERROR_NO_TOKEN, ERROR_PIPE_CONNECTED, HANDLE,
-        INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+        GetLastError, LocalFree, ERROR_IO_PENDING, ERROR_NO_TOKEN, ERROR_PIPE_CONNECTED,
+        ERROR_PIPE_NOT_CONNECTED, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
     },
     Security::{
         Authorization::{
@@ -34,13 +34,13 @@ use windows_sys::Win32::{
     },
     System::{
         Pipes::{
-            ConnectNamedPipe, CreateNamedPipeW, ImpersonateNamedPipeClient,
+            ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, ImpersonateNamedPipeClient,
             SetNamedPipeHandleState, PIPE_READMODE_MESSAGE, PIPE_REJECT_REMOTE_CLIENTS,
             PIPE_TYPE_MESSAGE, PIPE_WAIT,
         },
         Threading::{
             CreateEventW, GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
-            WaitForSingleObject,
+            SetEvent, WaitForMultipleObjects, WaitForSingleObject,
         },
         IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED},
     },
@@ -278,14 +278,34 @@ fn raw(handle: &OwnedHandle) -> HANDLE {
     handle.as_raw_handle() as HANDLE
 }
 
+/// Unnamed service-stop event; no externally supplied event name/handle.
+pub(crate) struct Cancellation(OwnedHandle);
+impl Cancellation {
+    pub(crate) fn new() -> Result<Self> {
+        Ok(Self(owned(unsafe { CreateEventW(null(), 1, 0, null()) })?))
+    }
+    pub(crate) fn signal(&self) {
+        if unsafe { SetEvent(raw(&self.0)) } == 0 {
+            std::process::abort();
+        }
+    }
+    pub(crate) fn cancelled(&self) -> bool {
+        (unsafe { WaitForSingleObject(raw(&self.0), 0) }) == WAIT_OBJECT_0
+    }
+}
+
 struct Pending<'a> {
     pipe: &'a OwnedHandle,
     event: OwnedHandle,
     overlap: Box<OVERLAPPED>,
     active: bool,
+    cancellation: Option<&'a Cancellation>,
 }
 impl<'a> Pending<'a> {
-    fn new(pipe: &'a OwnedHandle) -> Result<Self> {
+    fn controlled(pipe: &'a OwnedHandle, cancellation: Option<&'a Cancellation>) -> Result<Self> {
+        if cancellation.is_some_and(Cancellation::cancelled) {
+            return Err("IPC operation cancelled");
+        }
         let event = owned(unsafe { CreateEventW(null(), 1, 0, null()) })?;
         let mut overlap: Box<OVERLAPPED> = Box::new(unsafe { zeroed() });
         overlap.hEvent = raw(&event);
@@ -294,6 +314,7 @@ impl<'a> Pending<'a> {
             event,
             overlap,
             active: false,
+            cancellation,
         })
     }
     fn finish(&mut self, immediate: i32, deadline: Instant, connect: bool) -> Result<usize> {
@@ -308,9 +329,20 @@ impl<'a> Pending<'a> {
             self.active = true;
             let remaining = deadline.saturating_duration_since(Instant::now());
             let millis = remaining.as_millis().min(5000) as u32;
-            if remaining.is_zero()
-                || unsafe { WaitForSingleObject(raw(&self.event), millis) } != WAIT_OBJECT_0
-            {
+            if remaining.is_zero() {
+                return Err("IPC operation deadline");
+            }
+            let observed = if let Some(stop) = self.cancellation {
+                let handles = [raw(&stop.0), raw(&self.event)];
+                let result = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, millis) };
+                if result == WAIT_OBJECT_0 {
+                    return Err("IPC operation cancelled");
+                }
+                result.checked_sub(1).unwrap_or(u32::MAX)
+            } else {
+                unsafe { WaitForSingleObject(raw(&self.event), millis) }
+            };
+            if observed != WAIT_OBJECT_0 {
                 return Err("IPC operation deadline");
             }
         }
@@ -323,6 +355,9 @@ impl<'a> Pending<'a> {
         }
         if Instant::now() >= deadline {
             return Err("IPC operation deadline");
+        }
+        if self.cancellation.is_some_and(Cancellation::cancelled) {
+            return Err("IPC operation cancelled");
         }
         Ok(transferred as usize)
     }
@@ -347,7 +382,15 @@ impl Drop for Pending<'_> {
     }
 }
 fn read(pipe: &OwnedHandle, buffer: &mut [u8], deadline: Instant) -> Result<usize> {
-    let mut op = Pending::new(pipe)?;
+    read_controlled(pipe, buffer, deadline, None)
+}
+fn read_controlled(
+    pipe: &OwnedHandle,
+    buffer: &mut [u8],
+    deadline: Instant,
+    cancel: Option<&Cancellation>,
+) -> Result<usize> {
+    let mut op = Pending::controlled(pipe, cancel)?;
     let ok = unsafe {
         ReadFile(
             raw(pipe),
@@ -360,7 +403,15 @@ fn read(pipe: &OwnedHandle, buffer: &mut [u8], deadline: Instant) -> Result<usiz
     op.finish(ok, deadline, false)
 }
 fn write(pipe: &OwnedHandle, buffer: &[u8], deadline: Instant) -> Result<()> {
-    let mut op = Pending::new(pipe)?;
+    write_controlled(pipe, buffer, deadline, None)
+}
+fn write_controlled(
+    pipe: &OwnedHandle,
+    buffer: &[u8],
+    deadline: Instant,
+    cancel: Option<&Cancellation>,
+) -> Result<()> {
+    let mut op = Pending::controlled(pipe, cancel)?;
     let ok = unsafe {
         WriteFile(
             raw(pipe),
@@ -439,22 +490,42 @@ impl ProbeServer {
         require_system()?;
         self.exchange(Instant::now() + DEADLINE)
     }
-    fn exchange(self, deadline: Instant) -> Result<()> {
-        let mut op = Pending::new(&self.pipe)?;
+    pub(crate) fn serve_controlled(&self, cancel: &Cancellation) -> Result<()> {
+        require_system()?;
+        self.exchange_controlled(Instant::now() + DEADLINE, Some(cancel))
+    }
+    pub(crate) fn reset_connection(&self) -> Result<()> {
+        require_system()?;
+        if unsafe { DisconnectNamedPipe(raw(&self.pipe)) } == 0
+            && unsafe { GetLastError() } != ERROR_PIPE_NOT_CONNECTED
+        {
+            return Err("IPC connection reset failed");
+        }
+        Ok(())
+    }
+    fn exchange(&self, deadline: Instant) -> Result<()> {
+        self.exchange_controlled(deadline, None)
+    }
+    fn exchange_controlled(&self, deadline: Instant, cancel: Option<&Cancellation>) -> Result<()> {
+        let mut op = Pending::controlled(&self.pipe, cancel)?;
         let ok = unsafe { ConnectNamedPipe(raw(&self.pipe), &mut *op.overlap) };
         op.finish(ok, deadline, true)?;
         drop(op);
         let mut request = [0; REQUEST_SIZE];
-        if read(&self.pipe, &mut request, deadline)? != REQUEST_SIZE || request[0] != 1 {
+        if read_controlled(&self.pipe, &mut request, deadline, cancel)? != REQUEST_SIZE
+            || request[0] != 1
+        {
             return Err("IPC fixed request required");
         }
         authenticate_client(raw(&self.pipe), &self.scope)?;
         let mut response = [0; RESPONSE_SIZE];
         response[..REQUEST_SIZE].copy_from_slice(&request);
         // Byte 33 is fixed zero: no installation/readiness/VM claim.
-        write(&self.pipe, &response, deadline)?;
+        write_controlled(&self.pipe, &response, deadline, cancel)?;
         let mut acknowledgement = [0];
-        if read(&self.pipe, &mut acknowledgement, deadline)? != 1 || acknowledgement != [1] {
+        if read_controlled(&self.pipe, &mut acknowledgement, deadline, cancel)? != 1
+            || acknowledgement != [1]
+        {
             return Err("IPC acknowledgement missing");
         }
         Ok(())
@@ -548,6 +619,24 @@ pub fn owned_system_acceptance() -> Result<()> {
     result?;
     served?;
     require_system()
+}
+
+#[cfg(feature = "owned-system-acceptance")]
+pub(crate) fn owned_silent_client() -> Result<OwnedHandle> {
+    require_system()?;
+    let pipe = owned(unsafe {
+        CreateFileW(
+            wide(PIPE).as_ptr(),
+            CLIENT_ACCESS,
+            0,
+            null(),
+            OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+            0,
+        )
+    })?;
+    require_server_owner(&pipe, &Sid::system()?)?;
+    Ok(pipe)
 }
 
 #[cfg(test)]
@@ -687,6 +776,35 @@ mod tests {
         if require_system().is_err() {
             assert!(ProbeServer::bind(scope()).is_err());
         }
+    }
+    #[test]
+    fn explicit_cancellation_drains_connect_without_waiting_for_deadline() {
+        let server = ProbeServer::bind_at(&name(), scope()).unwrap();
+        let cancel = std::sync::Arc::new(Cancellation::new().unwrap());
+        let other = cancel.clone();
+        let thread = std::thread::spawn(move || {
+            server.exchange_controlled(Instant::now() + DEADLINE, Some(&other))
+        });
+        std::thread::sleep(Duration::from_millis(30));
+        let began = Instant::now();
+        cancel.signal();
+        assert_eq!(
+            thread.join().unwrap().err(),
+            Some("IPC operation cancelled")
+        );
+        assert!(began.elapsed() < Duration::from_secs(2));
+    }
+    #[test]
+    fn pre_cancelled_exchange_opens_no_new_operation() {
+        let server = ProbeServer::bind_at(&name(), scope()).unwrap();
+        let cancel = Cancellation::new().unwrap();
+        cancel.signal();
+        assert_eq!(
+            server
+                .exchange_controlled(Instant::now() + DEADLINE, Some(&cancel))
+                .err(),
+            Some("IPC operation cancelled")
+        );
     }
     #[test]
     fn impersonated_observer_is_refused_and_outer_token_is_not_reverted() {

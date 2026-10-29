@@ -219,3 +219,7 @@ pub mod windows_boot;
 /// Native local caller-authentication exchange, not a running service or installer.
 #[cfg(windows)]
 pub mod windows_ipc;
+
+/// Explicit development-only SCM acceptance host; never bundled in the app.
+#[cfg(all(windows, feature = "owned-system-acceptance"))]
+pub mod windows_service;

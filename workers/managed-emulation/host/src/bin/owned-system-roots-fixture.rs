@@ -141,6 +141,7 @@ fn owned() -> Result<(), i32> {
     }
     installation_acceptance(&roots)?;
     reservation_acceptance(&roots)?;
+    cline_managed_inert_probe::windows_service::owned_acceptance(&roots)?;
     let parent = paths[0].parent().ok_or(17)?.to_path_buf();
     drop(reopened);
     drop(roots);

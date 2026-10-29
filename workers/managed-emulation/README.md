@@ -387,3 +387,24 @@ This component does not install or run an SCM service, register a UI logon scope
 provision a VM/image/engine, integrate Setup Center or promote readiness. Protected
 service deployment, consented client registration and actual supervised Hyper-V
 lifecycle remain mandatory before the framework pack can become available.
+
+
+## Explicit owned SCM host (development-only feature)
+
+`windows_service.rs` implements real SCM dispatch/status, SYSTEM-only inert IPC,
+Stop/shutdown control and native I/O cancellation. The feature-gated
+`owned-local-service-fixture` binary has no console/install mode and is not
+bundled by the app. Before Running it validates its exact protected per-job image
+and existing roots, with System32-only DLL lookup. This is not UI authorization.
+
+The explicit native SYSTEM CI journey exclusively creates a temporary owned SCM
+entry for a digest-checked protected staged fixture, verifies image/account/start
+configuration, rejects duplicate creation and start arguments, probes real IPC,
+requires zero-error Stop plus actual process exit, restarts with a silent client
+and verifies prompt cancellation. It requires the exact service entry to disappear
+before closing the binary pin and nonrecursive owned cleanup. Failure retains
+ambiguous state. The child's 120-second CI watchdog is failure, never success.
+
+This does not provision the user's host, publish a trusted service/engine image,
+register UI logon scopes, create a VM, install a framework or complete Setup Center.
+Real installed Windows 10/Hyper-V and all distribution/approval gates remain.

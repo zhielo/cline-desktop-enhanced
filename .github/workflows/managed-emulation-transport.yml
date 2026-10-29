@@ -33,7 +33,7 @@ jobs:
         run: cargo +1.85.1 test --locked --manifest-path workers/managed-emulation/host/Cargo.toml
       - name: Build explicit CI-only SYSTEM roots fixture
         if: matrix.os == 'windows-latest'
-        run: cargo +1.85.1 build --locked --manifest-path workers/managed-emulation/host/Cargo.toml --features owned-system-acceptance --bin owned-system-roots-fixture
+        run: cargo +1.85.1 build --locked --manifest-path workers/managed-emulation/host/Cargo.toml --features owned-system-acceptance --bin owned-system-roots-fixture --bin owned-local-service-fixture
       - name: Actual LocalSystem protected roots acceptance (no Hyper-V)
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -51,4 +51,4 @@ jobs:
         run: python -B workers/managed-emulation/probe_protocol_test.py
       - name: Record scope
         shell: bash
-        run: echo 'Protocol/process, lifecycle reducer, real SQLite kill/reopen storage and credential-path tests only. Native Windows additionally checks owned protected ACLs and fixed SYSTEM roots. No physical-power-loss, running protected broker, actual VM lifecycle, Hyper-V connection, framework installation or containment acceptance.'
+        run: echo 'Protocol/process, lifecycle reducer, real SQLite kill/reopen storage and credential-path tests only. Native Windows additionally checks owned protected ACLs, fixed SYSTEM roots and a temporary inert SCM host with verified stop/process exit/removal. No physical-power-loss, released protected broker, actual VM lifecycle, Hyper-V connection, framework installation or containment acceptance.'

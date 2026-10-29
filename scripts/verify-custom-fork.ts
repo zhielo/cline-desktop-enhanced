@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["StartServiceCtrlDispatcherW", "RegisterServiceCtrlHandlerExW", "SERVICE_STOP_PENDING", "state.cancel.signal()", "roots.open_job(job_id)?", "job.owned_service_file(false)?", "LOAD_LIBRARY_SEARCH_SYSTEM32", "No service command-line arguments allowed", "SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE", "Never OpenService/adopt an existing entry", "WaitForSingleObject(process.as_raw_handle() as HANDLE, 5000)", "ERROR_SERVICE_DOES_NOT_EXIST", "join(\"owned-local-service-fixture.exe\")"]},
+ {path:"workers/managed-emulation/host/src/windows_ipc.rs",markers:["WaitForMultipleObjects", "IPC operation cancelled", "DisconnectNamedPipe", "explicit_cancellation_drains_connect_without_waiting_for_deadline", "pre_cancelled_exchange_opens_no_new_operation"]},
+ {path:"workers/managed-emulation/host/src/windows_roots.rs",markers:["validate_system_regular(file, allow_empty, 16384)", "Exclusive owned service binary required", "64 * 1024 * 1024"]},
+ {path:"workers/managed-emulation/host/src/bin/owned-local-service-fixture.rs",markers:["Duration::from_secs(120)", "std::process::exit(124)", "windows_service::dispatch()"]},
+ {path: ".github/workflows/managed-emulation-transport.yml",markers:["--bin owned-system-roots-fixture --bin owned-local-service-fixture"]},
  {path:"workers/managed-emulation/host/src/windows_ipc.rs",markers:["PIPE_REJECT_REMOTE_CLIENTS", "FILE_FLAG_FIRST_PIPE_INSTANCE", "SECURITY_SQOS_PRESENT | qos", "SECURITY_IDENTIFICATION", "ImpersonateNamedPipeClient(pipe)", "revert.finish()?", "IPC client scope mismatch", "TokenStatistics", "TokenSessionId", "CancelIoEx", "IPC server owner mismatch", "fn anonymous_client_is_denied_without_identity_fallback", "fn connected_silent_client_cancels_read_before_buffer_is_freed", "fn public_server_requires_real_system_without_escalation"]},
  {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["windows_ipc::owned_system_acceptance()"]},
  {path:"workers/emulation/unidbg/src/main/java/ClineRunner.java",markers:["backend.emu_stop();", "code.compareAndSet(0,reason)", "if(!guard.failed && guard.code.get()!=0)", "finally {emulator.close();}", "CLINE_UNIDBG_GUARD_V1 "]},

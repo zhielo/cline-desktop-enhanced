@@ -1,5 +1,6 @@
 # Native Windows CI only. Creates one random, bounded SYSTEM scheduled task for
-# the explicitly built owned fixture; no service/VM/user-PC setup is installed.
+# the explicitly built owned fixture. It may create/remove one temporary inert
+# SCM fixture on this CI machine; no product service, VM or user-PC setup.
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
@@ -49,7 +50,7 @@ try {
     if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ne $hash) {
         throw 'Owned fixture executable changed during acceptance'
     }
-    Write-Output 'Native SYSTEM local inert IPC and roots passed: scoped identification-token exchange and checked reversion; fixed protected ACLs/owner, reopen, no overwrite, pinned lifetime and nonrecursive owned cleanup. No VM, service, installed pack or readiness established.'
+    Write-Output 'Native SYSTEM temporary SCM lifecycle, local inert IPC and roots passed: scoped identification-token exchange and checked reversion; fixed protected ACLs/owner, reopen, no overwrite, pinned lifetime and nonrecursive owned cleanup. No VM, released product service, installed pack or readiness established.'
 } finally {
     if ($registered) {
         $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
