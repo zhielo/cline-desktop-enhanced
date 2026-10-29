@@ -217,6 +217,51 @@ def validate_jni_refusal(result, result_path, engine, arch, case):
         raise ValueError('JNI refusal/budget boundary')
 
 
+def owned_jvm_crash_evidence(result, private, arch, case):
+    """Retain bounded *owned fixture* fatal evidence before its tmpdir is removed.
+
+    Never used by a target runner or after private boot credentials are supplied.
+    A native crash is always a failure; no exit or guard contract is relaxed.
+    """
+    if result.returncode >= 0:
+        return
+    if arch not in ARCHES['unidbg'] or case not in ('positive','denied','budget','missing','fresh'):
+        raise ValueError('Unknown owned JVM crash profile')
+    path = private/'hotspot-crash.log'
+    report = {'status':'absent'}
+    descriptor = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            report = {'status':'unsafe-type'}
+        elif not 0 < before.st_size <= 1024*1024:
+            report = {'status':'byte-budget'}
+        else:
+            # HotSpot's fatal header and native frame list precede verbose
+            # registers/VM options. Keep only a bounded prefix, not the file.
+            raw = os.read(descriptor, min(before.st_size, 12288))
+            after = os.fstat(descriptor)
+            fields = ('st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns')
+            if any(getattr(before,k) != getattr(after,k) for k in fields) or len(raw) != min(before.st_size,12288):
+                report = {'status':'changed'}
+            else:
+                report = {'status':'captured','bytes':before.st_size,
+                          'prefix':raw.decode('utf-8',errors='replace')}
+    except FileNotFoundError:
+        pass
+    except OSError:
+        report = {'status':'unavailable'}
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    value = {'engine':'unidbg','architecture':arch,'case':case,
+             'observedExit':result.returncode,'hotspot':report,
+             'stdoutBytes':len(result.stdout),
+             'stdoutPrefix':result.stdout[:4096].decode('utf-8',errors='replace')}
+    print('CLINE_MANAGED_OWNED_JVM_CRASH_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
+
+
 def jni_check(engine):
     checks = 0
     for arch in ARCHES[engine]:
@@ -228,8 +273,10 @@ def jni_check(engine):
                 if engine == 'unidbg':
                     args.append(arch)
                 args += ['jni-int32','com/cline/Owned','missing' if case == 'missing' else 'transform','42',str(root/'result.json'),'1' if case == 'budget' else '10000']
-                command = ([str(ROOT/'jre/bin/java'),'--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
+                command = ([str(ROOT/'jre/bin/java'),'--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:ErrorFile='+str(root/'hotspot-crash.log'),'-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
                 result = invoke(command)
+                if engine == 'unidbg':
+                    owned_jvm_crash_evidence(result, root, arch, case)
                 if case in ('denied','budget','missing'):
                     validate_jni_refusal(result, root/'result.json', engine, arch, case)
                 else:
