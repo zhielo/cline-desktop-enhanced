@@ -466,6 +466,52 @@ impl SystemRoots {
     pub fn image_parent(&self) -> &Path {
         &self.leaves[3].0
     }
+    /// Fixed flat content-addressed leaf, not a client path. No write/delete
+    /// sharing, but a future Hyper-V reader may share this exact held image.
+    pub(crate) fn image_file(&self, filename: &str) -> Result<std::fs::File> {
+        self.revalidate()?;
+        image_filename(filename)?;
+        let path = wide(self.image_parent().join(filename).as_os_str())?;
+        let raw = unsafe {
+            CreateFileW(
+                path.as_ptr(),
+                windows_sys::Win32::Foundation::GENERIC_READ | READ_CONTROL,
+                FILE_SHARE_READ,
+                null(),
+                OPEN_EXISTING,
+                FILE_FLAG_OPEN_REPARSE_POINT,
+                0,
+            )
+        };
+        if raw == INVALID_HANDLE_VALUE {
+            return Err("Exact protected image unavailable");
+        }
+        let file = unsafe { std::fs::File::from_raw_handle(raw as _) };
+        validate_image_file(&file)?;
+        Ok(file)
+    }
+    #[cfg(feature = "owned-system-acceptance")]
+    pub(crate) fn create_owned_image_fixture(&self, filename: &str) -> Result<std::fs::File> {
+        self.revalidate()?;
+        image_filename(filename)?;
+        if filename != crate::image_policy::owned_pin().filename()? {
+            return Err("Exact owned image fixture required");
+        }
+        // The public data fixture is small; installation records keep 16 KiB.
+        protected_regular_file(&self.image_parent().join(filename), true)
+    }
+}
+
+fn image_filename(filename: &str) -> Result<()> {
+    let digest = filename
+        .strip_suffix(".iso")
+        .ok_or("Fixed image filename required")?;
+    crate::exact_hex::<32>(digest)?;
+    Ok(())
+}
+
+pub(crate) fn validate_image_file(file: &std::fs::File) -> Result<u64> {
+    validate_system_regular(file, false, crate::image_policy::MAX_IMAGE_BYTES)
 }
 
 fn protected_regular_file(path: &Path, create: bool) -> Result<std::fs::File> {
@@ -698,6 +744,22 @@ mod tests {
         Authorization::ConvertSidToStringSidW, ImpersonateSelf, RevertToSelf,
         SecurityImpersonation, PROTECTED_DACL_SECURITY_INFORMATION,
     };
+
+    #[test]
+    fn image_names_are_only_flat_canonical_content_digests() {
+        assert!(image_filename(&format!("{}.iso", "ab".repeat(32))).is_ok());
+        for name in [
+            "../outside.iso",
+            "C:\\outside.iso",
+            "image.iso",
+            "AB.iso",
+            "ab.iso:stream",
+            "\\\\.\\pipe\\image.iso",
+        ] {
+            assert!(image_filename(name).is_err());
+        }
+        assert!(image_filename(&format!("{}.iso", "AB".repeat(32))).is_err());
+    }
 
     fn fixture_policy() -> (Policy, Descriptor, String) {
         let owner = with_current_sid(|sid| {

@@ -158,6 +158,26 @@ BIOS/UEFI cold-boot validation and unfinished publication/Hyper-V acceptance.
 This is not a distributable four-engine image or an installed Setup Center pack.
 The existing mandatory real-Hyper-V/lifecycle/integration gates below remain.
 
+## Native protected image admission (not an installer)
+
+VM reservation now accepts only a revalidated protected native image guard, not an
+external digest. Production selection uses compiled pins, currently deliberately
+empty: development guest tests are not promoted into shipping image policy.
+The guard opens only a fixed content-addressed file in the pinned SYSTEM image
+root, validates the protected ACL/owner/single-link/non-reparse/size boundary,
+streams its exact SHA-256 with a 64-KiB buffer and retains read-only/no-write-or-
+delete-sharing access. The roots stay borrowed. Revalidation repeats this before
+reservation. The separate image cap is 768 MiB; identity files keep 16 KiB.
+This bounds bytes and memory, not stalled OS filesystem I/O; future broker process
+supervision still needs a hard deadline. Trusted administrators remain trusted.
+
+The existing feature-gated SYSTEM CI journey tests only exact public nonbootable
+fixture data and image/refusal/reservation binding. It does not populate production
+pins, stage a shipping payload, implement privileged installation or create a VM.
+An opened historical reservation is recovery bookkeeping, not permission to use an
+unadmitted image or proof of actual VM/image ownership. All lifecycle effects and
+installed-host gates below remain unfinished.
+
 ## Mandatory unfinished lifecycle integration
 
 Do **not** expose this developer probe as a ready Setup Center function.

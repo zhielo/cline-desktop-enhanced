@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/image_policy.rs",markers:["pub(crate) fn reviewed(_engine: Engine) -> Option<Pin>", "MAX_IMAGE_BYTES", "Protected image identity mismatch", "development_images_never_supply_shipping_pins"]},
+ {path:"workers/managed-emulation/host/src/windows_image.rs",markers:["No reviewed shipping image available", "self.roots.revalidate()?", "image_policy::verify(", "Image read sharing unavailable", "Changed image was admitted", "Linked image was admitted"]},
+ {path:"workers/managed-emulation/host/src/windows_identity.rs",markers:["image: &crate::windows_image::SystemImage<'_>", "image.revalidate()?", "image_sha256: image.sha256().into()"]},
+ {path:"workers/managed-emulation/host/src/windows_roots.rs",markers:["pub(crate) fn image_file(", "validate_image_file(&file)?", "crate::image_policy::MAX_IMAGE_BYTES"]},
  {path:"workers/managed-emulation/image/build_image.py",markers:["def owned_native_evidence(tree, engine):", "Native build source inputs differ", "Native binary resource mismatch/budget", "ownedNativeBuildSha256", "(stage/\"native-build.json\").write_bytes(native_evidence)"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["owned-engine-image/native-build.json"]},
  {path:"workers/managed-emulation/engines/Dockerfile",markers:["openjdk-17-jdk libx11-dev", "libffi-dev"]},
@@ -52,7 +56,7 @@ const requiredMarkers: Array<{
  {path:"workers/managed-emulation/host/src/windows_identity.rs",markers:["let host_boot = crate::windows_boot::HostBoot::observe()?", "require_forward_boot(&event, record.host_boot)?", "forward_work_requires_native_original_boot_without_authorizing_recovery", "pub fn require_original_boot"]},
 
  {path:"workers/managed-emulation/host/src/windows_identity.rs",markers:["pub const OWNERSHIP_FILE", "fn ownership_mac", "pub fn reserve_vm", "pub fn open_vm", "VM reservation authentication failed", "reservations_bind_all_claims_and_reject_ambiguous_schema", "record: Option<RecordBinding<'installation>>"]},
- {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["reservation_acceptance(&roots)?", "record.create_store()", "record.open_store()", "VM reservation authentication failed", ".reserve_vm(&job, &\"35\".repeat(32))"]},
+ {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["reservation_acceptance(&roots)?", "record.create_store()", "record.open_store()", "VM reservation authentication failed", ".reserve_vm(&job, &image)"]},
 
  {path:"workers/managed-emulation/image/build_image.py",markers:["Owned acceptance source replaced", "Duplicate engine manifest field", "generatedInitSha256"]},
  {path:"workers/managed-emulation/engines/selftest.py",markers:["verify_bundle()", "CLINE_MANAGED_ENGINE_OWNED_V1", "Owned runtime changed", "unsupported-syscall", "GetTickCount", "-Djna.tmpdir="]},

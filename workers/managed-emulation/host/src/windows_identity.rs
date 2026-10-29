@@ -175,17 +175,17 @@ impl<'roots> SystemIdentity<'roots> {
             key,
         })
     }
-    /// Reservation intent only. Image input still requires a future trusted image
-    /// policy; native OS observation supplies boot identity, never client claims.
+    /// Reservation intent only. A revalidated protected image supplies its
+    /// compiled digest; native OS observation supplies boot identity, never claims.
     /// VM GUID comes only from OS entropy, never a caller-provided VM identifier.
     pub fn reserve_vm<'owner, 'job, 'r>(
         &'owner self,
         job: &'job SystemJob<'r>,
-        image: &str,
+        image: &crate::windows_image::SystemImage<'_>,
     ) -> Result<OwnedVmRecord<'owner, 'roots, 'job, 'r>> {
         self.revalidate()?;
         job.revalidate()?;
-        crate::exact_hex::<32>(image)?;
+        image.revalidate()?;
         let host_boot = crate::windows_boot::HostBoot::observe()?;
         let mut vm = [0u8; 16];
         getrandom::fill(&mut vm).map_err(|_| "VM reservation entropy unavailable")?;
@@ -203,7 +203,7 @@ impl<'roots> SystemIdentity<'roots> {
                 &text[16..20],
                 &text[20..]
             ),
-            image_sha256: image.into(),
+            image_sha256: image.sha256().into(),
             host_boot: host_boot.id().into(),
         };
         let signature = self.reservation_mac(&identity)?.finalize().into_bytes();

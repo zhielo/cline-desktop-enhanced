@@ -140,6 +140,10 @@ fn owned() -> Result<(), i32> {
         std::fs::remove_dir(path).map_err(|_| 42)?;
     }
     installation_acceptance(&roots)?;
+    cline_managed_inert_probe::windows_image::owned_system_acceptance(&roots).map_err(|error| {
+        eprintln!("Owned image admission failed: {error}");
+        116
+    })?;
     reservation_acceptance(&roots)?;
     cline_managed_inert_probe::windows_service::owned_acceptance(&roots)?;
     let parent = paths[0].parent().ok_or(17)?.to_path_buf();
@@ -285,15 +289,18 @@ fn reservation_acceptance(
     if owner.open_vm(&job).is_ok() {
         return Err(82);
     }
-    let record = owner.reserve_vm(&job, &"35".repeat(32)).map_err(|_| 83)?;
+    let image = cline_managed_inert_probe::windows_image::SystemImage::create_owned_fixture(roots)
+        .map_err(|_| 117)?;
+    let image_path = roots.image_parent().join(format!("{}.iso", image.sha256()));
+    let record = owner.reserve_vm(&job, &image).map_err(|_| 83)?;
     let expected = record.identity().clone();
     if expected.installation != owner.installation()
         || expected.job != id
         || expected.vm_id.as_bytes()[14] != b'4'
         || !b"89ab".contains(&expected.vm_id.as_bytes()[19])
-        || expected.image_sha256 != "35".repeat(32)
+        || expected.image_sha256 != image.sha256()
         || expected.host_boot != boot.id()
-        || owner.reserve_vm(&job, &"35".repeat(32)).is_ok()
+        || owner.reserve_vm(&job, &image).is_ok()
         || owner.open_vm(&job).is_ok()
     {
         return Err(84);
@@ -334,6 +341,8 @@ fn reservation_acceptance(
     record.revalidate().map_err(|_| 102)?;
     drop(record);
     drop(owner);
+    drop(image);
+    std::fs::remove_file(image_path).map_err(|_| 118)?;
     let installation = roots
         .anchor_parent()
         .parent()

@@ -205,6 +205,12 @@ pub mod store;
 /// Native private boot provisioning; not a VM ownership or readiness claim.
 pub mod boot_media;
 
+/// Compiled shipping-image admission; development images are not shipping pins.
+pub mod image_policy;
+
+#[cfg(windows)]
+pub mod windows_image;
+
 /// Fixed SYSTEM-only Windows root provisioning, not a running broker/service.
 #[cfg(windows)]
 pub mod windows_roots;
