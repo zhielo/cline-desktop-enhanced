@@ -473,8 +473,16 @@ pub fn owned_acceptance(roots: &SystemRoots) -> std::result::Result<(), i32> {
         drop(Sc(duplicate));
         return Err(132);
     }
-    if std::fs::OpenOptions::new().write(true).open(&path).is_ok() {
-        return Err(133);
+    if unsafe { windows_sys::Win32::Foundation::GetLastError() }
+        != windows_sys::Win32::Foundation::ERROR_SERVICE_EXISTS
+    {
+        return Err(132);
+    }
+    match std::fs::OpenOptions::new().write(true).open(&path) {
+        Err(error)
+            if error.raw_os_error()
+                == Some(windows_sys::Win32::Foundation::ERROR_SHARING_VIOLATION as i32) => {}
+        _ => return Err(133),
     }
     // Service start arguments are not a configuration/command channel.
     let unexpected = wide(OsStr::new("unexpected-owned-argument"));

@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["ERROR_SERVICE_EXISTS", "ERROR_SHARING_VIOLATION as i32"]},
  {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["StartServiceCtrlDispatcherW", "RegisterServiceCtrlHandlerExW", "SERVICE_STOP_PENDING", "state.cancel.signal()", "roots.open_job(job_id)?", "job.owned_service_file(false)?", "LOAD_LIBRARY_SEARCH_SYSTEM32", "No service command-line arguments allowed", "SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE", "Never OpenService/adopt an existing entry", "WaitForSingleObject(process.as_raw_handle() as HANDLE, 5000)", "ERROR_SERVICE_DOES_NOT_EXIST", "join(\"owned-local-service-fixture.exe\")"]},
  {path:"workers/managed-emulation/host/src/windows_ipc.rs",markers:["WaitForMultipleObjects", "IPC operation cancelled", "DisconnectNamedPipe", "explicit_cancellation_drains_connect_without_waiting_for_deadline", "pre_cancelled_exchange_opens_no_new_operation"]},
  {path:"workers/managed-emulation/host/src/windows_roots.rs",markers:["validate_system_regular(file, allow_empty, 16384)", "Exclusive owned service binary required", "64 * 1024 * 1024"]},
