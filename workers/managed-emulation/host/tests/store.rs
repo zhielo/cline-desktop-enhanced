@@ -6,7 +6,6 @@ use rusqlite::{params, Connection};
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 const KEY: [u8; 32] = [0x59; 32];
 fn identity() -> Identity {
@@ -23,11 +22,13 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("cline-store-{}-{nonce}", std::process::id()));
+        let mut nonce = [0u8; 16];
+        getrandom::fill(&mut nonce).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "cline-store-{}-{}",
+            std::process::id(),
+            hex::encode(nonce)
+        ));
         fs::create_dir(&root).unwrap();
         Self { root }
     }
@@ -218,4 +219,11 @@ fn oversized_database_and_anchor_fields_are_rejected() {
         .set_len(16 * 1024 * 1024 + 1)
         .unwrap();
     assert!(f.open().is_err());
+}
+
+#[test]
+fn fixture_names_do_not_depend_on_clock_resolution() {
+    let fixtures: Vec<_> = (0..64).map(|_| Fixture::new()).collect();
+    let names: std::collections::HashSet<_> = fixtures.iter().map(|f| &f.root).collect();
+    assert_eq!(names.len(), fixtures.len());
 }

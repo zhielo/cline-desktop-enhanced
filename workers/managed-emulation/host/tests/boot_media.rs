@@ -11,11 +11,13 @@ use std::{
 struct PrivateRoot(PathBuf);
 impl PrivateRoot {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("cline-media-{}-{nonce}", std::process::id()));
+        let mut nonce = [0u8; 16];
+        getrandom::fill(&mut nonce).unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "cline-media-{}-{}",
+            std::process::id(),
+            hex::encode(nonce)
+        ));
         let builder = fs::DirBuilder::new();
         #[cfg(unix)]
         let builder = {

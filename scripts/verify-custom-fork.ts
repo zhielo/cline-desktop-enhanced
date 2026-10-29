@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/tests/store.rs",markers:["getrandom::fill(&mut nonce).unwrap()", "fixture_names_do_not_depend_on_clock_resolution"]},
+ {path:"scripts/prepare-wakaru-engine.ts",markers:["System32", "tar.exe", "timeout: 30000", "Pinned archive extraction failed (exit="]},
+ {path:"scripts/test-secret-scan-fixtures.mjs",markers:["current public ABI fixture", "credential beside ABI fixture", "credential-shaped checksum assignment stays blocking", "16 cases passed"]},
  {path:"workers/managed-emulation/host/src/image_policy.rs",markers:["pub(crate) fn reviewed(_engine: Engine) -> Option<Pin>", "MAX_IMAGE_BYTES", "Protected image identity mismatch", "development_images_never_supply_shipping_pins"]},
  {path:"workers/managed-emulation/host/src/windows_image.rs",markers:["No reviewed shipping image available", "self.roots.revalidate()?", "image_policy::verify(", "Image read sharing unavailable", "Changed image was admitted", "Linked image was admitted"]},
  {path:"workers/managed-emulation/host/src/windows_identity.rs",markers:["image: &crate::windows_image::SystemImage<'_>", "image.revalidate()?", "image_sha256: image.sha256().into()"]},

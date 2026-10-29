@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 const KEY: [u8; 32] = [0x59; 32];
 fn identity() -> Identity {
@@ -55,12 +55,13 @@ fn main() {
     println!("4 real kill/reopen commit-boundary cases passed; no VM effects tested");
 }
 fn crash(stage: CommitStage) {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let root =
-        std::env::temp_dir().join(format!("cline-store-crash-{}-{nonce}", std::process::id()));
+    let mut nonce = [0u8; 16];
+    getrandom::fill(&mut nonce).unwrap();
+    let root = std::env::temp_dir().join(format!(
+        "cline-store-crash-{}-{}",
+        std::process::id(),
+        hex::encode(nonce)
+    ));
     fs::create_dir(&root).unwrap();
     let (a, b) = paths(&root);
     drop(Store::create(&a, &b, identity(), KEY).unwrap());

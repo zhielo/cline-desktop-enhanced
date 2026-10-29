@@ -23,6 +23,10 @@ from smoke_boot import validate_engine_log
 from build_image import Node, owned_bundle, owned_native_evidence
 
 
+# Public upstream JNA native ABI checksum; not an API credential.
+JNA_ABI_CHECKSUM = "147a998f0cbc89681a1ae6c0dd121629"
+
+
 class NativeEvidenceTests(unittest.TestCase):
     def fixture(self):
         prefix = "opt/cline-engine/"
@@ -49,7 +53,7 @@ class NativeEvidenceTests(unittest.TestCase):
             "schema": 1, "scope": "development-owned-guest-tests-only",
             "sourceInputs": json.loads((HERE/"native-inputs.lock.json").read_bytes()),
             "patchedBridgeSha256": "a"*64, "patchedJnaSha256": "b"*64,
-            "jnaNativeAbi": "6.1.2", "jnaNativeApiChecksum": "147a998f0cbc89681a1ae6c0dd121629",
+            "jnaNativeAbi": "6.1.2", "jnaNativeApiChecksum": JNA_ABI_CHECKSUM,
             "resources": resources, "emulatorExecutedDuringBuild": False,
             "engineReadiness": "not-tested",
         }

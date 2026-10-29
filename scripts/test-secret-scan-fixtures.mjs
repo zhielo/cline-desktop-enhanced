@@ -153,8 +153,69 @@ try {
 			);
 		rmSync(report, { force: true });
 	}
+	// A public ABI checksum is not an API credential. Only its exact historical
+	// finding is ignored; new credential-shaped assignments must still block.
+	rmSync(doc);
+	const nativePath = "workers/managed-emulation/engines/test_bundle.py";
+	const native = join(root, nativePath);
+	mkdirSync(dirname(native), { recursive: true });
+	assert.ok(
+		ignoredHistory
+			.split(/\r?\n/)
+			.includes(
+				"3bd344d2defd0baf30e88933c6706049e6590619:" +
+					nativePath +
+					":generic-api-key:52",
+			),
+	);
+	const currentNative = readFileSync(join(repo, nativePath), "utf8");
+	const publicAbiChecksum = /^JNA_ABI_CHECKSUM = "([a-f0-9]{32})"/m.exec(
+		currentNative,
+	)?.[1];
+	assert.match(publicAbiChecksum || "", /^[a-f0-9]{32}$/);
+	for (const [label, contents, expected] of [
+		["current public ABI fixture", currentNative, 0],
+		["credential beside ABI fixture", currentNative + "\n" + generic, 1],
+		[
+			"credential-shaped checksum assignment stays blocking",
+			'api_key = "' + publicAbiChecksum + '"',
+			1,
+		],
+	]) {
+		writeFileSync(native, contents);
+		const report = join(root, "report.json");
+		const scan = spawnSync(
+			process.env.GITLEAKS_BIN || "gitleaks",
+			[
+				"dir",
+				".",
+				"--redact",
+				"--no-banner",
+				"--no-color",
+				"--config",
+				join(repo, ".gitleaks.toml"),
+				"--gitleaks-ignore-path",
+				join(repo, ".gitleaksignore"),
+				"--report-format",
+				"json",
+				"--report-path",
+				report,
+			],
+			{ cwd: root, encoding: "utf8", timeout: 30_000 },
+		);
+		assert.equal(scan.error, undefined, "Scanner must be available");
+		assert.equal(scan.status, expected, label);
+		if (expected)
+			assert.ok(
+				JSON.parse(readFileSync(report, "utf8")).some(
+					(finding) => finding.RuleID === "generic-api-key",
+				),
+				label,
+			);
+		rmSync(report, { force: true });
+	}
 	console.log(
-		"Secret scan scope regression: 13 cases passed; real token patterns remain blocking.",
+		"Secret scan scope regression: 16 cases passed; real token patterns remain blocking.",
 	);
 } finally {
 	rmSync(root, { recursive: true, force: true });
