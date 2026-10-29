@@ -26,6 +26,7 @@ jobs:
       - name: Engine bundle and receipt regressions
         run: |
           python3 -B workers/managed-emulation/engines/test_bundle.py
+          python3 -B workers/managed-emulation/engines/test_native_rebuild.py
           python3 -B workers/managed-emulation/image/test_engine_entry.py
           python3 -B workers/managed-emulation/engines/test_python_inputs.py
       - name: Fetch exact reviewed kernel and BusyBox

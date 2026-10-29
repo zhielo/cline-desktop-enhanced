@@ -4,6 +4,9 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/engines/native_rebuild.py",markers:["class NoRedirect", "Native source patch context", "Native void callback inventory", "if ((*env)->ExceptionCheck(env)) uc_emu_stop(eng);", "-DUNICORN_BUILD_TESTS=OFF", "originalJarSha256", "native-build.json", "emulatorExecutedDuringBuild"]},
+ {path:"workers/managed-emulation/engines/prepare.py",markers:["native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))"]},
+ {path:".github/workflows/managed-emulation-engines.yml",markers:["python3 -B workers/managed-emulation/engines/test_native_rebuild.py"]},
  {path:"workers/managed-emulation/engines/selftest.py",markers:["validate_owned_checked_jni(result, arch, case)", "CLINE_MANAGED_OWNED_CHECKED_JNI_FAILED_V1", "'-Xcheck:jni'", "def owned_jvm_crash_evidence(", "'-XX:ErrorFile='+str(root/'hotspot-crash.log')", "'-XX:-CreateCoredumpOnCrash'", "CLINE_MANAGED_OWNED_JVM_CRASH_V1", "before.st_nlink != 1", "result.stdout[:4096]", "min(before.st_size, 12288)"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["pull_request: {}", "Required exact-head release checks"]},
  {path:".github/workflows/managed-emulation-image.yml",markers:["pull_request: {}", "Required exact-head release checks"]},

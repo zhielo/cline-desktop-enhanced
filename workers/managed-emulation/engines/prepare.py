@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import python_inputs
+import native_rebuild
 
 ROOT = Path('/opt/cline-engine')
 ENGINES = ('qiling', 'unidbg', 'rnidbg', 'speakeasy')
@@ -93,6 +94,7 @@ def prepare(engine):
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/java', '-cp', str(build/'classes')+':'+str(build/'test-classes')+':'+str(build/'dependency/*'), 'ClineGuardTest')
         shutil.copytree(build/'classes', ROOT/'classes')
         shutil.copytree(build/'dependency', ROOT/'dependency')
+        native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/jlink', '--add-modules', 'java.base,java.logging,java.desktop,java.management,java.naming,jdk.unsupported', '--compress=2', '--strip-debug', '--no-header-files', '--no-man-pages', '--output', str(ROOT/'jre'))
     elif engine == 'rnidbg':
         run('bash', '/build/emulation/build-rnidbg.sh')
