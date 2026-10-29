@@ -193,11 +193,11 @@ export const RELEASE_GATE_POLICY = {
 	],
 	policyFiles: {
 		".github/workflows/managed-emulation-engines.yml":
-			"e15cff17d6bc4e4a24b78324514fbf9af40aeb20f88e587348dee534e0c341ff",
+			"2c2c74b85d9086e3dddca36b4b5b3b96eb2aeff966f155bc73df9a9f01474ae7",
 		".github/workflows/managed-emulation-image.yml":
-			"28558d2f4bbe4cef28af1f4fe8c9c2bea99af318d7f1a92cfbde86b4045bf416",
+			"8536f191dc3359e6f889e8c45a3501dd7fdcee04dd1ae2e6a580992dff5d58ff",
 		".github/workflows/managed-emulation-transport.yml":
-			"4d9a3b257767a6aa89579dfd6b477fc2a230565d001e297065386ba617eb70a3",
+			"5a186dd4faa3effceaa792ce46731c36f36e614757f9fdbeb35193eb83b196e9",
 		".github/workflows/additive-emulation-validation.yml":
 			"06e4e9be98d1a406f371fe0c9bd74906d79603a1d347b44344b225c09f47639d",
 		".github/workflows/general-recovery-validation.yml":

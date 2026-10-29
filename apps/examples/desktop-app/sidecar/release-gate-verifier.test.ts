@@ -554,3 +554,16 @@ for (const path of new Set(Object.values(p.managedCheckWorkflows))) {
 		);
 	});
 }
+
+for (const path of new Set(Object.values(p.managedCheckWorkflows))) {
+	test(`mandatory managed workflow has no pull-request path filter: ${path}`, () => {
+		const text = readFileSync(
+			new URL(`../../../../${path}`, import.meta.url),
+			"utf8",
+		);
+		// These checks are mandatory on every release candidate's exact head.
+		// A worker-only filter silently omits them for desktop-only patches.
+		const triggers = text.match(/^  pull_request:.*$/gm);
+		assert.deepEqual(triggers, ["  pull_request: {}"]);
+	});
+}
