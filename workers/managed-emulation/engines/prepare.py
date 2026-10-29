@@ -1,7 +1,8 @@
 """CI-only runtime construction. Fixed repository-owned adapters; no target input.
 
 Build tools and package-manager scripts run in the disposable build container,
-not the developer host or final guest. No emulator/fixture runs during build.
+not the developer host or final guest. No emulator or emulated binary/JNI
+fixture runs during build; fixed pure-Java guard/JDK health tests are separate.
 """
 import hashlib
 import json
@@ -10,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import python_inputs
 import native_rebuild
@@ -20,6 +22,40 @@ ENGINES = ('qiling', 'unidbg', 'rnidbg', 'speakeasy')
 
 def run(*command, env=None):
     subprocess.run(command, check=True, timeout=900, env=env)
+
+
+def verify_private_jre():
+    """Fixed JDK-only health check; no engine/JAR/native adapter is loaded.
+
+    The same jlinked JVM used by the guest runs in a separate disposable build
+    process. A passed builder check is not guest, engine or readiness evidence.
+    """
+    import selftest
+    with tempfile.TemporaryDirectory(prefix='owned-build-jvm-') as private:
+        result = selftest.invoke([
+            str(ROOT/'jre/bin/java'), '-Xcheck:jni',
+            '-Duser.home='+private, '-Djava.io.tmpdir='+private,
+            '-XX:ErrorFile='+str(Path(private)/'hotspot-crash.log'),
+            '-XX:-CreateCoredumpOnCrash', '-XX:-UsePerfData',
+            '-Xmx256m', '-XX:ReservedCodeCacheSize=64m',
+            '-XX:CompressedClassSpaceSize=64m',
+            '-cp', str(ROOT/'jvm-probe'), 'OwnedJvmProbe',
+        ])
+        # invoke retains its existing35-second deadline, bounded streams and
+        # owned process-group termination. Never retry or accept JVM warnings.
+        if result.returncode != 0 or result.stdout != b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n' or result.stderr:
+            print('CLINE_MANAGED_OWNED_BUILD_JVM_FAILED_V1 '+json.dumps({
+                'observedExit':result.returncode,
+                'stdoutPrefix':result.stdout[:4096].decode('utf-8',errors='replace'),
+                'stderrPrefix':result.stderr[:4096].decode('utf-8',errors='replace'),
+                'engineExecuted':False,
+            },sort_keys=True,separators=(',',':')),file=sys.stderr)
+            raise ValueError('Private JVM basic operations failed before guest image creation')
+    print('CLINE_MANAGED_OWNED_BUILD_JVM_V1 '+json.dumps({
+        'schema':1, 'scope':'owned-builder-jvm-only', 'checks':4,
+        'basicJdkOperations':'passed', 'engineExecuted':False,
+        'engineReadiness':'not-tested', 'guestExecution':'not-tested',
+    },sort_keys=True,separators=(',',':')))
 
 
 def manifest(root, engine):
@@ -92,14 +128,15 @@ def prepare(engine):
         # Fake-backend unit test only: no emulator, native backend or fixture is
         # instantiated during build. Real execution remains in the guest gate.
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/java', '-cp', str(build/'classes')+':'+str(build/'test-classes')+':'+str(build/'dependency/*'), 'ClineGuardTest')
-        # Compile only. This standalone JDK diagnostic has no emulator/JAR
-        # dependency and is never run in the builder or on a successful boot.
+        # Standalone JDK diagnostic, without any emulator/JAR dependency.
+        # It runs separately in the builder; guest execution stays unchanged.
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/javac', '--release', '17',
             '-d', str(ROOT/'jvm-probe'), '/build/managed/OwnedJvmProbe.java')
         shutil.copytree(build/'classes', ROOT/'classes')
         shutil.copytree(build/'dependency', ROOT/'dependency')
         native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/jlink', '--add-modules', 'java.base,java.logging,java.desktop,java.management,java.naming,jdk.unsupported', '--compress=2', '--strip-debug', '--no-header-files', '--no-man-pages', '--output', str(ROOT/'jre'))
+        verify_private_jre()
     elif engine == 'rnidbg':
         run('bash', '/build/emulation/build-rnidbg.sh')
         shutil.copyfile('/build/emulation/rnidbg/target/release/cline-rnidbg-runner', ROOT/'jni-runner')

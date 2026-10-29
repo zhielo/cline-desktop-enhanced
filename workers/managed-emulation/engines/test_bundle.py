@@ -323,6 +323,41 @@ class BundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unknown owned JVM failure profile'):
             selftest.owned_jvm_failure_evidence(subprocess.CompletedProcess([],-6,b'',b''),Path('/never-open'),'x86_64','denied')
 
+    def test_builder_probe_uses_the_actual_jlinked_jre_without_engine_dependencies(self):
+        result=subprocess.CompletedProcess([],0,b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n',b'')
+        with patch.object(selftest,'invoke',return_value=result) as invoke,contextlib.redirect_stdout(io.StringIO()) as output:
+            prepare.verify_private_jre()
+        command=invoke.call_args.args[0]
+        self.assertEqual(command[0],str(prepare.ROOT/'jre/bin/java'))
+        self.assertEqual(command[-3:],['-cp',str(prepare.ROOT/'jvm-probe'),'OwnedJvmProbe'])
+        self.assertIn('-Xcheck:jni',command)
+        self.assertNotIn('dependency',str(command))
+        self.assertNotIn('ClineRunner',command)
+        self.assertEqual(invoke.call_count,1)
+        value=json.loads(output.getvalue().split(' ',1)[1])
+        self.assertFalse(value['engineExecuted'])
+        self.assertEqual(value['guestExecution'],'not-tested')
+        self.assertEqual(value['engineReadiness'],'not-tested')
+        self.assertEqual(value['checks'],4)
+
+    def test_builder_probe_rejects_wrong_exit_output_warning_and_fatal_error(self):
+        for code,stdout,stderr in [(1,b'',b'owned JVM initialization error'),(0,b'wrong marker',b''),(0,b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n',b'warning'),(-6,b'x'*10000,b'y'*10000)]:
+            with patch.object(selftest,'invoke',return_value=subprocess.CompletedProcess([],code,stdout,stderr)) as invoke,contextlib.redirect_stdout(io.StringIO()) as output,contextlib.redirect_stderr(io.StringIO()) as errors,self.assertRaisesRegex(ValueError,'Private JVM basic operations failed'):
+                prepare.verify_private_jre()
+            self.assertEqual(invoke.call_count,1)
+            self.assertEqual(output.getvalue(),'')
+            value=json.loads(errors.getvalue().split(' ',1)[1])
+            self.assertEqual(value['observedExit'],code)
+            self.assertLessEqual(len(value['stdoutPrefix']),4096)
+            self.assertLessEqual(len(value['stderrPrefix']),4096)
+            self.assertFalse(value['engineExecuted'])
+
+    def test_builder_probe_budget_failure_cannot_be_retried_or_promoted(self):
+        with patch.object(selftest,'invoke',side_effect=ValueError('Owned command deadline')) as invoke,contextlib.redirect_stdout(io.StringIO()) as output,self.assertRaisesRegex(ValueError,'Owned command deadline'):
+            prepare.verify_private_jre()
+        self.assertEqual(invoke.call_count,1)
+        self.assertEqual(output.getvalue(),'')
+
     def test_post_failure_jvm_probe_has_no_engine_classpath_or_retry(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);(root/'jre').mkdir()
