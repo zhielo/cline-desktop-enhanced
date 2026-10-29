@@ -14,6 +14,12 @@ Run 40821504604 on 56bfb0b5 now preserves the primary ARM32 failure: DalvikVM$12
 
 Checked-JNI acceptance also refuses HotSpot native-method/local-reference warnings on either captured stream, even when the process exits 0 or a guard code. Fixed owned-fixture diagnostics retain only bounded prefixes; unrelated SLF4J no-provider notices remain separate. This closes the diagnostic blind spot where -Xcheck:jni could report misuse but a positive test silently discard its warning. It does not attribute the earlier class-resolution/native failures, expand target logging, change exit expectations or certify production readiness.
 
+## Unexpected non-signal owned JVM failures
+
+Actual guest run 40835287165 on ab92c2f3 failed the first unidbg cold boot with JNI exit1, only SLF4J notices on retained stderr, and no acceptance receipt. This is a failure, not an allowed missing-export exit or evidence that the preceding JNI fixes resolved stability. The old positive-case message omitted architecture/stdout and fatal-report capture only ran for signals, so the exact positive/fresh architecture and reason remain unproven.
+
+Owned-guest diagnostics now retain exact architecture/scenario/exit/result-presence, bounded stdout/stderr prefixes and the existing safe bounded HotSpot report for every unexpected exit, including exit1. Expected exits for each fixed scenario remain unchanged and do not open report files. The marker says JVM_FAILURE, not crash: a non-signal failure alone does not prove a native crash or OOM. No argv, result bytes, secret or arbitrary target output is retained. All strict refusal contracts, budgets and three fresh boots remain mandatory; this is evidence-gap correction, not an asserted root-cause repair or permission to rerun until green.
+
 ## Protected native image admission before VM reservation
 
 The native reservation API now requires a revalidated `SystemImage`, not a supplied image-hash string. Only compiled shipping pins may select a production image; the shipping catalog deliberately remains empty until image/source/license review is complete. Development image manifests, sidecar JSON, filesystem bytes and requests cannot provide these pins. Reopening a historical authenticated reservation remains recovery bookkeeping, not image admission or authority to create/boot a VM.

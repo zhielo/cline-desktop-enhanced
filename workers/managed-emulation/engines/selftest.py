@@ -217,16 +217,18 @@ def validate_jni_refusal(result, result_path, engine, arch, case):
         raise ValueError('JNI refusal/budget boundary')
 
 
-def owned_jvm_crash_evidence(result, private, arch, case):
-    """Retain bounded *owned fixture* fatal evidence before its tmpdir is removed.
+def owned_jvm_failure_evidence(result, private, arch, case):
+    """Retain bounded *owned fixture* unexpected-exit evidence before cleanup.
 
+    Includes non-signal fatal exits: exit 1 is not necessarily a Java exception.
     Never used by a target runner or after private boot credentials are supplied.
-    A native crash is always a failure; no exit or guard contract is relaxed.
+    No diagnostic makes an unexpected exit or native crash an accepted guard.
     """
-    if result.returncode >= 0:
-        return
     if arch not in ARCHES['unidbg'] or case not in ('positive','denied','budget','missing','fresh'):
-        raise ValueError('Unknown owned JVM crash profile')
+        raise ValueError('Unknown owned JVM failure profile')
+    expected = {'positive':0,'fresh':0,'denied':76,'budget':75,'missing':1}[case]
+    if result.returncode == expected:
+        return
     path = private/'hotspot-crash.log'
     report = {'status':'absent'}
     descriptor = None
@@ -258,8 +260,11 @@ def owned_jvm_crash_evidence(result, private, arch, case):
     value = {'engine':'unidbg','architecture':arch,'case':case,
              'observedExit':result.returncode,'hotspot':report,
              'stdoutBytes':len(result.stdout),
-             'stdoutPrefix':result.stdout[:4096].decode('utf-8',errors='replace')}
-    print('CLINE_MANAGED_OWNED_JVM_CRASH_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
+             'stdoutPrefix':result.stdout[:4096].decode('utf-8',errors='replace'),
+             'stderrBytes':len(result.stderr),
+             'stderrPrefix':result.stderr[:4096].decode('utf-8',errors='replace'),
+             'resultExists':(private/'result.json').exists() or (private/'result.json').is_symlink()}
+    print('CLINE_MANAGED_OWNED_JVM_FAILURE_V1 '+json.dumps(value,sort_keys=True,separators=(',',':')),file=sys.stderr)
 
 
 def validate_owned_checked_jni(result, arch, case):
@@ -291,7 +296,7 @@ def jni_check(engine):
                 command = ([str(ROOT/'jre/bin/java'),'-Xcheck:jni','--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:ErrorFile='+str(root/'hotspot-crash.log'),'-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
                 result = invoke(command)
                 if engine == 'unidbg':
-                    owned_jvm_crash_evidence(result, root, arch, case)
+                    owned_jvm_failure_evidence(result, root, arch, case)
                     validate_owned_checked_jni(result, arch, case)
                 if case in ('denied','budget','missing'):
                     validate_jni_refusal(result, root/'result.json', engine, arch, case)

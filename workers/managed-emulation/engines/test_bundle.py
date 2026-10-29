@@ -243,7 +243,7 @@ class BundleTests(unittest.TestCase):
             result=subprocess.CompletedProcess(['never printed argv'],-6,b'owned fatal stdout',b'owned diagnostic')
             output=io.StringIO()
             with contextlib.redirect_stderr(output):
-                selftest.owned_jvm_crash_evidence(result,root,'arm64','denied')
+                selftest.owned_jvm_failure_evidence(result,root,'arm64','denied')
             data=json.loads(output.getvalue().split(' ',1)[1])
             self.assertEqual((data['architecture'],data['case'],data['observedExit']),('arm64','denied',-6))
             self.assertEqual(data['hotspot'],{'status':'captured','bytes':len(report),'prefix':report.decode()})
@@ -260,7 +260,7 @@ class BundleTests(unittest.TestCase):
             path.write_bytes(b'x'*20000)
             output=io.StringIO()
             with contextlib.redirect_stderr(output):
-                selftest.owned_jvm_crash_evidence(result,root,'arm32','positive')
+                selftest.owned_jvm_failure_evidence(result,root,'arm32','positive')
             data=json.loads(output.getvalue().split(' ',1)[1])
             self.assertEqual(len(data['hotspot']['prefix']),12288)
             self.assertEqual(data['hotspot']['bytes'],20000)
@@ -269,7 +269,7 @@ class BundleTests(unittest.TestCase):
             with path.open('wb') as stream:stream.truncate(1024*1024+1)
             output=io.StringIO()
             with contextlib.redirect_stderr(output):
-                selftest.owned_jvm_crash_evidence(result,root,'arm32','positive')
+                selftest.owned_jvm_failure_evidence(result,root,'arm32','positive')
             self.assertEqual(json.loads(output.getvalue().split(' ',1)[1])['hotspot'],{'status':'byte-budget'})
 
     def test_owned_jvm_crash_evidence_does_not_follow_links_or_open_special_files(self):
@@ -286,21 +286,38 @@ class BundleTests(unittest.TestCase):
                     os.mkfifo(path)
                 output=io.StringIO()
                 with contextlib.redirect_stderr(output):
-                    selftest.owned_jvm_crash_evidence(result,root,'arm64','missing')
+                    selftest.owned_jvm_failure_evidence(result,root,'arm64','missing')
                 data=json.loads(output.getvalue().split(' ',1)[1])
                 self.assertNotEqual(data['hotspot']['status'],'captured')
                 self.assertNotIn('never read linked bytes',output.getvalue())
                 if kind == 'directory':path.rmdir()
                 elif kind != 'absent':path.unlink()
 
+    def test_unexpected_non_signal_jvm_exit_retains_architecture_and_fatal_evidence(self):
+        for arch in ('arm32','arm64'):
+            with tempfile.TemporaryDirectory() as directory:
+                root=Path(directory)
+                (root/'hotspot-crash.log').write_bytes(b'owned non-signal fatal header')
+                (root/'result.json').write_text('never include result bytes')
+                result=subprocess.CompletedProcess(['never include argv'],1,b'owned JVM stdout',b'owned stderr')
+                with contextlib.redirect_stderr(io.StringIO()) as output:
+                    selftest.owned_jvm_failure_evidence(result,root,arch,'positive')
+                value=json.loads(output.getvalue().split(' ',1)[1])
+                self.assertEqual((value['architecture'],value['case'],value['observedExit']),(arch,'positive',1))
+                self.assertEqual(value['stdoutPrefix'],'owned JVM stdout')
+                self.assertEqual(value['stderrPrefix'],'owned stderr')
+                self.assertTrue(value['resultExists'])
+                self.assertEqual(value['hotspot']['status'],'captured')
+                self.assertNotIn('never include',output.getvalue())
+
     def test_owned_jvm_crash_capture_never_reads_reports_on_normal_exit(self):
         with patch.object(selftest.os,'open') as opened,contextlib.redirect_stderr(io.StringIO()) as output:
-            for code in (0,1,75,76):
-                selftest.owned_jvm_crash_evidence(subprocess.CompletedProcess([],code,b'',b''),Path('/never-open'),'arm64','denied')
+            for case,code in [('positive',0),('fresh',0),('denied',76),('budget',75),('missing',1)]:
+                selftest.owned_jvm_failure_evidence(subprocess.CompletedProcess([],code,b'',b''),Path('/never-open'),'arm64',case)
             opened.assert_not_called()
             self.assertEqual(output.getvalue(),'')
-        with self.assertRaisesRegex(ValueError,'Unknown owned JVM crash profile'):
-            selftest.owned_jvm_crash_evidence(subprocess.CompletedProcess([],-6,b'',b''),Path('/never-open'),'x86_64','denied')
+        with self.assertRaisesRegex(ValueError,'Unknown owned JVM failure profile'):
+            selftest.owned_jvm_failure_evidence(subprocess.CompletedProcess([],-6,b'',b''),Path('/never-open'),'x86_64','denied')
 
     def test_manifest_hashes_actual_bytes_and_rejects_mutation_or_extra_file(self):
         with tempfile.TemporaryDirectory() as directory:
