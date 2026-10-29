@@ -2,6 +2,12 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Unprivileged owned guest-engine execution
+
+The fixed owned-image entry now drops real/effective/saved root IDs to UID/GID 65534, clears supplementary groups, disables core dumps and sets/read-backs Linux no-new-privileges and requires all four observed permitted/effective/inheritable/ambient capability sets to be empty before importing an emulator/native backend. A fresh root-private public canary must produce actual PermissionError after the drop; missing/readable files do not pass. The fixed isolated Python exec receives a small explicit nonsecret environment, no caller path/command or inherited worker credentials. The guest's disposable /tmp tmpfs is nosuid/nodev with sticky mode 1777 for unprivileged/JNI private temporary files; /run remains separately root-controlled. No host shares, network, user WSL or native host execution is added.
+
+Every owned guest engine receipt now requires the exact unprivileged execution identity, alongside all existing fixed scenario counts/architectures and post-execution bundle rehashes. All three fresh unidbg cold boots remain mandatory. Host unit tests verify policy/refusal/order only; actual guest cold boots must independently prove the real UID/GID/group/no-new-privileges/private-file denial across engines. This is not the production protected service, target supervisor, Hyper-V containment certificate, installable image distribution or completed one-click pack; none of those missing functions are promoted to ready.
+
 ## Emulation Framework Pack selection and file-installation transactions
 
 Setup Center now has a separate all-four/individual selection path for Qiling, unidbg, rnidbg and Speakeasy. Install all four is independent of checkbox selection; selected installation accepts only a nonempty deduplicated allowlist in stable engine order. Both commands use existing trusted-local explicit confirmation and durable setup admission/progress. Client paths, manifests, URLs, commands and environment overrides never become installer arguments. Install all supported components includes all four when this build contains a reviewed compiled catalog, and otherwise explicitly returns `emulationPackage.status: not-bundled`, never an invented install receipt.

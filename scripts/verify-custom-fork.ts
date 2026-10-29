@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/image/engine_entry.py",markers:["os.setgroups([])", "os.setresgid(ENGINE_UID, ENGINE_UID, ENGINE_UID)", "os.setresuid(ENGINE_UID, ENGINE_UID, ENGINE_UID)", "PR_SET_NO_NEW_PRIVS = 38", "except PermissionError", "os.execve(PYTHON", "resource.RLIMIT_CORE", "b'CapInh',b'CapPrm',b'CapEff',b'CapAmb'", "no_capabilities()"]},
+ {path:"workers/managed-emulation/image/build_image.py",markers:["mode=1777 tmpfs /tmp", "/opt/cline/engine_entry.py || fail"]},
+ {path:"workers/managed-emulation/image/smoke_boot.py",markers:["uid-gid-65534/no-supplementary-groups/no-new-privileges"]},
+
  {path:"apps/examples/desktop-app/sidecar/managed-emulation-pack.mjs",markers:["selectEmulationEngines", "const reused = []", "await releaseLease(", "parent === path", "info = await lstat(path)", "const needed = []", "await verifyEngine(", "ERR_MANAGED_PACK_INTEGRITY", "corresponding-source.tar.zst", "signal?.throwIfAborted()", "output.sync()", "await transfer(", "install.lock", "Retained pack installation budget", "await rename(temporary", 'activation: "not-implemented"', 'engineReadiness: "not-tested"']},
  {path:"apps/examples/desktop-app/sidecar/managed-emulation-catalog.ts",markers:["managedEmulationCatalog: ManagedPackCatalog | null = null"]},
  {path:"apps/examples/desktop-app/sidecar/commands.ts",markers:["setup_center_emulation_install", "setup_center_emulation_verify_files", "installManagedEmulationPack(args.engines, phase)", "verifyManagedEmulationPack(args.engines, phase)"]},

@@ -321,7 +321,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None
     tree["etc/hosts"] = Node("file", 0o644, b"127.0.0.1 localhost\n::1 localhost\n")
     for directory in ("dev", "proc", "sys", "run", "tmp", "mnt/cline-boot"):
         tree[directory] = Node("directory", 0o755)
-    sources = {"init": HERE / "init", "opt/cline/boot_selftest.py": HERE / "boot_selftest.py", "opt/cline/provision_boot.py": HERE / "provision_boot.py", "opt/cline/guest_probe.py": HERE.parent / "guest_probe.py", "opt/cline/probe_protocol.py": HERE.parent / "probe_protocol.py"}
+    sources = {"init": HERE / "init", "opt/cline/boot_selftest.py": HERE / "boot_selftest.py", "opt/cline/provision_boot.py": HERE / "provision_boot.py", "opt/cline/guest_probe.py": HERE.parent / "guest_probe.py", "opt/cline/probe_protocol.py": HERE.parent / "probe_protocol.py", "opt/cline/engine_entry.py": HERE / "engine_entry.py"}
     for path, source in sources.items():
         tree[path] = Node("file", 0o755 if path == "init" else 0o644, source.read_bytes())
     if owned_engine:
@@ -330,7 +330,7 @@ def build(rootfs, kernel_path, busybox_path, output, revision, owned_engine=None
         marker = "/usr/local/bin/python3.13 -B -E -s /opt/cline/boot_selftest.py || fail"
         if fixed.count(marker) != 1:
             raise ValueError("Owned init insertion boundary changed")
-        fixed = fixed.replace(marker, "$bb timeout -s KILL 240 /opt/cline-engine/env/bin/python -B -I /opt/cline-engine/selftest.py || fail\n"+marker)
+        fixed = fixed.replace(marker, "$bb mount -t tmpfs -o nosuid,nodev,mode=1777 tmpfs /tmp || fail\n$bb timeout -s KILL 240 /usr/local/bin/python3.13 -B -I /opt/cline/engine_entry.py || fail\n"+marker)
         tree["init"] = Node("file", 0o755, fixed.encode())
 
     for source, label in [(busybox, "busybox-static"), (kernel, "linux")]:

@@ -272,6 +272,10 @@ def speakeasy_check():
 def main():
     if sys.platform != 'linux':
         raise ValueError('Owned Linux guest required')
+    # The fixed entry drops root before importing any engine/native backend.
+    spec = importlib.util.spec_from_file_location('cline_engine_entry','/opt/cline/engine_entry.py')
+    policy = importlib.util.module_from_spec(spec); spec.loader.exec_module(policy)
+    identity = policy.verify_identity()
     engine,digest = verify_bundle()
     checks = qiling_check() if engine=='qiling' else speakeasy_check() if engine=='speakeasy' else jni_check(engine)
     if checks != {'qiling':12,'unidbg':10,'rnidbg':5,'speakeasy':4}[engine]:
@@ -279,7 +283,7 @@ def main():
     # Rehash AFTER emulation too; bytecode/cache/runtime mutation must not pass.
     if verify_bundle() != (engine,digest):
         raise ValueError('Owned runtime changed')
-    print('CLINE_MANAGED_ENGINE_OWNED_V1 '+json.dumps({'schema':1,'engine':engine,'architectures':ARCHES[engine], 'checks':checks,'bundleSha256':digest,'ownedFixtures':'passed','engineReadiness':'not-tested','vmIsolation':'not-attested'},sort_keys=True,separators=(',',':')))
+    print('CLINE_MANAGED_ENGINE_OWNED_V1 '+json.dumps({'schema':1,'engine':engine,'architectures':ARCHES[engine], 'checks':checks,'executionIdentity':identity,'bundleSha256':digest,'ownedFixtures':'passed','engineReadiness':'not-tested','vmIsolation':'not-attested'},sort_keys=True,separators=(',',':')))
 
 
 if __name__ == '__main__':

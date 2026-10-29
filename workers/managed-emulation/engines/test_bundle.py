@@ -109,13 +109,13 @@ class BundleTests(unittest.TestCase):
     def test_receipts_require_exact_engine_full_architecture_checks_and_scope(self):
         counts={'qiling':12,'unidbg':10,'rnidbg':5,'speakeasy':4}
         for engine,arches in selftest.ARCHES.items():
-            value={'schema':1,'engine':engine,'architectures':arches,'checks':counts[engine],'bundleSha256':'a'*64,'ownedFixtures':'passed','engineReadiness':'not-tested','vmIsolation':'not-attested'}
+            value={'schema':1,'engine':engine,'architectures':arches,'checks':counts[engine],'bundleSha256':'a'*64,'executionIdentity':'uid-gid-65534/no-supplementary-groups/no-new-privileges','ownedFixtures':'passed','engineReadiness':'not-tested','vmIsolation':'not-attested'}
             def data(v):return ('CLINE_MANAGED_ENGINE_OWNED_V1 '+json.dumps(v)+'\n').encode()
             with self.subTest(engine=engine):
                 self.assertEqual(validate_engine_log(data(value),engine),value)
                 self.assertEqual(validate_engine_log(data(value),engine,'a'*64),value)
                 with self.assertRaises(ValueError):validate_engine_log(data(value),engine,'b'*64)
-                for change in [{'schema':True},{'checks':float(counts[engine])},{'checks':counts[engine]-1},{'architectures':[]},{'engineReadiness':'ready'},{'vmIsolation':'attested'},{'bundleSha256':'x'*64},{'extra':True}]:
+                for change in [{'schema':True},{'checks':float(counts[engine])},{'checks':counts[engine]-1},{'architectures':[]},{'engineReadiness':'ready'},{'executionIdentity':'root'},{'vmIsolation':'attested'},{'bundleSha256':'x'*64},{'extra':True}]:
                     with self.assertRaises(ValueError):validate_engine_log(data({**value,**change}),engine)
                 with self.assertRaises(ValueError):validate_engine_log(data(value)+data(value),engine)
                 with self.assertRaises(ValueError):validate_engine_log(data(value)+b'CLINE_MANAGED_ENGINE_FAILED_V1\n',engine)

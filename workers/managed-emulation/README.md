@@ -414,3 +414,19 @@ exact protected fixture child that refuses command-line arguments with exit code
 This does not provision the user's host, publish a trusted service/engine image,
 register UI logon scopes, create a VM, install a framework or complete Setup Center.
 Real installed Windows 10/Hyper-V and all distribution/approval gates remain.
+
+## Owned engine identity acceptance
+
+The development image launches the complete owned engine self-test process as
+UID/GID 65534 with real/effective/saved IDs dropped, supplementary groups cleared,
+core dumps disabled, all permitted/effective/inheritable/ambient capabilities
+observed empty and Linux no-new-privileges set and checked before engine
+imports. A fresh root-private public canary must be unreadable with actual
+PermissionError, not a missing-file substitute. Only the fixed image interpreter,
+self-test and explicit environment are executable from this entry. Disposable
+/tmp is a private-guest nosuid/nodev/sticky tmpfs, not a host share; JNI native
+extraction remains possible inside that disposable guest. No boot key is present
+during owned engine tests. Receipts require the exact unprivileged identity and
+all prior scenario/architecture/bundle assertions. This is not a production
+target process supervisor, authenticated host/guest target execution, Hyper-V
+acceptance or the unfinished Setup Center pack.

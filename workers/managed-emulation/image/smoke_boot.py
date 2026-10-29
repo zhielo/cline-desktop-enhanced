@@ -65,7 +65,7 @@ def validate_engine_log(data, engine, expected_bundle=None):
         return value
     value = json.loads(lines[0][len(marker):], object_pairs_hook=unique)
     arches = {"qiling":["x86_64","arm32","arm64"],"unidbg":["arm32","arm64"],"rnidbg":["arm64"],"speakeasy":["x86_64"]}
-    expected = {"schema":1,"engine":engine,"architectures":arches[engine],"checks":{"qiling":12,"unidbg":10,"rnidbg":5,"speakeasy":4}[engine],"ownedFixtures":"passed","engineReadiness":"not-tested","vmIsolation":"not-attested"}
+    expected = {"schema":1,"engine":engine,"architectures":arches[engine],"checks":{"qiling":12,"unidbg":10,"rnidbg":5,"speakeasy":4}[engine],"executionIdentity":"uid-gid-65534/no-supplementary-groups/no-new-privileges","ownedFixtures":"passed","engineReadiness":"not-tested","vmIsolation":"not-attested"}
     if not isinstance(value,dict) or type(value.get("schema")) is not int or type(value.get("checks")) is not int or not isinstance(value.get("bundleSha256"),str) or set(value) != set(expected) | {"bundleSha256"} or any(value[k] != v for k,v in expected.items()) or not re.fullmatch("[0-9a-f]{64}",value["bundleSha256"]):
         raise ValueError("Owned engine evidence scope mismatch")
     if expected_bundle is not None and value["bundleSha256"] != expected_bundle:
