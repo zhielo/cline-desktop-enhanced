@@ -4,7 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
- {path:"workers/managed-emulation/engines/selftest.py",markers:["def owned_jvm_crash_evidence(", "'-XX:ErrorFile='+str(root/'hotspot-crash.log')", "'-XX:-CreateCoredumpOnCrash'", "CLINE_MANAGED_OWNED_JVM_CRASH_V1", "before.st_nlink != 1", "result.stdout[:4096]", "min(before.st_size, 12288)"]},
+ {path:"workers/managed-emulation/engines/selftest.py",markers:["'-Xcheck:jni'", "def owned_jvm_crash_evidence(", "'-XX:ErrorFile='+str(root/'hotspot-crash.log')", "'-XX:-CreateCoredumpOnCrash'", "CLINE_MANAGED_OWNED_JVM_CRASH_V1", "before.st_nlink != 1", "result.stdout[:4096]", "min(before.st_size, 12288)"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["pull_request: {}", "Required exact-head release checks"]},
  {path:".github/workflows/managed-emulation-image.yml",markers:["pull_request: {}", "Required exact-head release checks"]},
  {path:".github/workflows/managed-emulation-transport.yml",markers:["pull_request: {}", "Required exact-head release checks"]},

@@ -72,6 +72,28 @@ class BundleTests(unittest.TestCase):
         self.assertIn('try(AutoCloseable owned=resource) {return action.run();}',source)
         self.assertNotIn('finally {emulator.close();}',source)
 
+    def test_every_owned_unidbg_case_enables_jni_checks_without_relaxing_guards(self):
+        commands=[]
+        def fake_invoke(command):
+            commands.append(command)
+            self.assertEqual(command[0],str(selftest.ROOT/'jre/bin/java'))
+            self.assertEqual(command.count('-Xcheck:jni'),1)
+            self.assertIn('-XX:-CreateCoredumpOnCrash',command)
+            self.assertIn('-Xmx256m',command)
+            fixture,_,arch,_,_,method,_,result,limit=command[-9:]
+            self.assertIn(arch,('arm32','arm64'))
+            if Path(fixture).name.startswith('denied-'):
+                return subprocess.CompletedProcess(command,76,b'',b'CLINE_UNIDBG_GUARD_V1 76')
+            if limit == '1':
+                return subprocess.CompletedProcess(command,75,b'',b'CLINE_UNIDBG_GUARD_V1 75')
+            if method == 'missing':
+                return subprocess.CompletedProcess(command,1,b'',b'java.lang.IllegalArgumentException: Exact static JNI export required')
+            Path(result).write_text(json.dumps({'initialized':True,'returnValue':134,'backend':'unicorn2','instructionCount':10}))
+            return subprocess.CompletedProcess(command,0,b'',b'')
+        with patch.object(selftest,'invoke',side_effect=fake_invoke):
+            self.assertEqual(selftest.jni_check('unidbg'),10)
+        self.assertEqual(len(commands),10)
+
     def test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass(self):
         result=subprocess.CompletedProcess(['owned-fixture'],137,b'never print stdout',b'x'*16000)
         output=io.StringIO()

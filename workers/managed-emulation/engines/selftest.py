@@ -273,7 +273,7 @@ def jni_check(engine):
                 if engine == 'unidbg':
                     args.append(arch)
                 args += ['jni-int32','com/cline/Owned','missing' if case == 'missing' else 'transform','42',str(root/'result.json'),'1' if case == 'budget' else '10000']
-                command = ([str(ROOT/'jre/bin/java'),'--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:ErrorFile='+str(root/'hotspot-crash.log'),'-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
+                command = ([str(ROOT/'jre/bin/java'),'-Xcheck:jni','--enable-native-access=ALL-UNNAMED','-Duser.home='+private,'-Djava.io.tmpdir='+private,'-Djna.tmpdir='+private,'-XX:ErrorFile='+str(root/'hotspot-crash.log'),'-XX:-CreateCoredumpOnCrash','-XX:-UsePerfData','-Xmx256m','-XX:ReservedCodeCacheSize=64m','-XX:CompressedClassSpaceSize=64m','-cp',str(ROOT/'classes')+':'+str(ROOT/'dependency/*'),'ClineRunner'] if engine == 'unidbg' else [str(ROOT/'jni-runner')])+args
                 result = invoke(command)
                 if engine == 'unidbg':
                     owned_jvm_crash_evidence(result, root, arch, case)
