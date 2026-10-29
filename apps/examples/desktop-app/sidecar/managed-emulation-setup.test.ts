@@ -30,7 +30,7 @@ it("cancellation is cooperative, installation-scoped and never leaks to a later 
 	expect(() => cancelManagedEmulationInstall()).toThrow("No cancellable");
 	const next = installManagedEmulationPack(["unidbg"], () => {});
 	expect(signals).toHaveLength(2);
-	expect(signals[1]!.aborted).toBe(false);
+	expect(signals[1]?.aborted).toBe(false);
 	cancelManagedEmulationInstall();
 	await expect(next).rejects.toMatchObject({ name: "AbortError" });
 });

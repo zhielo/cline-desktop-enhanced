@@ -49,7 +49,7 @@ export function selectEmulationEngines(selection) {
 		!Array.isArray(selection) ||
 		!selection.length ||
 		selection.length > 4 ||
-		selection.some((id) => !EMULATION_ENGINES.includes(id)) ||
+		[...selection].some((id) => !EMULATION_ENGINES.includes(id)) ||
 		new Set(selection).size !== selection.length
 	)
 		throw new Error("Select one or more distinct supported emulation engines");
@@ -249,6 +249,26 @@ async function pointer(root) {
 	}
 	return { bytes, value };
 }
+async function releaseLease(lease, path, identity, operationError) {
+	try {
+		// Release only this invocation's lease. Never adopt or remove stale
+		// leases, replay interrupted work or recursively clean retained files.
+		await lease.close();
+		const retained = await lstat(path);
+		if (retained.dev !== identity.dev || retained.ino !== identity.ino)
+			throw new Error(
+				"Managed pack lease changed; retained state requires inspection",
+			);
+		await unlink(path);
+	} catch (error) {
+		if (operationError)
+			throw new AggregateError(
+				[operationError, error],
+				"Managed pack operation and lease release both failed; inspect retained state",
+			);
+		throw error;
+	}
+}
 function contains(parent, child) {
 	const path = relative(parent, child);
 	return (
@@ -340,6 +360,7 @@ export function createManagedEmulationPack({
 		});
 		const leaseIdentity = await lease.stat();
 		const transaction = randomUUID();
+		let operationError;
 		try {
 			await lease.writeFile(JSON.stringify({ transaction }));
 			await lease.sync();
@@ -457,19 +478,13 @@ export function createManagedEmulationPack({
 				activation: "not-implemented",
 				engineReadiness: "not-tested",
 			};
+		} catch (error) {
+			operationError = error;
+			throw error;
 		} finally {
-			// Only release this invocation's own lease. No recursive failure cleanup,
-			// directory adoption, stale-lock removal or automatic interrupted replay.
-			await lease.close();
-			const retained = await lstat(leasePath);
-			if (
-				retained.dev !== leaseIdentity.dev ||
-				retained.ino !== leaseIdentity.ino
-			)
-				throw new Error(
-					"Managed pack lease changed; retained state requires inspection",
-				);
-			await unlink(leasePath);
+			// Refuse a changed lease even after publication, without discarding the
+			// original failure when both installation and lease release fail.
+			await releaseLease(lease, leasePath, leaseIdentity, operationError);
 		}
 	}
 	async function verify(

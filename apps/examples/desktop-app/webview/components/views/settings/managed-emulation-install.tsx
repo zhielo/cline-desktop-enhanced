@@ -44,11 +44,11 @@ export function ManagedEmulationInstall({
 				modified.
 			</p>
 			{!available && (
-				<p role="status">
+				<output className="block">
 					This build does not yet contain the reviewed installable images,
 					corresponding sources and notices. Installation cannot start from
 					development test images.
-				</p>
+				</output>
 			)}
 			<details>
 				<summary>Choose individual engines (advanced)</summary>

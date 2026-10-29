@@ -1,6 +1,6 @@
 // Real filesystem/selection/transaction tests only, not emulator/Hyper-V tests.
 import { test } from "node:test";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, renameSync } from "node:fs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -95,6 +95,7 @@ test("individual installs preserve earlier engine selections and immutable files
 test("unknown, duplicate, empty and caller-shaped engine selections are refused", () => {
 	for (const value of [
 		[],
+		Array(1),
 		["qiling", "qiling"],
 		["unicorn"],
 		["../qiling"],
@@ -393,4 +394,36 @@ test("changed active pointer during reuse refuses a false successful receipt", a
 		}),
 		/selection changed/,
 	);
+});
+
+test("installation and changed-lease failure preserve both causes and foreign lease bytes", async (t) => {
+	const f = await fixture(t);
+	let changed = false;
+	await assert.rejects(
+		f.pack.install(["qiling"], {
+			phase: () => {
+				if (changed) return;
+				changed = true;
+				renameSync(
+					join(f.installRoot, "install.lock"),
+					join(f.installRoot, "original.lock"),
+				);
+				writeFileSync(join(f.installRoot, "install.lock"), "foreign lease");
+				throw new Error("owned primary operation failure");
+			},
+		}),
+		(error) => {
+			assert.equal(error instanceof AggregateError, true);
+			assert.equal(error.errors[0].message, "owned primary operation failure");
+			assert.match(error.errors[1].message, /lease changed/);
+			return true;
+		},
+	);
+	assert.equal(
+		await readFile(join(f.installRoot, "install.lock"), "utf8"),
+		"foreign lease",
+	);
+	await assert.rejects(readFile(join(f.installRoot, "active.json")), {
+		code: "ENOENT",
+	});
 });
