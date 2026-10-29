@@ -405,6 +405,12 @@ and verifies prompt cancellation. It requires the exact service entry to disappe
 before closing the binary pin and nonrecursive owned cleanup. Failure retains
 ambiguous state. The child's 120-second CI watchdog is failure, never success.
 
+Successful Stop also requires a signalled process handle and a queried native
+process exit code of zero; SCM `Stopped` and a signalled handle alone are not
+enough. Native acceptance rejects the still-live fixture process and a separate
+exact protected fixture child that refuses command-line arguments with exit code
+2, using the same process-exit verifier as service Stop.
+
 This does not provision the user's host, publish a trusted service/engine image,
 register UI logon scopes, create a VM, install a framework or complete Setup Center.
 Real installed Windows 10/Hyper-V and all distribution/approval gates remain.

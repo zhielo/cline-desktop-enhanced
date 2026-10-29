@@ -26,8 +26,8 @@ use windows_sys::Win32::{
         LibraryLoader::{SetDefaultDllDirectories, LOAD_LIBRARY_SEARCH_SYSTEM32},
         Services::*,
         Threading::{
-            OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
-            PROCESS_SYNCHRONIZE,
+            GetCurrentProcess, GetExitCodeProcess, OpenProcess, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
         },
     },
 };
@@ -332,6 +332,25 @@ fn start(service: &Sc) -> Result<OwnedHandle> {
     }
     Ok(unsafe { OwnedHandle::from_raw_handle(process as _) })
 }
+fn process_exit(process: HANDLE) -> Result<u32> {
+    // GetExitCodeProcess alone is insufficient: a live process returns
+    // STILL_ACTIVE, which can also be a real exit code. Require a signalled
+    // process first, then query its actual exit code.
+    if unsafe { WaitForSingleObject(process, 0) } != WAIT_OBJECT_0 {
+        return Err("Owned service process has not exited");
+    }
+    let mut code = 0;
+    if unsafe { GetExitCodeProcess(process, &mut code) } == 0 {
+        return Err("Owned service process exit code unavailable");
+    }
+    Ok(code)
+}
+fn clean_exit(process: HANDLE) -> Result<()> {
+    if process_exit(process)? != 0 {
+        return Err("Owned service process exited unsuccessfully");
+    }
+    Ok(())
+}
 fn stop(service: &Sc, process: &OwnedHandle) -> Result<()> {
     let mut prior: SERVICE_STATUS = unsafe { zeroed() };
     if unsafe { ControlService(service.0, SERVICE_CONTROL_STOP, &mut prior) } == 0 {
@@ -344,7 +363,7 @@ fn stop(service: &Sc, process: &OwnedHandle) -> Result<()> {
     {
         return Err("Owned service stop/process exit unresolved");
     }
-    Ok(())
+    clean_exit(process.as_raw_handle() as HANDLE)
 }
 fn digest(file: &std::fs::File) -> Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
@@ -419,6 +438,33 @@ pub fn owned_acceptance(roots: &SystemRoots) -> std::result::Result<(), i32> {
     if digest(&staged).map_err(|_| 111)? != expected {
         return Err(112);
     }
+    // Prove that the same exit verifier refuses both a live process and an
+    // actual failed child, not merely an SCM STOPPED status. The exact protected
+    // fixture already rejects every command-line argument with exit code 2;
+    // this adds no console execution mode, shell, target path or new authority.
+    if clean_exit(unsafe { GetCurrentProcess() }) != Err("Owned service process has not exited") {
+        return Err(139);
+    }
+    use std::os::windows::process::CommandExt;
+    let mut refused = std::process::Command::new(&path)
+        .arg("unexpected-owned-argument")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW)
+        .spawn()
+        .map_err(|_| 140)?;
+    let refused_handle = refused.as_raw_handle() as HANDLE;
+    if unsafe { WaitForSingleObject(refused_handle, 5000) } != WAIT_OBJECT_0
+        || process_exit(refused_handle) != Ok(2)
+        || clean_exit(refused_handle) != Err("Owned service process exited unsuccessfully")
+    {
+        return Err(141);
+    }
+    if refused.wait().map_err(|_| 142)?.code() != Some(2) {
+        return Err(142);
+    }
+    drop(refused);
     let manager = Sc(unsafe {
         OpenSCManagerW(
             null(),

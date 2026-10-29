@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["fn process_exit(process: HANDLE)", "GetExitCodeProcess(process, &mut code)", "clean_exit(process.as_raw_handle() as HANDLE)", "process_exit(refused_handle) != Ok(2)", "Owned service process has not exited", "Owned service process exited unsuccessfully"]},
  {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["ERROR_SERVICE_EXISTS", "ERROR_SHARING_VIOLATION as i32"]},
  {path:"workers/managed-emulation/host/src/windows_service.rs",markers:["StartServiceCtrlDispatcherW", "RegisterServiceCtrlHandlerExW", "SERVICE_STOP_PENDING", "state.cancel.signal()", "roots.open_job(job_id)?", "job.owned_service_file(false)?", "LOAD_LIBRARY_SEARCH_SYSTEM32", "No service command-line arguments allowed", "SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE", "Never OpenService/adopt an existing entry", "WaitForSingleObject(process.as_raw_handle() as HANDLE, 5000)", "ERROR_SERVICE_DOES_NOT_EXIST", "join(\"owned-local-service-fixture.exe\")"]},
  {path:"workers/managed-emulation/host/src/windows_ipc.rs",markers:["WaitForMultipleObjects", "IPC operation cancelled", "DisconnectNamedPipe", "explicit_cancellation_drains_connect_without_waiting_for_deadline", "pre_cancelled_exchange_opens_no_new_operation"]},
