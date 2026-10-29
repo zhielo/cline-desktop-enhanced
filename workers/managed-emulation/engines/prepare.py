@@ -72,6 +72,9 @@ def prepare(engine):
         jars = {p.name: p for p in (build/'dependency').glob('*.jar')}
         if set(jars) != set(expected) or any(hashlib.sha256(p.read_bytes()).hexdigest() != expected[n] for n,p in jars.items()):
             raise ValueError('Exact JNI dependency closure required')
+        # Fake-backend unit test only: no emulator, native backend or fixture is
+        # instantiated during build. Real execution remains in the guest gate.
+        run('/usr/lib/jvm/java-17-openjdk-amd64/bin/java', '-cp', str(build/'classes')+':'+str(build/'test-classes')+':'+str(build/'dependency/*'), 'ClineGuardTest')
         shutil.copytree(build/'classes', ROOT/'classes')
         shutil.copytree(build/'dependency', ROOT/'dependency')
         run('/usr/lib/jvm/java-17-openjdk-amd64/bin/jlink', '--add-modules', 'java.base,java.logging,java.desktop,java.management,java.naming,jdk.unsupported', '--compress=2', '--strip-debug', '--no-header-files', '--no-man-pages', '--output', str(ROOT/'jre'))

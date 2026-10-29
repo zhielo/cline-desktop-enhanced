@@ -197,8 +197,8 @@ def validate_jni_refusal(result, result_path, engine, arch, case):
     # Fixed owned guest checks only, before any private boot credentials. Do not
     # count an OOM, unrelated JVM error or killed runner as a missing-export test.
     contracts = {
-        'denied': (76, None),
-        'budget': (75, None),
+        'denied': (76, b'CLINE_UNIDBG_GUARD_V1 76' if engine == 'unidbg' else None),
+        'budget': (75, b'CLINE_UNIDBG_GUARD_V1 75' if engine == 'unidbg' else None),
         'missing': ((1, b'java.lang.IllegalArgumentException: Exact static JNI export required')
                     if engine == 'unidbg' else (-signal.SIGABRT, b'exact JNI export missing')),
     }

@@ -36,13 +36,13 @@ class BundleTests(unittest.TestCase):
                 for case in ('denied','budget','missing'):
                     expected = 76 if case == 'denied' else 75 if case == 'budget' else 1 if engine == 'unidbg' else -signal.SIGABRT
                     stderr = (b'java.lang.IllegalArgumentException: Exact static JNI export required'
-                              if engine == 'unidbg' else b"thread main panicked: exact JNI export missing") if case == 'missing' else b''
+                              if engine == 'unidbg' else b"thread main panicked: exact JNI export missing") if case == 'missing' else ('CLINE_UNIDBG_GUARD_V1 '+str(expected)).encode() if engine == 'unidbg' else b''
                     with self.subTest(engine=engine,arch=arch,case=case), tempfile.TemporaryDirectory() as directory:
                         path=Path(directory)/'result.json'
                         result=subprocess.CompletedProcess(['owned-fixture'],expected,b'never print stdout',stderr)
                         selftest.validate_jni_refusal(result,path,engine,arch,case)
                         for code, error in [(0,stderr),(-9,stderr),(137,b'OutOfMemoryError'),(expected,b'unrelated initialization error')]:
-                            if code == expected and case != 'missing': continue
+                            if code == expected and case != 'missing' and engine != 'unidbg': continue
                             bad=subprocess.CompletedProcess(['owned-fixture'],code,b'never print stdout',error)
                             output=io.StringIO()
                             with contextlib.redirect_stderr(output),self.assertRaisesRegex(ValueError,'JNI refusal/budget boundary'):
@@ -59,6 +59,16 @@ class BundleTests(unittest.TestCase):
                         path.unlink(); path.symlink_to(Path(directory)/'missing-target')
                         with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(ValueError):
                             selftest.validate_jni_refusal(result,path,engine,arch,case)
+
+    def test_unidbg_native_callback_uses_stop_not_jvm_exit(self):
+        source=(HERE.parents[1]/'emulation/unidbg/src/main/java/ClineRunner.java').read_text()
+        callback=source.split('public void hook(Backend b,',1)[1].split('},1,0,null);',1)[0]
+        self.assertNotIn('System.exit',callback)
+        self.assertIn('guard.stop(b,75);return;',callback)
+        self.assertIn('guard.stop(b,76);',callback)
+        self.assertIn('backend.emu_stop();',source)
+        self.assertIn('if(!guard.failed && guard.code.get()!=0)',source)
+        self.assertIn('finally {emulator.close();}',source)
 
     def test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass(self):
         result=subprocess.CompletedProcess(['owned-fixture'],137,b'never print stdout',b'x'*16000)

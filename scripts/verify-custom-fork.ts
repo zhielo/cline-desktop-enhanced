@@ -4,10 +4,14 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/emulation/unidbg/src/main/java/ClineRunner.java",markers:["backend.emu_stop();", "code.compareAndSet(0,reason)", "if(!guard.failed && guard.code.get()!=0)", "finally {emulator.close();}", "CLINE_UNIDBG_GUARD_V1 "]},
+ {path:"workers/emulation/unidbg/src/test/java/ClineGuardTest.java",markers:["Proxy.newProxyInstance", "new int[]{75,76}", "Repeated failed stop admitted", "!guard.failed"]},
+ {path:"workers/managed-emulation/engines/prepare.py",markers:["'ClineGuardTest'"]},
+ {path:"workers/managed-emulation/engines/test_bundle.py",markers:["test_unidbg_native_callback_uses_stop_not_jvm_exit"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["Require ALL three fresh cold boots", "for repetition in 2 3", "engine-$repetition-receipt.json", "--uefi --owned-engine unidbg"]},
  {path:"workers/managed-emulation/engines/selftest.py",markers:["result_path.exists() or result_path.is_symlink()"]},
 
- {path:"workers/managed-emulation/engines/selftest.py",markers:["def validate_jni_refusal", "CLINE_MANAGED_JNI_REFUSAL_DIAGNOSTIC_V1", "'denied': (76, None)", "'budget': (75, None)", "java.lang.IllegalArgumentException: Exact static JNI export required", "-signal.SIGABRT", "result.stderr[-4096:]"]},
+ {path:"workers/managed-emulation/engines/selftest.py",markers:["def validate_jni_refusal", "CLINE_MANAGED_JNI_REFUSAL_DIAGNOSTIC_V1", "'denied': (76, b'CLINE_UNIDBG_GUARD_V1 76'", "'budget': (75, b'CLINE_UNIDBG_GUARD_V1 75'", "java.lang.IllegalArgumentException: Exact static JNI export required", "-signal.SIGABRT", "result.stderr[-4096:]"]},
  {path:"workers/managed-emulation/engines/test_bundle.py",markers:["test_owned_jni_refusals_require_exact_reason_and_exit_without_result", "test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass", "OutOfMemoryError", "unexpected result"]},
  {path:"docs/MANAGED_EMULATION_RESEARCH.md",markers:["DefineSystem", "PIPE_REJECT_REMOTE_CLIENTS", "Missing evidence must retain state", "Do not ship Microsoft rootfs assets", "Merge only after"]},
 

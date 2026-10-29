@@ -83,3 +83,11 @@ A successful legacy Windows installer build does not establish the managed pack.
 8. https://github.com/zhkl0228/unidbg
 9. https://github.com/fuqiuluo/rnidbg
 10. https://github.com/mandiant/speakeasy (LICENSE.txt; review pinned release separately)
+
+## Reproduced JNI stability failure and bounded correction
+
+Run `40795746285`, unidbg job `123191688462`, completed the first ten-scenario cold boot but failed the second: ARM32 `denied`, expected exit 76, observed SIGABRT (-6), no result. Retained stderr contained only SLF4J warnings. This is a real failing refusal gate, not success. The old generic failure lacks equivalent evidence and cannot be assigned this cause. Native crash-stack causality remains unproven.
+
+The pinned unidbg 0.9.9 Backend source documents `emu_stop` as callable from a hook. Unicorn's hook documentation similarly supports stopping emulation before an instruction with `uc_emu_stop`. Replace callback-time JVM exit with that supported stop operation, retain the first successful guard reason, check it before JNI/output work, close after native frames unwind, and require the exact post-cleanup guard marker plus exit. Backend/cleanup failures and unrelated process death remain failures. Pure fake-backend tests prove only guard logic; three real fresh guest boots remain mandatory before calling native behavior stable.
+
+Sources: https://repo.maven.apache.org/maven2/com/github/zhkl0228/unidbg-api/0.9.9/unidbg-api-0.9.9-sources.jar and https://github.com/unicorn-engine/unicorn/blob/master/docs/Hooks.md . No backend, budget, timeout, expected exit or scenario-count relaxation is proposed.
