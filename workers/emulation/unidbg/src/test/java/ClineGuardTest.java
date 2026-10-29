@@ -13,7 +13,7 @@ public final class ClineGuardTest {
   });
  }
  static void require(boolean value) {if(!value)throw new AssertionError("Owned guard assertion");}
- public static void main(String[] args) {
+ public static void main(String[] args) throws Exception {
   for(int reason:new int[]{75,76}) {
    AtomicInteger calls=new AtomicInteger();ClineRunner.Guard guard=new ClineRunner.Guard();
    guard.check();guard.stop(backend(calls,false),reason);
@@ -33,6 +33,32 @@ public final class ClineGuardTest {
   try {guard.stop(backend(calls,true),75);throw new AssertionError("Repeated failed stop admitted");}
   catch(IllegalStateException expected) {}
   require(guard.failed);
+  for(int result:new int[]{0,75,76}) {
+   AtomicInteger closed=new AtomicInteger();
+   require(ClineRunner.withCleanup(()->{closed.incrementAndGet();},()->result)==result);
+   require(closed.get()==1);
+   Exception cleanup=new Exception("Owned cleanup failure");
+   try {
+    ClineRunner.withCleanup(()->{throw cleanup;},()->result);
+    throw new AssertionError("Cleanup failure became an accepted guard exit");
+   } catch(Exception error) {require(error==cleanup);}
+  }
+  for(Throwable primary:new Throwable[]{
+    new IllegalArgumentException("Owned original failure"),
+    new NoClassDefFoundError("owned/original/Failure")}) {
+   Exception cleanup=new Exception("Owned cleanup failure");
+   AtomicInteger closed=new AtomicInteger();
+   try {
+    ClineRunner.withCleanup(()->{closed.incrementAndGet();throw cleanup;},()->{
+     if(primary instanceof Error)throw (Error)primary;
+     throw (RuntimeException)primary;
+    });
+    throw new AssertionError("Original failure disappeared");
+   } catch(Throwable actual) {
+    require(actual==primary && closed.get()==1);
+    require(actual.getSuppressed().length==1 && actual.getSuppressed()[0]==cleanup);
+   }
+  }
   System.out.println("Owned fake-backend stop guards passed; no emulator or readiness established.");
  }
 }

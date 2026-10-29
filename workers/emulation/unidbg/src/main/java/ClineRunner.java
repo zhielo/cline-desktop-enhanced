@@ -10,6 +10,11 @@ import java.nio.file.*;
 
 /** Fixed primitive JNI harness. No supplied Java source, hooks or classpath. */
 public final class ClineRunner {
+ interface Action { int run() throws Exception; }
+ /** Keep the original failure; cleanup cannot turn a guard into an accepted exit. */
+ static int withCleanup(AutoCloseable resource,Action action) throws Exception {
+  try(AutoCloseable owned=resource) {return action.run();}
+ }
  static final class GuardStopped extends RuntimeException {
   private static final long serialVersionUID=1L;
  }
@@ -35,7 +40,7 @@ public final class ClineRunner {
  public static void main(String[] a) throws Exception {
   int status=execute(a);
   if(status!=0) {
-   // execute's finally has closed the backend after native frames unwound.
+   // Resource cleanup succeeded after native frames unwound.
    System.err.println("CLINE_UNIDBG_GUARD_V1 "+status);
    System.exit(status);
   }
@@ -46,6 +51,7 @@ public final class ClineRunner {
     .setProcessName("cline.approved.native").setRootDir(new File(a[1]))
     .addBackendFactory(new Unicorn2Factory(false)).build();
   final Guard guard=new Guard();
+  return withCleanup(emulator,()->{
   try {
    if(!emulator.getBackend().getClass().getName().equals("com.github.unidbg.arm.backend.Unicorn2Backend"))throw new IllegalStateException("Unicorn2 backend required; no fallback");
    final AtomicLong steps=new AtomicLong(); final long limit=Long.parseLong(a[8]);
@@ -80,6 +86,7 @@ public final class ClineRunner {
    // Only an observed successful stop can produce the dedicated guard exit.
    if(!guard.failed && guard.code.get()!=0)return guard.code.get();
    throw error;
-  } finally {emulator.close();}
+  }
+  });
  }
 }

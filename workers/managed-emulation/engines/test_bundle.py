@@ -68,7 +68,9 @@ class BundleTests(unittest.TestCase):
         self.assertIn('guard.stop(b,76);',callback)
         self.assertIn('backend.emu_stop();',source)
         self.assertIn('if(!guard.failed && guard.code.get()!=0)',source)
-        self.assertIn('finally {emulator.close();}',source)
+        self.assertIn('return withCleanup(emulator,()->{',source)
+        self.assertIn('try(AutoCloseable owned=resource) {return action.run();}',source)
+        self.assertNotIn('finally {emulator.close();}',source)
 
     def test_owned_jni_diagnostics_are_bounded_and_unknown_profiles_never_pass(self):
         result=subprocess.CompletedProcess(['owned-fixture'],137,b'never print stdout',b'x'*16000)
