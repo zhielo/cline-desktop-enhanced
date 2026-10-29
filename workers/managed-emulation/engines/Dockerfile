@@ -8,7 +8,7 @@ ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup
 ENV PATH=/usr/local/cargo/bin:$PATH
 COPY --from=compiler /usr/local/cargo /usr/local/cargo
 COPY --from=compiler /usr/local/rustup /usr/local/rustup
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential clang lld cmake libffi-dev libssl-dev pkg-config git curl ca-certificates maven openjdk-17-jdk-headless zlib1g-dev libjpeg62-turbo-dev libpng-dev libfreetype6-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential clang lld cmake libffi-dev libssl-dev pkg-config git curl ca-certificates maven openjdk-17-jdk libx11-dev zlib1g-dev libjpeg62-turbo-dev libpng-dev libfreetype6-dev && rm -rf /var/lib/apt/lists/*
 COPY workers/emulation /build/emulation
 COPY workers/re-analysis /build/re-analysis
 COPY workers/managed-emulation/engines /build/managed

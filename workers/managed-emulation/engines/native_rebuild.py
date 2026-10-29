@@ -151,6 +151,8 @@ def replace_resource(jar, label, binary):
 
 def build(runtime, work, java_home=Path('/usr/lib/jvm/java-17-openjdk-amd64')):
     """Only called from the disposable builder; compile, never run an emulator."""
+    for header in ('jni.h','linux/jni_md.h','jawt.h','linux/jawt_md.h'):
+        if not (java_home/'include'/header).is_file():raise ValueError('Complete JDK JNI/AWT headers required')
     inputs=fetch(Path(__file__).with_name('native-inputs.lock.json'),work)
     core=work/'core';extract_core(work/'unicorn-source.tar.gz',core)
     bridge=work/'bridge';bridge.mkdir();jna=work/'jna';jna.mkdir()

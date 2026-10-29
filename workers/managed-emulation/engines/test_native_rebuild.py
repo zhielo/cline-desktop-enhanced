@@ -11,6 +11,13 @@ import zipfile
 import native_rebuild as n
 
 class NativeTests(unittest.TestCase):
+    def test_missing_complete_jdk_headers_fails_before_download(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(n,'fetch') as fetched:
+            root=Path(d)
+            with self.assertRaisesRegex(ValueError,'Complete JDK'):
+                n.build(root/'runtime',root/'work',root/'jdk')
+            fetched.assert_not_called()
+
     def test_exact_lock_and_duplicate_schema_refusal(self):
         lock=Path(__file__).with_name('native-inputs.lock.json')
         v=n.load(lock)

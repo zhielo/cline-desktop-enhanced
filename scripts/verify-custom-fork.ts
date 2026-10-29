@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/engines/Dockerfile",markers:["openjdk-17-jdk libx11-dev", "libffi-dev"]},
  {path:"workers/managed-emulation/engines/native_rebuild.py",markers:["class NoRedirect", "Native source patch context", "Native void callback inventory", "if ((*env)->ExceptionCheck(env)) uc_emu_stop(eng);", "-DUNICORN_BUILD_TESTS=OFF", "originalJarSha256", "native-build.json", "emulatorExecutedDuringBuild"]},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["python3 -B workers/managed-emulation/engines/test_native_rebuild.py"]},
