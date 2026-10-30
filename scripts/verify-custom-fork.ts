@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/hyperv_creation.rs",markers:["Asynchronous creation lacks exact job", "Creation job identity mismatch", "Creation resulting-system identity mismatch", "Completed creation job lacks affected system", "self.fenced = true", "define_system_4096_is_pending_never_synchronous_success", "any_job_error_mismatch_or_incomplete_result_permanently_fences"]},
+ {path:"workers/managed-emulation/host/src/windows_hyperv.rs",markers:["pub fn decode_definition_output(", "GetComputerNameW", "CIM_REFERENCE.0, 512", "native_method_return_requires_uint32_bits_without_coercion", "nullable_references_distinguish_explicit_null_from_missing_empty_and_strings"]},
  {path:"workers/managed-emulation/host/src/windows_hyperv.rs",markers:["ROOT\\virtualization\\v2", "CoInitializeSecurity(", "RPC_C_AUTHN_LEVEL_PKT_PRIVACY", "reservation.revalidate()?", "require_identity(&name, expected)?", "Reserved VM not observed; no termination or removal inferred", "provider_guid_casing_does_not_change_the_reserved_identity", "native_property_types_do_not_coerce_or_accept_arrays_null_and_ranges", "enumeration_never_treats_timeout_or_unknown_success_as_end_of_results", "system_guard_precedes_any_com_or_provider_access"]},
  {path:"workers/managed-emulation/host/Cargo.toml",markers:['windows = { version = "=0.58.0"', '"Win32_System_Wmi"']},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["def verify_private_jre():", "        verify_private_jre()", "CLINE_MANAGED_OWNED_BUILD_JVM_FAILED_V1", "CLINE_MANAGED_OWNED_BUILD_JVM_V1", "'scope':'owned-builder-jvm-only'", "'engineExecuted':False", "'guestExecution':'not-tested'"]},

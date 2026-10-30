@@ -23,11 +23,12 @@ use windows::{
                 EOAC_NONE, RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_IMP_LEVEL_IMPERSONATE,
             },
             Rpc::{RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE},
-            Variant::{VT_BSTR, VT_I4},
+            Variant::{VT_BSTR, VT_I4, VT_NULL},
             Wmi::{
-                IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator, CIM_STRING, CIM_UINT16,
-                WBEM_FLAG_CONNECT_USE_MAX_WAIT, WBEM_FLAG_FORWARD_ONLY,
-                WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_S_FALSE, WBEM_S_NO_ERROR, WBEM_S_TIMEDOUT,
+                IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator, CIM_REFERENCE,
+                CIM_STRING, CIM_UINT16, CIM_UINT32, WBEM_FLAG_CONNECT_USE_MAX_WAIT,
+                WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_S_FALSE,
+                WBEM_S_NO_ERROR, WBEM_S_TIMEDOUT,
             },
         },
     },
@@ -221,14 +222,16 @@ fn property(object: &IWbemClassObject, name: PCWSTR) -> Result<(VARIANT, i32)> {
     Ok((value, kind))
 }
 fn text(value: &VARIANT, kind: i32) -> Result<String> {
-    // Inspect VT before the union. Borrow the BSTR without a coercing copy or
-    // ownership transfer, and enforce its bound before decoding/allocating.
+    bounded_text(value, kind, CIM_STRING.0, 128)
+}
+fn bounded_text(value: &VARIANT, kind: i32, expected: i32, budget: usize) -> Result<String> {
+    // Inspect VT before borrowing the union; never coerce/copy native pointers.
     let raw = unsafe { &value.as_raw().Anonymous.Anonymous };
-    if kind != CIM_STRING.0 || raw.vt != VT_BSTR.0 {
+    if kind != expected || raw.vt != VT_BSTR.0 {
         return Err("Exact native VM string type required");
     }
     let borrowed = ManuallyDrop::new(unsafe { BSTR::from_raw(raw.Anonymous.bstrVal) });
-    if borrowed.is_empty() || borrowed.len() > 128 {
+    if borrowed.is_empty() || borrowed.len() > budget {
         return Err("Native VM string budget");
     }
     let result = String::from_utf16(borrowed.as_wide()).map_err(|_| "Native VM string encoding")?;
@@ -237,6 +240,53 @@ fn text(value: &VARIANT, kind: i32) -> Result<String> {
     }
     Ok(result)
 }
+fn method_return(value: &VARIANT, kind: i32) -> Result<u32> {
+    let raw = unsafe { &value.as_raw().Anonymous.Anonymous };
+    if kind != CIM_UINT32.0 || raw.vt != VT_I4.0 {
+        return Err("Exact native method return type required");
+    }
+    // WMI carries CIM_UINT32 as signed VT_I4 bits, not VT_UI4 or decimal text.
+    Ok(unsafe { raw.Anonymous.lVal } as u32)
+}
+fn optional_reference(value: &VARIANT, kind: i32) -> Result<Option<String>> {
+    let raw = unsafe { &value.as_raw().Anonymous.Anonymous };
+    if kind == CIM_REFERENCE.0 && raw.vt == VT_NULL.0 {
+        return Ok(None);
+    }
+    bounded_text(value, kind, CIM_REFERENCE.0, 512).map(Some)
+}
+fn native_computer_name() -> Result<String> {
+    use windows_sys::Win32::System::WindowsProgramming::GetComputerNameW;
+    let mut buffer = [0u16; 64];
+    let mut count = buffer.len() as u32;
+    if unsafe { GetComputerNameW(buffer.as_mut_ptr(), &mut count) } == 0
+        || count == 0
+        || count as usize >= buffer.len()
+    {
+        return Err("Native local computer name unavailable");
+    }
+    String::from_utf16(&buffer[..count as usize]).map_err(|_| "Native local computer name encoding")
+}
+/// Decode output data only; not a factory invocation, VM ownership or receipt.
+/// Future callers must pass the actual DefineSystem output, not request data.
+/// Native local hostname comes from the OS, never a caller-supplied namespace.
+pub fn decode_definition_output(
+    object: &IWbemClassObject,
+) -> Result<crate::hyperv_creation::DefinitionReply> {
+    let (value, kind) = property(object, w!("ReturnValue"))?;
+    let code = method_return(&value, kind)?;
+    let (value, kind) = property(object, w!("ResultingSystem"))?;
+    let system = optional_reference(&value, kind)?;
+    let (value, kind) = property(object, w!("Job"))?;
+    let job = optional_reference(&value, kind)?;
+    crate::hyperv_creation::DefinitionReply::decode(
+        code,
+        system.as_deref(),
+        job.as_deref(),
+        &native_computer_name()?,
+    )
+}
+
 fn number(value: &VARIANT, kind: i32) -> Result<u16> {
     let raw = unsafe { &value.as_raw().Anonymous.Anonymous };
     if kind != CIM_UINT16.0 || raw.vt != VT_I4.0 {
@@ -342,6 +392,61 @@ mod tests {
         for args in [(0, 0, 0), (0, 3, 3), (1, 1, 0), (2, 0, 0), (-1, 0, 0)] {
             assert!(batch(args.0, args.1, args.2).is_err());
         }
+    }
+    #[test]
+    fn native_method_return_requires_uint32_bits_without_coercion() {
+        assert_eq!(
+            method_return(&VARIANT::from(4096i32), CIM_UINT32.0),
+            Ok(4096)
+        );
+        assert_eq!(
+            method_return(&VARIANT::from(-1i32), CIM_UINT32.0),
+            Ok(u32::MAX)
+        );
+        for value in [
+            VARIANT::new(),
+            VARIANT::from("4096"),
+            VARIANT::from(4096u32),
+            VARIANT::from(true),
+        ] {
+            assert!(method_return(&value, CIM_UINT32.0).is_err());
+        }
+        assert!(method_return(&VARIANT::from(0i32), CIM_UINT16.0).is_err());
+        assert!(method_return(&VARIANT::from(0i32), CIM_UINT32.0 | 8192).is_err());
+    }
+    #[test]
+    fn nullable_references_distinguish_explicit_null_from_missing_empty_and_strings() {
+        let mut raw = *VARIANT::new().as_raw();
+        raw.Anonymous.Anonymous.vt = VT_NULL.0;
+        let null = unsafe { VARIANT::from_raw(raw) };
+        assert_eq!(optional_reference(&null, CIM_REFERENCE.0), Ok(None));
+        assert!(optional_reference(&null, CIM_STRING.0).is_err());
+        let path = "Msvm_ConcreteJob.InstanceID=\"owned-job\"";
+        assert_eq!(
+            optional_reference(&VARIANT::from(path), CIM_REFERENCE.0),
+            Ok(Some(path.into()))
+        );
+        for value in [
+            VARIANT::new(),
+            VARIANT::from(""),
+            VARIANT::from(1i32),
+            VARIANT::from("x".repeat(513).as_str()),
+        ] {
+            assert!(optional_reference(&value, CIM_REFERENCE.0).is_err());
+        }
+        assert!(optional_reference(&VARIANT::from(path), CIM_STRING.0).is_err());
+        assert!(optional_reference(&VARIANT::from(path), CIM_REFERENCE.0 | 8192).is_err());
+    }
+    #[test]
+    fn local_reference_scope_uses_native_os_name_without_com_or_host_claims() {
+        let name = native_computer_name().unwrap();
+        let path = format!(
+            r#"\\{}\root\virtualization\v2:Msvm_ComputerSystem.Name="12345678-1234-4234-8234-123456789abc""#,
+            name
+        );
+        assert!(
+            crate::hyperv_creation::DefinitionReply::decode(0, Some(&path), None, &name).is_ok()
+        );
     }
     #[test]
     fn system_guard_precedes_any_com_or_provider_access() {

@@ -233,3 +233,6 @@ pub mod windows_service;
 /// Read-only native Hyper-V v2 observations; not VM ownership or effects.
 #[cfg(windows)]
 pub mod windows_hyperv;
+
+/// Creation response correlation data; never native ownership or VM effects.
+pub mod hyperv_creation;
