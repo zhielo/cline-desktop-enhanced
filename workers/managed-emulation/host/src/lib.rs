@@ -236,3 +236,8 @@ pub mod windows_hyperv;
 
 /// Creation response correlation data; never native ownership or VM effects.
 pub mod hyperv_creation;
+
+#[cfg(any(windows, test))]
+mod creation_records;
+#[cfg(windows)]
+pub mod windows_creation;

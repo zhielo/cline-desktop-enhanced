@@ -380,6 +380,25 @@ impl<'roots, 'job, 'job_roots> OwnedVmRecord<'_, 'roots, 'job, 'job_roots> {
         }
         Ok(())
     }
+    pub(crate) fn creation_key(&self) -> Result<Zeroizing<[u8; 32]>> {
+        self.revalidate()?;
+        self.owner.recovery_key(self.job, &self.identity)
+    }
+    pub(crate) fn creation_digest(&self) -> String {
+        hex::encode(self.digest)
+    }
+    pub(crate) fn creation_file(
+        &self,
+        role: crate::creation_records::Role,
+        create: bool,
+    ) -> Result<File> {
+        self.revalidate()?;
+        self.job.creation_file(role, create)
+    }
+    pub(crate) fn creation_exists(&self, role: crate::creation_records::Role) -> Result<bool> {
+        self.revalidate()?;
+        self.job.creation_exists(role)
+    }
     /// Forward work must use the original observed boot; recovery remains explicit.
     pub fn require_original_boot(&self) -> Result<()> {
         self.revalidate()?;
@@ -454,6 +473,11 @@ fn require_forward_boot(event: &Event, expected: &str) -> Result<()> {
         crate::windows_boot::HostBoot::observe()?.require_same(expected)?;
     }
     Ok(())
+}
+
+// Fixed-budget held-file reader shared only with the native creation guard.
+pub(crate) fn creation_contents(file: &File, limit: usize) -> Result<Zeroizing<Vec<u8>>> {
+    contents(file, limit)
 }
 
 #[cfg(test)]

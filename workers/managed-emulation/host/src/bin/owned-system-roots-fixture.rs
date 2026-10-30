@@ -292,6 +292,11 @@ fn reservation_acceptance(
     let image = cline_managed_inert_probe::windows_image::SystemImage::create_owned_fixture(roots)
         .map_err(|_| 117)?;
     let image_path = roots.image_parent().join(format!("{}.iso", image.sha256()));
+    cline_managed_inert_probe::windows_creation::owned_system_acceptance(roots, &owner, &image)
+        .map_err(|error| {
+            eprintln!("Owned durable creation acceptance failed: {error}");
+            119
+        })?;
     let record = owner.reserve_vm(&job, &image).map_err(|_| 83)?;
     let expected = record.identity().clone();
     if expected.installation != owner.installation()

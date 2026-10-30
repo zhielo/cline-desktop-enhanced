@@ -610,6 +610,27 @@ impl<'roots> SystemJob<'roots> {
             create,
         )
     }
+    fn creation_path(&self, role: crate::creation_records::Role) -> PathBuf {
+        self.directories[if role.anchor() { 1 } else { 2 }]
+            .0
+            .join(role.filename())
+    }
+    pub(crate) fn creation_file(
+        &self,
+        role: crate::creation_records::Role,
+        create: bool,
+    ) -> Result<std::fs::File> {
+        self.revalidate()?;
+        protected_regular_file(&self.creation_path(role), create)
+    }
+    pub(crate) fn creation_exists(&self, role: crate::creation_records::Role) -> Result<bool> {
+        self.revalidate()?;
+        match std::fs::symlink_metadata(self.creation_path(role)) {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(_) => Err("Creation record presence unavailable; no absence inferred"),
+        }
+    }
     #[cfg(feature = "owned-system-acceptance")]
     pub(crate) fn owned_service_path(&self) -> PathBuf {
         self.directories[2].0.join("owned-service.exe")

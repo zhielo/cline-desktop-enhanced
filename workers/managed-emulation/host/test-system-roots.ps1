@@ -50,7 +50,7 @@ try {
     if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ne $hash) {
         throw 'Owned fixture executable changed during acceptance'
     }
-    Write-Output 'Native SYSTEM temporary SCM lifecycle, local inert IPC and roots passed: scoped identification-token exchange and checked reversion; fixed protected ACLs/owner, reopen, no overwrite, pinned lifetime and nonrecursive owned cleanup. No VM, released product service, installed pack or readiness established.'
+    Write-Output 'Native SYSTEM temporary SCM lifecycle, local inert IPC and roots passed: scoped identification-token exchange and checked reversion; fixed protected ACLs/owner, durable creation intent/issuance interruption and diagnostic-only reopen, no overwrite/retry, pinned lifetime and nonrecursive owned cleanup. No VM, released product service, installed pack or readiness established.'
 } finally {
     if ($registered) {
         $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
