@@ -4,6 +4,8 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/windows_hyperv.rs",markers:["ROOT\\virtualization\\v2", "CoInitializeSecurity(", "RPC_C_AUTHN_LEVEL_PKT_PRIVACY", "reservation.revalidate()?", "require_identity(&name, expected)?", "Reserved VM not observed; no termination or removal inferred", "provider_guid_casing_does_not_change_the_reserved_identity", "native_property_types_do_not_coerce_or_accept_arrays_null_and_ranges", "enumeration_never_treats_timeout_or_unknown_success_as_end_of_results", "system_guard_precedes_any_com_or_provider_access"]},
+ {path:"workers/managed-emulation/host/Cargo.toml",markers:['windows = { version = "=0.58.0"', '"Win32_System_Wmi"']},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["def verify_private_jre():", "        verify_private_jre()", "CLINE_MANAGED_OWNED_BUILD_JVM_FAILED_V1", "CLINE_MANAGED_OWNED_BUILD_JVM_V1", "'scope':'owned-builder-jvm-only'", "'engineExecuted':False", "'guestExecution':'not-tested'"]},
  {path:"workers/managed-emulation/engines/test_bundle.py",markers:["test_builder_probe_budget_failure_cannot_be_retried_or_promoted", "test_builder_probe_rejects_wrong_exit_output_warning_and_fatal_error"]},
 

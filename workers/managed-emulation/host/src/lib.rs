@@ -229,3 +229,7 @@ pub mod windows_ipc;
 /// Explicit development-only SCM acceptance host; never bundled in the app.
 #[cfg(all(windows, feature = "owned-system-acceptance"))]
 pub mod windows_service;
+
+/// Read-only native Hyper-V v2 observations; not VM ownership or effects.
+#[cfg(windows)]
+pub mod windows_hyperv;
