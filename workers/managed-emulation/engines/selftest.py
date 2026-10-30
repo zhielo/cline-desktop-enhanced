@@ -3,6 +3,7 @@
 No HTTP worker, arbitrary target, script, classpath, JNI stub or host path input.
 A passed fixture is not installed-app readiness or containment attestation.
 """
+import base64
 import hashlib
 import importlib.util
 import json
@@ -21,6 +22,10 @@ MAX_BUNDLE_BYTES = 384*1024**2
 INVOKE_SECONDS = 35
 INVOKE_STDOUT_LIMIT = 1024*1024
 INVOKE_STDERR_LIMIT = 16*1024
+# Fixed public owned fixtures only, before any boot credentials. Base64 plus
+# prefixes must fit the unchanged one-MiB serial-log budget in smoke_boot.py.
+JVM_CRASH_FILE_LIMIT = 1024*1024
+JVM_CRASH_RETAIN_LIMIT = 512*1024
 ARCHES = {'qiling': ['x86_64','arm32','arm64'], 'unidbg':['arm32','arm64'], 'rnidbg':['arm64'], 'speakeasy':['x86_64']}
 
 
@@ -237,19 +242,34 @@ def owned_jvm_failure_evidence(result, private, arch, case):
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
             report = {'status':'unsafe-type'}
-        elif not 0 < before.st_size <= 1024*1024:
+        elif not 0 < before.st_size <= JVM_CRASH_FILE_LIMIT:
             report = {'status':'byte-budget'}
         else:
-            # HotSpot's fatal header and native frame list precede verbose
-            # registers/VM options. Keep only a bounded prefix, not the file.
-            raw = os.read(descriptor, min(before.st_size, 12288))
+            # A header alone drops compiled-method, GC, code-cache and dynamic
+            # library evidence. Read a bounded stable snapshot, then retain a
+            # byte-exact capped report alongside the legacy human prefix.
+            # Loop: a short read is not EOF, even on a regular file.
+            chunks = []
+            remaining = before.st_size
+            while remaining:
+                chunk = os.read(descriptor, min(65536, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            raw = b''.join(chunks)
             after = os.fstat(descriptor)
             fields = ('st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns')
-            if any(getattr(before,k) != getattr(after,k) for k in fields) or len(raw) != min(before.st_size,12288):
+            if any(getattr(before,k) != getattr(after,k) for k in fields) or len(raw) != before.st_size:
                 report = {'status':'changed'}
             else:
+                retained = raw[:JVM_CRASH_RETAIN_LIMIT]
                 report = {'status':'captured','bytes':before.st_size,
-                          'prefix':raw.decode('utf-8',errors='replace')}
+                          'prefix':raw[:12288].decode('utf-8',errors='replace'),
+                          'sha256':hashlib.sha256(raw).hexdigest(),
+                          'encoding':'base64','retainedBytes':len(retained),
+                          'complete':len(retained)==len(raw),
+                          'data':base64.b64encode(retained).decode('ascii')}
     except FileNotFoundError:
         pass
     except OSError:

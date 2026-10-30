@@ -1,4 +1,5 @@
 """No emulator or downloaded executable runs in these host parser tests."""
+import base64
 import hashlib
 import contextlib
 import io
@@ -250,7 +251,10 @@ class BundleTests(unittest.TestCase):
                 selftest.owned_jvm_failure_evidence(result,root,'arm64','denied')
             data=json.loads(output.getvalue().split(' ',1)[1])
             self.assertEqual((data['architecture'],data['case'],data['observedExit']),('arm64','denied',-6))
-            self.assertEqual(data['hotspot'],{'status':'captured','bytes':len(report),'prefix':report.decode()})
+            self.assertEqual(data['hotspot'],{'status':'captured','bytes':len(report),
+                'prefix':report.decode(),'sha256':hashlib.sha256(report).hexdigest(),
+                'encoding':'base64','retainedBytes':len(report),'complete':True,
+                'data':base64.b64encode(report).decode('ascii')})
             self.assertEqual(data['stdoutPrefix'],'owned fatal stdout')
             self.assertNotIn('never printed argv',output.getvalue())
             # Collecting a report can never make the failed refusal pass.
@@ -268,6 +272,8 @@ class BundleTests(unittest.TestCase):
             data=json.loads(output.getvalue().split(' ',1)[1])
             self.assertEqual(len(data['hotspot']['prefix']),12288)
             self.assertEqual(data['hotspot']['bytes'],20000)
+            self.assertEqual(base64.b64decode(data['hotspot']['data'],validate=True),b'x'*20000)
+            self.assertTrue(data['hotspot']['complete'])
             self.assertEqual(len(data['stdoutPrefix']),4096)
             self.assertEqual(data['stdoutBytes'],10000)
             with path.open('wb') as stream:stream.truncate(1024*1024+1)
@@ -275,6 +281,65 @@ class BundleTests(unittest.TestCase):
             with contextlib.redirect_stderr(output):
                 selftest.owned_jvm_failure_evidence(result,root,'arm32','positive')
             self.assertEqual(json.loads(output.getvalue().split(' ',1)[1])['hotspot'],{'status':'byte-budget'})
+
+    def test_owned_jvm_retains_byte_exact_crash_beyond_the_old_header(self):
+        # The observed 178756-byte report lost everything after byte12288.
+        # Include non-UTF8 bytes: decoding the human prefix must not damage the
+        # reconstructable owned crash evidence or its whole-file identity.
+        raw=(bytes(range(256))*699)[:178756]
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'hotspot-crash.log').write_bytes(raw)
+            with contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_failure_evidence(
+                    subprocess.CompletedProcess([],1,b'',b''),root,'arm32','fresh')
+            report=json.loads(output.getvalue().split(' ',1)[1])['hotspot']
+            self.assertTrue(report['complete'])
+            self.assertEqual(report['retainedBytes'],len(raw))
+            self.assertEqual(base64.b64decode(report['data'],validate=True),raw)
+            self.assertEqual(report['sha256'],hashlib.sha256(raw).hexdigest())
+
+    def test_owned_jvm_full_capture_is_explicitly_capped_with_unchanged_log_budget(self):
+        # Worst-case escaped prefixes/streams plus capped base64 leave room for
+        # boot diagnostics within the existing one-MiB serial-log ceiling.
+        from smoke_boot import MAX_LOG
+        raw=b'\x00'*selftest.JVM_CRASH_FILE_LIMIT
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'hotspot-crash.log').write_bytes(raw)
+            with contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_failure_evidence(
+                    subprocess.CompletedProcess([],1,b'\x00'*4096,b'\x00'*4096),
+                    root,'arm64','fresh')
+            encoded=output.getvalue().encode()
+            report=json.loads(encoded.split(b' ',1)[1])['hotspot']
+            self.assertFalse(report['complete'])
+            self.assertEqual(report['bytes'],len(raw))
+            self.assertEqual(report['retainedBytes'],selftest.JVM_CRASH_RETAIN_LIMIT)
+            self.assertEqual(base64.b64decode(report['data'],validate=True),
+                             raw[:selftest.JVM_CRASH_RETAIN_LIMIT])
+            self.assertEqual(report['sha256'],hashlib.sha256(raw).hexdigest())
+            self.assertLess(len(encoded),MAX_LOG-128*1024)
+
+    def test_owned_jvm_snapshot_handles_short_reads_and_refuses_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);path=root/'hotspot-crash.log'
+            raw=b'owned crash snapshot'
+            path.write_bytes(raw)
+            real_read=selftest.os.read
+            with patch.object(selftest.os,'read',side_effect=lambda fd,n:real_read(fd,min(n,3))),contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_failure_evidence(
+                    subprocess.CompletedProcess([],1,b'',b''),root,'arm32','fresh')
+            report=json.loads(output.getvalue().split(' ',1)[1])['hotspot']
+            self.assertTrue(report['complete'])
+            self.assertEqual(base64.b64decode(report['data'],validate=True),raw)
+            def changed_read(fd,n):
+                data=real_read(fd,n)
+                path.write_bytes(b'changed crash bytes')
+                return data
+            with patch.object(selftest.os,'read',side_effect=changed_read),contextlib.redirect_stderr(io.StringIO()) as output:
+                selftest.owned_jvm_failure_evidence(
+                    subprocess.CompletedProcess([],1,b'',b''),root,'arm32','fresh')
+            self.assertEqual(json.loads(output.getvalue().split(' ',1)[1])['hotspot'],
+                             {'status':'changed'})
 
     def test_owned_jvm_crash_evidence_does_not_follow_links_or_open_special_files(self):
         with tempfile.TemporaryDirectory() as directory:
