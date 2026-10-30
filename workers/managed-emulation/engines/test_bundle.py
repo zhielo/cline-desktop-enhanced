@@ -388,6 +388,58 @@ class BundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unknown owned JVM failure profile'):
             selftest.owned_jvm_failure_evidence(subprocess.CompletedProcess([],-6,b'',b''),Path('/never-open'),'x86_64','denied')
 
+    def test_failed_missing_export_contract_retains_same_exit_fatal_report(self):
+        for case,code in [('denied',76),('budget',75),('missing',1)]:
+            with self.subTest(case=case),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory)
+                raw=b'owned fatal report despite coincident expected numeric exit'
+                (root/'hotspot-crash.log').write_bytes(raw)
+                result=subprocess.CompletedProcess([],code,b'owned fatal stdout',b'')
+                with contextlib.redirect_stderr(io.StringIO()) as output:
+                    selftest.owned_jvm_failure_evidence(
+                        result,root,'arm64',case,contract_failed=True)
+                value=json.loads(output.getvalue().split(' ',1)[1])
+                self.assertEqual(value['failureKind'],'refusal-contract')
+                self.assertEqual(value['observedExit'],code)
+                self.assertTrue(value['hotspot']['complete'])
+                self.assertEqual(base64.b64decode(value['hotspot']['data'],validate=True),raw)
+        for invalid in (1,0,None,'true'):
+            with self.assertRaisesRegex(ValueError,'Unknown owned JVM failure profile'):
+                selftest.owned_jvm_failure_evidence(
+                    subprocess.CompletedProcess([],1,b'',b''),Path('/never-open'),
+                    'arm64','missing',contract_failed=invalid)
+
+    def test_jni_missing_contract_failure_captures_before_cleanup_without_retry(self):
+        commands=[]
+        raw=b'owned synthetic fatal log'
+        def fake_invoke(command):
+            commands.append(command)
+            fixture,rootfs,arch,scenario,cls,method,arg,result,limit=command[-9:]
+            if Path(fixture).name.startswith('denied-'):
+                return subprocess.CompletedProcess(command,76,b'',b'CLINE_UNIDBG_GUARD_V1 76')
+            if limit=='1':
+                return subprocess.CompletedProcess(command,75,b'',b'CLINE_UNIDBG_GUARD_V1 75')
+            if method=='missing':
+                if arch=='arm64':
+                    Path(result).with_name('hotspot-crash.log').write_bytes(raw)
+                    return subprocess.CompletedProcess(command,1,b'owned fatal stdout',b'owned stderr')
+                return subprocess.CompletedProcess(command,1,b'',b'java.lang.IllegalArgumentException: Exact static JNI export required')
+            Path(result).write_text(json.dumps({'initialized':True,'returnValue':134,
+                'backend':'unicorn2','instructionCount':10}))
+            return subprocess.CompletedProcess(command,0,b'',b'')
+        with patch.object(selftest,'invoke',side_effect=fake_invoke),patch.object(selftest,'owned_jvm_runtime_probe') as probe,contextlib.redirect_stderr(io.StringIO()) as output,self.assertRaisesRegex(ValueError,'JNI refusal/budget boundary'):
+            selftest.jni_check('unidbg')
+        probe.assert_called_once_with()
+        self.assertEqual(len(commands),9)  # Stops at ARM64 missing, no retry/fresh.
+        markers=[line for line in output.getvalue().splitlines()
+                 if line.startswith('CLINE_MANAGED_OWNED_JVM_FAILURE_V1 ')]
+        self.assertEqual(len(markers),1)
+        value=json.loads(markers[0].split(' ',1)[1])
+        self.assertEqual((value['architecture'],value['case'],value['observedExit'],
+                          value['failureKind']),('arm64','missing',1,'refusal-contract'))
+        self.assertEqual(base64.b64decode(value['hotspot']['data'],validate=True),raw)
+        self.assertFalse(Path(commands[-1][-2]).parent.exists())
+
     def test_builder_probe_uses_the_actual_jlinked_jre_without_engine_dependencies(self):
         result=subprocess.CompletedProcess([],0,b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n',b'')
         with patch.object(selftest,'invoke',return_value=result) as invoke,contextlib.redirect_stdout(io.StringIO()) as output:

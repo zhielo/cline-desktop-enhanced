@@ -222,17 +222,18 @@ def validate_jni_refusal(result, result_path, engine, arch, case):
         raise ValueError('JNI refusal/budget boundary')
 
 
-def owned_jvm_failure_evidence(result, private, arch, case):
+def owned_jvm_failure_evidence(result, private, arch, case, *, contract_failed=False):
     """Retain bounded *owned fixture* unexpected-exit evidence before cleanup.
 
-    Includes non-signal fatal exits: exit 1 is not necessarily a Java exception.
+    Includes semantic refusal failures: exit 1 is not necessarily the expected
+    missing-export exception. contract_failed comes only from failed validation.
     Never used by a target runner or after private boot credentials are supplied.
     No diagnostic makes an unexpected exit or native crash an accepted guard.
     """
-    if arch not in ARCHES['unidbg'] or case not in ('positive','denied','budget','missing','fresh'):
+    if arch not in ARCHES['unidbg'] or case not in ('positive','denied','budget','missing','fresh') or type(contract_failed) is not bool:
         raise ValueError('Unknown owned JVM failure profile')
     expected = {'positive':0,'fresh':0,'denied':76,'budget':75,'missing':1}[case]
-    if result.returncode == expected:
+    if result.returncode == expected and not contract_failed:
         return
     path = private/'hotspot-crash.log'
     report = {'status':'absent'}
@@ -279,6 +280,7 @@ def owned_jvm_failure_evidence(result, private, arch, case):
             os.close(descriptor)
     value = {'engine':'unidbg','architecture':arch,'case':case,
              'observedExit':result.returncode,'hotspot':report,
+             'failureKind':'refusal-contract' if contract_failed else 'unexpected-exit',
              'stdoutBytes':len(result.stdout),
              'stdoutPrefix':result.stdout[:4096].decode('utf-8',errors='replace'),
              'stderrBytes':len(result.stderr),
@@ -365,7 +367,17 @@ def jni_check(engine):
                         owned_jvm_runtime_probe()
                     validate_owned_checked_jni(result, arch, case)
                 if case in ('denied','budget','missing'):
-                    validate_jni_refusal(result, root/'result.json', engine, arch, case)
+                    try:
+                        validate_jni_refusal(result, root/'result.json', engine, arch, case)
+                    except ValueError:
+                        # Same numeric exit is insufficient: HotSpot fatal exit1
+                        # can collide with a legitimate missing-export exit1.
+                        # Unexpected exits were already captured above; do not
+                        # duplicate their report/probe or retry the engine.
+                        if engine == 'unidbg' and result.returncode == {'denied':76,'budget':75,'missing':1}[case]:
+                            owned_jvm_failure_evidence(result, root, arch, case, contract_failed=True)
+                            owned_jvm_runtime_probe()
+                        raise
                 else:
                     if result.returncode:
                         print('CLINE_MANAGED_ENGINE_DIAGNOSTIC_V1 JNI exit='+str(result.returncode)+' '+result.stderr[-4096:].decode(errors='replace'),file=sys.stderr)
