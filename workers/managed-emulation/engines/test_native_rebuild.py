@@ -1,4 +1,4 @@
-"""Parser/patch/container-builder tests. No emulator, JVM or network executed."""
+"""Parser/build tests and owned fake-JNI C faults; no emulator/JVM/network."""
 import io
 import json
 from pathlib import Path
@@ -9,6 +9,7 @@ from unittest.mock import patch
 import warnings
 import zipfile
 import native_rebuild as n
+from test_jni_memory import MemoryTests  # Included in the existing required CI command.
 
 class NativeTests(unittest.TestCase):
     def test_missing_complete_jdk_headers_fails_before_download(self):

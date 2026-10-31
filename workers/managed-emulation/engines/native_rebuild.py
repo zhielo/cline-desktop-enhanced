@@ -124,6 +124,45 @@ def patch_jna(source):
     return replace_once(source,'  fileEncoding = get_system_property(env, "file.encoding");\n  if (fileEncoding) {',
         '  fileEncoding = get_system_property(env, "file.encoding");\n  if ((*env)->ExceptionCheck(env)) return "file.encoding";\n  if (fileEncoding) {')
 
+def patch_memory_arrays(source):
+    # JNI lengths are signed 32-bit. Validate before narrowing or handing a
+    # buffer to Unicorn; preserve allocation exceptions without another JNI
+    # lookup or a native access through NULL. Always release a successful pin
+    # before translating a backend error into a Java exception.
+    source=replace_once(source,'''  jbyte *array = (*env)->GetByteArrayElements(env, bytes, NULL);
+  jsize size = (*env)->GetArrayLength(env, bytes);
+  uc_err err = uc_mem_write(eng, (uint64_t)address, array, (size_t)size);
+  if (err != UC_ERR_OK) {
+    throwException(env, err);
+  }
+  (*env)->ReleaseByteArrayElements(env, bytes, array, JNI_ABORT);''','''  if ((*env)->ExceptionCheck(env)) return;
+  if (bytes == NULL) { throwException(env, UC_ERR_ARG); return; }
+  jsize size = (*env)->GetArrayLength(env, bytes);
+  if ((*env)->ExceptionCheck(env) || size == 0) return;
+  jbyte *array = (*env)->GetByteArrayElements(env, bytes, NULL);
+  if (array == NULL) return;
+  uc_err err = uc_mem_write(eng, (uint64_t)address, array, (size_t)size);
+  (*env)->ReleaseByteArrayElements(env, bytes, array, JNI_ABORT);
+  if (err != UC_ERR_OK) throwException(env, err);''')
+    return replace_once(source,'''  jbyteArray bytes = (*env)->NewByteArray(env, (jsize)size);
+  jbyte *array = (*env)->GetByteArrayElements(env, bytes, NULL);
+  uc_err err = uc_mem_read(eng, (uint64_t)address, array, (size_t)size);
+  if (err != UC_ERR_OK) {
+    throwException(env, err);
+  }
+  (*env)->ReleaseByteArrayElements(env, bytes, array, 0);
+  return bytes;''','''  if ((*env)->ExceptionCheck(env)) return NULL;
+  if (size < 0 || size > INT32_MAX) { throwException(env, UC_ERR_ARG); return NULL; }
+  jbyteArray bytes = (*env)->NewByteArray(env, (jsize)size);
+  if (bytes == NULL) return NULL;
+  if (size == 0) return bytes;
+  jbyte *array = (*env)->GetByteArrayElements(env, bytes, NULL);
+  if (array == NULL) return NULL;
+  uc_err err = uc_mem_read(eng, (uint64_t)address, array, (size_t)size);
+  (*env)->ReleaseByteArrayElements(env, bytes, array, err == UC_ERR_OK ? 0 : JNI_ABORT);
+  if (err != UC_ERR_OK) { throwException(env, err); return NULL; }
+  return bytes;''')
+
 def patch_bridge(source):
     source=replace_once(source,'  if (err != UC_ERR_OK) {\n    const char *msg',
         '  if ((*env)->ExceptionCheck(env)) return;\n  if (err != UC_ERR_OK) {\n    const char *msg')
@@ -178,7 +217,7 @@ def build(runtime, work, java_home=Path('/usr/lib/jvm/java-17-openjdk-amd64')):
         if name.startswith('bridge-'):shutil.copyfile(work/name,bridge/name[7:])
         elif name.startswith('jna-') and name!='jna-sources.jar':shutil.copyfile(work/name,jna/name[4:])
     original_bridge=(bridge/'unicorn.c').read_text();original_jna=(jna/'dispatch.c').read_text()
-    (bridge/'unicorn.c').write_text(patch_bridge(original_bridge));(jna/'dispatch.c').write_text(patch_jna(original_jna))
+    (bridge/'unicorn.c').write_text(patch_memory_arrays(patch_bridge(original_bridge)));(jna/'dispatch.c').write_text(patch_jna(original_jna))
     sources=work/'java';sources.mkdir();classes=work/'classes';classes.mkdir();headers=work/'headers';headers.mkdir()
     count=0;total=0;seen=set()
     with zipfile.ZipFile(work/'jna-sources.jar') as src:
