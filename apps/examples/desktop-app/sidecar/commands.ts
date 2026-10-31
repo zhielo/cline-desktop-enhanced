@@ -4577,6 +4577,10 @@ export async function handleCommand(
 					typeof args?.jobId === "string" ? args.jobId : undefined,
 				),
 			};
+		if (command === "setup_center_emulation_pack_status") {
+			const { managedEmulationPackStatus } = await import("./managed-emulation-setup");
+			return await managedEmulationPackStatus();
+		}
 		if (command === "setup_center_licenses")
 			return await platformToolsNotices();
 		if (command === "setup_center_detect") return await detectInstalledTools();
@@ -4649,6 +4653,23 @@ export async function handleCommand(
 				? { setupJob: accepted.job }
 				: await accepted.completion;
 		};
+		if (command === "setup_center_emulation_cancel_install") {
+			if (typeof args.jobId !== "string") throw new Error("Exact setup job identity required");
+			const job = getSetupJob(args.jobId);
+			if (!job || job.id !== args.jobId || job.status !== "running" ||
+				job.command !== "setup_center_emulation_install")
+				throw new Error("Only the exact running emulation file installation can be cancelled");
+			const { cancelManagedEmulationInstall } = await import("./managed-emulation-setup");
+			return cancelManagedEmulationInstall();
+		}
+		if (command === "setup_center_emulation_install" || command === "setup_center_emulation_verify_files") {
+			const { installManagedEmulationPack, verifyManagedEmulationPack } = await import("./managed-emulation-setup");
+			// No client root, catalog, executable, URL or environment override is
+			// forwarded. Existing local/trusted/explicit-confirmation gates apply.
+			return await tracked((phase) => command === "setup_center_emulation_install"
+				? installManagedEmulationPack(args.engines, phase)
+				: verifyManagedEmulationPack(args.engines, phase));
+		}
 		if (command === "setup_center_install_full") {
 			if (args.acceptedPlatformToolsLicense !== true)
 				throw new Error(

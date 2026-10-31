@@ -1,0 +1,86 @@
+name: Managed emulation real guest engines
+on:
+  # Required exact-head release checks must run for every pull request.
+  pull_request: {}
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: managed-owned-engines-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  owned-engine:
+    name: Actual owned guest engine (${{ matrix.engine }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [qiling, unidbg, rnidbg, speakeasy]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Install CI-only image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends kmod grub-pc-bin grub-efi-amd64-bin grub-common xorriso mtools qemu-system-x86 ovmf
+      - name: Engine bundle and receipt regressions
+        run: |
+          python3 -B workers/managed-emulation/engines/test_bundle.py
+          python3 -B workers/managed-emulation/engines/test_native_rebuild.py
+          python3 -B workers/managed-emulation/image/test_engine_entry.py
+          python3 -B workers/managed-emulation/engines/test_python_inputs.py
+      - name: Fetch exact reviewed kernel and BusyBox
+        run: python3 -B workers/managed-emulation/image/fetch_inputs.py "$RUNNER_TEMP/owned-engine-inputs"
+      - name: Build separate immutable-base runtime (never execute fixture in builder)
+        shell: bash
+        env:
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          set -euo pipefail
+          python_image=$(python3 -c 'import json; print(json.load(open("workers/managed-emulation/image/inputs.lock.json"))["runtimeImage"])')
+          compiler_image=$(python3 -c 'import json; print(json.load(open("workers/managed-emulation/engines/inputs.lock.json"))["compilerImage"])')
+          docker build --platform linux/amd64 --build-arg "PYTHON_IMAGE=$python_image" --build-arg "COMPILER_IMAGE=$compiler_image" --build-arg "ENGINE=$ENGINE" -f workers/managed-emulation/engines/Dockerfile -t cline-owned-guest-engine .
+          container=$(docker create --network none --read-only cline-owned-guest-engine)
+          trap 'docker rm "$container" >/dev/null' EXIT
+          mkdir -p "$RUNNER_TEMP/owned-engine-inputs"
+          docker export "$container" > "$RUNNER_TEMP/owned-engine-inputs/rootfs.tar"
+      - name: Construct actual owned engine guest image (not published)
+        run: |
+          python3 -B workers/managed-emulation/image/build_image.py \
+            --rootfs "$RUNNER_TEMP/owned-engine-inputs/rootfs.tar" \
+            --kernel "$RUNNER_TEMP/owned-engine-inputs/kernel.deb" \
+            --busybox "$RUNNER_TEMP/owned-engine-inputs/busybox.deb" \
+            --output "$RUNNER_TEMP/owned-engine-image" \
+            --source-revision "$GITHUB_SHA" --owned-engine '${{ matrix.engine }}'
+      - name: Actual offline UEFI guest owned engine execution and refusal cases
+        run: |
+          python3 -B workers/managed-emulation/image/smoke_boot.py \
+            --image "$RUNNER_TEMP/owned-engine-image/inert-guest.iso" \
+            --log "$RUNNER_TEMP/owned-engine-image/engine.log" \
+            --receipt "$RUNNER_TEMP/owned-engine-image/engine-receipt.json" \
+            --uefi --owned-engine '${{ matrix.engine }}'
+          # A previous unidbg guest failed a refusal boundary without an exact
+          # case diagnostic. Require ALL three fresh cold boots, not retries
+          # until one passes; every failure remains fatal and retained.
+          if [ '${{ matrix.engine }}' = unidbg ]; then
+            for repetition in 2 3; do
+              python3 -B workers/managed-emulation/image/smoke_boot.py \
+                --image "$RUNNER_TEMP/owned-engine-image/inert-guest.iso" \
+                --log "$RUNNER_TEMP/owned-engine-image/engine-$repetition.log" \
+                --receipt "$RUNNER_TEMP/owned-engine-image/engine-$repetition-receipt.json" \
+                --uefi --owned-engine unidbg
+            done
+          fi
+      - name: Retain scoped engine evidence only (no runtime ISO)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: managed-owned-guest-${{ matrix.engine }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/owned-engine-image/image-manifest.json
+            ${{ runner.temp }}/owned-engine-image/native-build.json
+            ${{ runner.temp }}/owned-engine-image/*.log
+            ${{ runner.temp }}/owned-engine-image/*-receipt.json
+          if-no-files-found: warn
+      - name: Explicit unfinished installation scope
+        run: echo 'Owned guest engine scenarios only; no Hyper-V acceptance, installed Setup Center pack, arbitrary-target support, readiness promotion, runtime publication or containment certificate.'

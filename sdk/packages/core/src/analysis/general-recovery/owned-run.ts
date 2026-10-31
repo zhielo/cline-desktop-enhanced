@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import {
 	runPinnedGeneralRecovery,
 	GeneralRecoveryTerminationUnconfirmedError,
+	GeneralRecoveryExecutionError,
 } from "./engine";
 import { readOwnedArtifactBytes } from "../artifact-readers/reader";
 import { ResultSchema, digest, type AnalysisReceipt } from "../contracts";
@@ -120,6 +121,9 @@ export async function runOwnedGeneralRecovery(
 			receipt.error = persistenceFailed
 				? "Native ownership persistence failed; no automatic replay"
 				: "Cancelled without replay";
+		} else if (error instanceof GeneralRecoveryExecutionError) {
+			receipt.status = "failed";
+			receipt.error = error.message;
 		} else {
 			receipt.status = "failed";
 			receipt.error =

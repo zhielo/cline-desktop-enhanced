@@ -160,23 +160,83 @@ it("runs original feature/version/export/source-to-bundle algorithms on saved gr
 	}
 });
 it("rejects unbound graphs and modified source manifests with transaction rollback", () => {
-	const db = new FirstPartyAnalysisStore(join(root, "evidence.sqlite"));
+	let db = new FirstPartyAnalysisStore(join(root, "evidence.sqlite"));
+	const started = performance.now();
+	const cpuStarted = process.cpuUsage();
+	const phases: Array<{ phase: string; elapsedMs: number }> = [];
+	let completed = false;
+	function measured<T>(phase: string, operation: () => T): T {
+		const at = performance.now();
+		try {
+			return operation();
+		} finally {
+			phases.push({ phase, elapsedMs: Math.round(performance.now() - at) });
+		}
+	}
 	try {
-		db.setMode("owner", root, "static");
-		const r = receipt(a);
-		db.start(r);
+		measured("initialize-store", () => db.setMode("owner", root, "static"));
+		const r = measured("build-receipt", () => receipt(a));
+		measured("start-receipt", () => db.start(r));
 		r.status = "partial";
-		expect(() => db.save(r, a.semantic, b.application)).toThrow(/binding/);
-		expect(db.get("owner", r.id).status).toBe("running");
+		measured("reject-unbound-application", () => {
+			expect(() => db.save(r, a.semantic, b.application)).toThrow(/binding/);
+		});
+		function assertRolledBack() {
+			expect(db.get("owner", r.id).status).toBe("running");
+			// The receipt already declares both graphs. Neither graph row may
+			// survive the failed transaction, including its earlier semantic insert.
+			expect(() => db.semanticGraph("owner", r.id)).toThrow(/missing/);
+			expect(() => db.applicationGraph("owner", r.id)).toThrow(/missing/);
+		}
+		measured("check-first-rollback", assertRolledBack);
 		r.result!.applicationGraph!.sources[0]!.bytes++;
-		r.resultHash = digest(r.result);
-		expect(() => db.save(r, a.semantic, a.application)).toThrow(/binding/);
-		r.result!.applicationGraph!.sources[0]!.bytes--;
-		r.resultHash = digest(r.result);
-		db.save(r, a.semantic, a.application);
-		expect(db.applicationGraph("owner", r.id)).toEqual(a.application);
+		try {
+			r.resultHash = digest(r.result);
+			measured("reject-modified-manifest", () => {
+				expect(() => db.save(r, a.semantic, a.application)).toThrow(/binding/);
+			});
+			measured("check-second-rollback", assertRolledBack);
+		} finally {
+			// Never leave the shared owned fixture modified after an assertion failure.
+			r.result!.applicationGraph!.sources[0]!.bytes--;
+			r.resultHash = digest(r.result);
+		}
+		measured("close-after-rollbacks", () => db.close());
+		db = new FirstPartyAnalysisStore(join(root, "evidence.sqlite"));
+		measured("check-reopened-rollback", assertRolledBack);
+		measured("commit-valid-graphs", () =>
+			db.save(r, a.semantic, a.application),
+		);
+		measured("read-committed-graphs", () => {
+			expect(db.semanticGraph("owner", r.id)).toEqual(a.semantic);
+			expect(db.applicationGraph("owner", r.id)).toEqual(a.application);
+		});
+		completed = true;
 	} finally {
-		db.close();
+		let closed = false;
+		try {
+			measured("close-store", () => db.close());
+			closed = true;
+		} finally {
+			const elapsedMs = Math.round(performance.now() - started);
+			// Bounded owned-test diagnostics only: no source, paths, SQL bodies,
+			// credentials, retries or relaxed deadlines. Slow is not success.
+			if (!completed || !closed || elapsedMs >= 1000) {
+				const cpu = process.cpuUsage(cpuStarted);
+				console.warn(
+					"CLINE_OWNED_GRAPH_ROLLBACK_TIMING_V1",
+					JSON.stringify({
+						platform: process.platform,
+						node: process.version,
+						completed: completed && closed,
+						elapsedMs,
+						cpuUserMs: Math.round(cpu.user / 1000),
+						cpuSystemMs: Math.round(cpu.system / 1000),
+						phases,
+					}),
+				);
+			}
+		}
 	}
 });
 it("requires explicit graph opt-in and exact workflow inputs", () => {

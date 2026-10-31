@@ -6,6 +6,8 @@ import {
 } from "./setup-capability-directory";
 import { BinaryTriageReadiness } from "./binary-triage-readiness";
 import { ManagedEmulationPreflightPanel } from "./managed-emulation-preflight";
+import { ManagedEmulationInstall } from "./managed-emulation-install";
+import type { ManagedPackStatus } from "../../../../sidecar/managed-emulation-pack.mjs";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { desktopClient } from "@/lib/desktop-client";
@@ -32,6 +34,7 @@ type SetupJob = {
 	error?: string;
 };
 type Status = {
+	managedEmulationPackage?: ManagedPackStatus;
 	aiCapabilities?: SetupCapabilityDirectory;
 	optionalFrameworks?: OptionalFramework[];
 	specialistProfiles?: {
@@ -224,6 +227,8 @@ export function SetupCenter() {
 			"setup_center_test_ghidra",
 			"setup_center_test_worker",
 			"setup_center_test_device",
+			"setup_center_emulation_install",
+			"setup_center_emulation_verify_files",
 		].includes(command);
 		if (tracked) {
 			localStorage.setItem("cline.setup.pending-admission", command);
@@ -441,6 +446,23 @@ export function SetupCenter() {
 					frameworks={status?.optionalFrameworks}
 				/>
 				<BinaryTriageReadiness />
+				<ManagedEmulationInstall
+					status={status?.managedEmulationPackage}
+					busy={busy}
+					action={action}
+					job={setupJob}
+					cancel={async (jobId) => {
+						if (!window.confirm("Request cancellation of this exact engine file installation? Partially staged files are retained for inspection. This does not stop or retry a VM, framework, worker or unrelated setup job.")) return;
+						try {
+							await desktopClient.invoke("setup_center_emulation_cancel_install", {
+								environmentId: "local", confirmed: true, jobId,
+							});
+							setMessage("Cancellation requested; waiting for the installation job's terminal result. A request alone does not prove cancellation completed.");
+						} catch {
+							setError("Installation cancellation was not confirmed. Continue inspecting the exact job; no other operation was stopped.");
+						}
+					}}
+				/>
 				<ManagedEmulationPreflightPanel />
 				<p className="text-xs">
 					Installed does not mean verified. Ready requires an owned-fixture

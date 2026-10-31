@@ -1,0 +1,547 @@
+# Managed-local inert transport foundation — development only
+
+This source is **not** the Emulation Framework Pack, its installer, a VM
+lifecycle broker, a distributable guest image, or a containment certificate.
+It changes no installed application route, engine readiness, existing worker
+transport, WSL distribution, Hyper-V registration, VM, or host settings.
+There are intentionally no user setup instructions here.
+
+## Implemented slice
+
+- A Rust host probe uses Windows `AF_HYPERV` only. The Linux guest probe uses
+  `AF_VSOCK` only. There is no IP, DNS, TCP, HTTP or shell fallback.
+- The fixed Linux VSOCK port is 35555. Its Windows service GUID is
+  `00008ae3-facb-11e6-bd58-64006a7986d3`, following Microsoft's Linux VSOCK
+  template. Address encoding is tested; it is not a VM ownership check.
+- Only an authenticated `owned-probe` challenge is accepted. A response binds
+  the challenge to the fixed inert-fixture digest and explicitly retains
+  `vmIsolation: not-attested` and `engineReadiness: not-tested`.
+- Frames have a 4-byte big-endian size, a strict JSON envelope, an exact boot
+  session and direction, hex payload bytes, and HMAC-SHA256. The MAC domain is
+  the exact protocol plus NUL, followed by session bytes, direction byte, and
+  the exact payload bytes. Payloads are at most 1024 bytes; envelopes at most
+  4096. Both peers reject extra/duplicate fields, altered identities and MACs.
+- The host reads a bounded closed private stdin pipe, never argv/environment
+  credentials. It rejects wildcard/parent/loopback VM addresses and uses one
+  ten-second connection/I/O budget. A separate 15-second whole-process watchdog
+  bounds blocked private stdin EOF and output delivery; timeout hard-exits 124 without
+  touching a possibly blocked diagnostic pipe or running buffered-I/O cleanup
+  handlers (`_exit` on Unix, `TerminateProcess` on Windows). This terminates **only the probe**,
+  not the VM; its parent **must** still supervise the VM and record unresolved
+  termination/recovery rather than treating helper exit as success.
+  Private input/key buffers are cleared
+  best-effort on ordinary return; watchdog termination bypasses destructors.
+  This is not a memory-forensics guarantee.
+- The guest accepts one connection from host CID 2 and exits after one probe.
+  Accept plus I/O has an absolute 30-second maximum, further bounded by the
+  boot credential's expiry. It requires a root-owned, mode-0600, non-linked
+  regular boot record at the fixed private `/run/cline-managed-probe/boot.json`.
+  The guest pins `/`, `/run` and its private directory using descriptor-relative
+  no-follow opens. All parents must be root-owned and not group/world-writable;
+  the private directory must be mode 0700. The record must have one hard link
+  and unchanged identity/ownership/mode/size/timestamps across its bounded read.
+- No target bytes, arbitrary paths, scripts, commands, engine imports, file
+  transfers, subprocess launches or network access operations are implemented.
+  Imports perform no probe. Errors never echo private input or raw OS errors.
+
+## Lifecycle recovery core (development only)
+
+`host/src/lifecycle.rs` now supplies a strict, bounded, authenticated lifecycle
+journal reducer. This reducer is **not** the privileged broker, a VM factory,
+or a certificate that an observation actually occurred. The development persistence
+adapter below stores it without implementing host effects.
+
+- Each entry binds the installation/job, exact VM ID, image digest and original
+  host-boot identity, sequence, previous MAC and typed event. HMAC uses a separate
+  lifecycle domain. Unknown/duplicate fields, unsupported versions, mutations,
+  reordering, foreign identities and invalid transitions fail closed.
+- Restore requires an **independently retained trusted checkpoint**. A valid
+  prefix plus its own earlier checkpoint is not proof of freshness. The future
+  broker must protect and transactionally retain the journal and checkpoint;
+  reading the checkpoint from the same untrusted bytes defeats rollback checks.
+- A returned candidate is immutable with respect to the previous journal. The
+  broker must durably commit it **before** the corresponding effect. No host
+  operation is implemented or authorized by appending an event.
+- Every nonterminal reopen requires explicit recovery, even if the last record
+  said stopped or removal requested. Recovery permits only a stop/inspect path,
+  not automatic creation, boot, target execution, approval or replay. Removal
+  requires a new exact-VM stop observation after a stop intent. A reboot, helper
+  exit or missing PID does not synthesize that observation.
+- The fixed inert result is revalidated against the active challenge. It cannot
+  promote isolation or engine readiness. Recording it does not independently
+  prove transport authentication: the actual trusted probe/broker must verify
+  the real exchange first, not construct the public fixture response.
+- The single-job state machine permits one boot only and retains public boot
+  session/challenge identifiers, never boot keys, target bytes or shell commands.
+  Cross-job freshness, entropy and key provisioning remain broker requirements.
+  The original boot identity is historical binding, not current boot attestation.
+- Limits are 128 entries and 64 KiB. Exhaustion/mismatch remains unresolved and
+  blocks further transitions; old events/checkpoints are never silently pruned
+  to make a job look complete. Durable repair/compaction is not implemented.
+
+The initial exact VM identity must come from a trusted VM factory/ownership
+record. This reducer does not implement crash-safe VM creation/discovery or
+establish ownership from a supplied GUID. Its event observations must come from
+fresh independently checked Hyper-V state, not client assertions. Nothing is
+connected to Setup Center or changes the installed application's readiness.
+
+## Durable recovery storage adapter (development only)
+
+`host/src/store.rs` uses pinned rusqlite 0.40.2 with bundled SQLite. It writes
+immutable content-addressed full journal snapshots and a compare-and-swap current
+checkpoint into **separate databases in independent caller-protected directories**.
+Snapshots commit first, then the trusted anchor commits; both use rollback journals,
+`FULL` synchronization and bounded lock waits. State advances only after both commits.
+The key is privately supplied in memory and is never persisted in either database.
+
+- Open reads only the exact anchor-selected digest, verifies its bytes and the full
+  lifecycle MAC chain, and fences every nonterminal journal for explicit recovery.
+  It never scans for the highest sequence or promotes an orphan staged snapshot.
+- Stale writers lose the anchor compare-and-swap. Invalid requests, failed or ambiguous
+  commits fence the handle; reopening does not replay VM creation, boot or execution.
+- New leaf directories and files are exclusively created. Retained state is not
+  reused or deleted on failed creation. Symlink/reparse roots/files and linked
+  sidecars are rejected; Unix additionally enforces private modes/single links.
+- Fixed schemas, application/version IDs, integrity checks, 16 MiB database bounds,
+  256 retained snapshots, 128 journal events and 64 KiB snapshots bound this adapter.
+  Exhaustion remains unresolved. Repair/compaction is not implemented.
+- **Root ACL/owner protection, ancestor protection, secure key provisioning and
+  service identity are caller requirements, not supplied by this adapter.** Windows
+  roots must be provisioned by the future privileged broker; inherited ACLs and
+  hard-link ownership are not independently established here. Separate files do not
+  detect a privileged owner rolling back both the anchor and snapshot stores. MACs
+  do not replace a separately protected current checkpoint. No anti-rollback hardware
+  or physical-power-loss guarantee is claimed.
+- Four subprocess tests forcibly kill a real writer before/after each database
+  commit, reopen hot journals, and require the old or new exact checkpoint plus
+  recovery fencing. These are process-crash tests, not disk-failure, host-reboot,
+  Hyper-V lifecycle, engine readiness or installer acceptance.
+
+The adapter is **not connected to Setup Center or a privileged Hyper-V broker**.
+Stored event observations remain claims until fresh exact-VM state is independently
+verified. A committed stop intent is not a termination receipt.
+
+## Native private boot-media provisioning (development only)
+
+`host/src/boot_media.rs` now generates a fresh 256-bit key, 128-bit session and
+256-bit challenge using OS entropy, with a bounded 180-second credential lifetime.
+The native writer builds one fixed-size ISO9660 volume in process: only BOOT.JSON;1,
+which the guest mounts as boot.json. No Python, Java, xorriso, external installer,
+network endpoint, shell or user-provided template is needed by this writer.
+
+- Boot material is not Debug/Clone/Serialize/Deserialize. Secret-bearing temporary
+  buffers are zeroized on ordinary drop; this is best effort, not forensic erasure.
+- Media is exclusively created as boot.iso under a caller-protected job directory,
+  synced before success and rechecked for expiry. Retained/partial files are never
+  overwritten, auto-reused or deleted on error. Unix modes are private; reparse/link
+  roots are refused. Windows ACL/owner/ancestor protection still requires the broker.
+- The same in-memory material writes bounded matching input through a private pipe
+  to the native probe, including the host challenge. No keys go into argv/env/logs,
+  model context, receipts or the durable lifecycle journal.
+- OS entropy and byte/identity/private-mode/reuse/refusal tests run on native Linux
+  and Windows. A separate real UEFI guest boot mounts native-generated media and
+  must accept its exact record, remain unresolved without a host exchange, then
+  power off. Earlier absent/expired/public-format fixture boots remain required.
+
+The CI-only owned-boot-media-fixture binary produces no credentials on stdout or
+stderr. Its media is ephemeral, never uploaded. It is NOT an installer, a privileged
+service, VM ownership proof, cleanup authorization or a Setup Center capability.
+The future broker must durably reserve each boot, protect roots/keys, supervise
+operations, enforce no replay, attach only to the verified exact VM and remove media
+only after verified detach/termination. No user WSL or host configuration changes.
+
+## Development guest-image path
+
+`image/` now contains a separate CI-only diskless ISO builder and fixed guest
+bootstrap. See `image/README.md` for exact input locks, parser and module limits,
+BIOS/UEFI cold-boot validation and unfinished publication/Hyper-V acceptance.
+This is not a distributable four-engine image or an installed Setup Center pack.
+The existing mandatory real-Hyper-V/lifecycle/integration gates below remain.
+
+## Native protected image admission (not an installer)
+
+VM reservation now accepts only a revalidated protected native image guard, not an
+external digest. Production selection uses compiled pins, currently deliberately
+empty: development guest tests are not promoted into shipping image policy.
+The guard opens only a fixed content-addressed file in the pinned SYSTEM image
+root, validates the protected ACL/owner/single-link/non-reparse/size boundary,
+streams its exact SHA-256 with a 64-KiB buffer and retains read-only/no-write-or-
+delete-sharing access. The roots stay borrowed. Revalidation repeats this before
+reservation. The separate image cap is 768 MiB; identity files keep 16 KiB.
+This bounds bytes and memory, not stalled OS filesystem I/O; future broker process
+supervision still needs a hard deadline. Trusted administrators remain trusted.
+
+The existing feature-gated SYSTEM CI journey tests only exact public nonbootable
+fixture data and image/refusal/reservation binding. It does not populate production
+pins, stage a shipping payload, implement privileged installation or create a VM.
+An opened historical reservation is recovery bookkeeping, not permission to use an
+unadmitted image or proof of actual VM/image ownership. All lifecycle effects and
+installed-host gates below remain unfinished.
+
+## Mandatory unfinished lifecycle integration
+
+Do **not** expose this developer probe as a ready Setup Center function.
+
+The lifecycle broker still has to:
+
+1. Distribute a reviewed immutable image with Linux Hyper-V VSOCK support.
+2. Create and verify an app-owned VM with no network adapter/host shares.
+3. Protect owner/VM/image records and provision a fresh per-boot session/key
+   privately. The current helper's supplied VM ID does **not** prove ownership.
+4. Register only the reviewed Hyper-V service with explicit elevation, without
+   weakening host-wide Hyper-V socket policy or touching unrelated services.
+5. Enforce parent process deadlines, cancellation, verified VM termination,
+   no replay, disposable job state and recovery after helper/app/host failure.
+6. Reject readiness until the actual image, transport, lifecycle and cleanup
+   pass owned execution on a representative Windows Hyper-V host.
+7. Add separate target admission/execution/approval and per-engine runtime
+   identities. The inert probe does not grant permission to execute targets.
+
+The probe itself is not wired to the development persistence adapter. Its one-shot
+process and fresh boot session/key are necessary assumptions, not a replacement
+for the future broker's cross-job lifecycle/no-replay enforcement.
+An authenticated response proves possession of the boot key and agreement on
+the inert protocol, not the guest image's integrity, safe containment, or that a
+particular runtime binary executed. Those require separate host lifecycle and
+image-validation evidence.
+
+## Development validation
+
+From the repository root:
+
+```sh
+python3 -B workers/managed-emulation/probe_protocol_test.py
+cargo +1.85.1 test --locked --manifest-path workers/managed-emulation/host/Cargo.toml
+cargo +1.85.1 fmt --manifest-path workers/managed-emulation/host/Cargo.toml -- --check
+```
+
+Public fixture vectors contain public test credentials only. Python descriptor
+fixtures exercise real no-follow/FIFO/hard-link behavior with synthesized root
+ownership (unprivileged CI is not root/VM attestation). Journal tests establish
+state-machine/authentication behavior; separate storage tests kill actual processes
+at commit boundaries, not actual VMs or physical power. Python socketpair
+and native codec/process tests establish protocol behavior, **not** Hyper-V
+communication, Windows 10 compatibility, guest isolation or engine readiness.
+The dedicated CI workflow builds/tests the native helper on Linux and Windows;
+it deliberately does not claim a VM or framework was installed.
+
+Reference:
+https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/make-integration-service
+## Separate owned-engine guest images (development only)
+
+`engines/` builds separate Qiling, unidbg, rnidbg and Speakeasy runtime bundles
+from the existing pinned worker requirements/adapters and checked-in owned
+fixtures. Qiling and Speakeasy never share their incompatible Unicorn Python
+environments; the existing desktop Unicorn and external-worker routes are unchanged.
+The immutable Python and Rust base images are digest pinned. Debian build-tool/JDK
+packages are not a fully pinned reproducible distribution: final runtime bytes,
+links and fixture content are sealed in each bundle manifest; redistribution and
+complete build-tool/source/license review remain required before publication.
+
+Builders install/compile dependencies inside disposable containers, never execute
+an emulator or fixture there, and export only a runtime image. Compilers, Maven,
+package caches and pip are excluded from the final bundle. Guest tests use an
+engine-specific venv, minimal Java 17 runtime for unidbg, the existing reviewed
+rnidbg compatibility patch, and fixed shared-library closure. No arbitrary target,
+script, hook, stub, APK, classpath, host share or HTTP worker is accepted.
+
+The dedicated four-way CI constructs actual diskless guest images and boots each
+under networkless QEMU/TCG with 2 GiB RAM. Before credentials are provisioned,
+fixed owned scenarios must execute: Qiling all three existing profiles with
+stdout/exit, fresh-state, syscall-refusal and instruction-budget checks; unidbg
+ARM32/64 and experimental rnidbg ARM64 JNI return/refusal/budget/missing-export/
+fresh-state checks; Speakeasy owned PE entry/GetTickCount/fresh-state and identity
+refusal. Runtime bundle integrity is verified both before and after execution.
+Counts, architectures and exact scope must match; imports alone never pass.
+
+These are developer acceptance images, NOT installed Setup Center packs. Even a
+passed owned scenario retains engineReadiness not-tested and VM isolation
+not-attested. No guest runtime ISO is published. Hyper-V ownership/transport,
+privileged lifecycle/recovery, reviewed distribution, per-request approval,
+transactional setup and installed Windows 10 acceptance remain mandatory.
+
+### Bounded complete engine inventory verification
+
+The image builder checks every exported non-directory engine member against
+the sealed inventory, including exact file lengths/digests and symbolic-link
+targets. Extra files and malformed entry types fail before image construction.
+The guest reads bounded regular files through no-follow/nonblocking descriptors,
+checks allocation limits before reads and rejects changed metadata and special
+files. Aggregate bytes are refused before the next content read. These checks
+remain scoped to development-owned images; they do not implement installation,
+VM ownership, broker filesystem protection or arbitrary-target containment.
+
+Fixed owned guest child commands also have live 1-MiB stdout and 16-KiB stderr
+limits, at most 4-KiB input, one monotonic 35-second command deadline and fresh
+process-group cleanup. The leader is observed without reaping until cleanup,
+so its group ID cannot be reused between observation and termination. This
+stops owned background descendants even after a successful leader exit; it
+is not proof that the host VM has stopped or that arbitrary targets are safe.
+
+## Native Windows protected parent provisioning
+
+`host/src/windows_roots.rs` supplies fixed-location SYSTEM-only root creation and
+existing-root validation, not a running service, an installer or VM authority.
+The public API accepts no client paths or identities. It rejects impersonation
+and ordinary/admin process identities before accessing ProgramData. New roots
+are exclusive and explicitly SYSTEM-owned; protected ACLs admit only SYSTEM and
+built-in Administrators with full access. Handle-based ACL checks reject null,
+inherited/unprotected, duplicate, missing or changed rights/principals. Held
+non-reparse ancestor/root handles deny delete sharing and pin directory names.
+
+All roots must be retained for the future operation lifetime and revalidated
+before effects. Opening roots does not authenticate an installation, image,
+caller or VM: protected ownership/key records and the actual service/factory
+remain necessary. Administrators/SYSTEM are trusted; this does not prevent their
+intentional state rollback or certify containment. No existing state is adopted
+by initial creation, and failures leave partial state for explicit review.
+
+Native Windows tests exercise owned ACLs and real junctions. The separate
+`owned-system-acceptance` Cargo feature enables an unshipped CI-only executable.
+A Windows CI step runs it as actual SYSTEM through a fresh bounded scheduled
+task, checking exclusive public provisioning, revalidation, reopening and pinned
+lifetime. Successful fixture cleanup removes only its newly created empty
+directories; no recursive cleanup, user-PC installation or VM execution occurs.
+The executable is not built by default, included in an installer, or exposed to
+models. This scope is not Windows 10 installed Hyper-V acceptance.
+
+Windows root handles request directory-list read access, not attributes alone: attribute-only opens do not enforce delete-sharing denial. Native acceptance retains an actual rename-refusal assertion to verify the pinning behavior rather than inferring it from flags.
+
+### Protected per-job adapter (development only)
+
+`SystemRoots::create_job` generates a fresh 128-bit ID in process and exclusively
+creates explicit protected/pinned snapshot, independent-anchor and media leaves.
+`open_job` accepts only an exact ID, never a path, and revalidates the SYSTEM
+identity, parent roots and each leaf. The future service must select identities
+from protected ownership records; opening filesystem objects is not authorization.
+
+`SystemJob` keeps the parent guard borrowed. Its `ProtectedStore` keeps the job
+borrowed, exposes no raw mutable store and rechecks the identity/ACL boundary
+before every transition. Any failed transition fences that handle until explicit
+reopen/inspection. Existing caller-protected cross-platform Store adapters remain
+unchanged; only this Windows adapter provisions/retains the explicit ACL guards.
+The in-process journal key is zeroized but not persisted by this adapter.
+
+Fresh `write_boot_media` exclusively writes the existing bounded ISO beneath the
+pinned job; duplicate writes fail and retain state. Native SYSTEM acceptance
+covers actual SQLite create/reopen, identity mismatch, impersonation fencing,
+media and namespace pinning; its reducer events never create a VM. Only exact
+owned files and empty directories are cleaned after handles close. No arbitrary
+target execution, service, VM ownership, installed pack or readiness is added.
+
+### Persisted SYSTEM installation identity (development only)
+
+`windows_identity` creates/opens a fixed exclusive SYSTEM-owned, protected,
+single-link non-reparse `installation.bin` beneath the pinned root. It retains
+its file handle, checks bounded stable reads/ACLs and pins the envelope digest.
+A user-scoped SYSTEM DPAPI envelope with UI disabled protects an OS-random
+installation ID/master; no machine-wide DPAPI, external password, key getter,
+model/argv/env or log channel is used. Plaintext business buffers and native
+DPAPI allocations are zeroized on success and errors. Initial/partial state is
+never overwritten or automatically repaired/deleted.
+
+The identity guard derives domain/length-bound HMAC keys over every exact
+installation/job/VM/image/original-boot claim, rather than accepting a client key.
+Its borrowing store wrapper keeps all guards alive, revalidates before each
+transition and fences on failure. Reopening still requires explicit recovery;
+it never resumes a VM or certifies termination. Native SYSTEM acceptance actually
+persists/closes/decrypts/re-derives and reopens the owned SQLite journal.
+
+This protects ordinary-user access, not rollback by trusted administrators or
+SYSTEM. It is not caller authentication, a service, actual VM ownership/image
+records, installed Hyper-V acceptance or the promised Setup Center pack. Existing
+Unicorn and external worker behavior are unchanged.
+
+### Protected VM reservation intent (development only)
+
+`SystemIdentity::reserve_vm` generates the VM UUIDv4 using OS entropy and stores
+one immutable, strict versioned `ownership.json` under the protected job leaf.
+A separate HMAC domain binds every installation/job/VM/image/original-boot claim.
+`open_vm` reads only that fixed file, validates bounded schema and authentication,
+and never accepts an external VM identifier, path or automatic repair request.
+The borrowing record pins exclusive protected storage; its derived recovery store
+also checks the retained record bytes before transitions. Native SYSTEM acceptance
+covers handle teardown/reopen, persisted identity, explicit recovery and tamper
+refusal, with only exact owned fixture cleanup.
+
+This record is **reservation intent, not actual VM ownership**. Image and boot
+inputs are claims that future trusted observers must establish; no VM is created,
+queried, stopped or authorized here. Live Hyper-V factory/configuration checks,
+authenticated service, reviewed distributable pack and Setup Center integration
+remain unimplemented. Ordinary-user protection is not administrator rollback
+resistance or readiness attestation.
+
+### Native original-boot binding
+
+The reservation API no longer accepts an external original-boot claim. It reads
+`SystemBootEnvironmentInformation` directly from ntdll, with initialized bounded
+aligned storage, exact GUID decoding and no shell/clock/uptime fallback. Missing,
+failed or placeholder observations refuse reservation. `HostBoot` has no public
+constructor/deserializer; its value is read-only OS evidence, not hardware trust.
+Reservation-bound stores re-observe this boot before forward VM-created,
+boot-requested or inert-probe-recorded transitions, fencing after failure.
+Original records remain openable for explicit recovery, never automatic replay.
+A changed host boot is not a VM stop, removal or containment receipt. Native
+Windows tests include real stable queries and explicit different-boot refusal;
+no physical reboot or actual Hyper-V lifecycle acceptance is implied.
+
+
+## Native local caller authentication (development only)
+
+`host/src/windows_ipc.rs` supplies a fixed inert local message-pipe exchange for
+future service integration. Public binding/serving requires actual LocalSystem
+without pre-existing thread impersonation. Explicit DACL/first-instance/remote
+refusal and actual client token user + authentication LUID + session validation
+precede any response. Client owner validation requires SYSTEM before transmitting,
+with identification-only SQOS and nonce correlation. Token observation is not a
+registration grant or per-request authorization. No external SID/PID/session/JSON
+claims can construct a scope, and no target/command/path/credential is exchanged.
+
+One five-second monotonic connection budget covers all overlapped I/O. Cancellation
+retains async memory until completed; unresolved drain or identity reversion aborts
+the process instead of allowing privileged work with unsafe state. Native tests
+cover real user-mode pipes, anonymous/mismatched scope/owner and timeout refusal;
+the explicit owned SYSTEM fixture additionally uses the actual public endpoint.
+
+This component does not install or run an SCM service, register a UI logon scope,
+provision a VM/image/engine, integrate Setup Center or promote readiness. Protected
+service deployment, consented client registration and actual supervised Hyper-V
+lifecycle remain mandatory before the framework pack can become available.
+
+
+## Explicit owned SCM host (development-only feature)
+
+`windows_service.rs` implements real SCM dispatch/status, SYSTEM-only inert IPC,
+Stop/shutdown control and native I/O cancellation. The feature-gated
+`owned-local-service-fixture` binary has no console/install mode and is not
+bundled by the app. Before Running it validates its exact protected per-job image
+and existing roots, with System32-only DLL lookup. This is not UI authorization.
+
+The explicit native SYSTEM CI journey exclusively creates a temporary owned SCM
+entry for a digest-checked protected staged fixture, verifies image/account/start
+configuration, rejects duplicate creation and start arguments, probes real IPC,
+requires zero-error Stop plus actual process exit, restarts with a silent client
+and verifies prompt cancellation. It requires the exact service entry to disappear
+before closing the binary pin and nonrecursive owned cleanup. Failure retains
+ambiguous state. The child's 120-second CI watchdog is failure, never success.
+
+Successful Stop also requires a signalled process handle and a queried native
+process exit code of zero; SCM `Stopped` and a signalled handle alone are not
+enough. Native acceptance rejects the still-live fixture process and a separate
+exact protected fixture child that refuses command-line arguments with exit code
+2, using the same process-exit verifier as service Stop.
+
+This does not provision the user's host, publish a trusted service/engine image,
+register UI logon scopes, create a VM, install a framework or complete Setup Center.
+Real installed Windows 10/Hyper-V and all distribution/approval gates remain.
+
+## Owned engine identity acceptance
+
+The development image launches the complete owned engine self-test process as
+UID/GID 65534 with real/effective/saved IDs dropped, supplementary groups cleared,
+core dumps disabled, all permitted/effective/inheritable/ambient capabilities
+observed empty and Linux no-new-privileges set and checked before engine
+imports. A fresh root-private public canary must be unreadable with actual
+PermissionError, not a missing-file substitute. Only the fixed image interpreter,
+self-test and explicit environment are executable from this entry. Disposable
+/tmp is a private-guest nosuid/nodev/sticky tmpfs, not a host share; JNI native
+extraction remains possible inside that disposable guest. No boot key is present
+during owned engine tests. Receipts require the exact unprivileged identity and
+all prior scenario/architecture/bundle assertions. This is not a production
+target process supervisor, authenticated host/guest target execution, Hyper-V
+acceptance or the unfinished Setup Center pack.
+
+### Private Python artifact acquisition
+
+Owned Qiling/Speakeasy guest builds use the committed `engines/python-inputs.lock.json` inventory and per-profile `requirements-*.lock` files. `python_inputs.py verify` checks exact agreement with existing upstream version files; fetch accepts only fixed archive URLs, bounded bytes and SHA-256. Pip sees only the local verified archives with required hashes and no package index. Pinned setuptools/wheel build tools live under the disposable build directory, not the engine environment; no isolated build dependency resolver is permitted. Runtime installation ignores build-only installed metadata so required runtime packages cannot be accidentally omitted.
+
+`python3 -B workers/managed-emulation/engines/test_python_inputs.py` exercises parsing, drift, duplicates, origins, redirects, truncation, growth, corruption and exclusive partial-file retention without executing any distribution. Actual offline guest jobs remain mandatory. Source archive entries are references, not a complete corresponding-source bundle or license approval; apt/JRE/toolchain and shipping review remain separate. No desktop installation, VM, HTTPS worker, existing WSL or readiness claim changes.
+
+
+## Separate JVM-only post-failure diagnosis
+
+Exact dc0 guest run40838088442 failed unidbg's first cold boot at ARM64 `fresh`, exit1, no result and no HotSpot report. Newly retained stderr identifies `ExceptionInInitializerError` from `CryptoAlgorithmConstraints`/`Set.of` while `SecureRandom`/`File.createTempFile` initialized the native extractor. Its builder used Debian OpenJDK17.0.21+9-1~deb12u1. This identifies a concrete failing path, not a demonstrated root cause or proof that earlier native crashes share it.
+
+Only after an unexpected owned JVM exit, a separate bounded fresh JVM may now run a fixed standalone Java diagnostic: immutable-set construction, known SHA-256 vector, SecureRandom and exact temporary-file creation/deletion. It has no emulator/JNI dependency JAR classpath and takes no arguments. Its separate native-builder health gate is described below. The original failed process is not retried, prewarmed, accepted or replaced; successful engine paths are unchanged. Selected bounded release fields and bounded diagnostic streams are retained. Probe failures/deadlines preserve the original failure, and a passing probe is not root-cause, stability or readiness evidence. Existing per-process/boot budgets, checked-JNI warnings, guard exits and all three cold boots remain required. The full one-click pack is still incomplete and unavailable.
+
+
+## Independent private-JRE builder health gate
+
+The exact jlinked private JRE now executes the fixed standalone JDK probe in a separate disposable build process before the unidbg guest image is constructed. This distinguishes a basic native-builder JVM failure from later guest/JNI failures without loading an emulator, native adapter, dependency JAR or target. The existing bounded35-second owned-process supervisor and JVM memory limits apply. Exact output, exit zero and no warnings are required; malformed output, warnings, fatal exits and deadlines fail without retry or success receipts. Successful output explicitly says builder-only, engine not executed, guest not tested and engine readiness not tested.
+
+The successful guest path is unchanged; post-failure diagnostics and all30 scenarios across three mandatory cold boots remain intact. A builder pass is not a fix or explanation for the retained intermittent guest JVM initialization failure. This adds independent evidence, not a shipping image/catalog, VM factory, one-click installation, containment or installed-host acceptance.
+
+
+## Native Hyper-V provider observation boundary
+
+A thread-affine native WMI/COM adapter now connects only to the local Hyper-V v2 namespace under real unimpersonated SYSTEM. Process and proxy packet privacy are explicit; an incompatible pre-existing COM security policy is refused. Only an existing protected reservation can select a VM. A fixed exact-GUID query, bounded enumeration, strict noncoercing CIM/VARIANT decoding, duplicate refusal and before/after boot and reservation revalidation protect readback. Provider GUID letter casing is normalized only for exact identity comparison. Missing objects are errors, never stop/removal receipts. The observation cannot advance the journal, create/adopt/control a VM or grant engine readiness.
+
+COM connection and query setup are not independently cancellable here: production must run the adapter in a supervised native broker child before UI integration. Windows tests cover native VARIANT types, query injection, GUID matching, enumeration and the SYSTEM-before-COM guard; cross-compiled signature checks are not real provider execution or installed-host acceptance.
+
+The provider documents VirtualSystemIdentifier as read-only. The current random reservation GUID is an intent, not proof that DefineSystem will create that GUID. Before any creation effect, the factory must bind its protected intent to the actual returned ResultingSystem and asynchronous job, with crash recovery; it must not adopt a VM by friendly name or manufacture VmCreated evidence. Reviewed shipping images/catalog, protected production deployment/UI consent, real Hyper-V lifecycle/containment, Setup Center integration and installed Windows acceptance remain mandatory. No install button is enabled by this component.
+
+
+## Hyper-V creation response correlation
+
+The native factory groundwork now decodes actual Windows CIM_UINT32/VT_I4 return bits and nullable CIM_REFERENCE outputs without text/numeric coercion. The local hostname is OS-observed. Returned absolute references are accepted only for that exact host and Hyper-V v2 namespace and are rebuilt as bounded relative fixed-class/key paths; remote aliases, escaped/extra keys and wildcard VM IDs are rejected. Job identifiers are bounded without guessing undocumented GUID-only InstanceID semantics.
+
+DefineSystem return4096 remains pending, not success. Correlation requires the same exact returned job, normal state7/ErrorCode0 and an affected-system reference matching any initial VM candidate. Errors, missing evidence, terminal failure or mismatched identity permanently fence that in-memory tracker; no implicit retry or resumption is provided. This is response data, not an actual invocation, durable creation attempt, VM ownership/configuration observation, lifecycle receipt or authorization. The actual native DefineSystem call, supervised child, protected pre-effect persistence, provider-result binding and Hyper-V acceptance still must be implemented before use. Read-only property metadata does not itself prove which creation inputs a provider accepts; actual output/readback must establish identity. No installation/readiness gate changes.
+
+
+## Durable pre-effect creation intent
+
+A native SYSTEM-only creation guard now persists fixed-role preparation and issuance records with independent per-job anchors before returning a non-cloneable live issuance object. Each record is bound to the protected reservation digest, original native boot and OS-random attempt ID, authenticated with a domain/role-separated derived key. Files are exclusively created, flushed, read back and held without write/delete sharing. Any retained record blocks new preparation; partial writes, mismatched MACs/roles/contexts, missing anchors, impersonation or boot changes cannot become a retry. A failed live permit validation fences it even after impersonation ends. Keys, paths, handles and commands do not escape the public API.
+
+Reopen exposes historical diagnostic stages only and never reconstructs a live issuance object. In particular, all four records can persist before the object is delivered: SubmissionIssued is not evidence that DefineSystem was called, a VM exists or an operation terminated. There is no automatic cleanup, overwrite, retry, recovery grant, native management invocation or readiness change. A future independently approved/supervised factory must consume the live object and bind actual provider results separately. Administrator/SYSTEM trust and physical-power-loss limitations remain unchanged.
+
+Three portable authentication/layout tests cover cross-role/key/context refusal, schema/size/duplicate/truncation rejection and ordered record prefixes. Explicit native SYSTEM acceptance additionally exercises eight owned-file scenarios: issuance, independent interruption cuts, abandoned preparation, cross-role mutation, empty partial record, a record gap, lost final delivery, reopen/no-retry, held-writer refusal and post-impersonation fencing. These are real protected-file operations and injected phase cuts, not real VM execution or a physical crash/power-loss claim. The full production creation/lifecycle, shipping catalog and Setup Center flow remain incomplete.
+
+## Byte-exact bounded owned crash retention
+
+Exact `dea0037897fb91b9b75bcb675454e9080542dac4` guest run41010678764 failed the first unidbg cold boot, ARM32 `fresh`: exit1, no result, HotSpot SIGSEGV in C2-compiled `java.lang.String.startsWith` during DalvikVM class loading. Qiling, rnidbg and Speakeasy passed independently. Native SYSTEM run41010684641 passed the eight protected creation-record scenarios, not actual Hyper-V VM creation. The separate post-failure JDK probe passed without retrying the engine. None of these independent passes explains or repairs this crash; it remains a merge blocker.
+
+The original artifact12957363225 (SHA-256 `619be2ecc35dc89de018c4398602844ddc88eba1b4ce4bd30351157953f9c5a0`) retained only the first12288 of178756 HotSpot bytes. New owned-fixture capture keeps the existing human prefix and a base64 byte-exact report capped at512KiB, with retained/total counts, explicit completeness and a SHA-256 of the entire stable input (maximum1MiB). Larger admitted files are explicitly incomplete, never represented as fully retained. This does not recover already-lost crash bytes. Short reads are handled; changed, empty, oversized, symlink, hardlink, FIFO and other nonregular files remain refused. Normal/expected exits still never read a report.
+
+Only fixed public development fixtures before boot credentials may use this capture. HotSpot reports can include fixed fixture paths, JVM options, native-library maps and the deliberately restricted fixture environment; subprocess argv/result bytes are not separately echoed. Arbitrary targets and production credentials never enter this diagnostic path. Worst-case escaped prefixes plus capped base64 are tested below the unchanged one-MiB guest serial-log ceiling with128KiB spare for other boot diagnostics. No log/deadline/JVM/CPU/memory limit, engine retry, exit-code rule, three-cold-boot requirement, shipping/install/readiness gate or existing Unicorn/WSL integration changes. This is forensic evidence repair, not a causal runtime fix or full one-click pack delivery.
+
+## Same-exit refusal-contract failure evidence
+
+Exact69ce4fe3 guest run41012124712 passed the first unidbg cold boot but failed ARM64 `missing` on the second: exit1, no result and only SLF4J notices on stderr, without the required exact missing-export exception. Artifact12958178058 SHA-256 `bee23e0e4cce1552b3e0ac1ee83763405afe12e493822bb2e141db29140fca72` retains the failure. All ten other substantive workflows passed. No JVM fatal report or stdout was retained for this case: the capture incorrectly skipped every numerically expected exit, although HotSpot exit1 and the expected exception both use1. A native crash is possible, not established by this evidence.
+
+Fixed public owned JNI checks now capture bounded JVM stdout/stderr and safe fatal-report bytes after an actual failed refusal contract even if the exit code matches. The marker distinguishes `refusal-contract` from `unexpected-exit`. Only the failed semantic validation may select this path; a boolean flag is type-checked. Already-captured unexpected exits are not duplicated, normal fully verified guard/missing cases still never open a fatal report, and the original validation exception remains fatal. The separate post-failure JDK probe runs once, without an engine retry. This cannot recover the old missing report or establish the cause of either retained failure.
+
+Regressions cover coincident75/76/1 exits, malformed caller flags and the complete two-architecture dispatch up to ARM64 missing: capture before private-directory cleanup, one failed-case diagnostic/probe, nine invocations and no retry or later fresh case. Guard codes/reasons, result absence, checked-JNI warnings, memory/byte/deadline budgets and three cold boots are unchanged. This closes a concrete evidence-loss bug, not the outstanding runtime instability or the unfinished managed one-click pack. Existing Unicorn/WSL and disabled production installation/readiness gates are preserved.
+
+## Protected creation-response retention
+
+The exact predecessor d085840f6d38c9e454e9588ee64ae3063420f524 completed all11 substantive workflows successfully, including the Windows installer, native SYSTEM contracts and all four guest engines. Three actual unidbg receipts (artifact12974217778 SHA256 `59343b6ab72f3c6fc7a2789b49258a0774212a1291ac379e44022d132612a6e5`) retain30 passed owned scenarios with the same image/bundle. These passes do not explain the retained earlier intermittent JVM failures or finish the promised product.
+
+A new native persistence component consumes the live creation permit by value and records bounded decoded provider-response data in an independently placed anchor first, then an exclusive per-job response file. Both are flushed, read back, HMAC-authenticated under the new creation-reply domain with separate role tags, and bound to the exact original attempt, reservation digest and boot. Intent/issuance and response handles remain pinned in the live guard. Pending4096 responses (including unknown resulting-system candidates) remain distinct from completed0 response data. Only bounded canonical local relative references are retained. No overwrite, automatic repair or permit reconstruction exists; even a retained reply anchor with all four intent files missing blocks new preparation.
+
+Historical inspection pins the intent files while checking both response roles. It distinguishes unrecorded/anchor-only/recorded data and rejects missing anchors, zero-length partial files, wrong role MACs, mismatched valid-MAC payloads and changed contexts. Last-file persistence before handle delivery can be recorded data without a delivered live object. No state proves an actual native invocation, provider provenance, VM existence/configuration, successful job completion beyond the stored response claim, containment, termination, readiness or permission to retry/boot/adopt/remove. The future supervised native factory must supply the response from its actual call; this API does not manufacture that provenance. Later async-job completion/result binding remains separate work.
+
+Three portable codec regressions cover completed/pending/null-candidate roundtrips, domain/role/key/context/payload separation, duplicate/unknown/truncated/oversized schemas and noncanonical/remote paths. The explicit SYSTEM harness adds ten real protected-file scenarios using fabricated provider data and the existing nonbootable owned image: live readback and exact sharing refusal, pending preservation, anchor/final-delivery cuts, cross-role mutation, missing anchor, disagreeing authenticated payloads, lost intent files, empty partial data, impersonation refusal, reopen and exact no-retry errors. Negative cases require their exact expected failures, not any unrelated error. This is an injected persistence-boundary test, not process-kill/power-loss or Hyper-V execution acceptance. Current Windows CI must run these scenarios; a cross-compile is not execution evidence.
+
+Reviewed shipping images/catalog, protected production deployment and UI authorization, actual supervised DefineSystem/native job binding, realized configuration readback, private boot/guest exchange, bounded cancellation and exact VM cleanup/recovery, Setup Center integration and installed Windows10 acceptance remain unfinished. Install/Test/Use is not enabled by this component. Existing Unicorn and Ubuntu/WSL remain unchanged, with no manual HTTPS-worker requirement introduced.
+
+## Native retained creation-job readback (not VM creation)
+
+A non-cloneable `DefinitionJob` holds a protected `CreationReply` and performs a single read-only native observation per explicit poll. Only the returned exact job key selects `Msvm_ConcreteJob`; state7/explicit ErrorCode0 is required before the fixed `Msvm_AffectedJobElement` job-to-VM association query. Exact types, classes, keys, a single affected VM and any original candidate must agree. Each query uses strict bounded enumeration; empty/duplicate results cannot imply success, stop or removal. Protected-record and original-boot guards surround native reads. Errors and completion fence further polling, including after impersonation ends; no automatic retry, recreation or cleanup is granted.
+
+The uint16 state/error contract follows [Microsoft's Hyper-V v2 job reference](https://learn.microsoft.com/en-us/windows/win32/hyperv_v2/msvm-concretejob); the association roles follow [the Microsoft source reference](https://github.com/MicrosoftDocs/win32/blob/docs/desktop-src/HyperV_v2/msvm-affectedjobelement.md). Explicit null error values are retained only as nonterminal unknowns, never completed zero. Progress percentages and friendly names are not completion/identity evidence.
+
+This readback does not prove that retained response data originated from a real DefineSystem call, persist a completed result, establish VM ownership/configuration, create/boot/control a VM, authorize target execution or certify engine readiness. COM setup is not independently cancellable here; actual production integration still requires the supervised native broker child and installed-host Hyper-V acceptance. No installation or shipping gate is enabled.
+
+Native SYSTEM file acceptance extends the ten response-retention scenarios with seven watcher cases using fabricated observations and real protected-file guards. Those tests are not actual WMI/provider execution. Portable tests exercise safe fixed queries and existing correlation/refusal/fencing; Windows tests additionally exercise exact nullable native uint16 decoding.
+
+## Owned JNI memory fault regressions
+
+The private development unidbg bridge now checks JNI memory-array allocation/pin failures, signed64-to32-bit read lengths and pending exceptions before native access; successful pins are released before backend-error translation, with aborted copyback on read errors. The existing required `test_native_rebuild.py` command imports the compiled owned fake-JNI tests in `test_jni_memory.py`; the unpatched original must fail the same fault assertions. Only two fixed functions and agent-owned stubs are executed locally, not a JVM, emulator, engine native library or arbitrary target. Exact upstream source identities, unique patch contexts and private native provenance remain enforced.
+
+This is independently verified boundary hardening, not an established causal fix for run41171490585's ARM32 fresh classloading failure. The actual offline guest acceptance, all three cold boots and complete installed Hyper-V/Setup Center requirements remain mandatory. Production image pins/catalog, activation and readiness stay disabled; the PR remains draft and no partial merge is authorized.
+
+## Trusted native provider-child supervision
+
+`windows_child::probe_local_provider` requires non-impersonating SYSTEM and a reviewed native executable already staged in a fixed protected per-job role. Windows10 job-list attributes bind a suspended console-free DETACHED_PROCESS atomically; exact job limit/membership readback precedes resume. No shell, request-selected argv/path, stdio pipes, keys or ambient environment are accepted. An exact inheritance list carries only a query-only handle for the specific supervision job through the otherwise unused stdin slot; it is never read as a stream. The two child environment entries are native SystemDrive and SystemRoot. The child's protected guards remain held around its finite read-only COM connection action.
+
+A10-second child-work deadline/cancel flag stops the owned job. Only process-signalled plus zero-active-process observations yield exit/stopped outcomes; errors and Drop do not grant termination receipts. Native process creation/storage calls are still synchronous. This trusted-process job is not an untrusted-target sandbox and never proves cancellation of a WMI provider operation or VM. The existing owned SYSTEM fixture now exercises actual staged child exit/descendant refusal/deadline/cancel/Drop/impersonation/cleanup cases (stages150–159) without invoking Hyper-V. Production deployment, protected installer staging, factory/lifecycle integration and the entire shipping/Setup Center acceptance remain incomplete; no gates are enabled.

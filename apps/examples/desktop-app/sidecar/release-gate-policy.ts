@@ -1,9 +1,16 @@
 /** Host-owned finite release policy. Changes require explicit review and full CI. */
 export const RELEASE_GATE_POLICY = {
-	version: "cline-desktop-release-gate/v4",
+	version: "cline-desktop-release-gate/v5",
 	owner: "zhielo",
 	repo: "cline-desktop-enhanced",
 	requiredChecks: [
+		"Actual owned guest engine (qiling)",
+		"Actual owned guest engine (unidbg)",
+		"Actual owned guest engine (rnidbg)",
+		"Actual owned guest engine (speakeasy)",
+		"Managed inert transport contracts (ubuntu-latest)",
+		"Managed inert transport contracts (windows-latest)",
+		"Owned inert guest BIOS and UEFI boot (not Hyper-V)",
 		"Owned additive emulation (qiling)",
 		"Owned additive emulation (unidbg)",
 		"Owned additive emulation (rnidbg)",
@@ -38,6 +45,23 @@ export const RELEASE_GATE_POLICY = {
 		"Quality Checks",
 		"Detect Changes",
 	],
+	// Exact authoritative workflow provenance is mandatory for managed checks.
+	managedCheckWorkflows: {
+		"Actual owned guest engine (qiling)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Actual owned guest engine (unidbg)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Actual owned guest engine (rnidbg)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Actual owned guest engine (speakeasy)":
+			".github/workflows/managed-emulation-engines.yml",
+		"Managed inert transport contracts (ubuntu-latest)":
+			".github/workflows/managed-emulation-transport.yml",
+		"Managed inert transport contracts (windows-latest)":
+			".github/workflows/managed-emulation-transport.yml",
+		"Owned inert guest BIOS and UEFI boot (not Hyper-V)":
+			".github/workflows/managed-emulation-image.yml",
+	},
 	// desktop-test is path-triggered. When either check appears, require both.
 	conditionalChecks: [
 		"Test DMG background tooling",
@@ -168,6 +192,12 @@ export const RELEASE_GATE_POLICY = {
 		"installed-owned-app-cleanup-confirmed",
 	],
 	policyFiles: {
+		".github/workflows/managed-emulation-engines.yml":
+			"6bcbc82798352bfbd1da50fdd09757fa3c7a78fbf217409d1b152baf48e69aa2",
+		".github/workflows/managed-emulation-image.yml":
+			"8536f191dc3359e6f889e8c45a3501dd7fdcee04dd1ae2e6a580992dff5d58ff",
+		".github/workflows/managed-emulation-transport.yml":
+			"5a186dd4faa3effceaa792ce46731c36f36e614757f9fdbeb35193eb83b196e9",
 		".github/workflows/additive-emulation-validation.yml":
 			"06e4e9be98d1a406f371fe0c9bd74906d79603a1d347b44344b225c09f47639d",
 		".github/workflows/general-recovery-validation.yml":
@@ -183,6 +213,6 @@ export const RELEASE_GATE_POLICY = {
 		"apps/vscode/scripts/desktop-installed-acceptance.ts":
 			"b6ad34ffe811fbf5b867a1f356dcdfa11b64b144a96cf275c5c96f4f9b902388",
 		"scripts/validate-advanced-build.mjs":
-			"ef4053503d27c62f2a11681dfff1c8af6ce5589f8009c5de6fda5c923a322480",
+			"7b0f39c76f24966b947c705276ba9c2d3e49cfca3854b39c24a4512e6da4b027",
 	},
 } as const;

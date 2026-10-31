@@ -1,16 +1,18 @@
 /** Regression for the exact provenance-line exception; never prints fixture tokens. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
-	mkdtempSync,
 	mkdirSync,
-	writeFileSync,
-	rmSync,
+	mkdtempSync,
 	readFileSync,
+	rmSync,
+	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve, join, dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = mkdtempSync(join(tmpdir(), "cline-secret-scan-"));
 const revision = JSON.parse(
@@ -94,8 +96,126 @@ try {
 		{ cwd: root, encoding: "utf8", timeout: 30_000 },
 	);
 	assert.equal(r.status, 1, "The exception must not cover another file");
+	// The historical documentation exception must never suppress future findings.
+	const docPath = "workers/managed-emulation/image/README.md";
+	const doc = join(root, docPath);
+	mkdirSync(dirname(doc), { recursive: true });
+	rmSync(join(root, "other.json"));
+	const historicalProse = "escaping links,\n  unresolved/cyclic hardlinks";
+	const currentDoc = readFileSync(join(repo, docPath), "utf8");
+	const generic =
+		'api_key = "' +
+		createHash("sha256")
+			.update("owned scanner negative-control fixture")
+			.digest("hex") +
+		'"';
+	const ignoredHistory = readFileSync(join(repo, ".gitleaksignore"), "utf8");
+	const proseFingerprint =
+		"13ab96fa588bb8c7ee1f34b850f6a2b6ee9db166:" +
+		docPath +
+		":generic-api-key:18";
+	assert.ok(ignoredHistory.split(/\r?\n/).includes(proseFingerprint));
+	for (const [label, contents, expected] of [
+		["current image documentation", currentDoc, 0],
+		["historical prose in new content", historicalProse, 1],
+		["real token beside current prose", currentDoc + "\n" + generic, 1],
+		["real token replacing historical prose", generic, 1],
+	]) {
+		writeFileSync(doc, contents);
+		const report = join(root, "report.json");
+		const result = spawnSync(
+			process.env.GITLEAKS_BIN || "gitleaks",
+			[
+				"dir",
+				".",
+				"--redact",
+				"--no-banner",
+				"--no-color",
+				"--config",
+				join(repo, ".gitleaks.toml"),
+				"--gitleaks-ignore-path",
+				join(repo, ".gitleaksignore"),
+				"--report-format",
+				"json",
+				"--report-path",
+				report,
+			],
+			{ cwd: root, encoding: "utf8", timeout: 30_000 },
+		);
+		assert.equal(result.error, undefined, "Scanner must be available");
+		assert.equal(result.status, expected, label);
+		if (expected)
+			assert.ok(
+				JSON.parse(readFileSync(report, "utf8")).some(
+					(finding) => finding.RuleID === "generic-api-key",
+				),
+				label,
+			);
+		rmSync(report, { force: true });
+	}
+	// A public ABI checksum is not an API credential. Only its exact historical
+	// finding is ignored; new credential-shaped assignments must still block.
+	rmSync(doc);
+	const nativePath = "workers/managed-emulation/engines/test_bundle.py";
+	const native = join(root, nativePath);
+	mkdirSync(dirname(native), { recursive: true });
+	assert.ok(
+		ignoredHistory
+			.split(/\r?\n/)
+			.includes(
+				"3bd344d2defd0baf30e88933c6706049e6590619:" +
+					nativePath +
+					":generic-api-key:52",
+			),
+	);
+	const currentNative = readFileSync(join(repo, nativePath), "utf8");
+	const publicAbiChecksum = /^JNA_ABI_CHECKSUM = "([a-f0-9]{32})"/m.exec(
+		currentNative,
+	)?.[1];
+	assert.match(publicAbiChecksum || "", /^[a-f0-9]{32}$/);
+	for (const [label, contents, expected] of [
+		["current public ABI fixture", currentNative, 0],
+		["credential beside ABI fixture", currentNative + "\n" + generic, 1],
+		[
+			"credential-shaped checksum assignment stays blocking",
+			'api_key = "' + publicAbiChecksum + '"',
+			1,
+		],
+	]) {
+		writeFileSync(native, contents);
+		const report = join(root, "report.json");
+		const scan = spawnSync(
+			process.env.GITLEAKS_BIN || "gitleaks",
+			[
+				"dir",
+				".",
+				"--redact",
+				"--no-banner",
+				"--no-color",
+				"--config",
+				join(repo, ".gitleaks.toml"),
+				"--gitleaks-ignore-path",
+				join(repo, ".gitleaksignore"),
+				"--report-format",
+				"json",
+				"--report-path",
+				report,
+			],
+			{ cwd: root, encoding: "utf8", timeout: 30_000 },
+		);
+		assert.equal(scan.error, undefined, "Scanner must be available");
+		assert.equal(scan.status, expected, label);
+		if (expected)
+			assert.ok(
+				JSON.parse(readFileSync(report, "utf8")).some(
+					(finding) => finding.RuleID === "generic-api-key",
+				),
+				label,
+			);
+		rmSync(report, { force: true });
+	}
 	console.log(
-		"Secret scan scope regression: 9 cases passed; real token patterns remain blocking.",
+		"Secret scan scope regression: 16 cases passed; real token patterns remain blocking.",
 	);
 } finally {
 	rmSync(root, { recursive: true, force: true });
