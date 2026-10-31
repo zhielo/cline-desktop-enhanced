@@ -11,6 +11,8 @@ pub(crate) enum Role {
     Intent,
     IssueAnchor,
     Issued,
+    ReplyAnchor,
+    Reply,
 }
 impl Role {
     pub(crate) const ALL: [Self; 4] = [
@@ -19,16 +21,22 @@ impl Role {
         Self::IssueAnchor,
         Self::Issued,
     ];
+    pub(crate) const REPLY: [Self; 2] = [Self::ReplyAnchor, Self::Reply];
     pub(crate) fn bit(self) -> u8 {
         match self {
             Self::PrepareAnchor => 1,
             Self::Intent => 2,
             Self::IssueAnchor => 4,
             Self::Issued => 8,
+            Self::ReplyAnchor => 16,
+            Self::Reply => 32,
         }
     }
     pub(crate) fn anchor(self) -> bool {
-        matches!(self, Self::PrepareAnchor | Self::IssueAnchor)
+        matches!(
+            self,
+            Self::PrepareAnchor | Self::IssueAnchor | Self::ReplyAnchor
+        )
     }
     pub(crate) fn filename(self) -> &'static str {
         match self {
@@ -36,6 +44,8 @@ impl Role {
             Self::Intent => "creation-intent.json",
             Self::IssueAnchor => "creation-issue.anchor",
             Self::Issued => "creation-issued.json",
+            Self::ReplyAnchor => "creation-reply.anchor",
+            Self::Reply => "creation-reply.json",
         }
     }
 }
@@ -48,7 +58,7 @@ pub(crate) struct Context {
     pub(crate) host_boot: String,
 }
 impl Context {
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         if self.version != 1 {
             return Err("Creation record version mismatch");
         }
@@ -177,5 +187,11 @@ mod tests {
         let names: std::collections::HashSet<_> = Role::ALL.iter().map(|r| r.filename()).collect();
         assert_eq!(names.len(), 4);
         assert_eq!(Role::ALL.iter().filter(|r| r.anchor()).count(), 2);
+        let all: Vec<_> = Role::ALL.into_iter().chain(Role::REPLY).collect();
+        let names: std::collections::HashSet<_> = all.iter().map(|r| r.filename()).collect();
+        let bits: std::collections::HashSet<_> = all.iter().map(|r| r.bit()).collect();
+        assert_eq!(names.len(), 6);
+        assert_eq!(bits.len(), 6);
+        assert_eq!(all.iter().filter(|r| r.anchor()).count(), 3);
     }
 }

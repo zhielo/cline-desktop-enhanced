@@ -297,6 +297,11 @@ fn reservation_acceptance(
             eprintln!("Owned durable creation acceptance failed: {error}");
             119
         })?;
+    cline_managed_inert_probe::windows_creation::owned_reply_acceptance(roots, &owner, &image)
+        .map_err(|error| {
+            eprintln!("Owned creation reply acceptance failed: {error}");
+            120
+        })?;
     let record = owner.reserve_vm(&job, &image).map_err(|_| 83)?;
     let expected = record.identity().clone();
     if expected.installation != owner.installation()

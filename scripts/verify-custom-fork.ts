@@ -4,6 +4,10 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/host/src/creation_replies.rs",markers:["cline-managed-creation-reply/v1", "Creation reply paths are not canonical", "Creation reply record role mismatch", "pending_and_completed_remain_distinct_without_ownership_promotion", "reply_mac_cannot_cross_roles_keys_contexts_or_payloads", "malformed_duplicate_unknown_and_noncanonical_data_is_rejected"]},
+ {path:"workers/managed-emulation/host/src/windows_creation.rs",markers:["empty(record, &Role::REPLY)?", "pub fn record_reply(", "self.fenced = true", "pub fn inspect_reply(", "Creation reply context/data mismatch", "Creation reply layout inconsistent; retain state", "for scenario in 0..10", "owned reply persistence cut", "Owned reply persistence accepted impersonation"]},
+ {path:"workers/managed-emulation/host/src/creation_records.rs",markers:["creation-reply.anchor", "creation-reply.json", "pub(crate) const REPLY"]},
+ {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["windows_creation::owned_reply_acceptance(roots, &owner, &image)"]},
  {path:"workers/managed-emulation/host/src/creation_records.rs",markers:["cline-managed-creation-record/v1", "signatures_cannot_cross_roles_keys_or_contexts", "duplicate_unknown_truncated_and_oversized_records_are_refused", "only_ordered_record_prefixes_have_a_diagnostic_stage", "Creation record layout inconsistent; retain state"]},
  {path:"workers/managed-emulation/host/src/windows_creation.rs",markers:["file.sync_all()", "empty(record, &Role::ALL)?", "pub fn arm(self)", "Creation permit fenced; inspect retained attempt", "for scenario in 0..8", "owned issued-delivery cut", "ERROR_SHARING_VIOLATION", "Real protected-file reopen is diagnostic only"]},
  {path:"workers/managed-emulation/host/src/bin/owned-system-roots-fixture.rs",markers:["windows_creation::owned_system_acceptance(roots, &owner, &image)"]},

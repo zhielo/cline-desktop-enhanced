@@ -239,5 +239,7 @@ pub mod hyperv_creation;
 
 #[cfg(any(windows, test))]
 mod creation_records;
+#[cfg(any(windows, test))]
+mod creation_replies;
 #[cfg(windows)]
 pub mod windows_creation;
