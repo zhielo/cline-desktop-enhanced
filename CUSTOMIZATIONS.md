@@ -2,6 +2,10 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Fail-fast signed CI package bootstrap
+
+Exact976f529c guest workflow41251930895/unidbg job124687080725 stalled for more than12 minutes in apt-get update, before bundle tests, image construction or JVM execution. Live log shows repeated ignored HTTP Azure mirror InRelease/package requests and later fallback HTTPS metadata; this is an independent CI bootstrap problem, not unidbg evidence. The disposable Ubuntu24.04 engine runner now selects the official HTTPS Ubuntu archive through its existing regular, nonsymlink mirrorlist. Per-request HTTP/HTTPS timeouts30 seconds, zero APT retries and Update::Error-Mode=any reject failed metadata instead of silently using stale indexes. Package names, distribution keyring/signature checks, engine tests, engine command deadlines and all three mandatory unidbg boots are unchanged. No user-PC APT/WSL or application runtime setting is modified; no engine retry is introduced.
+
 ## Independent JDK JAR-classloading control for the unresolved unidbg failure
 
 Exacte78a4f19 real guest run41177006934/job124466582522 failed ARM64 budget acceptance: expected75, actual1, no result. Artifact13033289174 SHA256 `d7ff013756649bdca581d9edcb3ebebe19cbd8563efe89906ae0e8f26c65ee27` contains a complete234594-byte HotSpot report (SHA256 `db4057b3ee92d7d1586bc223eac5e4e972b8c59289eae976979a2b9f13599e7b`): C2 String.isEmpty SIGSEGV during DalvikVM64 class loading. Native helper workflow41177006807 passed independently; Qiling/rnidbg/Speakeasy passed their guest jobs. None fixes unidbg.

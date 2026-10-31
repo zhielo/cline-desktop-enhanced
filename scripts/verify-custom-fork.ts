@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:".github/workflows/managed-emulation-engines.yml",markers:["test ! -L /etc/apt/apt-mirrors.txt", "https://archive.ubuntu.com/ubuntu", "Acquire::http::Timeout=30", "Acquire::https::Timeout=30", "Acquire::Retries=0", "APT::Update::Error-Mode=any", "for repetition in 2 3"]},
  {path:"workers/managed-emulation/host/src/hyperv_creation.rs",markers:["pub fn observation_query(&self)", "ResultClass=Msvm_ComputerSystem Role=AffectingElement ResultRole=AffectedElement", "job_queries_are_fixed_local_and_preserve_exact_safe_instance_id"]},
  {path:"workers/managed-emulation/host/src/windows_hyperv.rs",markers:["pub struct DefinitionJob", "Native creation watcher fenced; inspect retained attempt", "self.retained.revalidate()?", "management.read_creation_job(job)?", "nullable_job_error_is_not_coerced_to_success", "owned_watcher_acceptance", "Owned watcher omitted post-read guard", "Owned watcher resumed after failure or completion"]},
  {path:"workers/managed-emulation/host/src/windows_creation.rs",markers:["owned_watcher_acceptance(live, scenario - 10)", "1 | 3 | 11..=16"]},
