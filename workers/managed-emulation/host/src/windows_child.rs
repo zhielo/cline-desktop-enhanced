@@ -72,6 +72,47 @@ fn wide(value: &OsStr) -> Result<Vec<u16>> {
     value.push(0);
     Ok(value)
 }
+// Finite native observations only: never format OS messages, paths or argv.
+fn creation_error() -> &'static str {
+    match unsafe { GetLastError() } {
+        2 => "Native child image not found by loader",
+        5 => "Native child process creation access denied",
+        6 => "Native child process creation invalid handle",
+        50 => "Native child process creation unsupported",
+        87 => "Native child process creation invalid parameter",
+        193 => "Native child process image format rejected",
+        1816 => "Native child process creation quota refused",
+        _ => "Atomic native child creation failed; no retry",
+    }
+}
+fn diagnostic_code(error: &str) -> i32 {
+    match error {
+        "Native child image not found by loader" => 1,
+        "Native child process creation access denied" => 2,
+        "Native child process creation invalid handle" => 3,
+        "Native child process creation unsupported" => 4,
+        "Native child process creation invalid parameter" => 5,
+        "Native child process image format rejected" => 6,
+        "Native child process creation quota refused" => 7,
+        "Atomic native child creation failed; no retry" => 8,
+        "Atomic native child job binding unavailable; no fallback" => 9,
+        "Native child job policy rejected" => 10,
+        "Native child job membership unavailable" => 11,
+        "Native child resume failed; retained outcome unknown" => 12,
+        "Native child exact job policy required" => 13,
+        "Native child job accounting unavailable" => 14,
+        "System data directory unavailable" => 20,
+        "Local absolute system data path required" => 21,
+        "Native child private environment required" => 22,
+        "Exact protected native child required" => 23,
+        "Single owned native process required" => 24,
+        "Native child DLL policy unavailable" => 25,
+        "Exclusive native child executable required" => 26,
+        "Impersonated protected storage access forbidden" => 27,
+        "LocalSystem broker required; no host settings changed" => 28,
+        _ => 99,
+    }
+}
 fn owned(raw: HANDLE) -> Result<OwnedHandle> {
     if raw == 0 || raw == INVALID_HANDLE_VALUE {
         return Err("Native child handle unavailable");
@@ -261,7 +302,7 @@ impl<'job, 'roots> Child<'job, 'roots> {
             )
         } == 0
         {
-            return Err("Atomic native child creation failed; no retry");
+            return Err(creation_error());
         }
         drop(attributes);
         let process = owned(info.hProcess)?;
@@ -463,7 +504,8 @@ pub fn dispatch() -> Option<i32> {
             Some(66)
         }) {
             Ok(Some(code)) => code,
-            _ => 66,
+            Err(error) => 100 + diagnostic_code(error),
+            Ok(None) => 66,
         },
     )
 }
@@ -516,29 +558,29 @@ pub(crate) fn owned_acceptance(
             return Err("Owned cancelled probe launched");
         }
         stage = 152;
-        if Child::start(storage, Action::Exit)?.wait(&no, Duration::from_secs(5))?
-            != ChildOutcome::Exited(7)
-        {
-            return Err("Owned native child exact exit failed");
-        }
+        expect_owned_outcome(
+            Child::start(storage, Action::Exit)?.wait(&no, Duration::from_secs(5))?,
+            ChildOutcome::Exited(7),
+            &mut stage,
+        )?;
         stage = 153;
-        if Child::start(storage, Action::Descendant)?.wait(&no, Duration::from_secs(5))?
-            != ChildOutcome::Exited(8)
-        {
-            return Err("Owned native child descendant not refused");
-        }
+        expect_owned_outcome(
+            Child::start(storage, Action::Descendant)?.wait(&no, Duration::from_secs(5))?,
+            ChildOutcome::Exited(8),
+            &mut stage,
+        )?;
         stage = 154;
-        if Child::start(storage, Action::Wait)?.wait(&no, Duration::from_millis(250))?
-            != ChildOutcome::DeadlineStopped
-        {
-            return Err("Owned native child deadline not confirmed");
-        }
+        expect_owned_outcome(
+            Child::start(storage, Action::Wait)?.wait(&no, Duration::from_millis(250))?,
+            ChildOutcome::DeadlineStopped,
+            &mut stage,
+        )?;
         stage = 155;
-        if Child::start(storage, Action::Wait)?.wait(&yes, Duration::from_secs(5))?
-            != ChildOutcome::CancelledStopped
-        {
-            return Err("Owned native child cancellation not confirmed");
-        }
+        expect_owned_outcome(
+            Child::start(storage, Action::Wait)?.wait(&yes, Duration::from_secs(5))?,
+            ChildOutcome::CancelledStopped,
+            &mut stage,
+        )?;
         stage = 156;
         let child = Child::start(storage, Action::Wait)?;
         let process = child
@@ -614,9 +656,33 @@ pub(crate) fn owned_acceptance(
         }
         Ok(())
     })();
-    result.map_err(|_| stage)
+    result.map_err(|error| {
+        if stage < 1000 {
+            stage * 1000 + diagnostic_code(error)
+        } else {
+            stage
+        }
+    })
 }
 
+#[cfg(feature = "owned-system-acceptance")]
+fn expect_owned_outcome(
+    actual: ChildOutcome,
+    expected: ChildOutcome,
+    stage: &mut i32,
+) -> Result<()> {
+    if actual == expected {
+        return Ok(());
+    }
+    *stage = *stage * 1000
+        + match actual {
+            ChildOutcome::Exited(code) => code.min(999) as i32,
+            ChildOutcome::DeadlineStopped => 900,
+            ChildOutcome::CancelledStopped => 901,
+            ChildOutcome::CancelledBeforeStart => 902,
+        };
+    Err("Owned native child outcome mismatch")
+}
 #[cfg(feature = "owned-system-acceptance")]
 fn observed_stopped(process: &OwnedHandle, job: &OwnedHandle) -> Result<()> {
     if unsafe { WaitForSingleObject(raw(process), 2000) } != WAIT_OBJECT_0 {
@@ -634,6 +700,45 @@ fn observed_stopped(process: &OwnedHandle, job: &OwnedHandle) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_failure_categories_are_finite_and_unknown_is_not_success() {
+        assert_eq!(
+            diagnostic_code("Native child process creation access denied"),
+            2
+        );
+        assert_eq!(diagnostic_code("System data directory unavailable"), 20);
+        assert_eq!(diagnostic_code("untrusted path, command or OS message"), 99);
+    }
+    #[cfg(feature = "owned-system-acceptance")]
+    #[test]
+    fn owned_outcome_mismatch_retains_exit_without_accepting_matching_numbers() {
+        let mut stage = 152;
+        expect_owned_outcome(ChildOutcome::Exited(7), ChildOutcome::Exited(7), &mut stage).unwrap();
+        assert_eq!(stage, 152);
+        assert!(expect_owned_outcome(
+            ChildOutcome::Exited(120),
+            ChildOutcome::Exited(7),
+            &mut stage
+        )
+        .is_err());
+        assert_eq!(stage, 152120);
+        let mut stage = 154;
+        assert!(expect_owned_outcome(
+            ChildOutcome::Exited(0),
+            ChildOutcome::DeadlineStopped,
+            &mut stage
+        )
+        .is_err());
+        assert_eq!(stage, 154000);
+        let mut stage = 153;
+        assert!(expect_owned_outcome(
+            ChildOutcome::Exited(u32::MAX),
+            ChildOutcome::Exited(8),
+            &mut stage
+        )
+        .is_err());
+        assert_eq!(stage, 153999);
+    }
     #[test]
     fn child_path_encoding_is_bounded_and_unambiguous() {
         assert_eq!(

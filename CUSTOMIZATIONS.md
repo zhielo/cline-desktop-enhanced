@@ -2,6 +2,12 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Native child first-execution failure retained
+
+Actual68c0c999 Windows job124458609892/run41174322915 compiled successfully but failed the real SYSTEM fixture at stage152 (the first fixed child execution). Linux native CI passed independently. The old stage alone cannot distinguish startup failure from an unexpected child exit, so it is not evidence of a specific environment, job, loader or identity cause. The exact log is retained locally for investigation; installation/readiness/merge remain blocked.
+
+Native child startup now preserves finite classifications for immediate CreateProcess failures before handle cleanup can overwrite last-error state. Child guard failures use fixed numeric categories, and owned acceptance retains stage×1000 plus the observed bounded child exit/outcome or fixed failure category. Unknown/large exits remain explicitly unknown instead of successful; no OS message, path, command, environment or secret is logged. Child policy, environment requirements, process/stop observations, deadlines and all refusal assertions are unchanged. Native regressions cover fixed/unknown category projection and expected versus mismatched exits, including an unrelated zero exit and an oversized unknown exit. These observations repair diagnostic loss, not the as-yet-unresolved stage152 cause.
+
 ## Fixed trusted native provider-child supervision
 
 A fixed native child role now permits the future protected local broker to isolate its read-only Hyper-V provider connection from an indefinitely blocked COM call. The caller must be real non-impersonating SYSTEM, hold the protected per-job roots and stage the reviewed executable in the fixed `native-child.exe` role first; no installer or UI performs that staging yet. The same existing protected regular-file owner/ACL/link/reparse/size checks and retained read-only handles pin the image and namespace. No request may choose an executable, path, command, shell or additional argument.
