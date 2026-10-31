@@ -2,6 +2,10 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Console-free native child startup
+
+Exact0aa8b3d7 Windows run41176752309/job124465788172 reported stage152148: the second process in the exact supervision job resolves to the native Windows System32 conhost.exe path. CREATE_NO_WINDOW hides the console window but still instantiated that console host. The fixed helper now uses DETACHED_PROCESS instead, never combined with CREATE_NO_WINDOW or CREATE_NEW_CONSOLE. It needs no console or I/O streams. Atomic job-list attachment, query-only handle allowlist, suspended identity checks, limit1, kill-on-close and stop/drain observations are unchanged; no breakaway flag or exception for console hosts is added. A native regression asserts the exact no-console/no-breakaway flag properties. The complete SYSTEM scenarios must pass on actual Windows before calling this correction accepted. Reference: https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags .
+
 ## Private fixed sibling-image diagnostic
 
 Exact831df7a6 Windows run41176239028/job124464271760 reported stage152146: the independent native process list contains another process. A bounded read-only query of that specific job member now distinguishes the native Windows System32 console host path, the same executable path, another executable or unavailable readback. No PID/path/image bytes are emitted, no process is started or adopted, and these path comparisons are diagnostic categories, not signature trust or permission to accept an extra process. Single-process containment remains unchanged.

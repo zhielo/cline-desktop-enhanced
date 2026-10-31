@@ -65,6 +65,9 @@ impl Action {
 }
 
 const POLICY: u32 = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+// NO_WINDOW still creates a hidden console host. This helper needs no console.
+const PROCESS_FLAGS: u32 =
+    CREATE_SUSPENDED | DETACHED_PROCESS | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT;
 
 fn wide(value: &OsStr) -> Result<Vec<u16>> {
     let mut value: Vec<u16> = value.encode_wide().collect();
@@ -412,10 +415,7 @@ impl<'job, 'roots> Child<'job, 'roots> {
                 null(),
                 null(),
                 1,
-                CREATE_SUSPENDED
-                    | CREATE_NO_WINDOW
-                    | CREATE_UNICODE_ENVIRONMENT
-                    | EXTENDED_STARTUPINFO_PRESENT,
+                PROCESS_FLAGS,
                 environment.as_ptr().cast(),
                 cwd.as_ptr(),
                 &startup.StartupInfo,
@@ -909,6 +909,15 @@ mod tests {
         for value in ["", "a\0b", "a\"b", &"a".repeat(2049)] {
             assert!(wide(OsStr::new(value)).is_err());
         }
+    }
+    #[test]
+    fn helper_is_console_free_without_job_breakaway() {
+        assert_ne!(PROCESS_FLAGS & DETACHED_PROCESS, 0);
+        assert_ne!(PROCESS_FLAGS & CREATE_SUSPENDED, 0);
+        assert_eq!(
+            PROCESS_FLAGS & (CREATE_NO_WINDOW | CREATE_NEW_CONSOLE | CREATE_BREAKAWAY_FROM_JOB),
+            0
+        );
     }
     #[test]
     fn explicit_native_environment_contains_only_observed_os_roots() {
