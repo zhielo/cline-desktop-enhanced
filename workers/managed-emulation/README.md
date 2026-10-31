@@ -549,3 +549,9 @@ A10-second child-work deadline/cancel flag stops the owned job. Only process-sig
 
 ### Independent JDK class-loading control
 The fixed `OwnedJvmProbe` now additionally writes one owned nested-class resource to a temporary JAR, checks256 fresh platform-parent loaders and2048 exact bounded resource reads. The existing builder health check and separate post-failure guest JVM run it without any engine dependency or native adapter. It exercises the JAR URL/class-loading family seen in the retained C2 String.isEmpty crash; no pass is treated as a causal fix, engine acceptance or readiness. No engine-process class preload, JIT workaround, retry or budget change is made.
+
+
+### Pinned private Java21 candidate
+The unidbg development guest's jlinked runtime is now built from the exact official Temurin21.0.13+9 archive in `engines/runtime-jdk.lock.json`. `runtime_jdk.py` checks bounded authenticated bytes, safe data-only extraction and full input release identity before CI-only jlink; reduced linked metadata and the six existing modules are verified separately. Legal-notice aliases become regular files after ordered extraction, avoiding repeated gzip inflation. `jre-origin.json` records the public archive identity inside the sealed runtime. The system17 compiler/native headers and Java17 class compatibility remain unchanged. No downloaded JDK is executed on the developer host.
+
+This is a runtime replacement candidate for the retained intermittent C2 class-loading crash, not an established root cause or accepted fix. The independent expanded Java-only control passed on80ab4f83 while the actual engine still failed. All existing positive/refusal cases, checked JNI, JIT, CPU, budgets and three mandatory cold boots stay required without retries/fallbacks. Nothing enables shipping install/activation/readiness or completes the managed Setup Center lifecycle.

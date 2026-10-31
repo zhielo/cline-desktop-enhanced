@@ -4,6 +4,11 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"workers/managed-emulation/engines/runtime-jdk.lock.json",markers:['"scope": "development-owned-guest-tests-only"', '"version": "21.0.13+9"', '"bytes": 207858352', 'd7f5d5cf865a2902b70ff549b97586a7d3f234e016f041ab447ea740c7d66d1c']},
+ {path:"workers/managed-emulation/engines/runtime_jdk.py",markers:["def verify_linked_release(home, version):", "def verify_release(home, version):", "Private JDK download identity", "Private JDK legal link refused", "Private linked JRE module closure", "directory.mkdir(mode=0o700)", "target.open('xb')"]},
+ {path:"workers/managed-emulation/engines/prepare.py",markers:["runtime_jdk.obtain(Path('/build/private-runtime-jdk'))", "'--module-path', str(runtime_home/'jmods')", "runtime_jdk.verify_linked_release(ROOT/'jre', runtime_origin['version'])", "ROOT/'jre-origin.json'"]},
+ {path:"workers/managed-emulation/engines/test_native_rebuild.py",markers:["from test_runtime_jdk import RuntimeJdkTests"]},
+ {path:"workers/managed-emulation/engines/test_runtime_jdk.py",markers:["test_download_exact_size_hash_no_retry", "test_owned_archive_legal_alias_is_bytes_not_symlink", "test_archive_refusals", "test_full_and_linked_release_identities_are_separate", "test_obtain_hash_before_extract_and_no_existing_adoption"]},
  {path:".github/workflows/managed-emulation-engines.yml",markers:["test ! -L /etc/apt/apt-mirrors.txt", "https://archive.ubuntu.com/ubuntu", "Acquire::http::Timeout=30", "Acquire::https::Timeout=30", "Acquire::Retries=0", "APT::Update::Error-Mode=any", "for repetition in 2 3"]},
  {path:"workers/managed-emulation/host/src/hyperv_creation.rs",markers:["pub fn observation_query(&self)", "ResultClass=Msvm_ComputerSystem Role=AffectingElement ResultRole=AffectedElement", "job_queries_are_fixed_local_and_preserve_exact_safe_instance_id"]},
  {path:"workers/managed-emulation/host/src/windows_hyperv.rs",markers:["pub struct DefinitionJob", "Native creation watcher fenced; inspect retained attempt", "self.retained.revalidate()?", "management.read_creation_job(job)?", "nullable_job_error_is_not_coerced_to_success", "owned_watcher_acceptance", "Owned watcher omitted post-read guard", "Owned watcher resumed after failure or completion"]},

@@ -15,6 +15,7 @@ import tempfile
 
 import python_inputs
 import native_rebuild
+import runtime_jdk
 
 ROOT = Path('/opt/cline-engine')
 ENGINES = ('qiling', 'unidbg', 'rnidbg', 'speakeasy')
@@ -135,7 +136,10 @@ def prepare(engine):
         shutil.copytree(build/'classes', ROOT/'classes')
         shutil.copytree(build/'dependency', ROOT/'dependency')
         native_rebuild.build(ROOT, Path('/build/private-unidbg-native'))
-        run('/usr/lib/jvm/java-17-openjdk-amd64/bin/jlink', '--add-modules', 'java.base,java.logging,java.desktop,java.management,java.naming,jdk.unsupported', '--compress=2', '--strip-debug', '--no-header-files', '--no-man-pages', '--output', str(ROOT/'jre'))
+        runtime_home, runtime_origin = runtime_jdk.obtain(Path('/build/private-runtime-jdk'))
+        run(str(runtime_home/'bin/jlink'), '--module-path', str(runtime_home/'jmods'), '--add-modules', 'java.base,java.logging,java.desktop,java.management,java.naming,jdk.unsupported', '--compress=2', '--strip-debug', '--no-header-files', '--no-man-pages', '--output', str(ROOT/'jre'))
+        runtime_jdk.verify_linked_release(ROOT/'jre', runtime_origin['version'])
+        (ROOT/'jre-origin.json').write_text(json.dumps(runtime_origin, sort_keys=True, separators=(',', ':'))+'\n')
         verify_private_jre()
     elif engine == 'rnidbg':
         run('bash', '/build/emulation/build-rnidbg.sh')
