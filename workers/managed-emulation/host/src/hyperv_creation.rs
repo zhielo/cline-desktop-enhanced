@@ -21,6 +21,16 @@ impl JobReference {
     pub fn relative_path(&self) -> String {
         format!("Msvm_ConcreteJob.InstanceID=\"{}\"", self.0)
     }
+    /// Fixed local readback only; the validated key cannot inject WQL syntax.
+    pub fn observation_query(&self) -> String {
+        format!("SELECT __CLASS,InstanceID,JobState,ErrorCode FROM Msvm_ConcreteJob WHERE InstanceID='{}'", self.0)
+    }
+    pub fn affected_system_query(&self) -> String {
+        format!("ASSOCIATORS OF {{{}}} WHERE AssocClass=Msvm_AffectedJobElement ResultClass=Msvm_ComputerSystem Role=AffectingElement ResultRole=AffectedElement", self.relative_path())
+    }
+    pub fn instance_id(&self) -> &str {
+        &self.0
+    }
 }
 
 fn host(value: &str) -> Result<()> {
@@ -233,6 +243,31 @@ mod tests {
             let reference = format!(r"\\{}\root\virtualization\v2:{}", name, VM);
             assert_eq!(system(&reference, name).unwrap().vm_id(), ID);
             assert!(system(&reference, LOCAL).is_err());
+        }
+    }
+    #[test]
+    fn job_queries_are_fixed_local_and_preserve_exact_safe_instance_id() {
+        let reference = job(JOB, LOCAL).unwrap();
+        assert_eq!(reference.instance_id(), "job:1234-ABCD");
+        assert_eq!(reference.observation_query(), "SELECT __CLASS,InstanceID,JobState,ErrorCode FROM Msvm_ConcreteJob WHERE InstanceID='job:1234-ABCD'");
+        assert_eq!(reference.affected_system_query(), format!("ASSOCIATORS OF {{{JOB}}} WHERE AssocClass=Msvm_AffectedJobElement ResultClass=Msvm_ComputerSystem Role=AffectingElement ResultRole=AffectedElement"));
+        let absolute = format!(r"\\owned-host\root\virtualization\v2:{JOB}");
+        assert_eq!(
+            job(&absolute, LOCAL).unwrap().observation_query(),
+            reference.observation_query()
+        );
+        for injected in [
+            "job' OR 1=1",
+            "job\"",
+            "job\\x",
+            "job} WHERE x",
+            "job\nvalue",
+        ] {
+            assert!(job(
+                &format!("Msvm_ConcreteJob.InstanceID=\"{injected}\""),
+                LOCAL
+            )
+            .is_err());
         }
     }
     #[test]

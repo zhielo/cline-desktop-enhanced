@@ -9,32 +9,17 @@ import { getOpenTabs } from "@/hosts/vscode/hostbridge/window/getOpenTabs"
 import { GetOpenTabsRequest } from "@/shared/proto/host/window"
 
 describe("Hostbridge - Window - getOpenTabs", () => {
-	let fixtureRoot: string | undefined
-	async function createAndOpenTestDocument(
-		name: string,
-		column: vscode.ViewColumn,
-		kind: "file" | "untitled" = "file",
-	): Promise<vscode.Uri> {
+	async function createAndOpenTestDocument(name: string, column: vscode.ViewColumn): Promise<vscode.Uri> {
 		const content = `// Test file ${name}\nconsole.log('Hello from file ${name}');`
-		assert.ok(fixtureRoot, "Owned tab fixture directory is required")
-		const uri =
-			kind === "file"
-				? vscode.Uri.file(path.join(fixtureRoot, `test-file-${name}.js`))
-				: vscode.Uri.parse(`untitled:test-file-${name}.js`)
-		if (kind === "file") {
-			// Prepare bytes before opening an editor. Applying a WorkspaceEdit to
-			// an untitled URI after opening it in another group can itself open
-			// the document again. A duplicate tab is valid API data, not slowness.
-			await fs.writeFile(uri.fsPath, content)
-			const document = await vscode.workspace.openTextDocument(uri)
-			await vscode.window.showTextDocument(document, { viewColumn: column, preview: false })
-		} else {
-			await vscode.window.showTextDocument(uri, { viewColumn: column, preview: false })
-			const edit = new vscode.WorkspaceEdit()
-			edit.insert(uri, new vscode.Position(0, 0), content)
-			assert.ok(await vscode.workspace.applyEdit(edit), "Owned untitled fixture edit must succeed")
-		}
-		return uri
+		// Populate an in-memory document before showing it. WorkspaceEdit on an
+		// already-visible untitled URI can open an extra tab in the active group;
+		// saved-file cleanup can also encounter EBUSY after tab closure on Windows.
+		// This API creates no editor, file, directory, or second edit operation.
+		const document = await vscode.workspace.openTextDocument({ language: "javascript", content })
+		assert.ok(document.isUntitled, "Tab fixture must stay in memory")
+		assert.strictEqual(document.getText(), content)
+		await vscode.window.showTextDocument(document, { viewColumn: column, preview: false })
+		return document.uri
 	}
 
 	async function waitForAllTabsClosed(): Promise<void> {
@@ -56,16 +41,11 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 	beforeEach(async () => {
 		// Clean up any existing editors and wait for cleanup to complete
 		await waitForAllTabsClosed()
-		fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cline-open-tabs-"))
 	})
 
 	afterEach(async () => {
 		// Clean up test documents and editors
 		await waitForAllTabsClosed()
-		if (fixtureRoot) {
-			await fs.rm(fixtureRoot, { recursive: true, force: true })
-			fixtureRoot = undefined
-		}
 	})
 
 	it("should return empty array when no tabs are open", async () => {
@@ -174,7 +154,7 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 		await vscode.window.showTextDocument(document, { preview: false })
 
 		// Also open an untitled document
-		await createAndOpenTestDocument("includes-deleted", vscode.ViewColumn.One, "untitled")
+		await createAndOpenTestDocument("includes-deleted", vscode.ViewColumn.One)
 
 		// Wait for tabs to be created
 		await pWaitFor(

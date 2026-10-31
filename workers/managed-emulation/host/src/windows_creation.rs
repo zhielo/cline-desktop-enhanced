@@ -541,7 +541,7 @@ pub fn owned_reply_acceptance(
     }
     const VM: &str = "Msvm_ComputerSystem.Name=\"12345678-1234-4234-8234-123456789abc\"";
     const JOB: &str = "Msvm_ConcreteJob.InstanceID=\"owned:reply-1\"";
-    for scenario in 0..10 {
+    for scenario in 0..17 {
         let job = roots.create_job()?;
         let id = job.id().to_owned();
         let record = owner.reserve_vm(&job, image)?;
@@ -553,10 +553,15 @@ pub fn owned_reply_acceptance(
         let path = |role: Role| paths[if role.anchor() { 1 } else { 2 }].join(role.filename());
         let permit = CreationAttempt::prepare(&record)?.arm()?;
         let context = permit.attempt.context.clone();
-        let reply = if scenario == 0 {
+        let reply = if matches!(scenario, 0 | 10) {
             DefinitionReply::decode(0, Some(VM), None, "OWNED")?
         } else {
-            DefinitionReply::decode(4096, None, Some(JOB), "OWNED")?
+            DefinitionReply::decode(
+                4096,
+                if scenario == 14 { Some(VM) } else { None },
+                Some(JOB),
+                "OWNED",
+            )?
         };
         if matches!(scenario, 2 | 3 | 7) {
             let cut = if scenario == 3 {
@@ -606,7 +611,11 @@ pub fn owned_reply_acceptance(
                     return Err("Owned reply writer refusal was not sharing protection");
                 }
             }
-            drop(live);
+            if scenario >= 10 {
+                crate::windows_hyperv::owned_watcher_acceptance(live, scenario - 10)?;
+            } else {
+                drop(live);
+            }
         }
         match scenario {
             4 => {
@@ -642,11 +651,11 @@ pub fn owned_reply_acceptance(
         let reopened = owner.open_vm(&job)?;
         let observed = inspect_reply(&reopened);
         let correct = match scenario {
-            0 => matches!(
+            0 | 10 => matches!(
                 observed,
                 Ok(ReplyInspection::Recorded(DefinitionReply::Completed(_)))
             ),
-            1 | 3 => matches!(
+            1 | 3 | 11..=16 => matches!(
                 observed,
                 Ok(ReplyInspection::Recorded(DefinitionReply::Pending { .. }))
             ),

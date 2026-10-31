@@ -1,9 +1,15 @@
 //! Read-only native Hyper-V v2 provider adapter for the future VM factory.
+//! Retained creation-job readback is still observation data, not invocation provenance.
 //! Never creates/starts/stops/adopts a VM, advances a journal or grants readiness.
 //! COM connection/query setup can block: use a supervised broker child before
 //! production/UI integration. Only enumeration has an independent local budget.
 use crate::{
-    windows_boot::HostBoot, windows_identity::OwnedVmRecord, windows_roots::require_system, Result,
+    hyperv_creation::{JobReference, PendingDefinition, SystemReference},
+    windows_boot::HostBoot,
+    windows_creation::CreationReply,
+    windows_identity::OwnedVmRecord,
+    windows_roots::require_system,
+    Result,
 };
 use std::{
     marker::PhantomData,
@@ -151,6 +157,20 @@ impl HyperVManagement {
         HostBoot::observe()?.require_same(self.boot.id())?;
         let id = reservation.identity().vm_id.as_str();
         let query = query(id)?;
+        let row = self.exact_row(&query)?;
+        let observed = row.as_ref().map(|row| observation(row, id)).transpose()?;
+        require_system()?;
+        reservation.revalidate()?;
+        HostBoot::observe()?.require_same(self.boot.id())?;
+        // Absence is never inferred stop/removal, nor authority to create/adopt.
+        observed.ok_or("Reserved VM not observed; no termination or removal inferred")
+    }
+    fn require_current(&self) -> Result<()> {
+        require_system()?;
+        HostBoot::observe()?.require_same(self.boot.id())
+    }
+    fn exact_row(&self, query: &str) -> Result<Option<IWbemClassObject>> {
+        self.require_current()?;
         let cursor = unsafe {
             self.services.ExecQuery(
                 &BSTR::from("WQL"),
@@ -159,13 +179,13 @@ impl HyperVManagement {
                 None,
             )
         }
-        .map_err(|_| "Exact reserved VM query unavailable")?;
+        .map_err(|_| "Exact native object query unavailable")?;
         blanket(&cursor)?;
         let deadline = Instant::now() + Duration::from_secs(3);
         let mut observed = None;
         loop {
             if Instant::now() >= deadline {
-                return Err("Exact reserved VM enumeration deadline");
+                return Err("Exact native object enumeration deadline");
             }
             let mut rows: [Option<IWbemClassObject>; 2] = [None, None];
             let mut returned = 0;
@@ -173,25 +193,227 @@ impl HyperVManagement {
             let done = batch(
                 status.0,
                 returned,
-                rows.iter().filter(|r| r.is_some()).count(),
+                rows.iter().filter(|row| row.is_some()).count(),
             )?;
             if returned > 0 {
                 if observed.is_some() || returned != 1 {
-                    return Err("Ambiguous reserved VM observation");
+                    return Err("Ambiguous native object observation");
                 }
-                let row = rows[0].as_ref().ok_or("Missing native VM object")?;
-                observed = Some(observation(row, id)?);
+                observed = Some(rows[0].take().ok_or("Missing native object")?);
             }
             if done {
                 break;
             }
         }
-        require_system()?;
-        reservation.revalidate()?;
-        HostBoot::observe()?.require_same(self.boot.id())?;
-        // Absence is never inferred stop/removal, nor authority to create/adopt.
-        observed.ok_or("Reserved VM not observed; no termination or removal inferred")
+        self.require_current()?;
+        Ok(observed)
     }
+    fn read_creation_job(&self, job: &JobReference) -> Result<NativeJobObservation> {
+        let row = self
+            .exact_row(&job.observation_query())?
+            .ok_or("Creation job missing; retain attempt without inferred completion")?;
+        let (value, kind) = property(&row, w!("__CLASS"))?;
+        if text(&value, kind)? != "Msvm_ConcreteJob" {
+            return Err("Exact native creation job class required");
+        }
+        let (value, kind) = property(&row, w!("InstanceID"))?;
+        if text(&value, kind)? != job.instance_id() {
+            return Err("Native creation job identity mismatch");
+        }
+        let (value, kind) = property(&row, w!("JobState"))?;
+        let state = number(&value, kind)?;
+        let (value, kind) = property(&row, w!("ErrorCode"))?;
+        let error = optional_number(&value, kind)?;
+        // Nonterminal/error states cannot trigger association lookup or bind a VM.
+        let system = if state == 7 && error == Some(0) {
+            let affected = self
+                .exact_row(&job.affected_system_query())?
+                .ok_or("Completed creation lacks exact affected VM; retain attempt")?;
+            let (value, kind) = property(&affected, w!("__CLASS"))?;
+            if text(&value, kind)? != "Msvm_ComputerSystem" {
+                return Err("Exact affected VM class required");
+            }
+            let (value, kind) = property(&affected, w!("Name"))?;
+            let id = text(&value, kind)?.to_ascii_lowercase();
+            crate::hyperv_address(&id)?;
+            Some(format!("Msvm_ComputerSystem.Name=\"{id}\""))
+        } else {
+            None
+        };
+        self.require_current()?;
+        Ok(NativeJobObservation {
+            state,
+            error,
+            system,
+        })
+    }
+}
+struct NativeJobObservation {
+    state: u16,
+    error: Option<u16>,
+    system: Option<String>,
+}
+/// Protected response lifetime plus a single exact asynchronous-job tracker.
+/// A recorded response alone is NOT proof DefineSystem ran. This type cannot
+/// create/boot/adopt/control a VM, advance a journal or grant readiness.
+/// Every error/completion fences this live watcher; retained files are not removed.
+pub struct DefinitionJob<'a, 'o, 'r, 'j, 'jr> {
+    retained: CreationReply<'a, 'o, 'r, 'j, 'jr>,
+    tracker: PendingDefinition,
+    fenced: bool,
+}
+impl<'a, 'o, 'r, 'j, 'jr> DefinitionJob<'a, 'o, 'r, 'j, 'jr> {
+    pub fn from_retained(retained: CreationReply<'a, 'o, 'r, 'j, 'jr>) -> Result<Self> {
+        let tracker = PendingDefinition::from_reply(retained.reply()?)?;
+        Ok(Self {
+            retained,
+            tracker,
+            fenced: false,
+        })
+    }
+    /// One native observation, never an unbounded polling loop. COM operations
+    /// still require the future supervised broker child before product use.
+    pub fn poll(&mut self, management: &HyperVManagement) -> Result<Option<SystemReference>> {
+        self.poll_observed(|job| {
+            management.require_current()?;
+            let observed = management.read_creation_job(job)?;
+            management.require_current()?;
+            Ok((observed, native_computer_name()?))
+        })
+    }
+    fn poll_observed(
+        &mut self,
+        read: impl FnOnce(&JobReference) -> Result<(NativeJobObservation, String)>,
+    ) -> Result<Option<SystemReference>> {
+        if self.fenced {
+            return Err("Native creation watcher fenced; inspect retained attempt");
+        }
+        self.fenced = true;
+        self.retained.revalidate()?;
+        let (observed, local) = read(self.tracker.job())?;
+        self.retained.revalidate()?;
+        let completed = self.tracker.observe(
+            &self.tracker.job().relative_path(),
+            observed.state,
+            observed.error,
+            observed.system.as_deref(),
+            &local,
+        )?;
+        if completed.is_none() {
+            self.fenced = false;
+        }
+        Ok(completed)
+    }
+}
+/// CI-only real protected-file guards with fabricated job observations, not
+/// Hyper-V/provider execution. Used by the explicit owned SYSTEM fixture.
+#[cfg(feature = "owned-system-acceptance")]
+pub(crate) fn owned_watcher_acceptance(
+    retained: CreationReply<'_, '_, '_, '_, '_>,
+    scenario: u8,
+) -> Result<()> {
+    use windows_sys::Win32::Security::{ImpersonateSelf, RevertToSelf, SecurityImpersonation};
+    struct Revert;
+    impl Drop for Revert {
+        fn drop(&mut self) {
+            if unsafe { RevertToSelf() } == 0 {
+                std::process::abort();
+            }
+        }
+    }
+    const VM: &str = "Msvm_ComputerSystem.Name=\"12345678-1234-4234-8234-123456789abc\"";
+    if scenario == 0 {
+        if DefinitionJob::from_retained(retained).err()
+            != Some("Pending creation requires asynchronous reply")
+        {
+            return Err("Owned synchronous response admitted an asynchronous watcher");
+        }
+        return Ok(());
+    }
+    let mut watcher = DefinitionJob::from_retained(retained)?;
+    let observation = |state, error, system: Option<&str>| {
+        Ok((
+            NativeJobObservation {
+                state,
+                error,
+                system: system.map(str::to_owned),
+            },
+            "OWNED".to_owned(),
+        ))
+    };
+    let first = match scenario {
+        1 => {
+            for error in [None, Some(0)] {
+                if watcher
+                    .poll_observed(|_| observation(4, error, None))?
+                    .is_some()
+                {
+                    return Err("Owned pending observation promoted completion");
+                }
+            }
+            let actual = watcher
+                .poll_observed(|_| observation(7, Some(0), Some(VM)))?
+                .ok_or("Owned completed observation missing")?;
+            if actual.vm_id() != "12345678-1234-4234-8234-123456789abc" {
+                return Err("Owned completed observation identity differs");
+            }
+            Ok(Some(actual))
+        }
+        2 => watcher.poll_observed(|_| Err("owned native query interruption")),
+        3 => watcher.poll_observed(|_| observation(7, None, Some(VM))),
+        4 => watcher.poll_observed(|_| {
+            observation(
+                7,
+                Some(0),
+                Some("Msvm_ComputerSystem.Name=\"12345678-1234-4234-8234-123456789abd\""),
+            )
+        }),
+        5 => {
+            if unsafe { ImpersonateSelf(SecurityImpersonation) } == 0 {
+                return Err("Owned watcher impersonation unavailable");
+            }
+            let _revert = Revert;
+            let mut called = false;
+            let result = watcher.poll_observed(|_| {
+                called = true;
+                observation(4, None, None)
+            });
+            if called
+                || result.as_ref().err() != Some(&"Impersonated protected storage access forbidden")
+            {
+                return Err("Owned watcher read under impersonation");
+            }
+            result
+        }
+        6 => {
+            let mut revert = None;
+            let result = watcher.poll_observed(|_| {
+                if unsafe { ImpersonateSelf(SecurityImpersonation) } == 0 {
+                    return Err("Owned watcher impersonation unavailable");
+                }
+                revert = Some(Revert);
+                observation(4, None, None)
+            });
+            drop(revert);
+            if result.as_ref().err() != Some(&"Impersonated protected storage access forbidden") {
+                return Err("Owned watcher omitted post-read guard");
+            }
+            result
+        }
+        _ => return Err("Unknown owned watcher scenario"),
+    };
+    if (scenario == 1) != first.is_ok() {
+        return Err("Owned watcher failure/completion distinction lost");
+    }
+    let mut called = false;
+    let again = watcher.poll_observed(|_| {
+        called = true;
+        observation(4, None, None)
+    });
+    if called || again.err() != Some("Native creation watcher fenced; inspect retained attempt") {
+        return Err("Owned watcher resumed after failure or completion");
+    }
+    Ok(())
 }
 fn query(id: &str) -> Result<String> {
     crate::hyperv_address(id)?;
@@ -294,6 +516,13 @@ fn number(value: &VARIANT, kind: i32) -> Result<u16> {
     }
     u16::try_from(unsafe { raw.Anonymous.lVal }).map_err(|_| "Native VM integer range")
 }
+fn optional_number(value: &VARIANT, kind: i32) -> Result<Option<u16>> {
+    let raw = unsafe { &value.as_raw().Anonymous.Anonymous };
+    if kind == CIM_UINT16.0 && raw.vt == VT_NULL.0 {
+        return Ok(None);
+    }
+    number(value, kind).map(Some)
+}
 fn observation(object: &IWbemClassObject, expected: &str) -> Result<VmObservation> {
     let (value, kind) = property(object, w!("__CLASS"))?;
     if text(&value, kind)? != "Msvm_ComputerSystem" {
@@ -382,6 +611,28 @@ mod tests {
             assert!(number(&value, CIM_UINT16.0).is_err());
         }
         assert!(number(&VARIANT::from(3i32), CIM_UINT16.0 | 8192).is_err());
+    }
+    #[test]
+    fn nullable_job_error_is_not_coerced_to_success() {
+        let mut raw = *VARIANT::new().as_raw();
+        raw.Anonymous.Anonymous.vt = VT_NULL.0;
+        let null = unsafe { VARIANT::from_raw(raw) };
+        assert_eq!(optional_number(&null, CIM_UINT16.0), Ok(None));
+        assert!(optional_number(&null, CIM_STRING.0).is_err());
+        assert_eq!(
+            optional_number(&VARIANT::from(0i32), CIM_UINT16.0),
+            Ok(Some(0))
+        );
+        for value in [
+            VARIANT::new(),
+            VARIANT::from("0"),
+            VARIANT::from(0u16),
+            VARIANT::from(-1i32),
+            VARIANT::from(65536i32),
+        ] {
+            assert!(optional_number(&value, CIM_UINT16.0).is_err());
+        }
+        assert!(optional_number(&VARIANT::from(0i32), CIM_UINT16.0 | 8192).is_err());
     }
     #[test]
     fn enumeration_never_treats_timeout_or_unknown_success_as_end_of_results() {
