@@ -31,7 +31,8 @@ typedef void *jclass;
 typedef void *jbyteArray;
 typedef int uc_err;
 typedef struct { int unused; } uc_engine;
-typedef struct { uc_engine *uc; } *t_unicorn;
+struct OwnedUnicorn { uc_engine *uc; };
+typedef struct OwnedUnicorn *t_unicorn;
 struct FakeJNI;
 typedef const struct FakeJNI *JNIEnv;
 struct FakeJNI {
@@ -79,7 +80,7 @@ static uc_err uc_mem_read(uc_engine *eng,uint64_t address,void *p,size_t size) {
 static const struct FakeJNI functions={exception_check,get_length,pin,release,allocate};
 static JNIEnv env=&functions;
 static uc_engine engine;
-static struct { uc_engine *uc; } instance={&engine};
+static struct OwnedUnicorn instance={&engine};
 static void reset(int fault) {
  pending=fault==1;mode=fault;length=4;
  length_calls=pin_calls=release_calls=allocation_calls=native_calls=throws=0;last_release=-1;
