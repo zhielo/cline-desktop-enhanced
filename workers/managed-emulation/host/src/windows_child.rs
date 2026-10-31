@@ -22,10 +22,16 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::{
-        GetLastError, ERROR_INSUFFICIENT_BUFFER, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
-        WAIT_TIMEOUT,
+        DuplicateHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, HANDLE, INVALID_HANDLE_VALUE,
+        WAIT_OBJECT_0, WAIT_TIMEOUT,
     },
-    System::{JobObjects::*, SystemInformation::GetWindowsDirectoryW, Threading::*},
+    System::{
+        Console::{GetStdHandle, STD_INPUT_HANDLE},
+        JobObjects::*,
+        SystemInformation::GetWindowsDirectoryW,
+        SystemServices::JOB_OBJECT_QUERY,
+        Threading::*,
+    },
 };
 
 const ARG: &str = "--managed-native-provider-probe/v1";
@@ -177,7 +183,7 @@ struct Attributes {
 impl Attributes {
     fn new() -> Result<Self> {
         let mut bytes = 0;
-        if unsafe { InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut bytes) } != 0
+        if unsafe { InitializeProcThreadAttributeList(null_mut(), 2, 0, &mut bytes) } != 0
             || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
             || !(size_of::<usize>()..=16384).contains(&bytes)
         {
@@ -185,7 +191,7 @@ impl Attributes {
         }
         let mut storage = vec![0usize; bytes.div_ceil(size_of::<usize>())];
         if unsafe {
-            InitializeProcThreadAttributeList(storage.as_mut_ptr().cast(), 1, 0, &mut bytes)
+            InitializeProcThreadAttributeList(storage.as_mut_ptr().cast(), 2, 0, &mut bytes)
         } == 0
         {
             return Err("Native child attributes unavailable");
@@ -257,7 +263,25 @@ impl<'job, 'roots> Child<'job, 'roots> {
             return Err("Native child job policy rejected");
         }
         require_policy(raw(&job.0))?;
+        // The child receives QUERY only, not assignment, termination or policy rights.
+        let mut query_handle = 0;
+        if unsafe {
+            DuplicateHandle(
+                GetCurrentProcess(),
+                raw(&job.0),
+                GetCurrentProcess(),
+                &mut query_handle,
+                JOB_OBJECT_QUERY,
+                1,
+                0,
+            )
+        } == 0
+        {
+            return Err("Native child query handle unavailable");
+        }
+        let query_handle = owned(query_handle)?;
         // Attribute values must outlive the list, including error returns.
+        let inherited = [raw(&query_handle)];
         let jobs = [raw(&job.0)];
         let mut attributes = Attributes::new()?;
         if unsafe {
@@ -274,10 +298,26 @@ impl<'job, 'roots> Child<'job, 'roots> {
         {
             return Err("Atomic native child job binding unavailable; no fallback");
         }
+        if unsafe {
+            UpdateProcThreadAttribute(
+                attributes.ptr(),
+                0,
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                inherited.as_ptr().cast(),
+                size_of::<HANDLE>(),
+                null_mut(),
+                null(),
+            )
+        } == 0
+        {
+            return Err("Native child exact handle list unavailable");
+        }
         let mut startup: STARTUPINFOEXW = unsafe { zeroed() };
         startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
         startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-        // Explicit NULL std handles and false inheritance: no parent pipes/keys.
+        // stdin is an opaque QUERY-only job handle, never a stream or request input.
+        // The exact handle list excludes every other inheritable parent handle.
+        startup.StartupInfo.hStdInput = raw(&query_handle);
         startup.lpAttributeList = attributes.ptr();
         let environment = environment()?;
         let mut info: PROCESS_INFORMATION = unsafe { zeroed() };
@@ -290,7 +330,7 @@ impl<'job, 'roots> Child<'job, 'roots> {
                 command.as_mut_ptr(),
                 null(),
                 null(),
-                0,
+                1,
                 CREATE_SUSPENDED
                     | CREATE_NO_WINDOW
                     | CREATE_UNICODE_ENVIRONMENT
@@ -452,8 +492,15 @@ fn child_identity<T>(work: impl FnOnce() -> T) -> Result<T> {
         return Err("Exact protected native child required");
     }
     let _image = job.native_child_file(false)?;
-    require_policy(0)?;
-    if active(0)? != 1 {
+    let supervision = owned(unsafe { GetStdHandle(STD_INPUT_HANDLE) })?;
+    let mut member = 0;
+    if unsafe { IsProcessInJob(GetCurrentProcess(), raw(&supervision), &mut member) } == 0
+        || member == 0
+    {
+        return Err("Native child exact inherited job required");
+    }
+    require_policy(raw(&supervision))?;
+    if active(raw(&supervision))? != 1 {
         return Err("Single owned native process required");
     }
     // No inherited provider tokens/options, PATH, HOME, TEMP or boot keys.
@@ -800,7 +847,7 @@ mod tests {
         assert!(require_environment(extra, &value).is_err());
         assert!(require_environment(entries[1..].to_vec(), &value).is_err());
         let mut changed = entries;
-        changed[0].1 = OsString::from("Z:");
+        changed[0].1 = OsString::from("not-an-os-drive");
         assert!(require_environment(changed, &value).is_err());
     }
     #[test]
