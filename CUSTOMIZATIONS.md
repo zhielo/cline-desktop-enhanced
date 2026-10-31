@@ -2,6 +2,10 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Independent bounded process-list observation
+
+Exact956439b8 Windows run41175999928/job124463570538 reported stage152141, independently identifying the child guard's observed two-active-process value rather than a supervisor kill. A bounded four-slot native job process-list query now distinguishes a sole current PID, duplicate current PID, another process or unavailable/inconsistent list. Identifiers are never logged and every shape remains an error under the unchanged single-process requirement. This is an independent diagnostic, not a process-count waiver or established explanation for the accounting mismatch.
+
 ## Bounded job-accounting failure classification
 
 Exact3bd28e69 Windows run41175560792/job124462267885 still reported stage152124 with the explicit query handle. The earlier child guard exit124 collides numerically with the supervisor termination code, so that value alone cannot establish a child accounting mismatch or validate the job-selection hypothesis. Distinct fixed categories now retain zero, two or more active processes and exact-handle membership refusal without printing identifiers or OS data. All require exactly one; no retry or relaxed assertion is added. The SystemDrive change advanced past the earlier distinct120 refusal, but current acceptance is still failing and the full pack remains unfinished/unmerged.

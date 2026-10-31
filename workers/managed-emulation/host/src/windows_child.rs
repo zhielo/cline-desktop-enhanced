@@ -116,6 +116,10 @@ fn diagnostic_code(error: &str) -> i32 {
         "Native child job reports two processes" => 41,
         "Native child job reports multiple processes" => 42,
         "Native child exact inherited job required" => 43,
+        "Native child accounting disagrees with sole current process" => 44,
+        "Native child process list duplicates current process" => 45,
+        "Native child process list contains another process" => 46,
+        "Native child process list unavailable or inconsistent" => 47,
         "Native child DLL policy unavailable" => 25,
         "Exclusive native child executable required" => 26,
         "Impersonated protected storage access forbidden" => 27,
@@ -180,6 +184,40 @@ fn active(job: HANDLE) -> Result<u32> {
         return Err("Native child job accounting unavailable");
     }
     Ok(value.ActiveProcesses)
+}
+// Bounded diagnostic readback only. Never admits an unexpected process count.
+fn process_count_error(job: HANDLE) -> &'static str {
+    #[repr(C)]
+    struct Processes {
+        assigned: u32,
+        listed: u32,
+        ids: [usize; 4],
+    }
+    let mut value: Processes = unsafe { zeroed() };
+    if unsafe {
+        QueryInformationJobObject(
+            job,
+            JobObjectBasicProcessIdList,
+            (&mut value as *mut Processes).cast(),
+            size_of::<Processes>() as u32,
+            null_mut(),
+        )
+    } == 0
+        || value.assigned != value.listed
+        || value.listed == 0
+        || value.listed > 4
+    {
+        return "Native child process list unavailable or inconsistent";
+    }
+    let ids = &value.ids[..value.listed as usize];
+    let current = unsafe { GetCurrentProcessId() } as usize;
+    if ids == [current] {
+        "Native child accounting disagrees with sole current process"
+    } else if ids.iter().all(|id| *id == current) {
+        "Native child process list duplicates current process"
+    } else {
+        "Native child process list contains another process"
+    }
 }
 struct Attributes {
     storage: Vec<usize>,
@@ -507,7 +545,7 @@ fn child_identity<T>(work: impl FnOnce() -> T) -> Result<T> {
     match active(raw(&supervision))? {
         1 => {}
         0 => return Err("Native child job reports zero processes"),
-        2 => return Err("Native child job reports two processes"),
+        2 => return Err(process_count_error(raw(&supervision))),
         _ => return Err("Native child job reports multiple processes"),
     }
     // No inherited provider tokens/options, PATH, HOME, TEMP or boot keys.
