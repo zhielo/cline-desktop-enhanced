@@ -120,6 +120,10 @@ fn diagnostic_code(error: &str) -> i32 {
         "Native child process list duplicates current process" => 45,
         "Native child process list contains another process" => 46,
         "Native child process list unavailable or inconsistent" => 47,
+        "Native child job also contains native console host" => 48,
+        "Native child job also contains same executable" => 49,
+        "Native child sibling image is another executable" => 50,
+        "Native child sibling image unavailable" => 51,
         "Native child DLL policy unavailable" => 25,
         "Exclusive native child executable required" => 26,
         "Impersonated protected storage access forbidden" => 27,
@@ -215,9 +219,44 @@ fn process_count_error(job: HANDLE) -> &'static str {
         "Native child accounting disagrees with sole current process"
     } else if ids.iter().all(|id| *id == current) {
         "Native child process list duplicates current process"
+    } else if ids.len() == 2 && ids.contains(&current) {
+        sibling_image_error(*ids.iter().find(|id| **id != current).unwrap())
     } else {
         "Native child process list contains another process"
     }
+}
+fn sibling_image_error(id: usize) -> &'static str {
+    let Ok(id) = u32::try_from(id) else {
+        return "Native child sibling image unavailable";
+    };
+    let Ok(process) = owned(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, id) })
+    else {
+        return "Native child sibling image unavailable";
+    };
+    let mut path = [0u16; 2048];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(raw(&process), 0, path.as_mut_ptr(), &mut length) } == 0
+        || length == 0
+        || length as usize >= path.len()
+    {
+        return "Native child sibling image unavailable";
+    }
+    let observed = String::from_utf16_lossy(&path[..length as usize]);
+    let mut root = [0u16; 1024];
+    let used = unsafe { GetWindowsDirectoryW(root.as_mut_ptr(), root.len() as u32) } as usize;
+    if used > 0
+        && used < root.len()
+        && observed.eq_ignore_ascii_case(&format!(
+            "{}\\System32\\conhost.exe",
+            String::from_utf16_lossy(&root[..used])
+        ))
+    {
+        return "Native child job also contains native console host";
+    }
+    if std::env::current_exe().is_ok_and(|p| observed.eq_ignore_ascii_case(&p.to_string_lossy())) {
+        return "Native child job also contains same executable";
+    }
+    "Native child sibling image is another executable"
 }
 struct Attributes {
     storage: Vec<usize>,

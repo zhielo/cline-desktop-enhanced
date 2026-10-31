@@ -2,6 +2,10 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Private fixed sibling-image diagnostic
+
+Exact831df7a6 Windows run41176239028/job124464271760 reported stage152146: the independent native process list contains another process. A bounded read-only query of that specific job member now distinguishes the native Windows System32 console host path, the same executable path, another executable or unavailable readback. No PID/path/image bytes are emitted, no process is started or adopted, and these path comparisons are diagnostic categories, not signature trust or permission to accept an extra process. Single-process containment remains unchanged.
+
 ## Independent bounded process-list observation
 
 Exact956439b8 Windows run41175999928/job124463570538 reported stage152141, independently identifying the child guard's observed two-active-process value rather than a supervisor kill. A bounded four-slot native job process-list query now distinguishes a sole current PID, duplicate current PID, another process or unavailable/inconsistent list. Identifiers are never logged and every shape remains an error under the unchanged single-process requirement. This is an independent diagnostic, not a process-count waiver or established explanation for the accounting mismatch.
