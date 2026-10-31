@@ -22,6 +22,28 @@ export class GeneralRecoveryTerminationUnconfirmedError extends Error {
 		this.name = "GeneralRecoveryTerminationUnconfirmedError";
 	}
 }
+/** Retain only fixed supervisor observations, never parser output, paths or environment. */
+export class GeneralRecoveryExecutionError extends Error {
+	constructor(result: {
+		exitCode: number | null;
+		timedOut: boolean;
+		cancelled: boolean;
+		truncated?: boolean;
+		outputDrainTimedOut?: boolean;
+	}) {
+		const exit =
+			Number.isSafeInteger(result.exitCode) &&
+			typeof result.exitCode === "number" &&
+			result.exitCode >= -2147483648 &&
+			result.exitCode <= 2147483647
+				? result.exitCode
+				: "unknown";
+		super(
+			`Native recovery execution failed (exit=${exit}; hostDeadline=${result.timedOut === true}; cancelled=${result.cancelled === true}; outputLimit=${result.truncated === true}; drainDeadline=${result.outputDrainTimedOut === true}); no fallback or automatic replay`,
+		);
+		this.name = "GeneralRecoveryExecutionError";
+	}
+}
 const MAX_FILE = 1024 * 1024;
 const MAX_TOTAL = 2 * 1024 * 1024;
 const MAX_ENTRIES = 512;
@@ -282,9 +304,7 @@ export async function runPinnedGeneralRecovery(
 			result.truncated ||
 			result.outputDrainTimedOut
 		)
-			throw new Error(
-				"General recovery failed, exceeded deadline/output limits or did not confirm process drainage",
-			);
+			throw new GeneralRecoveryExecutionError(result);
 		const report = Report.parse(JSON.parse(result.stdout));
 		if (report.failed || report.total !== report.modules.length)
 			throw new Error("Incomplete general recovery report");

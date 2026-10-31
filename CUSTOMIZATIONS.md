@@ -2,6 +2,14 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Exact-head tab fixtures and retained recovery supervisor observations
+
+On 8866f9c7e37ba003da37abd6dc12cb00f07c7504, VS Code job124406684545 repeatedly observed three real tab paths while its two-document fixture expected two: the second untitled document appeared in both editor groups. The fixture applied a WorkspaceEdit after opening an untitled URI in a second group. The corrected multi-group/same-group fixtures write owned saved files before opening their documents; a separate real-host test explicitly requires duplicate paths for the same document in two groups. The production getOpenTabs API remains a list of tabs, not deduplicated documents. Deleted-file/untitled coverage and the existing eight-second waits remain. Compilation does not certify actual extension-host acceptance.
+
+The same head's Windows general-recovery job124406123151 failed the owned native case after50430ms with a generic error; this timing does not prove the cause. Native execution failures now retain only a fixed finite supervisor summary (numeric exit or unknown, host deadline, cancellation, output limit and output-drain deadline flags). Exit124 is not relabeled as proof of a timeout. No stdout, stderr, command, path or environment value is persisted by this summary. Unknown failures retain the previous generic error; cancellation, unconfirmed termination, retained reservations and no replay/fallback remain unchanged. Tests cover field projection, invalid numeric exits and persisted failed—not successful—receipts. This closes a diagnostic gap, not the unresolved Windows cause or the unidbg stability issue.
+
+All four-engine shipping-image/source/notice review, local broker/Hyper-V lifecycle, complete Setup Center install/test/use/repair/remove and installed Windows acceptance remain merge blockers. The shipping catalog remains empty; no development image is promoted and no readiness is enabled by these changes.
+
 ## Retained owned JVM fatal evidence
 
 The third fresh unidbg boot on e4b4b7de7282783ba0614fb02a978af1badb9671/run 40819482794 failed ARM64 denied-syscall acceptance with SIGABRT (-6), not the required 76; the first two boots passed. This demonstrates that the earlier callback-stop correction did not establish a resolved native stability issue. No native stack was retained, so its cause remains unproven and no successful previous run supersedes the failure.

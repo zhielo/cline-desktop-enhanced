@@ -9,25 +9,32 @@ import { getOpenTabs } from "@/hosts/vscode/hostbridge/window/getOpenTabs"
 import { GetOpenTabsRequest } from "@/shared/proto/host/window"
 
 describe("Hostbridge - Window - getOpenTabs", () => {
-	async function createAndOpenTestDocument(name: string, column: vscode.ViewColumn): Promise<void> {
+	let fixtureRoot: string | undefined
+	async function createAndOpenTestDocument(
+		name: string,
+		column: vscode.ViewColumn,
+		kind: "file" | "untitled" = "file",
+	): Promise<vscode.Uri> {
 		const content = `// Test file ${name}\nconsole.log('Hello from file ${name}');`
-
-		// Create an untitled document with a custom name
-		const uri = vscode.Uri.parse(`untitled:test-file-${name}.js`)
-
-		// Open directly in the requested group. Opening an untitled document
-		// first can create a tab in the active group before showTextDocument
-		// opens it in another group, leaving duplicate tabs behind.
-		await vscode.window.showTextDocument(uri, {
-			viewColumn: column,
-			preview: false,
-		})
-
-		// Set the content
-		const edit = new vscode.WorkspaceEdit()
-		edit.insert(uri, new vscode.Position(0, 0), content)
-		await vscode.workspace.applyEdit(edit)
-
+		assert.ok(fixtureRoot, "Owned tab fixture directory is required")
+		const uri =
+			kind === "file"
+				? vscode.Uri.file(path.join(fixtureRoot, `test-file-${name}.js`))
+				: vscode.Uri.parse(`untitled:test-file-${name}.js`)
+		if (kind === "file") {
+			// Prepare bytes before opening an editor. Applying a WorkspaceEdit to
+			// an untitled URI after opening it in another group can itself open
+			// the document again. A duplicate tab is valid API data, not slowness.
+			await fs.writeFile(uri.fsPath, content)
+			const document = await vscode.workspace.openTextDocument(uri)
+			await vscode.window.showTextDocument(document, { viewColumn: column, preview: false })
+		} else {
+			await vscode.window.showTextDocument(uri, { viewColumn: column, preview: false })
+			const edit = new vscode.WorkspaceEdit()
+			edit.insert(uri, new vscode.Position(0, 0), content)
+			assert.ok(await vscode.workspace.applyEdit(edit), "Owned untitled fixture edit must succeed")
+		}
+		return uri
 	}
 
 	async function waitForAllTabsClosed(): Promise<void> {
@@ -49,11 +56,16 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 	beforeEach(async () => {
 		// Clean up any existing editors and wait for cleanup to complete
 		await waitForAllTabsClosed()
+		fixtureRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cline-open-tabs-"))
 	})
 
 	afterEach(async () => {
 		// Clean up test documents and editors
 		await waitForAllTabsClosed()
+		if (fixtureRoot) {
+			await fs.rm(fixtureRoot, { recursive: true, force: true })
+			fixtureRoot = undefined
+		}
 	})
 
 	it("should return empty array when no tabs are open", async () => {
@@ -70,8 +82,8 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 
 	it("should return paths of open text document tabs", async () => {
 		// Open the documents in editors (this creates the tabs)
-		await createAndOpenTestDocument("open-tabs-1", vscode.ViewColumn.One)
-		await createAndOpenTestDocument("open-tabs-2", vscode.ViewColumn.Two)
+		const first = await createAndOpenTestDocument("open-tabs-1", vscode.ViewColumn.One)
+		const second = await createAndOpenTestDocument("open-tabs-2", vscode.ViewColumn.Two)
 
 		// Wait for tabs to be fully created
 		await pWaitFor(
@@ -98,6 +110,24 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 			2,
 			`Expected 2 tabs, got ${response.paths.length}. Found tabs: ${JSON.stringify(response.paths)}`,
 		)
+		assert.deepStrictEqual([...response.paths].sort(), [first.fsPath, second.fsPath].sort())
+	})
+
+	it("preserves two actual tabs for the same document in different groups", async () => {
+		const uri = await createAndOpenTestDocument("same-document", vscode.ViewColumn.One)
+		const document = await vscode.workspace.openTextDocument(uri)
+		await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Two, preview: false })
+		await pWaitFor(
+			() =>
+				vscode.window.tabGroups.all.filter((group) =>
+					group.tabs.some(
+						(tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri.toString(),
+					),
+				).length === 2,
+			{ timeout: 8000, interval: 50 },
+		)
+		const response = await getOpenTabs(GetOpenTabsRequest.create({}))
+		assert.deepStrictEqual(response.paths, [uri.fsPath, uri.fsPath])
 	})
 
 	it("should return all open tabs even when multiple files are opened in the same ViewColumn", async () => {
@@ -144,7 +174,7 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 		await vscode.window.showTextDocument(document, { preview: false })
 
 		// Also open an untitled document
-		await createAndOpenTestDocument("includes-deleted", vscode.ViewColumn.One)
+		await createAndOpenTestDocument("includes-deleted", vscode.ViewColumn.One, "untitled")
 
 		// Wait for tabs to be created
 		await pWaitFor(
