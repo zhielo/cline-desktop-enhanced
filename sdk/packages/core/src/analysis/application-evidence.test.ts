@@ -213,23 +213,22 @@ it("rejects unbound graphs and modified source manifests with transaction rollba
 		});
 		completed = true;
 	} finally {
+		let closed = false;
 		try {
 			measured("close-store", () => db.close());
-		} catch (error) {
-			completed = false;
-			throw error;
+			closed = true;
 		} finally {
 			const elapsedMs = Math.round(performance.now() - started);
 			// Bounded owned-test diagnostics only: no source, paths, SQL bodies,
 			// credentials, retries or relaxed deadlines. Slow is not success.
-			if (!completed || elapsedMs >= 1000) {
+			if (!completed || !closed || elapsedMs >= 1000) {
 				const cpu = process.cpuUsage(cpuStarted);
 				console.warn(
 					"CLINE_OWNED_GRAPH_ROLLBACK_TIMING_V1",
 					JSON.stringify({
 						platform: process.platform,
 						node: process.version,
-						completed,
+						completed: completed && closed,
 						elapsedMs,
 						cpuUserMs: Math.round(cpu.user / 1000),
 						cpuSystemMs: Math.round(cpu.system / 1000),
