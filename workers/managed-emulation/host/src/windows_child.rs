@@ -13,7 +13,7 @@ use std::{
     fs::File,
     mem::{size_of, zeroed},
     os::windows::{
-        ffi::{OsStrExt, OsStringExt},
+        ffi::OsStrExt,
         io::{AsRawHandle, FromRawHandle, OwnedHandle},
     },
     ptr::{null, null_mut},
@@ -385,13 +385,46 @@ impl<'job, 'roots> Child<'job, 'roots> {
 fn environment() -> Result<Vec<u16>> {
     let mut root = [0u16; 1024];
     let used = unsafe { GetWindowsDirectoryW(root.as_mut_ptr(), root.len() as u32) } as usize;
-    if used == 0 || used >= root.len() {
+    if used < 3 || used >= root.len() {
         return Err("Native Windows directory unavailable");
     }
-    let mut value: Vec<u16> = "SystemRoot=".encode_utf16().collect();
+    // Known-folder resolution expands the OS's SystemDrive-based defaults.
+    // Derive it from the native Windows directory, never the caller environment.
+    if !((root[0] >= b'A' as u16 && root[0] <= b'Z' as u16)
+        || (root[0] >= b'a' as u16 && root[0] <= b'z' as u16))
+        || root[1] != b':' as u16
+        || root[2] != b'\\' as u16
+    {
+        return Err("Native local Windows directory required");
+    }
+    let mut value: Vec<u16> = "SystemDrive=".encode_utf16().collect();
+    value.extend_from_slice(&root[..2]);
+    value.push(0);
+    value.extend("SystemRoot=".encode_utf16());
     value.extend_from_slice(&root[..used]);
     value.extend([0, 0]);
     Ok(value)
+}
+fn require_environment(entries: Vec<(OsString, OsString)>, expected: &[u16]) -> Result<()> {
+    let mut actual: Vec<Vec<u16>> = entries
+        .into_iter()
+        .map(|(key, value)| {
+            let mut entry: Vec<u16> = key.encode_wide().collect();
+            entry.push(b'=' as u16);
+            entry.extend(value.encode_wide());
+            entry
+        })
+        .collect();
+    actual.sort();
+    let expected: Vec<Vec<u16>> = expected
+        .split(|c| *c == 0)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| entry.to_vec())
+        .collect();
+    if actual != expected {
+        return Err("Native child private environment required");
+    }
+    Ok(())
 }
 /// No automatic installation or readiness: the future protected installer must
 /// stage the reviewed native executable in this fixed per-job role first.
@@ -424,12 +457,7 @@ fn child_identity<T>(work: impl FnOnce() -> T) -> Result<T> {
         return Err("Single owned native process required");
     }
     // No inherited provider tokens/options, PATH, HOME, TEMP or boot keys.
-    let entries: Vec<_> = std::env::vars_os().collect();
-    let expected = environment()?;
-    let expected = OsString::from_wide(&expected[11..expected.len() - 2]);
-    if entries.len() != 1 || entries[0].0 != OsStr::new("SystemRoot") || entries[0].1 != expected {
-        return Err("Native child private environment required");
-    }
+    require_environment(std::env::vars_os().collect(), &environment()?)?;
     if unsafe {
         SetDefaultDllDirectories(
             windows_sys::Win32::System::LibraryLoader::LOAD_LIBRARY_SEARCH_SYSTEM32,
@@ -752,11 +780,28 @@ mod tests {
         }
     }
     #[test]
-    fn explicit_native_environment_contains_only_observed_systemroot() {
+    fn explicit_native_environment_contains_only_observed_os_roots() {
         let value = environment().unwrap();
-        assert!(value.starts_with(&"SystemRoot=".encode_utf16().collect::<Vec<_>>()));
+        assert!(value.starts_with(&"SystemDrive=".encode_utf16().collect::<Vec<_>>()));
         assert!(value.ends_with(&[0, 0]));
-        assert_eq!(value.iter().filter(|x| **x == 0).count(), 2);
+        assert_eq!(value.iter().filter(|x| **x == 0).count(), 3);
+        let entries = value
+            .split(|c| *c == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf16(s).unwrap())
+            .map(|s| {
+                let (key, value) = s.split_once('=').unwrap();
+                (OsString::from(key), OsString::from(value))
+            })
+            .collect::<Vec<_>>();
+        require_environment(entries.clone(), &value).unwrap();
+        let mut extra = entries.clone();
+        extra.push((OsString::from("PATH"), OsString::from("untrusted")));
+        assert!(require_environment(extra, &value).is_err());
+        assert!(require_environment(entries[1..].to_vec(), &value).is_err());
+        let mut changed = entries;
+        changed[0].1 = OsString::from("Z:");
+        assert!(require_environment(changed, &value).is_err());
     }
     #[test]
     fn exact_job_limits_are_read_back_and_empty_job_is_not_a_process_exit() {
