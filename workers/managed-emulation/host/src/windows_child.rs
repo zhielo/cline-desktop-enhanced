@@ -112,6 +112,10 @@ fn diagnostic_code(error: &str) -> i32 {
         "Native child private environment required" => 22,
         "Exact protected native child required" => 23,
         "Single owned native process required" => 24,
+        "Native child job reports zero processes" => 40,
+        "Native child job reports two processes" => 41,
+        "Native child job reports multiple processes" => 42,
+        "Native child exact inherited job required" => 43,
         "Native child DLL policy unavailable" => 25,
         "Exclusive native child executable required" => 26,
         "Impersonated protected storage access forbidden" => 27,
@@ -500,8 +504,11 @@ fn child_identity<T>(work: impl FnOnce() -> T) -> Result<T> {
         return Err("Native child exact inherited job required");
     }
     require_policy(raw(&supervision))?;
-    if active(raw(&supervision))? != 1 {
-        return Err("Single owned native process required");
+    match active(raw(&supervision))? {
+        1 => {}
+        0 => return Err("Native child job reports zero processes"),
+        2 => return Err("Native child job reports two processes"),
+        _ => return Err("Native child job reports multiple processes"),
     }
     // No inherited provider tokens/options, PATH, HOME, TEMP or boot keys.
     require_environment(std::env::vars_os().collect(), &environment()?)?;
