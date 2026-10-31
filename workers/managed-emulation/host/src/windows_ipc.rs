@@ -14,8 +14,8 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::{
-        GetLastError, LocalFree, ERROR_IO_PENDING, ERROR_NO_TOKEN, ERROR_PIPE_CONNECTED,
-        ERROR_PIPE_NOT_CONNECTED, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+        GetLastError, LocalFree, ERROR_IO_PENDING, ERROR_NO_TOKEN, ERROR_PIPE_CONNECTED, HANDLE,
+        INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
     },
     Security::{
         Authorization::{
@@ -34,16 +34,23 @@ use windows_sys::Win32::{
     },
     System::{
         Pipes::{
-            ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, ImpersonateNamedPipeClient,
+            ConnectNamedPipe, CreateNamedPipeW, ImpersonateNamedPipeClient,
             SetNamedPipeHandleState, PIPE_READMODE_MESSAGE, PIPE_REJECT_REMOTE_CLIENTS,
             PIPE_TYPE_MESSAGE, PIPE_WAIT,
         },
         Threading::{
             CreateEventW, GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
-            SetEvent, WaitForMultipleObjects, WaitForSingleObject,
+            WaitForMultipleObjects, WaitForSingleObject,
         },
         IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED},
     },
+};
+
+#[cfg(any(test, feature = "owned-system-acceptance"))]
+use windows_sys::Win32::System::Threading::SetEvent;
+#[cfg(feature = "owned-system-acceptance")]
+use windows_sys::Win32::{
+    Foundation::ERROR_PIPE_NOT_CONNECTED, System::Pipes::DisconnectNamedPipe,
 };
 
 const PIPE: &str = r"\\.\pipe\ClineEnhancedManagedProbe.v1";
@@ -281,9 +288,11 @@ fn raw(handle: &OwnedHandle) -> HANDLE {
 /// Unnamed service-stop event; no externally supplied event name/handle.
 pub(crate) struct Cancellation(OwnedHandle);
 impl Cancellation {
+    #[cfg(any(test, feature = "owned-system-acceptance"))]
     pub(crate) fn new() -> Result<Self> {
         Ok(Self(owned(unsafe { CreateEventW(null(), 1, 0, null()) })?))
     }
+    #[cfg(any(test, feature = "owned-system-acceptance"))]
     pub(crate) fn signal(&self) {
         if unsafe { SetEvent(raw(&self.0)) } == 0 {
             std::process::abort();
@@ -490,10 +499,12 @@ impl ProbeServer {
         require_system()?;
         self.exchange(Instant::now() + DEADLINE)
     }
+    #[cfg(feature = "owned-system-acceptance")]
     pub(crate) fn serve_controlled(&self, cancel: &Cancellation) -> Result<()> {
         require_system()?;
         self.exchange_controlled(Instant::now() + DEADLINE, Some(cancel))
     }
+    #[cfg(feature = "owned-system-acceptance")]
     pub(crate) fn reset_connection(&self) -> Result<()> {
         require_system()?;
         if unsafe { DisconnectNamedPipe(raw(&self.pipe)) } == 0

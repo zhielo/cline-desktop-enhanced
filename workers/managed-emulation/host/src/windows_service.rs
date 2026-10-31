@@ -365,7 +365,7 @@ fn stop(service: &Sc, process: &OwnedHandle) -> Result<()> {
     }
     clean_exit(process.as_raw_handle() as HANDLE)
 }
-fn digest(file: &std::fs::File) -> Result<[u8; 32]> {
+pub(crate) fn digest(file: &std::fs::File) -> Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
     use std::io::{Read, Seek, SeekFrom};
     let size = file
@@ -438,6 +438,7 @@ pub fn owned_acceptance(roots: &SystemRoots) -> std::result::Result<(), i32> {
     if digest(&staged).map_err(|_| 111)? != expected {
         return Err(112);
     }
+    crate::windows_child::owned_acceptance(&job, &staged)?;
     // Prove that the same exit verifier refuses both a live process and an
     // actual failed child, not merely an SCM STOPPED status. The exact protected
     // fixture already rejects every command-line argument with exit code 2;

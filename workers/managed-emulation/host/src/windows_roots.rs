@@ -567,6 +567,28 @@ fn validate_system_regular(file: &std::fs::File, allow_empty: bool, maximum: u64
     Ok(size)
 }
 
+enum ExecutableRole {
+    NativeChild,
+    #[cfg(feature = "owned-system-acceptance")]
+    OwnedService,
+}
+impl ExecutableRole {
+    fn unavailable(&self) -> &'static str {
+        match self {
+            Self::NativeChild => "Exclusive native child executable required",
+            #[cfg(feature = "owned-system-acceptance")]
+            Self::OwnedService => "Exclusive owned service binary required",
+        }
+    }
+    fn name(&self) -> &'static str {
+        match self {
+            Self::NativeChild => "native-child.exe",
+            #[cfg(feature = "owned-system-acceptance")]
+            Self::OwnedService => "owned-service.exe",
+        }
+    }
+}
+
 /// Pinned per-job roots. Borrowing the parent keeps its protected namespace
 /// alive. No deletion/VM API is supplied; ambiguous state is retained for recovery.
 pub struct SystemJob<'roots> {
@@ -633,16 +655,30 @@ impl<'roots> SystemJob<'roots> {
     }
     #[cfg(feature = "owned-system-acceptance")]
     pub(crate) fn owned_service_path(&self) -> PathBuf {
-        self.directories[2].0.join("owned-service.exe")
+        self.directories[2]
+            .0
+            .join(ExecutableRole::OwnedService.name())
     }
     #[cfg(feature = "owned-system-acceptance")]
     pub(crate) fn owned_service_file(&self, create: bool) -> Result<std::fs::File> {
+        self.executable_file(ExecutableRole::OwnedService, create)
+    }
+    pub(crate) fn native_child_path(&self) -> PathBuf {
+        self.directories[2]
+            .0
+            .join(ExecutableRole::NativeChild.name())
+    }
+    pub(crate) fn native_child_file(&self, create: bool) -> Result<std::fs::File> {
+        self.executable_file(ExecutableRole::NativeChild, create)
+    }
+    // Fixed role names only. No request-selected executable, directory or argv.
+    fn executable_file(&self, role: ExecutableRole, create: bool) -> Result<std::fs::File> {
         use windows_sys::Win32::{
             Foundation::{GENERIC_READ, GENERIC_WRITE},
             Storage::FileSystem::{CREATE_NEW, FILE_FLAG_WRITE_THROUGH},
         };
         self.revalidate()?;
-        let path = wide(self.owned_service_path().as_os_str())?;
+        let path = wide(self.directories[2].0.join(role.name()).as_os_str())?;
         let descriptor = Descriptor::new("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)")?;
         let attributes = SECURITY_ATTRIBUTES {
             nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
@@ -661,7 +697,7 @@ impl<'roots> SystemJob<'roots> {
             )
         };
         if raw == INVALID_HANDLE_VALUE {
-            return Err("Exclusive owned service binary required");
+            return Err(role.unavailable());
         }
         let file = unsafe { std::fs::File::from_raw_handle(raw as _) };
         validate_system_regular(&file, create, 64 * 1024 * 1024)?;

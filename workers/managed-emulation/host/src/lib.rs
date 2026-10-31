@@ -243,3 +243,7 @@ mod creation_records;
 mod creation_replies;
 #[cfg(windows)]
 pub mod windows_creation;
+
+/// Supervised trusted native provider probe; not a VM/target execution boundary.
+#[cfg(windows)]
+pub mod windows_child;

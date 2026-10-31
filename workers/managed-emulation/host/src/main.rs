@@ -160,6 +160,10 @@ fn terminate_probe_on_deadline() -> ! {
 }
 
 fn main() {
+    #[cfg(windows)]
+    if let Some(code) = cline_managed_inert_probe::windows_child::dispatch() {
+        std::process::exit(code);
+    }
     // Independent whole-process bound: stdin EOF and stdout delivery are not
     // covered by socket timeouts. This kills ONLY this probe, never the VM.
     let (done, waiting) = std::sync::mpsc::channel();

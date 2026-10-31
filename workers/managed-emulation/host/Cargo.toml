@@ -18,7 +18,7 @@ zeroize = "=1.8.1"
 [target.'cfg(windows)'.dependencies]
 socket2 = { version = "=0.5.9", features = ["all"] }
 windows = { version = "=0.58.0", features = ["Win32_System_Com", "Win32_System_Wmi", "Win32_System_Variant", "Win32_Security", "Win32_System_Rpc"] }
-windows-sys = { version = "=0.52.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Services", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Shell"] }
+windows-sys = { version = "=0.52.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Services", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_SystemInformation", "Win32_System_WindowsProgramming", "Win32_UI_Shell"] }
 
 [[test]]
 name = "store_crash"
