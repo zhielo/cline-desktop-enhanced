@@ -1,4 +1,8 @@
 import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
@@ -8,6 +12,59 @@ import java.util.Set;
 
 /** Diagnostic only: fixed public JDK operations, no emulator or JNI dependency. */
 public final class OwnedJvmProbe {
+    /** Fixed owned bytes only. No dependency classes or native adapter loading. */
+    public static final class Payload {
+        public static int value() { return 42; }
+    }
+
+    private static void classLoading() throws Exception {
+        String name = "OwnedJvmProbe$Payload";
+        String entry = name + ".class";
+        byte[] bytes;
+        try (var stream = OwnedJvmProbe.class.getResourceAsStream("/" + entry)) {
+            if (stream == null) throw new IllegalStateException("Owned class resource missing");
+            bytes = stream.readNBytes(65537);
+            if (bytes.length == 0 || bytes.length > 65536 || stream.read() != -1)
+                throw new IllegalStateException("Owned class resource budget");
+        }
+        var jar = Files.createTempFile("cline-owned-classes-", ".jar");
+        try {
+            try (var output = new JarOutputStream(Files.newOutputStream(jar))) {
+                output.putNextEntry(new JarEntry(entry));
+                output.write(bytes);
+                output.closeEntry();
+            }
+            URL location = jar.toUri().toURL();
+            // Exercise the JAR URL/class-loading paths seen in the fatal stack,
+            // in a separate process that cannot load the emulator's JNI bridge.
+            // Close every loader and owned file; no caches/retries or JIT flags.
+            for (int iteration = 0; iteration < 256; iteration++) {
+                try (var loader = new URLClassLoader(new URL[] { location },
+                        ClassLoader.getPlatformClassLoader())) {
+                    Class<?> loaded = Class.forName(name, true, loader);
+                    if (loaded.getClassLoader() != loader ||
+                            !Integer.valueOf(42).equals(loaded.getMethod("value").invoke(null)))
+                        throw new IllegalStateException("Owned class-loading result mismatch");
+                    for (int lookup = 0; lookup < 8; lookup++) {
+                        URL resource = loader.getResource(entry);
+                        if (resource == null || !resource.getProtocol().equals("jar") ||
+                                resource.getFile().isEmpty() || !resource.getFile().startsWith("file:"))
+                            throw new IllegalStateException("Owned JAR URL mismatch");
+                        var connection = resource.openConnection();
+                        connection.setUseCaches(false);
+                        try (var stream = connection.getInputStream()) {
+                            byte[] actual = stream.readNBytes(bytes.length + 1);
+                            if (!Arrays.equals(bytes, actual) || stream.read() != -1)
+                                throw new IllegalStateException("Owned class bytes changed");
+                        }
+                    }
+                }
+            }
+        } finally {
+            Files.delete(jar);
+        }
+    }
+
     public static void main(String[] arguments) throws Exception {
         if (arguments.length != 0) throw new IllegalArgumentException("No probe arguments");
         if (Set.of("Cipher", "KeyStore", "MessageDigest", "Signature").size() != 4)
@@ -29,6 +86,7 @@ public final class OwnedJvmProbe {
         // tmpdir, never a caller-selected file. No random bytes/path in output.
         File temporary = File.createTempFile("cline-owned-jvm-", ".tmp");
         Files.delete(temporary.toPath());
+        classLoading();
         System.out.println("CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed");
     }
 }

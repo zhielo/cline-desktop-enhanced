@@ -455,7 +455,7 @@ class BundleTests(unittest.TestCase):
         self.assertFalse(value['engineExecuted'])
         self.assertEqual(value['guestExecution'],'not-tested')
         self.assertEqual(value['engineReadiness'],'not-tested')
-        self.assertEqual(value['checks'],4)
+        self.assertEqual(value['checks'],5)
 
     def test_builder_probe_rejects_wrong_exit_output_warning_and_fatal_error(self):
         for code,stdout,stderr in [(1,b'',b'owned JVM initialization error'),(0,b'wrong marker',b''),(0,b'CLINE_MANAGED_OWNED_JVM_PROBE_V1 passed\n',b'warning'),(-6,b'x'*10000,b'y'*10000)]:

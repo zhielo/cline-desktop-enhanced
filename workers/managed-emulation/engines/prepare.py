@@ -52,7 +52,7 @@ def verify_private_jre():
             },sort_keys=True,separators=(',',':')),file=sys.stderr)
             raise ValueError('Private JVM basic operations failed before guest image creation')
     print('CLINE_MANAGED_OWNED_BUILD_JVM_V1 '+json.dumps({
-        'schema':1, 'scope':'owned-builder-jvm-only', 'checks':4,
+        'schema':1, 'scope':'owned-builder-jvm-only', 'checks':5,
         'basicJdkOperations':'passed', 'engineExecuted':False,
         'engineReadiness':'not-tested', 'guestExecution':'not-tested',
     },sort_keys=True,separators=(',',':')))
