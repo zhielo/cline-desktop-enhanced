@@ -4,6 +4,7 @@ const requiredMarkers: Array<{
 	path: string;
 	markers: string[];
 }> = [
+ {path:"apps/examples/desktop-app/sidecar/release-gate-policy.ts",markers:["33f87521c3bd9b705f9ec7868be254d90e4506f54dd514862bc921f9c42427fe"]},
  {path:"workers/managed-emulation/engines/runtime-jdk.lock.json",markers:['"scope": "development-owned-guest-tests-only"', '"version": "21.0.13+9"', '"bytes": 207858352', 'd7f5d5cf865a2902b70ff549b97586a7d3f234e016f041ab447ea740c7d66d1c']},
  {path:"workers/managed-emulation/engines/runtime_jdk.py",markers:["def verify_linked_release(home, version):", "def verify_release(home, version):", "Private JDK download identity", "Private JDK legal link refused", "Private linked JRE module closure", "directory.mkdir(mode=0o700)", "target.open('xb')"]},
  {path:"workers/managed-emulation/engines/prepare.py",markers:["runtime_jdk.obtain(Path('/build/private-runtime-jdk'))", "'--module-path', str(runtime_home/'jmods')", "runtime_jdk.verify_linked_release(ROOT/'jre', runtime_origin['version'])", "ROOT/'jre-origin.json'"]},
