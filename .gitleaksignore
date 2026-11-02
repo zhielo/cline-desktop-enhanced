@@ -2,3 +2,11 @@
 # Public upstream Git SHA in the original scanner-scope fixture, not a credential.
 # Exact historical finding only; current fixture reads the revision from inventory.
 ca66b174c8aa6d5816fd7489ac4e6d9c5936e085:scripts/test-secret-scan-fixtures.mjs:sourcegraph-access-token:16
+
+# Historical documentation prose: "escaping links" followed by "unresolved/cyclic".
+# Not a credential; exact commit/path/rule/line only. Current wording is corrected.
+13ab96fa588bb8c7ee1f34b850f6a2b6ee9db166:workers/managed-emulation/image/README.md:generic-api-key:18
+
+# Historical public upstream JNA native ABI checksum, not an API credential.
+# Exact introduced commit/path/rule/line only; current source names the constant.
+3bd344d2defd0baf30e88933c6706049e6590619:workers/managed-emulation/engines/test_bundle.py:generic-api-key:52

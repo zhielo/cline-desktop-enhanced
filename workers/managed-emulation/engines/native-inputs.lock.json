@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "scope": "development-owned-guest-tests-only",
+  "files": [
+    {
+      "name": "jna-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.10.0/jna-5.10.0-sources.jar",
+      "bytes": 161266,
+      "sha256": "b8dcd308699f6f4f75c545d10c4372d71b49316c1c014dc79ed28dfccfadd36e"
+    },
+    {
+      "name": "unicorn-source.tar.gz",
+      "url": "https://codeload.github.com/zhkl0228/unicorn/tar.gz/548eda466eb9a2c69723a0f74888aa7b889b4ed9",
+      "bytes": 4074628,
+      "sha256": "c90a485e10674c576c2977ba84afb190277530d74fd43db1ba94afb526928a4b"
+    },
+    {
+      "name": "jna-dispatch.c",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/native/dispatch.c",
+      "bytes": 120615,
+      "sha256": "1f82495b658f9708d1e2ce453a84ab7ba1e5ebefa355e11431dd0c4e37015bc4"
+    },
+    {
+      "name": "jna-callback.c",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/native/callback.c",
+      "bytes": 24786,
+      "sha256": "3f2bd1bda4c70f67dd9edf73bd2e54fb5de6823246af134f0f218df1f6081fa8"
+    },
+    {
+      "name": "jna-dispatch.h",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/native/dispatch.h",
+      "bytes": 9414,
+      "sha256": "a5b1fe67f1bd6ab411e31a5e0c109c8079cfc299fee38735d59b1b52ed6e773a"
+    },
+    {
+      "name": "jna-protect.h",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/native/protect.h",
+      "bytes": 4275,
+      "sha256": "5b5ddb946cd9a1331aabc64fb56e02b608fc0ec88e7f5ab82bf1b8440f482451"
+    },
+    {
+      "name": "jna-Makefile",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/native/Makefile",
+      "bytes": 15653,
+      "sha256": "01cf8352802c9982b40a9983e6be748c6625bd9c8a4253783a06141712913a7a"
+    },
+    {
+      "name": "bridge-unicorn.c",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/unicorn.c",
+      "bytes": 25508,
+      "sha256": "e9b98705cf69b48bf6ca4a2d1d017af469975896744d71af49b109f7abbcd673"
+    },
+    {
+      "name": "bridge-unicorn.h",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/unicorn.h",
+      "bytes": 545,
+      "sha256": "1753c279af35d9e5f2095df0adecc980be8896a24ad73e1c675ae14c1d7c2723"
+    },
+    {
+      "name": "bridge-sample_arm.c",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/sample_arm.c",
+      "bytes": 7261,
+      "sha256": "c7adc5ee3d0f1a2137c6e98bb12bd3fb3fafb5224ec82bcf8048df9fe3e716fe"
+    },
+    {
+      "name": "bridge-sample_arm64.c",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/sample_arm64.c",
+      "bytes": 4835,
+      "sha256": "45ae8957b84f6e492933ee97deb01664e80d147b1bec697a15d2bb1409c9f3c8"
+    },
+    {
+      "name": "bridge-khash.h",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/khash.h",
+      "bytes": 21542,
+      "sha256": "76197162b53e0e66f69880c81c4fef113c31d61747598ecbbf2e129e3170a3c6"
+    },
+    {
+      "name": "bridge-com_github_unidbg_arm_backend_unicorn_Unicorn.h",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/com_github_unidbg_arm_backend_unicorn_Unicorn.h",
+      "bytes": 7718,
+      "sha256": "7d3d63f961592bec733c1bf0399c54b38fb1132044bb7328cf66bdd026f6b721"
+    },
+    {
+      "name": "bridge-com_github_unidbg_arm_backend_unicorn_Unicorn_NewHook.h",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/com_github_unidbg_arm_backend_unicorn_Unicorn_NewHook.h",
+      "bytes": 367,
+      "sha256": "3ab7500a8c79bb06227440f3737d653aa5737ad8f94eeab0711a9ea5870cd771"
+    },
+    {
+      "name": "bridge-com_github_unidbg_arm_backend_unicorn_Unicorn_Tuple.h",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/com_github_unidbg_arm_backend_unicorn_Unicorn_Tuple.h",
+      "bytes": 361,
+      "sha256": "a716d4f1ebe65ddda148e26c30706e015325035487bd145c9ad3cc4c73e6dec1"
+    },
+    {
+      "name": "bridge-com_github_unidbg_arm_backend_unicorn_Unicorn_UnHook.h",
+      "url": "https://raw.githubusercontent.com/zhkl0228/unidbg/ee936a4bedb02b1e2d61533275246c49ed390e22/backend/unicorn2/src/main/native/com_github_unidbg_arm_backend_unicorn_Unicorn_UnHook.h",
+      "bytes": 364,
+      "sha256": "9cb4cd6483910797010c008760b97e9d9add0338cde0123c59db6c50b42c6204"
+    },
+    {
+      "name": "jna-build.xml",
+      "url": "https://raw.githubusercontent.com/java-native-access/jna/8230fd9c023246e331601690a2afb82f37e6d4b6/build.xml",
+      "bytes": 78888,
+      "sha256": "b0760950a899c351cf657ce073af9809ba47014fe4b174c2673db63a10952fe4"
+    }
+  ]
+}

@@ -45,6 +45,10 @@ import {
 	verifyRuntime,
 } from "./bundled-analysis-runtime";
 import { privateUpdateReadiness } from "./trusted-update";
+import {
+	managedEmulationPackStatus,
+	installManagedEmulationPack,
+} from "./managed-emulation-setup";
 
 const execute = promisify(execFile);
 const Preferences = z
@@ -321,6 +325,7 @@ export async function platformToolsNotices() {
 export async function installFullCapabilityPack(
 	phase: (value: string) => void = () => {},
 ) {
+	const emulation = await managedEmulationPackStatus();
 	phase("Verifying bundled platform-tools integrity");
 	const tools = await bundledPlatformTools();
 	phase("Verifying and activating immutable full capability packs");
@@ -333,7 +338,12 @@ export async function installFullCapabilityPack(
 			acceptedPlatformToolsLicense: true,
 		});
 	const receipt = await testFullCapabilityPack(phase);
-	return { activation, receipt };
+	// Only a compiled, reviewed catalog can include the four engines. Never
+	// silently claim they were installed in a build with no installable payload.
+	const emulationPackage = emulation.available
+		? await installManagedEmulationPack(["qiling", "unidbg", "rnidbg", "speakeasy"], phase)
+		: { installed: [], status: "not-bundled", engineReadiness: "not-tested" };
+	return { activation, receipt, emulationPackage };
 }
 export async function rollbackToCorePack(
 	phase: (value: string) => void = () => {},
@@ -1044,6 +1054,7 @@ export async function getSetupCenterStatus() {
 	);
 	return {
 		preferences,
+		managedEmulationPackage: await managedEmulationPackStatus(),
 		aiCapabilities: setupCapabilityCatalog(),
 		optionalFrameworks: ["qiling", "unidbg", "rnidbg", "speakeasy"].map(
 			(id) => ({

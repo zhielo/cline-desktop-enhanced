@@ -1,0 +1,43 @@
+#!/usr/bin/busybox sh
+# Fixed PID 1 for the development inert image. No shell login or network setup.
+export PATH=/usr/bin:/usr/local/bin
+export LD_LIBRARY_PATH=/usr/local/lib
+export PYTHONDONTWRITEBYTECODE=1
+umask 077
+bb=/usr/bin/busybox
+finish() { $bb poweroff -f; while :; do $bb sleep 3600; done; }
+fail() { echo 'CLINE_MANAGED_BOOT_REJECTED_V1'; finish; }
+$bb mount -t proc -o nosuid,nodev,noexec proc /proc || fail
+$bb mount -t sysfs -o nosuid,nodev,noexec sysfs /sys || fail
+$bb mount -t devtmpfs -o nosuid devtmpfs /dev || fail
+$bb mount -t tmpfs -o nosuid,nodev,noexec,mode=0755 tmpfs /run || fail
+# A failed required core load is fatal. Hyper-V-only drivers may legitimately
+# report ENODEV in the QEMU compatibility smoke test; that is NOT Hyper-V proof.
+$bb modprobe vsock || fail
+for module in hv_vmbus hv_storvsc hv_sock ata_piix sr_mod isofs; do
+    $bb modprobe "$module" >/dev/null 2>&1 || :
+done
+/usr/local/bin/python3.13 -B -E -s /opt/cline/boot_selftest.py || fail
+# No credential exists in the immutable build inputs. Only the second, read-only
+# per-job media may provision it. No IP/KVP/host share/manual-shell fallback.
+$bb mkdir -p /mnt/cline-boot /run/cline-managed-probe || fail
+$bb chmod 0700 /run/cline-managed-probe || fail
+# Storage enumeration is asynchronous. Wait only a fixed bounded interval.
+for attempt in $($bb seq 1 30); do
+    [ -b /dev/sr1 ] && break
+    $bb sleep 0.1
+done
+if ! $bb mount -t iso9660 -o ro,nosuid,nodev,noexec /dev/sr1 /mnt/cline-boot; then
+    echo 'CLINE_MANAGED_CREDENTIAL_ABSENT_V1'
+    finish
+fi
+# Python performs bounded no-follow copy and strict source validation; no cp or
+# shell evaluation of guest media contents. The broker/media writer is pending.
+/usr/local/bin/python3.13 -B -E -s /opt/cline/provision_boot.py || fail
+$bb umount /mnt/cline-boot || fail
+echo 'CLINE_MANAGED_CREDENTIAL_ACCEPTED_V1'
+$bb timeout -s KILL 45 /usr/local/bin/python3.13 -B -E -s /opt/cline/guest_probe.py
+code=$?
+if [ "$code" -eq 0 ]; then echo 'CLINE_MANAGED_PROBE_EXITED_V1'; else echo 'CLINE_MANAGED_PROBE_UNRESOLVED_V1'; fi
+# Probe exit does not attest host-side VM termination, containment or readiness.
+finish

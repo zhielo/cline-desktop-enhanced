@@ -291,3 +291,74 @@ it.skipIf(!pinned || process.platform === "win32")(
 	},
 	30000,
 );
+
+it("persists bounded supervisor failure observations without promoting failed recovery", async () => {
+	const { root, store, input } = await fixture();
+	const failure = new engineModule.GeneralRecoveryExecutionError({
+		exitCode: null,
+		timedOut: true,
+		cancelled: false,
+		truncated: false,
+		outputDrainTimedOut: false,
+	});
+	vi.spyOn(engineModule, "runPinnedGeneralRecovery").mockRejectedValue(failure);
+	const receipt: AnalysisReceipt = {
+		id: randomUUID(),
+		sessionId: "owner",
+		workspace: root,
+		profile: ANALYSIS_PROFILE,
+		input,
+		requestHash: digest(input),
+		createdAt: new Date().toISOString(),
+		status: "running",
+	};
+	store.start(receipt);
+	try {
+		const result = await runOwnedGeneralRecovery(
+			receipt,
+			store,
+			new AbortController(),
+		);
+		expect(result.status).toBe("failed");
+		expect(result.error).toBe(failure.message);
+		expect(result.error).toContain("hostDeadline=true");
+		expect(result.result).toBeUndefined();
+		expect(result.resultHash).toBeUndefined();
+		expect(store.get("owner", receipt.id).error).toBe(failure.message);
+		expect(store.get("owner", receipt.id).status).toBe("failed");
+	} finally {
+		store.close();
+	}
+});
+
+it("unknown native failures cannot persist arbitrary error text", async () => {
+	const { root, store, input } = await fixture();
+	vi.spyOn(engineModule, "runPinnedGeneralRecovery").mockRejectedValue(
+		new Error("private parser output and environment"),
+	);
+	const receipt: AnalysisReceipt = {
+		id: randomUUID(),
+		sessionId: "owner",
+		workspace: root,
+		profile: ANALYSIS_PROFILE,
+		input,
+		requestHash: digest(input),
+		createdAt: new Date().toISOString(),
+		status: "running",
+	};
+	store.start(receipt);
+	try {
+		const result = await runOwnedGeneralRecovery(
+			receipt,
+			store,
+			new AbortController(),
+		);
+		expect(result.status).toBe("failed");
+		expect(result.error).toContain("no fallback or automatic replay");
+		expect(result.error).not.toMatch(/private|environment/);
+		expect(store.get("owner", receipt.id).error).toBe(result.error);
+		expect(result.result).toBeUndefined();
+	} finally {
+		store.close();
+	}
+});

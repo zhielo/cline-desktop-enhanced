@@ -1,0 +1,12 @@
+**
+!workers/
+!workers/emulation/
+!workers/emulation/**
+!workers/re-analysis/
+!workers/re-analysis/**
+!workers/managed-emulation/
+!workers/managed-emulation/engines/
+!workers/managed-emulation/engines/**
+**/__pycache__/
+**/target/
+**/vendor/

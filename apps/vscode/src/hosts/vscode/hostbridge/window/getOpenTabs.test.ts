@@ -9,25 +9,17 @@ import { getOpenTabs } from "@/hosts/vscode/hostbridge/window/getOpenTabs"
 import { GetOpenTabsRequest } from "@/shared/proto/host/window"
 
 describe("Hostbridge - Window - getOpenTabs", () => {
-	async function createAndOpenTestDocument(name: string, column: vscode.ViewColumn): Promise<void> {
+	async function createAndOpenTestDocument(name: string, column: vscode.ViewColumn): Promise<vscode.Uri> {
 		const content = `// Test file ${name}\nconsole.log('Hello from file ${name}');`
-
-		// Create an untitled document with a custom name
-		const uri = vscode.Uri.parse(`untitled:test-file-${name}.js`)
-
-		// Open directly in the requested group. Opening an untitled document
-		// first can create a tab in the active group before showTextDocument
-		// opens it in another group, leaving duplicate tabs behind.
-		await vscode.window.showTextDocument(uri, {
-			viewColumn: column,
-			preview: false,
-		})
-
-		// Set the content
-		const edit = new vscode.WorkspaceEdit()
-		edit.insert(uri, new vscode.Position(0, 0), content)
-		await vscode.workspace.applyEdit(edit)
-
+		// Populate an in-memory document before showing it. WorkspaceEdit on an
+		// already-visible untitled URI can open an extra tab in the active group;
+		// saved-file cleanup can also encounter EBUSY after tab closure on Windows.
+		// This API creates no editor, file, directory, or second edit operation.
+		const document = await vscode.workspace.openTextDocument({ language: "javascript", content })
+		assert.ok(document.isUntitled, "Tab fixture must stay in memory")
+		assert.strictEqual(document.getText(), content)
+		await vscode.window.showTextDocument(document, { viewColumn: column, preview: false })
+		return document.uri
 	}
 
 	async function waitForAllTabsClosed(): Promise<void> {
@@ -70,8 +62,8 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 
 	it("should return paths of open text document tabs", async () => {
 		// Open the documents in editors (this creates the tabs)
-		await createAndOpenTestDocument("open-tabs-1", vscode.ViewColumn.One)
-		await createAndOpenTestDocument("open-tabs-2", vscode.ViewColumn.Two)
+		const first = await createAndOpenTestDocument("open-tabs-1", vscode.ViewColumn.One)
+		const second = await createAndOpenTestDocument("open-tabs-2", vscode.ViewColumn.Two)
 
 		// Wait for tabs to be fully created
 		await pWaitFor(
@@ -98,6 +90,24 @@ describe("Hostbridge - Window - getOpenTabs", () => {
 			2,
 			`Expected 2 tabs, got ${response.paths.length}. Found tabs: ${JSON.stringify(response.paths)}`,
 		)
+		assert.deepStrictEqual([...response.paths].sort(), [first.fsPath, second.fsPath].sort())
+	})
+
+	it("preserves two actual tabs for the same document in different groups", async () => {
+		const uri = await createAndOpenTestDocument("same-document", vscode.ViewColumn.One)
+		const document = await vscode.workspace.openTextDocument(uri)
+		await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.Two, preview: false })
+		await pWaitFor(
+			() =>
+				vscode.window.tabGroups.all.filter((group) =>
+					group.tabs.some(
+						(tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === uri.toString(),
+					),
+				).length === 2,
+			{ timeout: 8000, interval: 50 },
+		)
+		const response = await getOpenTabs(GetOpenTabsRequest.create({}))
+		assert.deepStrictEqual(response.paths, [uri.fsPath, uri.fsPath])
 	})
 
 	it("should return all open tabs even when multiple files are opened in the same ViewColumn", async () => {

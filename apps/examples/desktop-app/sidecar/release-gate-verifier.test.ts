@@ -459,3 +459,111 @@ for (const [label, change] of [
 		change(e);
 		assert.throws(() => verifyReleaseGateEvidence(133, head, e));
 	});
+
+for (const name of Object.keys(p.managedCheckWorkflows)) {
+	test(`managed gate is mandatory with authoritative provenance: ${name}`, () => {
+		for (const conclusion of ["failure", "skipped", "cancelled", "timed_out"]) {
+			const evidence = fixture();
+			evidence.checks.check_runs.find((c) => c.name === name)!.conclusion =
+				conclusion;
+			assert.throws(() => verifyReleaseGateEvidence(133, head, evidence));
+		}
+		const missing = fixture();
+		missing.checks.check_runs = missing.checks.check_runs.filter(
+			(c) => c.name !== name,
+		);
+		missing.checks.total_count = missing.checks.check_runs.length;
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, missing),
+			/Missing or repeated managed check/,
+		);
+		const duplicate = fixture();
+		duplicate.checks.check_runs.push({
+			...duplicate.checks.check_runs.find((c) => c.name === name)!,
+			id: 98765,
+		});
+		duplicate.checks.total_count++;
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, duplicate),
+			/Missing or repeated managed check/,
+		);
+		const invalid = fixture();
+		invalid.checks.check_runs.find((c) => c.name === name)!.id = 0;
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, invalid),
+			/Invalid managed check identity/,
+		);
+		const spoof = fixture();
+		spoof.checks.check_runs.find((c) => c.name === name)!.details_url =
+			"https://untrusted.invalid/success";
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, spoof),
+			/exact job\/workflow binding/,
+		);
+	});
+}
+
+test("managed checks refuse missing, partial, wrong-head, foreign and failed workflow provenance", () => {
+	for (const mutate of [
+		(e: ReleaseGateEvidence) => {
+			delete e.workflowRuns;
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.total_count++;
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[0].path = ".github/workflows/pretend.yml";
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[0].head_sha = "f".repeat(40);
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[0].event = "workflow_dispatch";
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[0].repository.full_name = "other/fork";
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs[0].conclusion = "failure";
+		},
+		(e: ReleaseGateEvidence) => {
+			e.workflowRuns!.workflow_runs.push({
+				...e.workflowRuns!.workflow_runs[0],
+			});
+			e.workflowRuns!.total_count++;
+		},
+	]) {
+		const evidence = fixture();
+		mutate(evidence);
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, evidence),
+			/Managed/,
+		);
+	}
+});
+
+for (const path of new Set(Object.values(p.managedCheckWorkflows))) {
+	test(`managed workflow recipe cannot change silently: ${path}`, () => {
+		const evidence = fixture();
+		evidence.policyFileBytes[path] = Buffer.from(
+			"changed managed validation recipe",
+		);
+		assert.throws(
+			() => verifyReleaseGateEvidence(133, head, evidence),
+			/recipe changed/,
+		);
+	});
+}
+
+for (const path of new Set(Object.values(p.managedCheckWorkflows))) {
+	test(`mandatory managed workflow has no pull-request path filter: ${path}`, () => {
+		const text = readFileSync(
+			new URL(`../../../../${path}`, import.meta.url),
+			"utf8",
+		);
+		// These checks are mandatory on every release candidate's exact head.
+		// A worker-only filter silently omits them for desktop-only patches.
+		const triggers = text.match(/^  pull_request:.*$/gm);
+		assert.deepEqual(triggers, ["  pull_request: {}"]);
+	});
+}

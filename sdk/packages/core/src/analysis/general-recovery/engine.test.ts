@@ -15,6 +15,7 @@ import {
 	runPinnedGeneralRecovery,
 	safeRecoveryName,
 	GeneralRecoveryTerminationUnconfirmedError,
+	GeneralRecoveryExecutionError,
 } from "./engine";
 import { WAKARU_PINS } from "./contracts";
 const previousTemp = process.env.TMPDIR;
@@ -178,3 +179,45 @@ it.skipIf(!pinnedRoot || process.platform !== "linux")(
 		);
 	},
 );
+
+// These are supervisor observations, not assertions about the underlying cause.
+it("retains finite execution flags without leaking native parser output or interpreting exit 124", () => {
+	const raw = {
+		exitCode: 124,
+		timedOut: false,
+		cancelled: false,
+		truncated: false,
+		outputDrainTimedOut: false,
+		stdout: "private parser source",
+		stderr: "private parser diagnostics",
+		command: "private executable",
+		environment: "private environment",
+	};
+	const failure = new GeneralRecoveryExecutionError(raw);
+	expect(failure.message).toBe(
+		"Native recovery execution failed (exit=124; hostDeadline=false; cancelled=false; outputLimit=false; drainDeadline=false); no fallback or automatic replay",
+	);
+	for (const flag of [
+		"timedOut",
+		"cancelled",
+		"truncated",
+		"outputDrainTimedOut",
+	] as const) {
+		const observed = new GeneralRecoveryExecutionError({
+			...raw,
+			[flag]: true,
+		});
+		expect(observed.message).not.toBe(failure.message);
+		expect(observed.message).not.toMatch(/private/);
+	}
+	for (const exitCode of [null, NaN, Infinity, 1.5, 2147483648, -2147483649]) {
+		expect(
+			new GeneralRecoveryExecutionError({ ...raw, exitCode }).message,
+		).toContain("exit=unknown;");
+	}
+	for (const exitCode of [0, 1, -1, 125]) {
+		expect(
+			new GeneralRecoveryExecutionError({ ...raw, exitCode }).message,
+		).toContain(`exit=${exitCode};`);
+	}
+});

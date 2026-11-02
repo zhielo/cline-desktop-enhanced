@@ -61,32 +61,35 @@ try {
 		extracted = path.join(scratch, "extracted");
 	await writeFile(archive, encoded, { flag: "wx" });
 	await mkdir(extracted);
-	const result =
+	// Windows' OS-owned bsdtar handles the exact verified ZIP without a
+	// PowerShell/.NET startup or Expand-Archive process. Never fall back to a
+	// PATH-selected Windows executable or enlarge the existing 30s budget.
+	const systemRoot = process.env.SystemRoot;
+	if (
+		platform === "win32" &&
+		(!systemRoot ||
+			!/^[A-Za-z]:\\/.test(systemRoot) ||
+			path.win32.normalize(systemRoot) !== systemRoot)
+	)
+		throw new Error(
+			"Absolute Windows system root required for native extraction",
+		);
+	const extractor =
 		platform === "win32"
-			? spawnSync(
-					"powershell.exe",
-					[
-						"-NoProfile",
-						"-NonInteractive",
-						"-Command",
-						"Expand-Archive -LiteralPath $env:CLINE_ARCHIVE -DestinationPath $env:CLINE_EXTRACTED",
-					],
-					{
-						env: {
-							...process.env,
-							CLINE_ARCHIVE: archive,
-							CLINE_EXTRACTED: extracted,
-						},
-						stdio: "inherit",
-						timeout: 30000,
-					},
-				)
-			: spawnSync("tar", ["-xzf", archive, "-C", extracted], {
-					stdio: "inherit",
-					timeout: 30000,
-				});
+			? path.win32.join(systemRoot!, "System32", "tar.exe")
+			: "tar";
+	const result = spawnSync(
+		extractor,
+		[platform === "win32" ? "-xf" : "-xzf", archive, "-C", extracted],
+		{
+			stdio: "inherit",
+			timeout: 30000,
+		},
+	);
 	if (result.status !== 0 || result.error)
-		throw new Error("Pinned archive extraction failed");
+		throw new Error(
+			`Pinned archive extraction failed (exit=${result.status ?? "none"}; code=${(result.error as NodeJS.ErrnoException | undefined)?.code ?? "none"}; signal=${result.signal ?? "none"})`,
+		);
 	const names = await readdir(extracted);
 	if (names.length !== 1 || names[0] !== pin.file)
 		throw new Error("Unexpected pinned archive entries");
