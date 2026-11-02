@@ -167,6 +167,38 @@ class InputTests(unittest.TestCase):
                 inputs.fetch({}, {}, 'qiling', output)
             self.assertFalse(output.exists())
 
+    def test_sources_cover_exact_selected_components_and_remain_development_only(self):
+        components, profiles = inputs.load()
+        for engine in ('qiling', 'speakeasy'):
+            selected = sorted(set(profiles[engine] + inputs.BUILD))
+            self.assertEqual(inputs.selected_sources(components, profiles, engine),
+                             [components[item]['source'] for item in selected])
+            self.assertLessEqual(sum(components[item]['source']['bytes'] for item in selected),
+                                 inputs.MAX_SELECTED)
+        with self.assertRaises(ValueError):
+            inputs.selected_sources(components, profiles, 'unidbg')
+        with patch.object(inputs, 'MAX_SELECTED', 1), self.assertRaisesRegex(ValueError, 'source budget'):
+            inputs.selected_sources(components, profiles, 'qiling')
+
+    def test_source_fetch_checks_bytes_and_does_not_publish_failed_archive(self):
+        data, install = self.owned()
+        source = {**install, 'filename': 'owned-1.0.tar.gz',
+                  'url': 'https://files.pythonhosted.org/packages/owned/owned-1.0.tar.gz'}
+        inputs.artifact(source, source=True)
+        for body, ok in [(data, True), (data[:-1], False), (b'x' * len(data), False), (data+b'x', False)]:
+            with self.subTest(ok=ok, body=body), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory)/'sources'
+                with patch.object(inputs, 'selected_sources', return_value=[source]):
+                    opener = lambda *args, **kwargs: Response(body, source['url'])
+                    if ok:
+                        self.assertEqual(inputs.fetch_sources({}, {}, 'qiling', output, opener), 1)
+                        self.assertEqual((output/source['filename']).read_bytes(), data)
+                    else:
+                        with self.assertRaises(ValueError):
+                            inputs.fetch_sources({}, {}, 'qiling', output, opener)
+                        self.assertFalse((output/source['filename']).exists())
+                        self.assertTrue((output/(source['filename']+'.part')).exists())
+
     def test_builder_uses_local_hashes_and_pinned_build_tools_not_index_build_resolution(self):
         source = (inputs.HERE/'prepare.py').read_text()
         self.assertIn("python_inputs.load(Path('/build'))", source)

@@ -2,6 +2,12 @@
 
 This file is the durable customization ledger for this repository. The source on `main` is the source of truth: every installer must be built from a committed revision, and custom behavior must never exist only as an uncommitted patch or generated build output.
 
+## Pinned Python source acquisition, development scope only
+
+The managed-engine development input tool can now fetch the exact pinned source archives for the selected Qiling or Speakeasy Python requirements and their build tools, with the existing no-redirect HTTPS downloader, byte/digest checks, exclusive destination and partial-file refusal. This is separate from install artifact selection and does not change the engine image, product runtime, install/readiness policy or the signed workflow.
+
+The exact 771d96a source inventories were fetched and independently rehashed: Qiling 41 archives / 93,296,537 bytes; Speakeasy 16 archives / 10,947,538 bytes. Offline tests cover exact profile selection, budgets, successful acquisition and truncated, modified and oversized archives; all existing downloader refusal tests remain in force. This establishes only availability and byte identity of pinned Python sdists, not matching source for wheel-bundled native libraries, the JDK, base image, all engine inputs, build modifications, notices, distribution rights or a reviewed shipping catalog. Product installation and acceptance remain blocked.
+
 ## Reviewed CI recipe fingerprint synchronized
 
 Exactd72b25dc passed all four actual guest-engine jobs in run41254351933. unidbg job124694240372 completed all30 ARM32/ARM64 scenarios across three fresh cold boots without retries or changed contracts. Inspected artifact13062214861 SHA256 `924ae2f7d48a78b9173fb05229f776789dba34b6406f65209c251678080a3454` confirms image `f84365a6d71c9f0661d7c26e8e350bfad44acb25a50ca9a030d3716312387fdc` and bundle `210836023989fd5248b0da211aa3c75b738350c5501b862981b1c649ce90b186` match across all three receipts. The synthetic integration source a047b346 has current basebb100774 and headd72b25dc as its exact two parents. The independent JDK-only builder control also passed. This validates that tested runtime scope, not an established historical crash cause, permanent elimination of intermittence or full product completion.

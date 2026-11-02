@@ -117,6 +117,17 @@ def selected_artifacts(components, profiles, engine):
     return [components[item]['install'] for item in sorted(set(profiles[engine] + BUILD))]
 
 
+def selected_sources(components, profiles, engine):
+    # Source archives are verified inventory inputs only. They do not establish
+    # that prebuilt wheels contain no additional bundled native dependencies.
+    if engine not in ('qiling', 'speakeasy'):
+        raise ValueError('Fixed Python engine required')
+    sources = [components[item]['source'] for item in sorted(set(profiles[engine] + BUILD))]
+    if sum(entry['bytes'] for entry in sources) > MAX_SELECTED:
+        raise ValueError('Private Python selected source budget')
+    return sources
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, stream, code, message, headers, newurl):
         # Refuse BEFORE contacting any redirect destination, even one claiming
@@ -130,7 +141,15 @@ def open_artifact(request, timeout):
 
 def fetch(components, profiles, engine, output, opener=None):
     # Fixed CI build directory only; never accepts a desktop IPC path or manifest.
-    artifacts = selected_artifacts(components, profiles, engine)
+    return fetch_artifacts(selected_artifacts(components, profiles, engine), output, opener)
+
+
+def fetch_sources(components, profiles, engine, output, opener=None):
+    # Separate exclusive directory; never included in an installable payload.
+    return fetch_artifacts(selected_sources(components, profiles, engine), output, opener)
+
+
+def fetch_artifacts(artifacts, output, opener=None):
     names = [entry['filename'] for entry in artifacts]
     if len(names) != len(set(names)):
         raise ValueError('Duplicate private Python artifact filename')
@@ -173,17 +192,21 @@ def fetch(components, profiles, engine, output, opener=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('operation', choices=['verify', 'fetch'])
+    parser.add_argument('operation', choices=['verify', 'fetch', 'fetch-sources'])
     parser.add_argument('--engine', choices=['qiling', 'speakeasy'])
     parser.add_argument('--output', type=Path)
     parser.add_argument('--requirements-root', type=Path)
     args = parser.parse_args()
     components, profiles = load(args.requirements_root)
-    if args.operation == 'fetch':
+    if args.operation in ('fetch', 'fetch-sources'):
         if args.engine is None or args.output is None:
             parser.error('Fixed engine and new build output required')
-        count = fetch(components, profiles, args.engine, args.output)
-        print('Verified private Python build artifacts:', args.engine, count)
+        if args.operation == 'fetch':
+            count = fetch(components, profiles, args.engine, args.output)
+            print('Verified private Python build artifacts:', args.engine, count)
+        else:
+            count = fetch_sources(components, profiles, args.engine, args.output)
+            print('Verified development Python source archives (not a license or source-closure review):', args.engine, count)
     elif args.engine is not None or args.output is not None:
         parser.error('Verification accepts no engine/output')
     else:
